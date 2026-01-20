@@ -135,7 +135,8 @@ export function createSSEStream(
         // Ignore if controller is closed
       }
 
-      // Set up heartbeat every 15 seconds to keep connection alive
+      // Set up heartbeat every 5 seconds to keep connection alive
+      // Reduced from 15s to prevent browser/proxy timeout issues
       heartbeatInterval = setInterval(() => {
         try {
           controller.enqueue(encoder.encode(": heartbeat\n\n"));
@@ -146,7 +147,7 @@ export function createSSEStream(
             heartbeatInterval = null;
           }
         }
-      }, 15000);
+      }, 5000);
 
       unsubscribe = emitter.subscribe((event) => {
         // If loopId is specified, only send events for that loop

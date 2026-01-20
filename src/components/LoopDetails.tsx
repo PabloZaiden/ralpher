@@ -15,10 +15,11 @@ export interface LoopDetailsProps {
   onBack?: () => void;
 }
 
-type TabId = "log" | "plan" | "status" | "diff";
+type TabId = "log" | "prompt" | "plan" | "status" | "diff";
 
 const tabs: { id: TabId; label: string }[] = [
   { id: "log", label: "Log" },
+  { id: "prompt", label: "Prompt" },
   { id: "plan", label: "Plan" },
   { id: "status", label: "Status" },
   { id: "diff", label: "Diff" },
@@ -182,7 +183,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       }
     }
 
-    if (activeTab !== "log") {
+    if (activeTab !== "log" && activeTab !== "prompt") {
       loadContent();
     }
   }, [activeTab, getPlan, getStatusFile, getDiff]);
@@ -479,6 +480,19 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   progressContent={progressContent}
                   maxHeight="600px"
                 />
+              )}
+
+              {activeTab === "prompt" && (
+                <div className="p-4">
+                  <div className="mb-3">
+                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                      Original Task Prompt
+                    </h3>
+                  </div>
+                  <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4">
+                    {config.prompt || "No prompt specified."}
+                  </pre>
+                </div>
               )}
 
               {activeTab === "plan" && (

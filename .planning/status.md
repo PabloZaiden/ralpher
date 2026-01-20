@@ -654,7 +654,7 @@ src/components/common/
 
 **Files Modified:**
 - `src/hooks/useLoop.ts` - Added progressContent state and handling
-- `src/components/LoopDetails.tsx` - Pass progressContent to LogViewer, expandable diff UI
+- `src/components/LoopDetails.tsx` - Pass progressContent to LogViewer, expandable diff UI, Prompt tab
 - `src/components/CreateLoopForm.tsx` - Added placeholder styling classes
 - `src/core/git-service.ts` - Added getDiffWithContent and FileDiffWithContent
 - `src/types/api.ts` - Added patch field to FileDiff
@@ -666,3 +666,22 @@ src/components/common/
 - `bun run build` - **PASS**
 - `bun test` - **135 tests PASS**
 - `bun x tsc --noEmit` - **PASS**
+
+---
+
+### 2026-01-20 - Prompt Tab Addition (Current Session)
+
+**Goal:** Allow users to see the original requested prompt in the loop details
+
+**Implementation:**
+- Added new "Prompt" tab to `LoopDetails` component
+- Tab displays the original task prompt from `config.prompt`
+- Shows prompt in a styled pre-formatted block with monospace font
+- Tab order: Log → Prompt → Plan → Status → Diff
+
+**Files Modified:**
+- `src/components/LoopDetails.tsx` - Added Prompt tab to tabs array and content area
+
+**Verification Results:**
+- `bun run build` - **PASS**
+- `bun test` - **135 tests PASS**
