@@ -471,24 +471,20 @@ export class LoopEngine {
 
   /**
    * Build the prompt for an iteration.
-   * For the first iteration, use the original prompt.
-   * For subsequent iterations, use a continuation prompt.
+   * Uses a consistent template that instructs the AI to follow the planning docs pattern.
    */
   private buildPrompt(iteration: number): PromptInput {
-    let text: string;
+    const text = `- Read AGENTS.md, read the document in the \`./.planning\` folder, pick up the most important set of tasks to continue with, and make sure you make a plan with coding tasks that includes updating the docs with your progress and what the next steps to work on are, at the end. Don't ask for confirmation and start working on it right away.
 
-    if (iteration === 1) {
-      // First iteration: use the original prompt
-      text = this.config.prompt;
-    } else {
-      // Subsequent iterations: continuation prompt
-      text = `Continue working on the task. 
+- Make sure that the implementations and fixes you make don't contradict the core design principles outlined in AGENTS.md and the planning document.
 
-Read the .planning/plan.md and .planning/status.md files to understand what needs to be done next.
+- Goal: ${this.config.prompt}
 
-When you have completed all tasks, end your response with:
+- Add tasks to the plan to achieve the goal.
+
+- When you have completed all tasks, end your response with:
+
 <promise>COMPLETE</promise>`;
-    }
 
     return {
       parts: [{ type: "text", text }],
