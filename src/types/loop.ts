@@ -30,6 +30,9 @@ export interface LoopConfig {
   /** Optional iteration limit (default: unlimited) */
   maxIterations?: number;
 
+  /** Maximum consecutive identical errors before failsafe exit (default: 5) */
+  maxConsecutiveErrors?: number;
+
   /** Regex for completion detection. Default: "<promise>COMPLETE</promise>$" */
   stopPattern: string;
 
@@ -101,6 +104,38 @@ export interface LoopState {
 
   /** Iteration history (last N for display) */
   recentIterations: IterationSummary[];
+
+  /** Application logs (persisted for page refresh) */
+  logs?: LoopLogEntry[];
+
+  /** Consecutive error tracking for failsafe exit */
+  consecutiveErrors?: ConsecutiveErrorTracker;
+}
+
+/**
+ * A persisted log entry in the loop state.
+ */
+export interface LoopLogEntry {
+  /** Unique ID for the log entry */
+  id: string;
+  /** Log level */
+  level: "agent" | "info" | "warn" | "error" | "debug";
+  /** Log message */
+  message: string;
+  /** Optional additional details */
+  details?: Record<string, unknown>;
+  /** ISO timestamp */
+  timestamp: string;
+}
+
+/**
+ * Tracks consecutive identical errors for failsafe exit.
+ */
+export interface ConsecutiveErrorTracker {
+  /** Last error message seen */
+  lastErrorMessage: string;
+  /** Count of consecutive identical errors */
+  count: number;
 }
 
 /**
@@ -199,6 +234,7 @@ export interface Loop {
  */
 export const DEFAULT_LOOP_CONFIG = {
   stopPattern: "<promise>COMPLETE</promise>$",
+  maxConsecutiveErrors: 5,
   git: {
     enabled: true,
     branchPrefix: "ralph/",
@@ -219,5 +255,6 @@ export function createInitialState(id: string): LoopState {
     status: "idle",
     currentIteration: 0,
     recentIterations: [],
+    logs: [],
   };
 }

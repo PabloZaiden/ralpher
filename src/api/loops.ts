@@ -83,6 +83,7 @@ export const loopsCrudRoutes = {
           modelProviderID: body.model?.providerID,
           modelID: body.model?.modelID,
           maxIterations: body.maxIterations,
+          maxConsecutiveErrors: body.maxConsecutiveErrors,
           stopPattern: body.stopPattern,
           gitEnabled: body.git?.enabled,
           gitBranchPrefix: body.git?.branchPrefix,

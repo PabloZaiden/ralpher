@@ -193,12 +193,24 @@ export function useLoop(loopId: string): UseLoopResult {
       }
       const data = (await response.json()) as Loop;
       setLoop(data);
+      
+      // Load persisted logs from loop state on initial load
+      // Only load if we have no logs yet (fresh page load)
+      if (data.state.logs && data.state.logs.length > 0 && logs.length === 0) {
+        setLogs(data.state.logs.map((log) => ({
+          id: log.id,
+          level: log.level,
+          message: log.message,
+          details: log.details,
+          timestamp: log.timestamp,
+        })));
+      }
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
     }
-  }, [loopId]);
+  }, [loopId, logs.length]);
 
   // Update the loop
   const update = useCallback(

@@ -884,3 +884,42 @@ src/components/common/
 - `bun x tsc --noEmit` - **PASS** (no errors)
 - `bun test` - **135 tests PASS**
 - `bun run build` - **PASS**
+
+---
+
+### 2026-01-20 - Test Fixes for Error Continuation Behavior (Current Session)
+
+**Issue:**
+- Two tests were failing after the error handling behavior was changed to "continue on error instead of failing"
+- The tests expected the loop to fail immediately on first error, but now loops continue until `maxConsecutiveErrors` is reached
+
+**Failing Tests:**
+1. `tests/unit/loop-engine.test.ts` - "LoopEngine > handles errors gracefully"
+2. `tests/e2e/full-loop.test.ts` - "Full Loop Workflow > handles backend errors gracefully"
+
+**Root Cause:**
+- The `trackConsecutiveError()` method logic was: on first error, set count=1 and return `false`
+- Even with `maxConsecutiveErrors: 1`, this meant the first error would NOT trigger failsafe
+- A second error was required to trigger `return newCount >= maxErrors` (2 >= 1)
+
+**Fixes Applied:**
+
+1. **Updated test config** (`tests/unit/loop-engine.test.ts`):
+   - Added `maxConsecutiveErrors: 1` to the test loop so it fails after first error
+
+2. **Updated test config** (`tests/e2e/full-loop.test.ts`):
+   - Added `maxConsecutiveErrors: 1` to the createLoop call
+
+3. **Fixed logic bug** (`src/core/loop-engine.ts`):
+   - In `trackConsecutiveError()`, on first error now returns `1 >= maxErrors`
+   - This correctly handles the `maxConsecutiveErrors: 1` case where we should fail on the very first error
+
+**Files Modified:**
+- `src/core/loop-engine.ts` - Fixed trackConsecutiveError() logic for first error
+- `tests/unit/loop-engine.test.ts` - Added maxConsecutiveErrors: 1 to test
+- `tests/e2e/full-loop.test.ts` - Added maxConsecutiveErrors: 1 to test
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **135 tests PASS**
+- `bun run build` - **PASS**

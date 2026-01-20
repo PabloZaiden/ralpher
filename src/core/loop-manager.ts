@@ -49,6 +49,8 @@ export interface CreateLoopOptions {
   modelID?: string;
   /** Maximum iterations (optional) */
   maxIterations?: number;
+  /** Maximum consecutive identical errors before failsafe exit (default: 5) */
+  maxConsecutiveErrors?: number;
   /** Custom stop pattern (default: "<promise>COMPLETE</promise>$") */
   stopPattern?: string;
   /** Enable git integration (default: true) */
@@ -117,6 +119,7 @@ export class LoopManager {
           ? { providerID: options.modelProviderID, modelID: options.modelID }
           : undefined,
       maxIterations: options.maxIterations,
+      maxConsecutiveErrors: options.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors,
       stopPattern: options.stopPattern ?? DEFAULT_LOOP_CONFIG.stopPattern,
       git: {
         enabled: options.gitEnabled ?? DEFAULT_LOOP_CONFIG.git.enabled,

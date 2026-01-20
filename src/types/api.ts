@@ -21,6 +21,8 @@ export interface CreateLoopRequest {
   model?: ModelConfig;
   /** Optional iteration limit */
   maxIterations?: number;
+  /** Maximum consecutive identical errors before failsafe exit (default: 5) */
+  maxConsecutiveErrors?: number;
   /** Regex for completion detection (optional, uses default) */
   stopPattern?: string;
   /** Git configuration (optional, uses defaults) */
@@ -39,6 +41,8 @@ export interface UpdateLoopRequest {
   model?: ModelConfig;
   /** Update max iterations */
   maxIterations?: number;
+  /** Update max consecutive errors */
+  maxConsecutiveErrors?: number;
   /** Update stop pattern */
   stopPattern?: string;
   /** Update git config */
@@ -117,7 +121,7 @@ export interface FileDiff {
  */
 export interface LogEntry {
   /** Log level */
-  level: "info" | "warn" | "error" | "debug";
+  level: "agent" | "info" | "warn" | "error" | "debug";
   /** Log message */
   message: string;
   /** ISO timestamp */
@@ -169,6 +173,10 @@ export function validateCreateLoopRequest(req: unknown): string | undefined {
 
   if (body.maxIterations !== undefined && typeof body.maxIterations !== "number") {
     return "maxIterations must be a number";
+  }
+
+  if (body.maxConsecutiveErrors !== undefined && typeof body.maxConsecutiveErrors !== "number") {
+    return "maxConsecutiveErrors must be a number";
   }
 
   if (body.stopPattern !== undefined && typeof body.stopPattern !== "string") {

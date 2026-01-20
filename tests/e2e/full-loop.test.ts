@@ -188,6 +188,8 @@ describe("Full Loop Workflow", () => {
         directory: ctx.workDir,
         prompt: "Cause error",
         gitEnabled: false,
+        // Set maxConsecutiveErrors to 1 so it fails after first error
+        maxConsecutiveErrors: 1,
       });
 
       await ctx.manager.startLoop(loop.config.id);

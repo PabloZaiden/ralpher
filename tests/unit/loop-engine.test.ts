@@ -319,7 +319,8 @@ describe("LoopEngine", () => {
   });
 
   test("handles errors gracefully", async () => {
-    const loop = createTestLoop();
+    // Set maxConsecutiveErrors to 1 so it fails after first error
+    const loop = createTestLoop({ maxConsecutiveErrors: 1 });
 
     const baseMock = createMockBackend([]);
     mockBackend = {

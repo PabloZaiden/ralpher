@@ -24,6 +24,7 @@ export function CreateLoopForm({
   const [directory, setDirectory] = useState("");
   const [prompt, setPrompt] = useState("");
   const [maxIterations, setMaxIterations] = useState<string>("");
+  const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>("5");
   const [backendMode, setBackendMode] = useState<"spawn" | "connect">("spawn");
   const [hostname, setHostname] = useState("localhost");
   const [port, setPort] = useState("3000");
@@ -61,6 +62,13 @@ export function CreateLoopForm({
       const num = parseInt(maxIterations, 10);
       if (!isNaN(num) && num > 0) {
         request.maxIterations = num;
+      }
+    }
+
+    if (maxConsecutiveErrors.trim()) {
+      const num = parseInt(maxConsecutiveErrors, 10);
+      if (!isNaN(num) && num > 0) {
+        request.maxConsecutiveErrors = num;
       }
     }
 
@@ -186,6 +194,28 @@ export function CreateLoopForm({
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Leave empty for unlimited iterations
+            </p>
+          </div>
+
+          {/* Max consecutive errors */}
+          <div>
+            <label
+              htmlFor="maxConsecutiveErrors"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Max Consecutive Errors
+            </label>
+            <input
+              type="number"
+              id="maxConsecutiveErrors"
+              value={maxConsecutiveErrors}
+              onChange={(e) => setMaxConsecutiveErrors(e.target.value)}
+              min="1"
+              placeholder="5"
+              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Failsafe exit after this many identical consecutive errors (default: 5)
             </p>
           </div>
 

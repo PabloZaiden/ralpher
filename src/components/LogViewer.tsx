@@ -72,6 +72,8 @@ function getToolStatusColor(status: ToolCallData["status"]): string {
  */
 function getLogLevelColor(level: LogLevel): string {
   switch (level) {
+    case "agent":
+      return "text-purple-400";
     case "debug":
       return "text-gray-500";
     case "info":
@@ -90,6 +92,8 @@ function getLogLevelColor(level: LogLevel): string {
  */
 function getLogLevelBadge(level: LogLevel): "default" | "info" | "success" | "warning" | "error" {
   switch (level) {
+    case "agent":
+      return "success";
     case "debug":
       return "default";
     case "info":

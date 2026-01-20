@@ -10,7 +10,9 @@ import type {
   Loop,
   IterationSummary,
   GitCommit,
+  LoopLogEntry,
 } from "../types/loop";
+import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import type {
   LoopEvent,
   MessageData,
@@ -364,6 +366,7 @@ export class LoopEngine {
 
   /**
    * Run the main iteration loop.
+   * Now continues on errors unless max consecutive identical errors is reached.
    */
   private async runLoop(): Promise<void> {
     while (!this.aborted && this.shouldContinue()) {
@@ -378,9 +381,11 @@ export class LoopEngine {
         this.emitLog("info", "Stop pattern detected - loop completed successfully", {
           totalIterations: this.loop.state.currentIteration,
         });
+        // Clear consecutive error tracker on success
         this.updateState({
           status: "completed",
           completedAt: createTimestamp(),
+          consecutiveErrors: undefined,
         });
 
         this.emit({
@@ -393,25 +398,57 @@ export class LoopEngine {
       }
 
       if (iterationResult.outcome === "error") {
-        this.emitLog("error", `Iteration failed: ${iterationResult.error}`);
-        this.updateState({
-          status: "failed",
-          completedAt: createTimestamp(),
-          error: {
-            message: iterationResult.error ?? "Unknown error",
+        const errorMessage = iterationResult.error ?? "Unknown error";
+        this.emitLog("error", `Iteration failed with error: ${errorMessage}`);
+
+        // Track consecutive identical errors
+        const shouldFailsafe = this.trackConsecutiveError(errorMessage);
+
+        if (shouldFailsafe) {
+          const maxErrors = this.config.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors;
+          this.emitLog("error", `Failsafe exit: ${maxErrors} consecutive identical errors`, {
+            errorMessage,
+          });
+          this.updateState({
+            status: "failed",
+            completedAt: createTimestamp(),
+            error: {
+              message: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
+              iteration: this.loop.state.currentIteration,
+              timestamp: createTimestamp(),
+            },
+          });
+
+          this.emit({
+            type: "loop.error",
+            loopId: this.config.id,
+            error: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
             iteration: this.loop.state.currentIteration,
             timestamp: createTimestamp(),
-          },
+          });
+          return;
+        }
+
+        // Log that we're continuing despite the error
+        this.emitLog("warn", "Error occurred but continuing to next iteration (exit criteria not met)", {
+          errorMessage,
+          consecutiveErrors: this.loop.state.consecutiveErrors?.count ?? 1,
+          maxConsecutiveErrors: this.config.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors,
         });
 
+        // Emit error event but don't stop
         this.emit({
           type: "loop.error",
           loopId: this.config.id,
-          error: iterationResult.error ?? "Unknown error",
+          error: errorMessage,
           iteration: this.loop.state.currentIteration,
           timestamp: createTimestamp(),
         });
-        return;
+
+        // Continue to next iteration instead of stopping
+      } else {
+        // Successful iteration (outcome === "continue") - clear error tracker
+        this.updateState({ consecutiveErrors: undefined });
       }
 
       // Check max iterations
@@ -443,6 +480,37 @@ export class LoopEngine {
       this.emitLog("debug", "Waiting before next iteration...");
       this.updateState({ status: "waiting" });
       await this.delay(1000);
+    }
+  }
+
+  /**
+   * Track consecutive identical errors.
+   * Returns true if we should failsafe exit (max consecutive errors reached).
+   */
+  private trackConsecutiveError(errorMessage: string): boolean {
+    const tracker = this.loop.state.consecutiveErrors;
+    const maxErrors = this.config.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors;
+
+    if (tracker && tracker.lastErrorMessage === errorMessage) {
+      // Same error as before, increment count
+      const newCount = tracker.count + 1;
+      this.updateState({
+        consecutiveErrors: {
+          lastErrorMessage: errorMessage,
+          count: newCount,
+        },
+      });
+      return newCount >= maxErrors;
+    } else {
+      // Different error or first error, reset tracker to 1
+      this.updateState({
+        consecutiveErrors: {
+          lastErrorMessage: errorMessage,
+          count: 1,
+        },
+      });
+      // Check if even 1 error exceeds the max (for maxConsecutiveErrors: 1 case)
+      return 1 >= maxErrors;
     }
   }
 
@@ -510,7 +578,7 @@ export class LoopEngine {
             currentMessageId = event.messageId;
             messageCount++;
             // Create a log entry that we'll update with response content
-            currentResponseLogId = this.emitLog("debug", "AI started generating response", {
+            currentResponseLogId = this.emitLog("agent", "AI started generating response", {
               responseContent: "",
             });
             break;
@@ -519,7 +587,7 @@ export class LoopEngine {
             responseContent += event.content;
             // Update the response log entry with accumulated content
             if (currentResponseLogId) {
-              this.emitLog("debug", "AI generating response...", {
+              this.emitLog("agent", "AI generating response...", {
                 responseContent,
               }, currentResponseLogId);
             }
@@ -536,7 +604,7 @@ export class LoopEngine {
           case "message.complete":
             // Final update to the response log with complete content
             if (currentResponseLogId) {
-              this.emitLog("info", "AI finished generating response", {
+              this.emitLog("agent", "AI finished generating response", {
                 responseContent,
                 responseLength: responseContent.length,
               }, currentResponseLogId);
@@ -562,7 +630,7 @@ export class LoopEngine {
             const toolId = `tool-${iteration}-${event.toolName}-${toolCallCount}`;
             toolCalls.set(event.toolName, { id: toolId, name: event.toolName, input: event.input });
             toolCallCount++;
-            this.emitLog("debug", `AI calling tool: ${event.toolName}`);
+            this.emitLog("agent", `AI calling tool: ${event.toolName}`);
             const timestamp = createTimestamp();
             // Emit tool call event
             this.emit({
@@ -583,7 +651,7 @@ export class LoopEngine {
 
           case "tool.complete": {
             const toolInfo = toolCalls.get(event.toolName);
-            this.emitLog("debug", `Tool completed: ${event.toolName}`);
+            this.emitLog("agent", `Tool completed: ${event.toolName}`);
             const timestamp = createTimestamp();
             // Emit tool complete event - use the same ID from tool.start
             this.emit({
@@ -881,6 +949,7 @@ Output ONLY the commit message, nothing else.`
   /**
    * Emit an application log event.
    * Used to communicate internal loop engine operations to the UI.
+   * Also persists the log in the loop state for page refresh recovery.
    * @returns The ID of the log entry (for updates)
    */
   private emitLog(
@@ -890,6 +959,19 @@ Output ONLY the commit message, nothing else.`
     id?: string
   ): string {
     const logId = id ?? `log-${this.config.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const timestamp = createTimestamp();
+    
+    // Persist log in loop state (for page refresh recovery)
+    const logEntry: LoopLogEntry = {
+      id: logId,
+      level,
+      message,
+      details,
+      timestamp,
+    };
+    this.persistLog(logEntry, id !== undefined);
+    
+    // Emit log event for real-time updates
     this.emit({
       type: "loop.log",
       loopId: this.config.id,
@@ -897,9 +979,34 @@ Output ONLY the commit message, nothing else.`
       level,
       message,
       details,
-      timestamp: createTimestamp(),
+      timestamp,
     });
     return logId;
+  }
+
+  /**
+   * Persist a log entry in the loop state.
+   * If isUpdate is true, update an existing entry; otherwise append.
+   */
+  private persistLog(entry: LoopLogEntry, isUpdate: boolean): void {
+    const logs = this.loop.state.logs ?? [];
+    
+    if (isUpdate) {
+      // Find and update existing entry
+      const index = logs.findIndex((log) => log.id === entry.id);
+      if (index >= 0) {
+        logs[index] = entry;
+      } else {
+        logs.push(entry);
+      }
+    } else {
+      logs.push(entry);
+    }
+    
+    // Keep only the last 500 logs to prevent memory issues
+    const trimmedLogs = logs.length > 500 ? logs.slice(-500) : logs;
+    
+    this.updateState({ logs: trimmedLogs });
   }
 
   /**

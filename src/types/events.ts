@@ -115,8 +115,13 @@ export interface LoopProgressEvent {
 
 /**
  * Log level for application log events.
+ * - "agent": AI agent activity (responses, tool calls)
+ * - "info": General informational messages
+ * - "warn": Warning messages
+ * - "error": Error messages
+ * - "debug": Debug/verbose messages
  */
-export type LogLevel = "info" | "warn" | "error" | "debug";
+export type LogLevel = "agent" | "info" | "warn" | "error" | "debug";
 
 /**
  * Application-level log event.
