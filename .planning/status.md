@@ -923,3 +923,36 @@ src/components/common/
 - `bun x tsc --noEmit` - **PASS** (no errors)
 - `bun test` - **135 tests PASS**
 - `bun run build` - **PASS**
+
+---
+
+### 2026-01-20 - Diff Indicator and AI Reasoning Display (Current Session)
+
+**Issues Fixed:**
+
+1. **Diff panel update indicator not showing**
+   - **Problem:** The diff tab indicator only triggered when `diffContent.length` changed, but diff content was only fetched when the user clicked on the diff tab
+   - **Solution:** 
+     - Added `gitChangeCounter` state to `useLoop` hook that increments on `loop.iteration.end` and `loop.git.commit` events
+     - Also trigger diff indicator when `toolCalls.length` changes (tool calls often mean file operations)
+     - Component now watches these signals instead of `diffContent.length`
+
+2. **AI reasoning/thinking not displayed in logs**
+   - **Problem:** The OpenCode SDK emits `ReasoningPart` events for AI chain-of-thought reasoning, but we weren't handling them
+   - **Solution:**
+     - Added `reasoning.delta` to `AgentEvent` type in `src/backends/types.ts`
+     - Added handler for `part.type === "reasoning"` in OpenCode backend's `translateEvent()` method
+     - Added `reasoning.delta` case in LoopEngine's event handler to create and update "AI reasoning..." log entries
+     - Reasoning content is now displayed in the log viewer under the "agent" log level
+
+**Files Modified:**
+- `src/hooks/useLoop.ts` - Added `gitChangeCounter` state and increment on git-related events
+- `src/components/LoopDetails.tsx` - Watch `gitChangeCounter` and `toolCalls.length` for diff indicator
+- `src/backends/types.ts` - Added `reasoning.delta` to `AgentEvent` union type
+- `src/backends/opencode/index.ts` - Handle `reasoning` part type in `translateEvent()`
+- `src/core/loop-engine.ts` - Handle `reasoning.delta` events, track reasoning content in logs
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **135 tests PASS**
+- `bun run build` - **PASS**

@@ -103,6 +103,7 @@ export type AgentEvent =
   | { type: "message.start"; messageId: string }
   | { type: "message.delta"; content: string }
   | { type: "message.complete"; content: string }
+  | { type: "reasoning.delta"; content: string }
   | { type: "tool.start"; toolName: string; input: unknown }
   | { type: "tool.complete"; toolName: string; output: unknown }
   | { type: "error"; message: string };

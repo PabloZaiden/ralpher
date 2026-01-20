@@ -539,12 +539,14 @@ export class LoopEngine {
     });
 
     let responseContent = "";
+    let reasoningContent = "";
     let messageCount = 0;
     let toolCallCount = 0;
     let outcome: IterationResult["outcome"] = "continue";
     let error: string | undefined;
     let currentMessageId: string | null = null;
     let currentResponseLogId: string | null = null;
+    let currentReasoningLogId: string | null = null;
     const toolCalls = new Map<string, { id: string; name: string; input: unknown }>();
 
     try {
@@ -601,7 +603,29 @@ export class LoopEngine {
             });
             break;
 
+          case "reasoning.delta":
+            // AI reasoning/thinking content (chain of thought)
+            if (!currentReasoningLogId) {
+              // Create a new log entry for reasoning on first delta
+              currentReasoningLogId = this.emitLog("agent", "AI reasoning...", {
+                reasoningContent: event.content,
+              });
+            }
+            reasoningContent += event.content;
+            // Update the reasoning log entry with accumulated content
+            this.emitLog("agent", "AI reasoning...", {
+              reasoningContent,
+            }, currentReasoningLogId);
+            break;
+
           case "message.complete":
+            // Final update to the reasoning log if there was reasoning
+            if (currentReasoningLogId && reasoningContent) {
+              this.emitLog("agent", "AI finished reasoning", {
+                reasoningContent,
+                reasoningLength: reasoningContent.length,
+              }, currentReasoningLogId);
+            }
             // Final update to the response log with complete content
             if (currentResponseLogId) {
               this.emitLog("agent", "AI finished generating response", {

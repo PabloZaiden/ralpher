@@ -394,6 +394,14 @@ export class OpenCodeBackend implements AgentBackend {
               content: event.properties.delta,
             };
           }
+        } else if (part.type === "reasoning") {
+          // Reasoning content (AI thinking/chain of thought)
+          if (event.properties.delta) {
+            return {
+              type: "reasoning.delta",
+              content: event.properties.delta,
+            };
+          }
         } else if (part.type === "tool") {
           const state = part.state;
           const partId = part.id;

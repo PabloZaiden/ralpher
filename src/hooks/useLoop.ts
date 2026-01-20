@@ -53,6 +53,8 @@ export interface UseLoopResult {
   progressContent: string;
   /** Application logs from the loop engine */
   logs: LogEntry[];
+  /** Counter that increments when git changes occur (use to trigger diff refresh) */
+  gitChangeCounter: number;
   /** Refresh loop data */
   refresh: () => Promise<void>;
   /** Update the loop */
@@ -90,6 +92,7 @@ export function useLoop(loopId: string): UseLoopResult {
   const [toolCalls, setToolCalls] = useState<ToolCallData[]>([]);
   const [progressContent, setProgressContent] = useState<string>("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [gitChangeCounter, setGitChangeCounter] = useState(0);
 
   // SSE connection for real-time updates
   const { events, status: sseStatus } = useLoopSSE<LoopEvent>(loopId, {
@@ -170,8 +173,13 @@ export function useLoop(loopId: string): UseLoopResult {
       case "loop.accepted":
       case "loop.discarded":
       case "loop.error":
+        refresh();
+        break;
+
       case "loop.iteration.end":
       case "loop.git.commit":
+        // These events indicate git changes that affect the diff
+        setGitChangeCounter((prev) => prev + 1);
         refresh();
         break;
     }
@@ -432,6 +440,7 @@ export function useLoop(loopId: string): UseLoopResult {
     toolCalls,
     progressContent,
     logs,
+    gitChangeCounter,
     refresh,
     update,
     remove,

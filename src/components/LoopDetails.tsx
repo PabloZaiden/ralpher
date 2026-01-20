@@ -136,6 +136,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     toolCalls,
     progressContent,
     logs,
+    gitChangeCounter,
     refresh,
     start,
     stop,
@@ -163,7 +164,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const prevMessagesCount = useRef(0);
   const prevToolCallsCount = useRef(0);
   const prevLogsCount = useRef(0);
-  const prevDiffCount = useRef(0);
   const prevPlanContent = useRef<string | null>(null);
   const prevStatusContent = useRef<string | null>(null);
 
@@ -200,13 +200,22 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     prevLogsCount.current = logs.length;
   }, [messages.length, toolCalls.length, logs.length, activeTab]);
 
-  // Detect changes in diff content
+  // Detect changes in diff content based on git change events and tool calls
+  // gitChangeCounter increments when iteration ends or git commit happens
+  // toolCalls changes often mean file operations that affect the diff
+  const prevGitChangeCounter = useRef(0);
+  const prevToolCallsForDiff = useRef(0);
   useEffect(() => {
-    if (diffContent.length > prevDiffCount.current && activeTab !== "diff") {
+    const hasGitChange = gitChangeCounter > prevGitChangeCounter.current;
+    const hasToolChange = toolCalls.length > prevToolCallsForDiff.current;
+    
+    if ((hasGitChange || hasToolChange) && activeTab !== "diff") {
       setTabsWithUpdates((prev) => new Set(prev).add("diff"));
     }
-    prevDiffCount.current = diffContent.length;
-  }, [diffContent.length, activeTab]);
+    
+    prevGitChangeCounter.current = gitChangeCounter;
+    prevToolCallsForDiff.current = toolCalls.length;
+  }, [gitChangeCounter, toolCalls.length, activeTab]);
 
   // Detect changes in plan content
   useEffect(() => {
