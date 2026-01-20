@@ -422,6 +422,39 @@ src/components/common/
 
 ## Notes
 
+### 2026-01-20 - Test Fixes for Async Streaming
+
+- Fixed failing unit tests in `tests/unit/loop-engine.test.ts`
+  - The `LoopEngine.runIteration()` was changed to use async streaming (`sendPromptAsync` + `subscribeToEvents`) instead of sync `sendPrompt`
+  - Updated the inline `createMockBackend` function to properly implement async streaming:
+    - `sendPromptAsync()` now stores response for `subscribeToEvents` to yield
+    - `subscribeToEvents()` now yields proper events: `message.start`, `message.delta`, `message.complete`
+  - Updated 3 test cases that override the mock backend:
+    - "can be stopped manually" - uses async events with resolver
+    - "pause and resume works" - uses async streaming
+    - "handles errors gracefully" - throws from `sendPromptAsync`
+- All 135 tests now pass (previously 20 were failing with timeouts)
+- Build succeeds
+
+### 2026-01-20 - UI and Logging Improvements (Previous Session)
+
+- **SSE "Connecting..." status fix:**
+  - Added heartbeat/keepalive to `src/core/event-emitter.ts` (every 15 seconds)
+  - Fixed `src/hooks/useSSE.ts` error handling for reconnection state
+
+- **Real-time logging improvements:**
+  - Changed `LoopEngine.runIteration()` to use async streaming for real-time events
+  - Now emits `loop.progress` events for streaming text deltas
+  - Now emits `loop.tool_call` events as tools are invoked
+  - Emits `loop.message` with full content when complete
+
+- **AI-generated commit messages:**
+  - `LoopEngine.commitIteration()` now accepts `responseContent` parameter
+  - Added `generateCommitMessage()` method that:
+    1. Gets list of changed files
+    2. Asks opencode to generate a meaningful commit message
+    3. Falls back to file list if AI generation fails
+
 ### 2026-01-20 - TypeScript Errors Fixed
 
 - Fixed all TypeScript errors to make `bun x tsc --noEmit` pass:

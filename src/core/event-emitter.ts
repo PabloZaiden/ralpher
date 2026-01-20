@@ -116,6 +116,7 @@ export class FilteredEventEmitter {
 
 /**
  * Create a ReadableStream from the event emitter for SSE.
+ * Includes periodic heartbeat to keep connection alive.
  */
 export function createSSEStream(
   emitter: SimpleEventEmitter<LoopEvent>,
@@ -123,9 +124,30 @@ export function createSSEStream(
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let unsubscribe: Unsubscribe | null = null;
+  let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
   return new ReadableStream({
     start(controller) {
+      // Send initial connection event
+      try {
+        controller.enqueue(encoder.encode(": connected\n\n"));
+      } catch {
+        // Ignore if controller is closed
+      }
+
+      // Set up heartbeat every 15 seconds to keep connection alive
+      heartbeatInterval = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": heartbeat\n\n"));
+        } catch {
+          // Controller may be closed, clean up
+          if (heartbeatInterval) {
+            clearInterval(heartbeatInterval);
+            heartbeatInterval = null;
+          }
+        }
+      }, 15000);
+
       unsubscribe = emitter.subscribe((event) => {
         // If loopId is specified, only send events for that loop
         if (loopId && "loopId" in event && event.loopId !== loopId) {
@@ -141,6 +163,10 @@ export function createSSEStream(
       });
     },
     cancel() {
+      if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+      }
       if (unsubscribe) {
         unsubscribe();
         unsubscribe = null;

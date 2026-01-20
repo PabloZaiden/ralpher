@@ -79,6 +79,12 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEResult<T> 
     };
 
     eventSource.onmessage = (messageEvent) => {
+      // Skip comment/heartbeat messages (they start with ":")
+      // EventSource doesn't fire onmessage for comments, but just in case
+      if (!messageEvent.data || messageEvent.data.trim() === "") {
+        return;
+      }
+
       try {
         const data = JSON.parse(messageEvent.data) as T;
         setEvents((prev) => {
@@ -91,14 +97,19 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEResult<T> 
         });
         onEvent?.(data);
       } catch {
-        // Ignore parse errors
+        // Ignore parse errors (could be comments or malformed data)
         console.warn("Failed to parse SSE event:", messageEvent.data);
       }
     };
 
-    eventSource.onerror = () => {
-      updateStatus("error");
-      // EventSource will automatically try to reconnect
+    eventSource.onerror = (e) => {
+      // EventSource goes to CONNECTING state automatically on error
+      // Only set error if it's truly closed
+      if (eventSource.readyState === EventSource.CLOSED) {
+        updateStatus("error");
+      } else if (eventSource.readyState === EventSource.CONNECTING) {
+        updateStatus("connecting");
+      }
     };
   }, [url, maxEvents, onEvent, updateStatus]);
 

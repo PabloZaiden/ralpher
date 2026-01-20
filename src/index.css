@@ -9,7 +9,7 @@
     @apply grid place-items-center min-w-[320px] min-h-screen relative m-0;
   }
 }
-
+/* 
 body::before {
   content: "";
   position: fixed;
@@ -21,7 +21,7 @@ body::before {
   transform: rotate(-12deg) scale(1.35);
   animation: slide 30s linear infinite;
   pointer-events: none;
-}
+} */
 
 @keyframes slide {
   from {

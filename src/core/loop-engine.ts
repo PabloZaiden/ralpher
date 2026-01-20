@@ -367,7 +367,7 @@ export class LoopEngine {
   }
 
   /**
-   * Run a single iteration.
+   * Run a single iteration with real-time event streaming.
    */
   private async runIteration(): Promise<IterationResult> {
     const iteration = this.loop.state.currentIteration + 1;
@@ -391,6 +391,8 @@ export class LoopEngine {
     let toolCallCount = 0;
     let outcome: IterationResult["outcome"] = "continue";
     let error: string | undefined;
+    let currentMessageId: string | null = null;
+    const toolCalls = new Map<string, { name: string; input: unknown }>();
 
     try {
       // Build the prompt
@@ -401,33 +403,113 @@ export class LoopEngine {
         throw new Error("No session ID");
       }
 
-      const response = await this.backend.sendPrompt(this.sessionId, prompt);
-      responseContent = response.content;
-      messageCount = 1;
-      toolCallCount = response.parts.filter((p) => p.type === "tool_call").length;
+      // Send prompt asynchronously
+      await this.backend.sendPromptAsync(this.sessionId, prompt);
 
-      // Emit message event
-      this.emit({
-        type: "loop.message",
-        loopId: this.config.id,
-        iteration,
-        message: {
-          id: response.id,
-          role: "assistant",
-          content: responseContent,
-          timestamp: createTimestamp(),
-        },
-        timestamp: createTimestamp(),
-      });
+      // Subscribe to events and process them
+      for await (const event of this.backend.subscribeToEvents(this.sessionId)) {
+        // Check if aborted
+        if (this.aborted) {
+          break;
+        }
+
+        // Update last activity timestamp
+        this.updateState({ lastActivityAt: createTimestamp() });
+
+        switch (event.type) {
+          case "message.start":
+            currentMessageId = event.messageId;
+            messageCount++;
+            break;
+
+          case "message.delta":
+            responseContent += event.content;
+            // Emit progress event for streaming text
+            this.emit({
+              type: "loop.progress",
+              loopId: this.config.id,
+              iteration,
+              content: event.content,
+              timestamp: createTimestamp(),
+            });
+            break;
+
+          case "message.complete":
+            // Emit the complete message
+            this.emit({
+              type: "loop.message",
+              loopId: this.config.id,
+              iteration,
+              message: {
+                id: currentMessageId || `msg-${Date.now()}`,
+                role: "assistant",
+                content: responseContent,
+                timestamp: createTimestamp(),
+              },
+              timestamp: createTimestamp(),
+            });
+            // Message complete means iteration is done
+            break;
+
+          case "tool.start": {
+            const toolId = `tool-${Date.now()}-${toolCallCount}`;
+            toolCalls.set(event.toolName, { name: event.toolName, input: event.input });
+            toolCallCount++;
+            // Emit tool call event
+            this.emit({
+              type: "loop.tool_call",
+              loopId: this.config.id,
+              iteration,
+              tool: {
+                id: toolId,
+                name: event.toolName,
+                input: event.input,
+                status: "running",
+              },
+              timestamp: createTimestamp(),
+            });
+            break;
+          }
+
+          case "tool.complete": {
+            const toolInfo = toolCalls.get(event.toolName);
+            // Emit tool complete event
+            this.emit({
+              type: "loop.tool_call",
+              loopId: this.config.id,
+              iteration,
+              tool: {
+                id: `tool-${event.toolName}`,
+                name: event.toolName,
+                input: toolInfo?.input,
+                output: event.output,
+                status: "completed",
+              },
+              timestamp: createTimestamp(),
+            });
+            break;
+          }
+
+          case "error":
+            outcome = "error";
+            error = event.message;
+            break;
+        }
+
+        // If message is complete or error occurred, stop listening
+        if (event.type === "message.complete" || event.type === "error") {
+          break;
+        }
+      }
 
       // Check for stop pattern
-      if (this.stopDetector.matches(responseContent)) {
+      if (outcome !== "error" && this.stopDetector.matches(responseContent)) {
         outcome = "complete";
       }
 
       // Commit changes if git is enabled
-      if (this.config.git.enabled) {
-        await this.commitIteration(iteration);
+      if (this.config.git.enabled && outcome !== "error") {
+        await this.commitIteration(iteration, responseContent);
       }
     } catch (err) {
       outcome = "error";
@@ -494,8 +576,9 @@ export class LoopEngine {
 
   /**
    * Commit changes after an iteration.
+   * Generates a meaningful commit message based on the changes made.
    */
-  private async commitIteration(iteration: number): Promise<void> {
+  private async commitIteration(iteration: number, responseContent: string): Promise<void> {
     const directory = this.config.directory;
     const hasChanges = await this.git.hasUncommittedChanges(directory);
 
@@ -503,7 +586,15 @@ export class LoopEngine {
       return; // No changes to commit
     }
 
-    const message = `${this.config.git.commitPrefix} Iteration ${iteration}`;
+    // Generate commit message based on changes
+    let message: string;
+    try {
+      message = await this.generateCommitMessage(iteration, responseContent);
+    } catch (err) {
+      // Fallback to generic message if generation fails
+      console.warn(`Failed to generate commit message: ${String(err)}`);
+      message = `${this.config.git.commitPrefix} Iteration ${iteration}`;
+    }
 
     try {
       const commitInfo = await this.git.commit(directory, message);
@@ -537,6 +628,68 @@ export class LoopEngine {
       // Log but don't fail the iteration
       console.error(`Failed to commit iteration ${iteration}: ${String(err)}`);
     }
+  }
+
+  /**
+   * Generate a meaningful commit message based on the changes.
+   * Uses opencode to summarize what was done.
+   */
+  private async generateCommitMessage(iteration: number, responseContent: string): Promise<string> {
+    if (!this.sessionId) {
+      return `${this.config.git.commitPrefix} Iteration ${iteration}`;
+    }
+
+    // Get the list of changed files
+    const changedFiles = await this.git.getChangedFiles(this.config.directory);
+    if (changedFiles.length === 0) {
+      return `${this.config.git.commitPrefix} Iteration ${iteration}`;
+    }
+
+    // Ask opencode to generate a commit message
+    const prompt: PromptInput = {
+      parts: [{
+        type: "text",
+        text: `Generate a concise git commit message (max 72 characters for the first line) for the following changes. Do not include any explanation, just output the commit message directly.
+
+Changed files:
+${changedFiles.map(f => `- ${f}`).join("\n")}
+
+Summary of work done this iteration:
+${responseContent.slice(0, 500)}...
+
+The commit message should:
+1. Start with a verb (Add, Fix, Update, Refactor, etc.)
+2. Be specific about what changed
+3. First line max 72 characters
+4. Optionally include a blank line and more details
+
+Output ONLY the commit message, nothing else.`
+      }],
+    };
+
+    try {
+      const response = await this.backend.sendPrompt(this.sessionId, prompt);
+      const generatedMessage = response.content.trim();
+      
+      // Validate the message isn't too long or empty
+      if (generatedMessage && generatedMessage.length > 0 && generatedMessage.length < 500) {
+        // Prepend the commit prefix
+        const firstLine = generatedMessage.split("\n")[0] ?? generatedMessage;
+        const rest = generatedMessage.split("\n").slice(1).join("\n");
+        
+        if (rest) {
+          return `${this.config.git.commitPrefix} ${firstLine}\n${rest}`;
+        }
+        return `${this.config.git.commitPrefix} ${firstLine}`;
+      }
+    } catch (err) {
+      console.warn(`Failed to generate commit message via AI: ${String(err)}`);
+    }
+
+    // Fallback: generate a simple message based on changed files
+    const fileList = changedFiles.slice(0, 3).join(", ");
+    const moreFiles = changedFiles.length > 3 ? ` (+${changedFiles.length - 3} more)` : "";
+    return `${this.config.git.commitPrefix} Iteration ${iteration}: ${fileList}${moreFiles}`;
   }
 
   /**

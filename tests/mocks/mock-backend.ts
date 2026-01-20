@@ -39,6 +39,7 @@ export class MockBackend implements AgentBackend {
   private sessions = new Map<string, AgentSession>();
   private responseIndex = 0;
   private config: MockBackendConfig;
+  private pendingPrompt: { resolve: () => void; content: string } | null = null;
 
   // Track calls for assertions
   public connectCalls: BackendConnectionConfig[] = [];
@@ -109,8 +110,23 @@ export class MockBackend implements AgentBackend {
     };
   }
 
-  async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
-    // Not implemented for sync tests
+  async sendPromptAsync(sessionId: string, prompt: PromptInput): Promise<void> {
+    this.sendPromptCalls.push({ sessionId, prompt });
+
+    if (this.config.throwOnPrompt) {
+      throw new Error(this.config.errorMessage ?? "Mock backend error");
+    }
+
+    // Store the response content for subscribeToEvents to use
+    const responses = this.config.responses ?? [];
+    const content = responses[this.responseIndex] ?? "<promise>COMPLETE</promise>";
+    this.responseIndex++;
+
+    // Store pending prompt for event generation
+    this.pendingPrompt = {
+      resolve: () => {},
+      content,
+    };
   }
 
   async abortSession(sessionId: string): Promise<void> {
@@ -118,9 +134,35 @@ export class MockBackend implements AgentBackend {
   }
 
   async *subscribeToEvents(_sessionId: string): AsyncIterable<AgentEvent> {
-    const events = this.config.events ?? [];
-    for (const event of events) {
-      yield event;
+    // If there are explicit events configured, use those
+    if (this.config.events && this.config.events.length > 0) {
+      for (const event of this.config.events) {
+        yield event;
+      }
+      return;
+    }
+
+    // Otherwise, generate events based on the pending prompt
+    if (this.pendingPrompt) {
+      const content = this.pendingPrompt.content;
+      
+      // Add delay if configured
+      if (this.config.responseDelay && this.config.responseDelay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, this.config.responseDelay));
+      }
+
+      // Emit message start
+      yield { type: "message.start", messageId: `mock-msg-${Date.now()}` };
+
+      // Emit content as delta
+      yield { type: "message.delta", content };
+
+      // Emit message complete
+      yield { type: "message.complete", content };
+
+      this.pendingPrompt = null;
+    } else if (this.config.throwOnPrompt) {
+      yield { type: "error", message: this.config.errorMessage ?? "Mock backend error" };
     }
   }
 
@@ -135,6 +177,7 @@ export class MockBackend implements AgentBackend {
     this.createSessionCalls = [];
     this.sendPromptCalls = [];
     this.abortCalls = [];
+    this.pendingPrompt = null;
   }
 
   /**

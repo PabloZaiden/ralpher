@@ -58,11 +58,12 @@ describe("LoopEngine", () => {
   let emitter: SimpleEventEmitter<LoopEvent>;
   let emittedEvents: LoopEvent[];
 
-  // Create a mock backend
+  // Create a mock backend that supports async streaming
   function createMockBackend(responses: string[]): AgentBackend {
     let responseIndex = 0;
     let connected = false;
     const sessions = new Map<string, AgentSession>();
+    let pendingResponse: string | null = null;
 
     return {
       name: "mock",
@@ -108,15 +109,26 @@ describe("LoopEngine", () => {
       },
 
       async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
-        // Not used in tests
+        // Store the response for subscribeToEvents to yield
+        const content = responses[responseIndex] ?? "Default response";
+        responseIndex++;
+        pendingResponse = content;
       },
 
       async abortSession(_sessionId: string): Promise<void> {
-        // Not used in tests
+        // Mark as aborted
       },
 
       async *subscribeToEvents(_sessionId: string): AsyncIterable<AgentEvent> {
-        // Not used in tests
+        // Yield events based on pendingResponse
+        if (pendingResponse !== null) {
+          const content = pendingResponse;
+          pendingResponse = null;
+
+          yield { type: "message.start", messageId: `msg-${Date.now()}` };
+          yield { type: "message.delta", content };
+          yield { type: "message.complete", content };
+        }
       },
     };
   }
@@ -222,23 +234,25 @@ describe("LoopEngine", () => {
   test("can be stopped manually", async () => {
     const loop = createTestLoop({ maxIterations: 10 });
 
-    // Create a slow backend that we can control
-    let resolvePrompt: (() => void) | undefined;
-    let promptCalled = false;
+    // Create a slow backend that we can control using async streaming
+    let resolveEvents: (() => void) | undefined;
+    let sendPromptAsyncCalled = false;
 
+    const baseMock = createMockBackend([]);
     mockBackend = {
-      ...createMockBackend([]),
-      async sendPrompt(): Promise<AgentResponse> {
-        promptCalled = true;
-        // Wait for external signal
+      ...baseMock,
+      async sendPromptAsync(): Promise<void> {
+        sendPromptAsyncCalled = true;
+        // This just signals we're ready for events
+      },
+      async *subscribeToEvents(): AsyncIterable<AgentEvent> {
+        // Wait for external signal before yielding events
         await new Promise<void>((resolve) => {
-          resolvePrompt = resolve;
+          resolveEvents = resolve;
         });
-        return {
-          id: `msg-${Date.now()}`,
-          content: "Still working...",
-          parts: [{ type: "text", text: "Still working..." }],
-        };
+        yield { type: "message.start", messageId: `msg-${Date.now()}` };
+        yield { type: "message.delta", content: "Still working..." };
+        yield { type: "message.complete", content: "Still working..." };
       },
     };
 
@@ -251,16 +265,16 @@ describe("LoopEngine", () => {
     // Start in background
     const startPromise = engine.start();
 
-    // Wait for the prompt to be called
-    while (!promptCalled) {
+    // Wait for sendPromptAsync to be called
+    while (!sendPromptAsyncCalled) {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
 
     // Now stop the engine (this sets aborted flag)
     await engine.stop("Test stop");
 
-    // Resolve the pending prompt so the loop can finish
-    if (resolvePrompt) resolvePrompt();
+    // Resolve the pending events so the loop can finish
+    if (resolveEvents) resolveEvents();
 
     await startPromise;
 
@@ -272,20 +286,21 @@ describe("LoopEngine", () => {
     // the pause method when it's in a pauseable state
     const loop = createTestLoop({ maxIterations: 5 });
 
-    // Create a backend that completes on 2nd iteration
+    // Create a backend that completes on 2nd iteration using async streaming
     let responseCount = 0;
 
+    const baseMock = createMockBackend([]);
     mockBackend = {
-      ...createMockBackend([]),
-      async sendPrompt(): Promise<AgentResponse> {
+      ...baseMock,
+      async sendPromptAsync(): Promise<void> {
         responseCount++;
+      },
+      async *subscribeToEvents(): AsyncIterable<AgentEvent> {
         // Complete on second iteration
         const content = responseCount >= 2 ? "<promise>COMPLETE</promise>" : "Working...";
-        return {
-          id: `msg-${Date.now()}`,
-          content,
-          parts: [{ type: "text", text: content }],
-        };
+        yield { type: "message.start", messageId: `msg-${Date.now()}` };
+        yield { type: "message.delta", content };
+        yield { type: "message.complete", content };
       },
     };
 
@@ -306,9 +321,10 @@ describe("LoopEngine", () => {
   test("handles errors gracefully", async () => {
     const loop = createTestLoop();
 
+    const baseMock = createMockBackend([]);
     mockBackend = {
-      ...createMockBackend([]),
-      async sendPrompt(): Promise<AgentResponse> {
+      ...baseMock,
+      async sendPromptAsync(): Promise<void> {
         throw new Error("Backend error");
       },
     };
