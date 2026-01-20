@@ -44,14 +44,29 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEResult<T> 
   const [status, setStatus] = useState<SSEStatus>("closed");
   const eventSourceRef = useRef<EventSource | null>(null);
 
+  // Use refs for callbacks to avoid re-triggering effects
+  const onEventRef = useRef(onEvent);
+  const onStatusChangeRef = useRef(onStatusChange);
+  const maxEventsRef = useRef(maxEvents);
+
+  // Keep refs up to date
+  useEffect(() => {
+    onEventRef.current = onEvent;
+  }, [onEvent]);
+
+  useEffect(() => {
+    onStatusChangeRef.current = onStatusChange;
+  }, [onStatusChange]);
+
+  useEffect(() => {
+    maxEventsRef.current = maxEvents;
+  }, [maxEvents]);
+
   // Update status and call callback
-  const updateStatus = useCallback(
-    (newStatus: SSEStatus) => {
-      setStatus(newStatus);
-      onStatusChange?.(newStatus);
-    },
-    [onStatusChange]
-  );
+  const updateStatus = useCallback((newStatus: SSEStatus) => {
+    setStatus(newStatus);
+    onStatusChangeRef.current?.(newStatus);
+  }, []);
 
   // Disconnect from SSE
   const disconnect = useCallback(() => {
@@ -90,19 +105,19 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEResult<T> 
         setEvents((prev) => {
           const newEvents = [...prev, data];
           // Trim to maxEvents
-          if (newEvents.length > maxEvents) {
-            return newEvents.slice(-maxEvents);
+          if (newEvents.length > maxEventsRef.current) {
+            return newEvents.slice(-maxEventsRef.current);
           }
           return newEvents;
         });
-        onEvent?.(data);
+        onEventRef.current?.(data);
       } catch {
         // Ignore parse errors (could be comments or malformed data)
         console.warn("Failed to parse SSE event:", messageEvent.data);
       }
     };
 
-    eventSource.onerror = (e) => {
+    eventSource.onerror = () => {
       // EventSource goes to CONNECTING state automatically on error
       // Only set error if it's truly closed
       if (eventSource.readyState === EventSource.CLOSED) {
@@ -111,24 +126,27 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEResult<T> 
         updateStatus("connecting");
       }
     };
-  }, [url, maxEvents, onEvent, updateStatus]);
+  }, [url, updateStatus]);
 
   // Clear events
   const clearEvents = useCallback(() => {
     setEvents([]);
   }, []);
 
-  // Auto-connect on mount
+  // Auto-connect on mount, reconnect only when URL changes
   useEffect(() => {
     if (autoConnect) {
       connect();
     }
 
-    // Cleanup on unmount
+    // Cleanup on unmount or URL change
     return () => {
-      disconnect();
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
     };
-  }, [autoConnect, connect, disconnect]);
+  }, [url, autoConnect]); // Only depend on url and autoConnect, not connect/disconnect
 
   return {
     events,

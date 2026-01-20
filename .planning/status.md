@@ -422,6 +422,17 @@ src/components/common/
 
 ## Notes
 
+### 2026-01-20 - SSE Connection Flickering Fix
+
+- Fixed the "Connecting..." status flickering issue in `src/hooks/useSSE.ts`
+- **Root cause:** The `connect` callback was being recreated on every render because it depended on `onEvent` which was a new function reference each time. The `useEffect` depended on `connect`, causing reconnection on every render.
+- **Fix:** 
+  - Store callbacks (`onEvent`, `onStatusChange`, `maxEvents`) in refs to avoid triggering effect re-runs
+  - Remove `connect` and `disconnect` from the `useEffect` dependency array
+  - Only reconnect when `url` or `autoConnect` actually changes
+- Tests: 135 pass
+- Build: Succeeds
+
 ### 2026-01-20 - Test Fixes for Async Streaming
 
 - Fixed failing unit tests in `tests/unit/loop-engine.test.ts`
