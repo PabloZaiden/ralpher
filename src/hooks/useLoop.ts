@@ -98,19 +98,26 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Handle SSE events
   function handleSSEEvent(event: LoopEvent) {
+    console.log("[useLoop] SSE event received:", event.type, event);
+    
     switch (event.type) {
       case "loop.log":
         // Add log entry
-        setLogs((prev) => [
-          ...prev,
-          {
-            id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-            level: event.level,
-            message: event.message,
-            details: event.details,
-            timestamp: event.timestamp,
-          },
-        ]);
+        console.log("[useLoop] Adding log entry:", event.message, "current logs count:", logs.length);
+        setLogs((prev) => {
+          const newLogs = [
+            ...prev,
+            {
+              id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+              level: event.level,
+              message: event.message,
+              details: event.details,
+              timestamp: event.timestamp,
+            },
+          ];
+          console.log("[useLoop] New logs count:", newLogs.length);
+          return newLogs;
+        });
         break;
 
       case "loop.progress":

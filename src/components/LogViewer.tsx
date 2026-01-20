@@ -111,6 +111,7 @@ export function LogViewer({
   autoScroll = true,
   maxHeight = "500px",
 }: LogViewerProps) {
+  console.log("[LogViewer] Rendering with:", { messages: messages.length, toolCalls: toolCalls.length, logs: logs.length, progressContent: progressContent?.length });
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when content changes

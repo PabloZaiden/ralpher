@@ -31,6 +31,7 @@ export class SimpleEventEmitter<T = LoopEvent> {
    * Emit an event to all subscribers.
    */
   emit(event: T): void {
+    console.log("[EventEmitter] Emitting event:", (event as LoopEvent).type, "to", this.handlers.size, "subscribers");
     for (const handler of this.handlers) {
       try {
         handler(event);
@@ -157,6 +158,7 @@ export function createSSEStream(
 
         try {
           const data = `data: ${JSON.stringify(event)}\n\n`;
+          console.log("[SSE] Sending event to stream:", event.type, "loopId:", loopId || "global");
           controller.enqueue(encoder.encode(data));
         } catch {
           // Controller may be closed, ignore
