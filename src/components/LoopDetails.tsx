@@ -2,7 +2,7 @@
  * LoopDetails component showing full loop information with tabs.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { LoopStatus, FileDiff, FileContentResponse, UncommittedChangesError } from "../types";
 import { useLoop } from "../hooks";
 import { Badge, Button, Card, ConfirmModal, Modal, getStatusBadgeVariant } from "./common";
@@ -156,6 +156,17 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [loadingContent, setLoadingContent] = useState(false);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
+  // Track which tabs have unseen updates
+  const [tabsWithUpdates, setTabsWithUpdates] = useState<Set<TabId>>(new Set());
+  
+  // Track previous values to detect changes
+  const prevMessagesCount = useRef(0);
+  const prevToolCallsCount = useRef(0);
+  const prevLogsCount = useRef(0);
+  const prevDiffCount = useRef(0);
+  const prevPlanContent = useRef<string | null>(null);
+  const prevStatusContent = useRef<string | null>(null);
+
   // Modals
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [discardConfirm, setDiscardConfirm] = useState(false);
@@ -164,6 +175,56 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     error: UncommittedChangesError | null;
   }>({ open: false, error: null });
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Clear update indicator when switching to a tab
+  function handleTabChange(tabId: TabId) {
+    setActiveTab(tabId);
+    setTabsWithUpdates((prev) => {
+      const next = new Set(prev);
+      next.delete(tabId);
+      return next;
+    });
+  }
+
+  // Detect changes in log content (messages, toolCalls, logs)
+  useEffect(() => {
+    const totalLogItems = messages.length + toolCalls.length + logs.length;
+    const prevTotal = prevMessagesCount.current + prevToolCallsCount.current + prevLogsCount.current;
+    
+    if (totalLogItems > prevTotal && activeTab !== "log") {
+      setTabsWithUpdates((prev) => new Set(prev).add("log"));
+    }
+    
+    prevMessagesCount.current = messages.length;
+    prevToolCallsCount.current = toolCalls.length;
+    prevLogsCount.current = logs.length;
+  }, [messages.length, toolCalls.length, logs.length, activeTab]);
+
+  // Detect changes in diff content
+  useEffect(() => {
+    if (diffContent.length > prevDiffCount.current && activeTab !== "diff") {
+      setTabsWithUpdates((prev) => new Set(prev).add("diff"));
+    }
+    prevDiffCount.current = diffContent.length;
+  }, [diffContent.length, activeTab]);
+
+  // Detect changes in plan content
+  useEffect(() => {
+    const currentContent = planContent?.content ?? null;
+    if (currentContent !== null && currentContent !== prevPlanContent.current && activeTab !== "plan") {
+      setTabsWithUpdates((prev) => new Set(prev).add("plan"));
+    }
+    prevPlanContent.current = currentContent;
+  }, [planContent?.content, activeTab]);
+
+  // Detect changes in status content
+  useEffect(() => {
+    const currentContent = statusContent?.content ?? null;
+    if (currentContent !== null && currentContent !== prevStatusContent.current && activeTab !== "status") {
+      setTabsWithUpdates((prev) => new Set(prev).add("status"));
+    }
+    prevStatusContent.current = currentContent;
+  }, [statusContent?.content, activeTab]);
 
   // Load content when tab changes
   useEffect(() => {
@@ -458,19 +519,25 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
           <div className="lg:col-span-4 xl:col-span-5">
             {/* Tab navigation */}
             <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                    activeTab === tab.id
-                      ? "border-blue-500 text-blue-600 dark:text-blue-400"
-                      : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
+              {tabs.map((tab) => {
+                const hasUpdate = tabsWithUpdates.has(tab.id);
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={`relative px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                      activeTab === tab.id
+                        ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                        : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                    }`}
+                  >
+                    {tab.label}
+                    {hasUpdate && activeTab !== tab.id && (
+                      <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-blue-500" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {/* Tab content */}

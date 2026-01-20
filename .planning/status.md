@@ -801,3 +801,43 @@ src/components/common/
 - `bun x tsc --noEmit` - **PASS** (no errors)
 - `bun test` - **135 tests PASS**
 - `bun run build` - **PASS**
+
+---
+
+### 2026-01-20 - Tab Update Indicators (Current Session)
+
+**Feature:** Show visual indicator on inactive tabs when they have new updates
+
+**Implementation in `src/components/LoopDetails.tsx`:**
+
+1. **Added state to track tabs with unseen updates:**
+   - `tabsWithUpdates`: Set of TabIds that have unread changes
+   - Refs to track previous counts/values: `prevMessagesCount`, `prevToolCallsCount`, `prevLogsCount`, `prevDiffCount`, `prevPlanContent`, `prevStatusContent`
+
+2. **Added change detection effects:**
+   - **Log tab**: Detects changes in `messages`, `toolCalls`, or `logs` arrays
+   - **Diff tab**: Detects when `diffContent` array grows
+   - **Plan tab**: Detects when `planContent.content` changes
+   - **Status tab**: Detects when `statusContent.content` changes
+   - Only marks tab as having updates if it's not the active tab
+
+3. **Added `handleTabChange()` function:**
+   - Switches to the new tab
+   - Clears the update indicator for that tab
+
+4. **Added visual indicator:**
+   - Small blue dot (2x2 rounded-full) positioned at top-right of tab button
+   - Only shows when tab has updates AND is not active
+
+**Visual Result:**
+- When user is on "Log" tab and new files appear in diff, the "Diff" tab shows a blue dot
+- When user clicks on "Diff" tab, the dot disappears
+- Same behavior for Log, Plan, Status, and Diff tabs
+
+**Files Modified:**
+- `src/components/LoopDetails.tsx` - Added tab update indicator system
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **135 tests PASS**
+- `bun run build` - **PASS**
