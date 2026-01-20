@@ -767,3 +767,37 @@ src/components/common/
 - `bun x tsc --noEmit` - **PASS** (no errors)
 - `bun test` - **135 tests PASS**
 - `bun run build` - **PASS**
+
+---
+
+### 2026-01-20 - Duplicate Events Fix (Current Session)
+
+**Issue:**
+- Users were seeing duplicate events in the log viewer
+- For example: "AI started generating response" appearing 3 times, or the same bash tool call with input appearing 7-8 times before showing output
+- Root cause: The OpenCode SDK emits `message.updated` and `message.part.updated` events repeatedly as messages/parts are being built up - each update was being treated as a new event
+
+**Fix Applied in `src/backends/opencode/index.ts`:**
+
+1. **Updated `subscribeToEvents()` method:**
+   - Added `emittedMessageStarts` Set to track message IDs we've already emitted `message.start` events for
+   - Added `toolPartStatus` Map to track tool part IDs and their last known status
+
+2. **Updated `translateEvent()` method:**
+   - For `message.updated`: Only emit `message.start` once per message ID (skip if already in Set)
+   - For `message.part.updated` with tool type: Only emit `tool.start` or `tool.complete` when status changes (skip if same status already emitted)
+   - Text deltas (`message.delta`) are always unique content, so no deduplication needed
+
+**Deduplication Logic:**
+- `message.start`: Emit once per message ID, then skip subsequent `message.updated` events for same message
+- `tool.start`: Emit once when status is "running", skip subsequent "running" updates
+- `tool.complete`: Emit once when status is "completed", skip subsequent "completed" updates  
+- `tool.error`: Emit once when status is "error", skip subsequent "error" updates
+
+**Files Modified:**
+- `src/backends/opencode/index.ts` - Added deduplication tracking to event subscription
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **135 tests PASS**
+- `bun run build` - **PASS**

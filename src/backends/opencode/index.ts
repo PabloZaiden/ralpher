@@ -263,6 +263,9 @@ export class OpenCodeBackend implements AgentBackend {
   /**
    * Subscribe to events from a session.
    * Yields AgentEvents translated from OpenCode SDK events.
+   * 
+   * Deduplication: The SDK emits update events repeatedly as messages/parts
+   * are being built. We track what we've already emitted to avoid duplicates.
    */
   async *subscribeToEvents(sessionId: string): AsyncIterable<AgentEvent> {
     const client = this.getClient();
@@ -271,9 +274,20 @@ export class OpenCodeBackend implements AgentBackend {
       query: { directory: this.directory },
     });
 
+    // Track emitted events to avoid duplicates
+    // For message.start: track message IDs we've seen
+    const emittedMessageStarts = new Set<string>();
+    // For tool events: track tool part IDs and their last known status
+    const toolPartStatus = new Map<string, string>();
+
     for await (const event of subscription.stream) {
       // Filter events for our session and translate them
-      const translated = this.translateEvent(event as OpenCodeEvent, sessionId);
+      const translated = this.translateEvent(
+        event as OpenCodeEvent,
+        sessionId,
+        emittedMessageStarts,
+        toolPartStatus
+      );
       if (translated) {
         yield translated;
       }
@@ -336,11 +350,18 @@ export class OpenCodeBackend implements AgentBackend {
 
   /**
    * Translate an OpenCode SDK event to our AgentEvent type.
-   * Returns null if the event is not relevant or for a different session.
+   * Returns null if the event is not relevant, for a different session, or a duplicate.
+   * 
+   * @param event - The raw SDK event
+   * @param sessionId - The session ID to filter for
+   * @param emittedMessageStarts - Set of message IDs we've already emitted start events for
+   * @param toolPartStatus - Map of tool part IDs to their last emitted status
    */
   private translateEvent(
     event: OpenCodeEvent,
-    sessionId: string
+    sessionId: string,
+    emittedMessageStarts: Set<string>,
+    toolPartStatus: Map<string, string>
   ): AgentEvent | null {
     switch (event.type) {
       case "message.updated": {
@@ -348,7 +369,11 @@ export class OpenCodeBackend implements AgentBackend {
         if (msg.sessionID !== sessionId) return null;
 
         if (msg.role === "assistant") {
-          // Message started or updated
+          // Only emit message.start once per message ID
+          if (emittedMessageStarts.has(msg.id)) {
+            return null;
+          }
+          emittedMessageStarts.add(msg.id);
           return {
             type: "message.start",
             messageId: msg.id,
@@ -362,6 +387,7 @@ export class OpenCodeBackend implements AgentBackend {
         if (part.sessionID !== sessionId) return null;
 
         if (part.type === "text") {
+          // Text deltas are always unique (each delta is new content)
           if (event.properties.delta) {
             return {
               type: "message.delta",
@@ -370,19 +396,38 @@ export class OpenCodeBackend implements AgentBackend {
           }
         } else if (part.type === "tool") {
           const state = part.state;
+          const partId = part.id;
+          const lastStatus = toolPartStatus.get(partId);
+          
+          // Only emit if status changed from what we last emitted
           if (state.status === "running") {
+            if (lastStatus === "running") {
+              // Already emitted tool.start for this tool, skip
+              return null;
+            }
+            toolPartStatus.set(partId, "running");
             return {
               type: "tool.start",
               toolName: part.tool,
               input: state.input,
             };
           } else if (state.status === "completed") {
+            if (lastStatus === "completed") {
+              // Already emitted tool.complete for this tool, skip
+              return null;
+            }
+            toolPartStatus.set(partId, "completed");
             return {
               type: "tool.complete",
               toolName: part.tool,
               output: state.output,
             };
           } else if (state.status === "error") {
+            if (lastStatus === "error") {
+              // Already emitted error for this tool, skip
+              return null;
+            }
+            toolPartStatus.set(partId, "error");
             return {
               type: "error",
               message: state.error,
