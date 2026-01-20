@@ -267,22 +267,17 @@ export class OpenCodeBackend implements AgentBackend {
   async *subscribeToEvents(sessionId: string): AsyncIterable<AgentEvent> {
     const client = this.getClient();
 
-    console.log("[OpenCodeBackend] Subscribing to events for session:", sessionId);
     const subscription = await client.event.subscribe({
       query: { directory: this.directory },
     });
-    console.log("[OpenCodeBackend] Subscription created, waiting for events...");
 
     for await (const event of subscription.stream) {
-      console.log("[OpenCodeBackend] Received SDK event:", (event as OpenCodeEvent).type, event);
       // Filter events for our session and translate them
       const translated = this.translateEvent(event as OpenCodeEvent, sessionId);
       if (translated) {
-        console.log("[OpenCodeBackend] Translated event:", translated.type);
         yield translated;
       }
     }
-    console.log("[OpenCodeBackend] Event stream ended");
   }
 
   /**

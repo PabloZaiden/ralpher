@@ -102,7 +102,6 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEResult<T> 
 
       try {
         const data = JSON.parse(messageEvent.data) as T;
-        console.log("[useSSE] Received event:", (data as { type?: string }).type || data);
         setEvents((prev) => {
           const newEvents = [...prev, data];
           // Trim to maxEvents

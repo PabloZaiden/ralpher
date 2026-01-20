@@ -33,6 +33,8 @@ export interface ToolCallData {
   output?: unknown;
   /** Status */
   status: "pending" | "running" | "completed" | "failed";
+  /** Timestamp when the tool call was created/updated */
+  timestamp: string;
 }
 
 /**

@@ -748,3 +748,22 @@ src/components/common/
 **Verification Results:**
 - `bun run build` - **PASS**
 - `bun test` - **135 tests PASS**
+
+---
+
+### 2026-01-20 - TypeScript Fix (Current Session)
+
+**Issue Fixed:**
+- Fixed TypeScript errors in `src/core/loop-engine.ts` around lines 479, 549, and 580
+- The `toolCalls` Map was typed as `Map<string, { name: string; input: unknown }>` but the code was storing and reading an `id` property
+
+**Fix Applied:**
+- Updated the Map type to `Map<string, { id: string; name: string; input: unknown }>`
+
+**Files Modified:**
+- `src/core/loop-engine.ts` - Fixed toolCalls Map type
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **135 tests PASS**
+- `bun run build` - **PASS**

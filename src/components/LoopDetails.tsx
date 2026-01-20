@@ -92,9 +92,10 @@ function DiffPatchViewer({ patch }: { patch: string }) {
 
 /**
  * Check if loop can be started.
+ * Only show start for idle or stopped loops, not for completed/failed ones.
  */
 function canStart(status: LoopStatus): boolean {
-  return ["idle", "stopped", "completed", "failed", "max_iterations"].includes(status);
+  return ["idle", "stopped"].includes(status);
 }
 
 /**

@@ -476,7 +476,7 @@ export class LoopEngine {
     let outcome: IterationResult["outcome"] = "continue";
     let error: string | undefined;
     let currentMessageId: string | null = null;
-    const toolCalls = new Map<string, { name: string; input: unknown }>();
+    const toolCalls = new Map<string, { id: string; name: string; input: unknown }>();
 
     try {
       // Build the prompt
@@ -544,10 +544,12 @@ export class LoopEngine {
             break;
 
           case "tool.start": {
-            const toolId = `tool-${Date.now()}-${toolCallCount}`;
-            toolCalls.set(event.toolName, { name: event.toolName, input: event.input });
+            // Use tool name as the base ID so we can match start/complete events
+            const toolId = `tool-${iteration}-${event.toolName}-${toolCallCount}`;
+            toolCalls.set(event.toolName, { id: toolId, name: event.toolName, input: event.input });
             toolCallCount++;
             this.emitLog("debug", `AI calling tool: ${event.toolName}`);
+            const timestamp = createTimestamp();
             // Emit tool call event
             this.emit({
               type: "loop.tool_call",
@@ -558,8 +560,9 @@ export class LoopEngine {
                 name: event.toolName,
                 input: event.input,
                 status: "running",
+                timestamp,
               },
-              timestamp: createTimestamp(),
+              timestamp,
             });
             break;
           }
@@ -567,19 +570,21 @@ export class LoopEngine {
           case "tool.complete": {
             const toolInfo = toolCalls.get(event.toolName);
             this.emitLog("debug", `Tool completed: ${event.toolName}`);
-            // Emit tool complete event
+            const timestamp = createTimestamp();
+            // Emit tool complete event - use the same ID from tool.start
             this.emit({
               type: "loop.tool_call",
               loopId: this.config.id,
               iteration,
               tool: {
-                id: `tool-${event.toolName}`,
+                id: toolInfo?.id ?? `tool-${iteration}-${event.toolName}`,
                 name: event.toolName,
                 input: toolInfo?.input,
                 output: event.output,
                 status: "completed",
+                timestamp,
               },
-              timestamp: createTimestamp(),
+              timestamp,
             });
             break;
           }

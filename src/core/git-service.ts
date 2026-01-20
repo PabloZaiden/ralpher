@@ -223,6 +223,24 @@ export class GitService {
   }
 
   /**
+   * Hard reset to discard all uncommitted changes and untracked files.
+   * This is a destructive operation!
+   */
+  async resetHard(directory: string): Promise<void> {
+    // Reset tracked files
+    const resetResult = await this.runGitCommand(directory, ["reset", "--hard"]);
+    if (!resetResult.success) {
+      throw new Error(`Failed to reset: ${resetResult.stderr}`);
+    }
+
+    // Clean untracked files and directories
+    const cleanResult = await this.runGitCommand(directory, ["clean", "-fd"]);
+    if (!cleanResult.success) {
+      throw new Error(`Failed to clean untracked files: ${cleanResult.stderr}`);
+    }
+  }
+
+  /**
    * Merge a source branch into a target branch.
    * Returns the merge commit SHA.
    */

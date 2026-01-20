@@ -204,11 +204,24 @@ export class LoopManager {
 
   /**
    * Delete a loop.
+   * If git is enabled and there's a working branch, discards it first.
    */
   async deleteLoop(loopId: string): Promise<boolean> {
     // Stop if running
     if (this.engines.has(loopId)) {
       await this.stopLoop(loopId, "Loop deleted");
+    }
+
+    // Get loop to check for git branch
+    const loop = await loadLoop(loopId);
+    
+    // If git is enabled and has a working branch, discard it first
+    if (loop && loop.config.git.enabled && loop.state.git?.workingBranch) {
+      const discardResult = await this.discardLoop(loopId);
+      if (!discardResult.success) {
+        // Log but don't fail the delete - user explicitly wants to delete
+        console.warn(`Failed to discard git branch during delete: ${discardResult.error}`);
+      }
     }
 
     const deleted = await deleteLoopFile(loopId);
@@ -378,6 +391,7 @@ export class LoopManager {
 
   /**
    * Discard a completed loop (delete git branch without merging).
+   * Resets the working directory to a clean state.
    */
   async discardLoop(loopId: string): Promise<{ success: boolean; error?: string }> {
     // Use getLoop to check engine state first
@@ -392,11 +406,17 @@ export class LoopManager {
     }
 
     try {
+      // First, reset any uncommitted changes on the working branch
+      await this.git.resetHard(loop.config.directory);
+
       // Checkout original branch
       await this.git.checkoutBranch(
         loop.config.directory,
         loop.state.git.originalBranch
       );
+
+      // Reset original branch to clean state too (in case of any issues)
+      await this.git.resetHard(loop.config.directory);
 
       // Delete the working branch
       await this.git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);

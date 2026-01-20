@@ -88,7 +88,7 @@ function getLogLevelColor(level: LogLevel): string {
 /**
  * Get the badge variant for a log level.
  */
-function getLogLevelBadge(level: LogLevel): "default" | "info" | "success" | "warning" | "danger" {
+function getLogLevelBadge(level: LogLevel): "default" | "info" | "success" | "warning" | "error" {
   switch (level) {
     case "debug":
       return "default";
@@ -97,7 +97,7 @@ function getLogLevelBadge(level: LogLevel): "default" | "info" | "success" | "wa
     case "warn":
       return "warning";
     case "error":
-      return "danger";
+      return "error";
     default:
       return "default";
   }
@@ -111,7 +111,6 @@ export function LogViewer({
   autoScroll = true,
   maxHeight = "500px",
 }: LogViewerProps) {
-  console.log("[LogViewer] Rendering with:", { messages: messages.length, toolCalls: toolCalls.length, logs: logs.length, progressContent: progressContent?.length });
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when content changes
@@ -133,8 +132,8 @@ export function LogViewer({
   });
 
   toolCalls.forEach((tool) => {
-    // Use the message timestamp or current time for tool calls
-    entries.push({ type: "tool", data: tool, timestamp: new Date().toISOString() });
+    // Use the tool's timestamp
+    entries.push({ type: "tool", data: tool, timestamp: tool.timestamp });
   });
 
   logs.forEach((log) => {
