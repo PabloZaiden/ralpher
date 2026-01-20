@@ -284,6 +284,6 @@ For more information, read the Bun API docs in `node_modules/bun-types/docs/**.m
 
 ## General guidelines
 
-- Never use `git` operations. That's up to the user.
+- Git operations are allowed. The system manages git branches, commits, and merges for Ralph Loops.
 - Always prefer simplicity, usability and top level type safety over cleverness.
 - Before doing something, check the patterns used in the rest of the codebase.

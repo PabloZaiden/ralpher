@@ -122,26 +122,28 @@ export function createSSEStream(
   loopId?: string
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
+  let unsubscribe: Unsubscribe | null = null;
 
   return new ReadableStream({
     start(controller) {
-      const unsubscribe = emitter.subscribe((event) => {
+      unsubscribe = emitter.subscribe((event) => {
         // If loopId is specified, only send events for that loop
         if (loopId && "loopId" in event && event.loopId !== loopId) {
           return;
         }
 
-        const data = `data: ${JSON.stringify(event)}\n\n`;
-        controller.enqueue(encoder.encode(data));
+        try {
+          const data = `data: ${JSON.stringify(event)}\n\n`;
+          controller.enqueue(encoder.encode(data));
+        } catch {
+          // Controller may be closed, ignore
+        }
       });
-
-      // Store unsubscribe for cleanup
-      (controller as unknown as { _unsubscribe: Unsubscribe })._unsubscribe = unsubscribe;
     },
-    cancel(controller) {
-      const ctrl = controller as unknown as { _unsubscribe?: Unsubscribe };
-      if (ctrl._unsubscribe) {
-        ctrl._unsubscribe();
+    cancel() {
+      if (unsubscribe) {
+        unsubscribe();
+        unsubscribe = null;
       }
     },
   });

@@ -1,32 +1,24 @@
+/**
+ * Main server entry point for Ralph Loops Management System.
+ * Uses Bun's native serve() with route-based API.
+ */
+
 import { serve } from "bun";
 import index from "./index.html";
+import { apiRoutes } from "./api";
+import { ensureDataDirectories } from "./persistence/paths";
+import "./backends/register"; // Auto-register backends
+
+// Ensure data directories exist on startup
+await ensureDataDirectories();
 
 const server = serve({
   routes: {
-    // Serve index.html for all unmatched routes.
+    // API routes
+    ...apiRoutes,
+
+    // Serve index.html for all unmatched routes (SPA fallback)
     "/*": index,
-
-    "/api/hello": {
-      async GET(req) {
-        return Response.json({
-          message: "Hello, world!",
-          method: "GET",
-        });
-      },
-      async PUT(req) {
-        return Response.json({
-          message: "Hello, world!",
-          method: "PUT",
-        });
-      },
-    },
-
-    "/api/hello/:name": async req => {
-      const name = req.params.name;
-      return Response.json({
-        message: `Hello, ${name}!`,
-      });
-    },
   },
 
   development: process.env.NODE_ENV !== "production" && {
@@ -38,4 +30,4 @@ const server = serve({
   },
 });
 
-console.log(`🚀 Server running at ${server.url}`);
+console.log(`🚀 Ralpher server running at ${server.url}`);

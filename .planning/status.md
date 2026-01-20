@@ -1,8 +1,8 @@
 # Ralph Loops Management System - Implementation Status
 
 **Last Updated:** 2026-01-20  
-**Current Phase:** Phase 2 - OpenCode Backend (COMPLETE)  
-**Overall Progress:** Phase 2 Complete, Ready for Phase 3
+**Current Phase:** Phase 4 - API Layer (COMPLETE)  
+**Overall Progress:** Phase 4 Complete, Ready for Phase 5
 
 ---
 
@@ -12,8 +12,8 @@
 |-------|------|--------|----------|
 | 1 | Foundation | **Complete** | 5/5 |
 | 2 | OpenCode Backend | **Complete** | 5/5 |
-| 3 | Loop Engine + Git | Not Started | 0/8 |
-| 4 | API Layer | Not Started | 0/5 |
+| 3 | Loop Engine + Git | **Complete** | 8/8 |
+| 4 | API Layer | **Complete** | 5/5 |
 | 5 | Frontend | Not Started | 0/9 |
 | 6 | Testing & Polish | Not Started | 0/6 |
 
@@ -102,25 +102,73 @@ tests/unit/
 - `session.idle` → `message.complete`
 - `session.error` → `error`
 
-### Verification Results
-
-- `bun run build` - **PASS**
-- `bun test` - **PASS** (34 tests total)
-
 ---
 
 ## Phase 3: Loop Engine + Git
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 3.1 | Implement loop engine core | Not Started |
-| 3.2 | Implement iteration execution | Not Started |
-| 3.3 | Implement stop pattern detection | Not Started |
-| 3.4 | Implement loop manager | Not Started |
-| 3.5 | Implement GitService | Not Started |
-| 3.6 | Integrate git branch on start | Not Started |
-| 3.7 | Integrate git commit on iteration end | Not Started |
-| 3.8 | Implement accept/discard endpoints | Not Started |
+| 3.1 | Implement GitService | **Complete** |
+| 3.2 | Implement loop engine core | **Complete** |
+| 3.3 | Implement iteration execution | **Complete** |
+| 3.4 | Implement stop pattern detection | **Complete** |
+| 3.5 | Implement loop manager | **Complete** |
+| 3.6 | Integrate git branch on start | **Complete** |
+| 3.7 | Integrate git commit on iteration end | **Complete** |
+| 3.8 | Write tests | **Complete** |
+
+### Files Created in Phase 3
+
+```
+src/core/
+├── git-service.ts    # Git operations using Bun.$
+├── loop-engine.ts    # Core loop execution logic
+└── loop-manager.ts   # Loop lifecycle management
+
+tests/unit/
+├── git-service.test.ts    # 13 tests
+├── loop-engine.test.ts    # 8 tests
+└── loop-manager.test.ts   # 15 tests
+```
+
+### Implementation Details
+
+**GitService Features:**
+- `isGitRepo()` - Check if directory is a git repo
+- `getCurrentBranch()` - Get current branch name
+- `hasUncommittedChanges()` - Check for uncommitted changes
+- `getChangedFiles()` - List changed files
+- `createBranch()` / `checkoutBranch()` / `deleteBranch()` - Branch operations
+- `branchExists()` - Check if branch exists
+- `stageAll()` / `commit()` - Commit operations with SHA return
+- `stash()` / `stashPop()` - Stash operations
+- `mergeBranch()` - Merge source into target branch
+- `getDiff()` / `getDiffSummary()` - Diff information
+- All operations use `Bun.$` for shell commands
+
+**LoopEngine Features:**
+- `start()` - Initialize and run the loop
+- `stop()` - Stop execution manually
+- `pause()` / `resume()` - Pause/resume loop
+- `StopPatternDetector` class for regex-based completion detection
+- Default pattern: `<promise>COMPLETE</promise>$`
+- Automatic git branch creation on start (if git.enabled)
+- Automatic git commit after each iteration (if git.enabled)
+- Records iteration summaries (messageCount, toolCallCount, outcome)
+- Emits events for all state changes
+
+**LoopManager Features:**
+- `createLoop()` - Create new loop with config
+- `getLoop()` / `getAllLoops()` - Retrieve loops
+- `updateLoop()` / `deleteLoop()` - Modify/delete loops
+- `startLoop()` - Start loop execution
+- `stopLoop()` / `pauseLoop()` / `resumeLoop()` - Control loops
+- `acceptLoop()` - Merge git branch on completion
+- `discardLoop()` - Delete git branch without merging
+- `isRunning()` / `getRunningLoopState()` - Query running state
+- `shutdown()` - Stop all running loops
+- Handles uncommitted changes with `handleUncommitted` option
+- Periodic state persistence to disk (every 5 seconds)
 
 ---
 
@@ -128,11 +176,61 @@ tests/unit/
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 4.1 | Refactor `src/index.ts` for modular routes | Not Started |
-| 4.2 | Implement loops CRUD endpoints | Not Started |
-| 4.3 | Implement loop control endpoints | Not Started |
-| 4.4 | Implement SSE endpoint | Not Started |
-| 4.5 | Add health check endpoint | Not Started |
+| 4.1 | Refactor `src/index.ts` for modular routes | **Complete** |
+| 4.2 | Implement loops CRUD endpoints | **Complete** |
+| 4.3 | Implement loop control endpoints | **Complete** |
+| 4.4 | Implement SSE endpoint | **Complete** |
+| 4.5 | Add health check endpoint | **Complete** |
+
+### Files Created in Phase 4
+
+```
+src/api/
+├── index.ts          # Central export combining all routes
+├── health.ts         # Health check endpoint (/api/health)
+├── loops.ts          # CRUD + control + data endpoints
+└── events.ts         # SSE streaming endpoints
+
+tests/api/
+├── health.test.ts        # 2 tests
+├── loops-crud.test.ts    # 16 tests
+├── loops-control.test.ts # 18 tests
+└── events-sse.test.ts    # 4 tests
+```
+
+### API Endpoints Implemented
+
+**CRUD:**
+- `GET /api/loops` - List all loops
+- `POST /api/loops` - Create new loop
+- `GET /api/loops/:id` - Get loop details
+- `PATCH /api/loops/:id` - Update loop
+- `DELETE /api/loops/:id` - Delete loop
+
+**Control:**
+- `POST /api/loops/:id/start` - Start loop (handles 409 for uncommitted changes)
+- `POST /api/loops/:id/stop` - Stop loop
+- `POST /api/loops/:id/pause` - Pause loop
+- `POST /api/loops/:id/resume` - Resume loop
+- `POST /api/loops/:id/accept` - Merge git branch
+- `POST /api/loops/:id/discard` - Delete git branch
+
+**Data:**
+- `GET /api/loops/:id/diff` - Get git diff
+- `GET /api/loops/:id/plan` - Get plan.md content
+- `GET /api/loops/:id/status-file` - Get status.md content
+
+**SSE:**
+- `GET /api/events` - Global event stream
+- `GET /api/loops/:id/events` - Loop-specific event stream
+
+**System:**
+- `GET /api/health` - Health check
+
+### Verification Results
+
+- `bun run build` - **PASS**
+- `bun test` - **PASS** (108 tests total)
 
 ---
 
@@ -156,9 +254,9 @@ tests/unit/
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 6.1 | Create test setup and mock backend | Not Started |
-| 6.2 | Write unit tests for core modules | Not Started |
-| 6.3 | Write API integration tests | Not Started |
+| 6.1 | Create test setup and mock backend | **Partial** |
+| 6.2 | Write unit tests for core modules | **Complete** |
+| 6.3 | Write API integration tests | **Complete** |
 | 6.4 | Write E2E tests | Not Started |
 | 6.5 | Error handling and loading states | Not Started |
 | 6.6 | Documentation updates | Not Started |
@@ -169,27 +267,49 @@ tests/unit/
 
 ### Build & Type Check
 - [x] `bun run build` succeeds
-- [x] `bun test` passes (34 tests)
+- [x] `bun test` passes (108 tests)
 - [ ] `bun x tsc --noEmit` passes (pre-existing errors in build.ts)
 
 ### Functional Requirements
-- [ ] F1: Create loop via API
-- [ ] F2: Start/stop loops
-- [ ] F3: Loop iterates until complete
-- [ ] F4: Respects maxIterations
+- [x] F1: Create loop via API
+- [x] F2: Start/stop loops
+- [x] F3: Loop iterates until complete (LoopEngine)
+- [x] F4: Respects maxIterations (LoopEngine)
 - [x] F5: Connect to existing opencode (OpenCodeBackend.connect with mode="connect")
 - [x] F6: Spawn new opencode (OpenCodeBackend.connect with mode="spawn")
-- [ ] F7: Git branch per loop
-- [ ] F8: Git commit per iteration
-- [ ] F9: Git merge on accept
-- [ ] F10: Events stream via SSE
-- [ ] F11: Persists across restarts
+- [x] F7: Git branch per loop (LoopEngine.setupGitBranch)
+- [x] F8: Git commit per iteration (LoopEngine.commitIteration)
+- [x] F9: Git merge on accept (LoopManager.acceptLoop)
+- [x] F10: Events stream via SSE
+- [x] F11: Persists across restarts (LoopManager state persistence)
 - [ ] F12: Web UI shows loops
 - [ ] F13: Web UI real-time log
 
 ---
 
 ## Notes
+
+### 2026-01-20 - Phase 4 Complete
+
+- Created modular API structure in `src/api/`
+- Implemented all REST endpoints for loops CRUD, control, and data
+- Implemented SSE streaming endpoints for real-time events
+- Fixed SSE stream cancel handling for proper cleanup
+- Added 38 new API integration tests (108 total tests now passing)
+- API endpoints fully tested with actual HTTP requests
+- All functional requirements F1, F2, F10 now complete
+
+### 2026-01-20 - Phase 3 Complete
+
+- Implemented `GitService` with all git operations using `Bun.$`
+- Implemented `LoopEngine` with iteration execution and stop pattern detection
+- Implemented `LoopManager` for full loop lifecycle management
+- Added 36 new tests (70 total tests now passing)
+- Git integration fully working:
+  - Branch created on loop start (if git.enabled)
+  - Commit after each iteration
+  - Merge on accept, delete branch on discard
+- Build and all tests pass
 
 ### 2026-01-20 - Phase 2 Complete
 
@@ -220,20 +340,30 @@ tests/unit/
 
 ## Next Steps
 
-1. **Begin Phase 3: Loop Engine + Git**
-   - Implement `LoopEngine` class in `src/core/loop-engine.ts`
-   - Implement iteration execution with prompt/response cycle
-   - Implement stop pattern detection (`<promise>COMPLETE</promise>`)
-   - Implement `LoopManager` for lifecycle management
-   - Implement `GitService` for branch/commit/merge operations
+1. **Begin Phase 5: Frontend**
+   - Implement `useSSE` hook for real-time event subscriptions
+   - Implement `useLoops` hook for loops state management
+   - Create common UI components (Button, Card, Badge, Modal)
+   - Create Dashboard with LoopCard grid
+   - Create LoopDetails with tabs (Log, Plan, Status, Diff)
+   - Create LogViewer for real-time message streaming
+   - Create CreateLoopForm modal
+   - Implement client-side routing
+   - Add git info (branch, commits) to UI
 
 2. **Key files to create:**
-   - `src/core/loop-engine.ts` - Core loop execution logic
-   - `src/core/loop-manager.ts` - Loop lifecycle management
-   - `src/core/git-service.ts` - Git operations using Bun.$
+   - `src/hooks/useSSE.ts` - SSE connection hook
+   - `src/hooks/useLoops.ts` - Loops state hook
+   - `src/hooks/useLoop.ts` - Single loop hook
+   - `src/components/common/*.tsx` - Shared UI components
+   - `src/components/Dashboard.tsx` - Loop grid view
+   - `src/components/LoopCard.tsx` - Loop summary card
+   - `src/components/LoopDetails.tsx` - Full loop view with tabs
+   - `src/components/LogViewer.tsx` - Real-time log display
+   - `src/components/CreateLoopForm.tsx` - Loop creation form
 
 3. **Important considerations:**
-   - Each iteration = fresh context window
-   - Stop condition: output ends with `<promise>COMPLETE</promise>`
-   - Git branch created on loop start (if git.enabled)
-   - Git commit after each iteration (if git.enabled)
+   - Use native `EventSource` API for SSE
+   - Use React 19 with functional components only
+   - Use Tailwind CSS v4 for styling
+   - No external UI libraries - build from scratch
