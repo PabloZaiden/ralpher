@@ -841,3 +841,46 @@ src/components/common/
 - `bun x tsc --noEmit` - **PASS** (no errors)
 - `bun test` - **135 tests PASS**
 - `bun run build` - **PASS**
+
+---
+
+### 2026-01-20 - AI Response Content in Logs (Current Session)
+
+**Feature:** Show accumulated AI response text in log entries, updated as content streams in
+
+**Problem:** The "AI started generating response" log entry didn't show the actual response content. Users couldn't see what the AI was saying without expanding the streaming progress content.
+
+**Implementation:**
+
+1. **Added `id` field to `LoopLogEvent` in `src/types/events.ts`:**
+   - Unique ID for each log entry, used to update existing entries
+
+2. **Updated `emitLog()` in `src/core/loop-engine.ts`:**
+   - Now generates and returns a unique log ID
+   - Accepts optional `id` parameter to update existing entries
+   - Returns the log ID for tracking
+
+3. **Updated message handling in `runIteration()`:**
+   - `message.start`: Creates log entry with ID, initial empty `responseContent` in details
+   - `message.delta`: Updates the same log entry with accumulated `responseContent`
+   - `message.complete`: Final update with complete response and length
+
+4. **Updated `useLoop` hook in `src/hooks/useLoop.ts`:**
+   - `handleSSEEvent` for `loop.log` now updates existing entries by ID
+   - If log with same ID exists, updates it in place
+   - If new ID, appends to log list
+
+**Result:**
+- The "AI started generating response" / "AI generating response..." / "AI finished generating response" log entry now has a `responseContent` field in its details
+- Users can expand the details to see what the AI is saying
+- The same log entry updates in place as content streams in (no duplicate entries)
+
+**Files Modified:**
+- `src/types/events.ts` - Added `id` field to `LoopLogEvent`
+- `src/core/loop-engine.ts` - Updated `emitLog()` to support IDs and updates, track response in log details
+- `src/hooks/useLoop.ts` - Updated log handling to update existing entries by ID
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **135 tests PASS**
+- `bun run build` - **PASS**

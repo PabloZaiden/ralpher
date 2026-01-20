@@ -476,6 +476,7 @@ export class LoopEngine {
     let outcome: IterationResult["outcome"] = "continue";
     let error: string | undefined;
     let currentMessageId: string | null = null;
+    let currentResponseLogId: string | null = null;
     const toolCalls = new Map<string, { id: string; name: string; input: unknown }>();
 
     try {
@@ -508,11 +509,20 @@ export class LoopEngine {
           case "message.start":
             currentMessageId = event.messageId;
             messageCount++;
-            this.emitLog("debug", "AI started generating response");
+            // Create a log entry that we'll update with response content
+            currentResponseLogId = this.emitLog("debug", "AI started generating response", {
+              responseContent: "",
+            });
             break;
 
           case "message.delta":
             responseContent += event.content;
+            // Update the response log entry with accumulated content
+            if (currentResponseLogId) {
+              this.emitLog("debug", "AI generating response...", {
+                responseContent,
+              }, currentResponseLogId);
+            }
             // Emit progress event for streaming text
             this.emit({
               type: "loop.progress",
@@ -524,9 +534,13 @@ export class LoopEngine {
             break;
 
           case "message.complete":
-            this.emitLog("info", "AI finished generating response", {
-              responseLength: responseContent.length,
-            });
+            // Final update to the response log with complete content
+            if (currentResponseLogId) {
+              this.emitLog("info", "AI finished generating response", {
+                responseContent,
+                responseLength: responseContent.length,
+              }, currentResponseLogId);
+            }
             // Emit the complete message
             this.emit({
               type: "loop.message",
@@ -867,20 +881,25 @@ Output ONLY the commit message, nothing else.`
   /**
    * Emit an application log event.
    * Used to communicate internal loop engine operations to the UI.
+   * @returns The ID of the log entry (for updates)
    */
   private emitLog(
     level: LogLevel,
     message: string,
-    details?: Record<string, unknown>
-  ): void {
+    details?: Record<string, unknown>,
+    id?: string
+  ): string {
+    const logId = id ?? `log-${this.config.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     this.emit({
       type: "loop.log",
       loopId: this.config.id,
+      id: logId,
       level,
       message,
       details,
       timestamp: createTimestamp(),
     });
+    return logId;
   }
 
   /**

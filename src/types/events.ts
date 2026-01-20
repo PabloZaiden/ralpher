@@ -125,6 +125,8 @@ export type LogLevel = "info" | "warn" | "error" | "debug";
 export interface LoopLogEvent {
   type: "loop.log";
   loopId: string;
+  /** Unique ID for this log entry (used for updates) */
+  id: string;
   /** Log level */
   level: LogLevel;
   /** Log message */

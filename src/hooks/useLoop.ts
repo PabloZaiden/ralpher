@@ -100,17 +100,33 @@ export function useLoop(loopId: string): UseLoopResult {
   function handleSSEEvent(event: LoopEvent) {
     switch (event.type) {
       case "loop.log":
-        // Add log entry
-        setLogs((prev) => [
-          ...prev,
-          {
-            id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-            level: event.level,
-            message: event.message,
-            details: event.details,
-            timestamp: event.timestamp,
-          },
-        ]);
+        // Update existing log entry or add new one
+        setLogs((prev) => {
+          const existingIndex = prev.findIndex((log) => log.id === event.id);
+          if (existingIndex >= 0) {
+            // Update existing entry
+            const updated = [...prev];
+            updated[existingIndex] = {
+              id: event.id,
+              level: event.level,
+              message: event.message,
+              details: event.details,
+              timestamp: event.timestamp,
+            };
+            return updated;
+          }
+          // Add new entry
+          return [
+            ...prev,
+            {
+              id: event.id,
+              level: event.level,
+              message: event.message,
+              details: event.details,
+              timestamp: event.timestamp,
+            },
+          ];
+        });
         break;
 
       case "loop.progress":
