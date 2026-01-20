@@ -403,9 +403,12 @@ export class OpenCodeBackend implements AgentBackend {
       case "session.error": {
         if (event.properties.sessionID !== sessionId) return null;
         const error = event.properties.error;
+        const errorMessage = typeof error?.data?.message === "string" 
+          ? error.data.message 
+          : "Unknown error";
         return {
           type: "error",
-          message: error?.data?.message ?? "Unknown error",
+          message: errorMessage,
         };
       }
 

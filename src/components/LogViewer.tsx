@@ -138,17 +138,17 @@ export function LogViewer({
                     </span>
                     <div className="flex-1">
                       <span className="text-yellow-400">{tool.name}</span>
-                      {tool.input && (
+                      {tool.input != null && (
                         <details className="mt-1">
                           <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
                             Input
                           </summary>
                           <pre className="mt-1 p-2 bg-gray-800 rounded text-xs overflow-x-auto">
-                            {JSON.stringify(tool.input, null, 2)}
+                            {String(JSON.stringify(tool.input, null, 2))}
                           </pre>
                         </details>
                       )}
-                      {tool.output && (
+                      {tool.output != null && (
                         <details className="mt-1">
                           <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
                             Output
@@ -156,7 +156,7 @@ export function LogViewer({
                           <pre className="mt-1 p-2 bg-gray-800 rounded text-xs overflow-x-auto">
                             {typeof tool.output === "string"
                               ? tool.output
-                              : JSON.stringify(tool.output, null, 2)}
+                              : String(JSON.stringify(tool.output, null, 2))}
                           </pre>
                         </details>
                       )}

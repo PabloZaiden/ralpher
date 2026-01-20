@@ -14,7 +14,7 @@ import { ensureDataDirectories } from "../../src/persistence/paths";
 describe("Loops CRUD API Integration", () => {
   let testDataDir: string;
   let testWorkDir: string;
-  let server: Server;
+  let server: Server<unknown>;
   let baseUrl: string;
 
   beforeAll(async () => {

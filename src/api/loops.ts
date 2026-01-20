@@ -118,7 +118,20 @@ export const loopsCrudRoutes = {
       }
 
       try {
-        const loop = await loopManager.updateLoop(req.params.id, body);
+        // Transform the request to match the expected type
+        // git needs special handling since UpdateLoopRequest has Partial<GitConfig>
+        const { git, ...rest } = body;
+        const updates: Record<string, unknown> = { ...rest };
+        
+        // If git is provided, we need to get the existing config and merge
+        if (git !== undefined) {
+          const existingLoop = await loopManager.getLoop(req.params.id);
+          if (existingLoop) {
+            updates.git = { ...existingLoop.config.git, ...git };
+          }
+        }
+
+        const loop = await loopManager.updateLoop(req.params.id, updates);
         if (!loop) {
           return errorResponse("not_found", "Loop not found", 404);
         }

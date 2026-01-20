@@ -223,7 +223,7 @@ describe("LoopEngine", () => {
     const loop = createTestLoop({ maxIterations: 10 });
 
     // Create a slow backend that we can control
-    let resolvePrompt: (() => void) | null = null;
+    let resolvePrompt: (() => void) | undefined;
     let promptCalled = false;
 
     mockBackend = {

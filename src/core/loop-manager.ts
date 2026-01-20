@@ -335,7 +335,8 @@ export class LoopManager {
    * Accept a completed loop (merge git branch).
    */
   async acceptLoop(loopId: string): Promise<AcceptLoopResult> {
-    const loop = await loadLoop(loopId);
+    // Use getLoop to check engine state first
+    const loop = await this.getLoop(loopId);
     if (!loop) {
       return { success: false, error: "Loop not found" };
     }
@@ -379,7 +380,8 @@ export class LoopManager {
    * Discard a completed loop (delete git branch without merging).
    */
   async discardLoop(loopId: string): Promise<{ success: boolean; error?: string }> {
-    const loop = await loadLoop(loopId);
+    // Use getLoop to check engine state first
+    const loop = await this.getLoop(loopId);
     if (!loop) {
       return { success: false, error: "Loop not found" };
     }

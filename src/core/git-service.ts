@@ -82,7 +82,7 @@ export class GitService {
       // Format: "XY filename" or "XY original -> renamed"
       const match = line.match(/^..\s+(.+?)(?:\s+->\s+(.+))?$/);
       if (match) {
-        return match[2] ?? match[1];
+        return match[2] ?? match[1] ?? line.slice(3).trim();
       }
       return line.slice(3).trim();
     });
@@ -271,7 +271,7 @@ export class GitService {
       if (additions === "-" && deletions === "-") {
         // Binary file
         status = "modified";
-      } else if (parseInt(deletions, 10) === 0 && parseInt(additions, 10) > 0) {
+      } else if (parseInt(deletions ?? "0", 10) === 0 && parseInt(additions ?? "0", 10) > 0) {
         // Could be added or modified, need more info
         const statusResult = await this.runGitCommand(directory, [
           "diff",
@@ -291,8 +291,8 @@ export class GitService {
       diffs.push({
         path,
         status,
-        additions: additions === "-" ? 0 : parseInt(additions, 10),
-        deletions: deletions === "-" ? 0 : parseInt(deletions, 10),
+        additions: additions === "-" ? 0 : parseInt(additions ?? "0", 10),
+        deletions: deletions === "-" ? 0 : parseInt(deletions ?? "0", 10),
       });
     }
 
@@ -326,9 +326,9 @@ export class GitService {
     const deletionsMatch = output.match(/(\d+) deletions?\(-\)/);
 
     return {
-      files: filesMatch ? parseInt(filesMatch[1], 10) : 0,
-      insertions: insertionsMatch ? parseInt(insertionsMatch[1], 10) : 0,
-      deletions: deletionsMatch ? parseInt(deletionsMatch[1], 10) : 0,
+      files: filesMatch?.[1] ? parseInt(filesMatch[1], 10) : 0,
+      insertions: insertionsMatch?.[1] ? parseInt(insertionsMatch[1], 10) : 0,
+      deletions: deletionsMatch?.[1] ? parseInt(deletionsMatch[1], 10) : 0,
     };
   }
 

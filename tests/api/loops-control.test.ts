@@ -24,7 +24,7 @@ import type {
 describe("Loops Control API Integration", () => {
   let testDataDir: string;
   let testWorkDir: string;
-  let server: Server;
+  let server: Server<unknown>;
   let baseUrl: string;
 
   // Create a mock backend that completes immediately
