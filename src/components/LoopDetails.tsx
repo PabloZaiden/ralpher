@@ -134,6 +134,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     messages,
     toolCalls,
     progressContent,
+    logs,
     refresh,
     start,
     stop,
@@ -477,6 +478,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 <LogViewer
                   messages={messages}
                   toolCalls={toolCalls}
+                  logs={logs}
                   progressContent={progressContent}
                   maxHeight="600px"
                 />

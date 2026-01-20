@@ -15,6 +15,7 @@ import type {
   LoopEvent,
   MessageData,
   ToolCallData,
+  LogLevel,
 } from "../types/events";
 import { createTimestamp } from "../types/events";
 import type {
@@ -146,6 +147,8 @@ export class LoopEngine {
       throw new Error(`Cannot start loop in status: ${this.loop.state.status}`);
     }
 
+    this.emitLog("info", "Starting loop execution", { loopName: this.config.name });
+
     this.aborted = false;
     this.updateState({
       status: "starting",
@@ -158,10 +161,17 @@ export class LoopEngine {
     try {
       // Set up git branch if enabled
       if (this.config.git.enabled) {
+        this.emitLog("info", "Setting up git branch...");
         await this.setupGitBranch();
+      } else {
+        this.emitLog("info", "Git integration disabled, skipping branch setup");
       }
 
       // Create backend session
+      this.emitLog("info", "Connecting to AI backend...", { 
+        backendType: this.config.backend.type,
+        mode: this.config.backend.mode 
+      });
       await this.setupSession();
 
       // Emit started event
@@ -172,9 +182,12 @@ export class LoopEngine {
         timestamp: createTimestamp(),
       });
 
+      this.emitLog("info", "Loop started successfully, beginning iterations");
+
       // Start the iteration loop
       await this.runLoop();
     } catch (error) {
+      this.emitLog("error", `Failed to start loop: ${String(error)}`);
       this.handleError(error);
     }
   }
@@ -183,10 +196,12 @@ export class LoopEngine {
    * Stop the loop execution.
    */
   async stop(reason = "User requested stop"): Promise<void> {
+    this.emitLog("info", `Stopping loop: ${reason}`);
     this.aborted = true;
 
     if (this.sessionId) {
       try {
+        this.emitLog("info", "Aborting backend session...");
         await this.backend.abortSession(this.sessionId);
       } catch {
         // Ignore abort errors
@@ -204,6 +219,8 @@ export class LoopEngine {
       reason,
       timestamp: createTimestamp(),
     });
+
+    this.emitLog("info", "Loop stopped");
   }
 
   /**
@@ -214,6 +231,7 @@ export class LoopEngine {
       throw new Error(`Cannot pause loop in status: ${this.loop.state.status}`);
     }
 
+    this.emitLog("info", "Pausing loop execution");
     this.updateState({ status: "paused" });
 
     this.emit({
@@ -230,6 +248,8 @@ export class LoopEngine {
     if (this.loop.state.status !== "paused") {
       throw new Error(`Cannot resume loop in status: ${this.loop.state.status}`);
     }
+
+    this.emitLog("info", "Resuming loop execution");
 
     this.emit({
       type: "loop.resumed",
@@ -256,12 +276,14 @@ export class LoopEngine {
     );
 
     // Check if we're in a git repo
+    this.emitLog("debug", "Checking if directory is a git repository", { directory });
     const isRepo = await this.git.isGitRepo(directory);
     if (!isRepo) {
       throw new Error(`Directory is not a git repository: ${directory}`);
     }
 
     // Check for uncommitted changes
+    this.emitLog("debug", "Checking for uncommitted changes");
     const hasChanges = await this.git.hasUncommittedChanges(directory);
     if (hasChanges) {
       throw new Error("Directory has uncommitted changes. Please commit or stash them first.");
@@ -269,14 +291,17 @@ export class LoopEngine {
 
     // Get the current branch (original branch)
     const originalBranch = await this.git.getCurrentBranch(directory);
+    this.emitLog("info", `Current branch: ${originalBranch}`);
 
     // Check if the working branch already exists
     const branchExists = await this.git.branchExists(directory, branchName);
     if (branchExists) {
       // Checkout existing branch
+      this.emitLog("info", `Checking out existing branch: ${branchName}`);
       await this.git.checkoutBranch(directory, branchName);
     } else {
       // Create new branch
+      this.emitLog("info", `Creating new branch: ${branchName}`);
       await this.git.createBranch(directory, branchName);
     }
 
@@ -288,6 +313,11 @@ export class LoopEngine {
         commits: this.loop.state.git?.commits ?? [],
       },
     });
+
+    this.emitLog("info", `Git branch setup complete`, { 
+      originalBranch, 
+      workingBranch: branchName 
+    });
   }
 
   /**
@@ -296,21 +326,31 @@ export class LoopEngine {
   private async setupSession(): Promise<void> {
     // Connect to backend if not already connected
     if (!this.backend.isConnected()) {
+      this.emitLog("info", "Backend not connected, establishing connection...", {
+        mode: this.config.backend.mode,
+        hostname: this.config.backend.hostname,
+        port: this.config.backend.port,
+      });
       await this.backend.connect({
         mode: this.config.backend.mode,
         hostname: this.config.backend.hostname,
         port: this.config.backend.port,
         directory: this.config.directory,
       });
+      this.emitLog("info", "Backend connection established");
+    } else {
+      this.emitLog("debug", "Backend already connected");
     }
 
     // Create a new session for this loop
+    this.emitLog("info", "Creating new AI session...");
     const session = await this.backend.createSession({
       title: `Ralph Loop: ${this.config.name}`,
       directory: this.config.directory,
     });
 
     this.sessionId = session.id;
+    this.emitLog("info", `AI session created`, { sessionId: session.id });
 
     this.updateState({
       session: {
@@ -328,12 +368,16 @@ export class LoopEngine {
   private async runLoop(): Promise<void> {
     while (!this.aborted && this.shouldContinue()) {
       if (this.loop.state.status === "paused") {
+        this.emitLog("debug", "Loop is paused, waiting for resume");
         return; // Will resume later
       }
 
       const iterationResult = await this.runIteration();
 
       if (iterationResult.outcome === "complete") {
+        this.emitLog("info", "Stop pattern detected - loop completed successfully", {
+          totalIterations: this.loop.state.currentIteration,
+        });
         this.updateState({
           status: "completed",
           completedAt: createTimestamp(),
@@ -349,6 +393,7 @@ export class LoopEngine {
       }
 
       if (iterationResult.outcome === "error") {
+        this.emitLog("error", `Iteration failed: ${iterationResult.error}`);
         this.updateState({
           status: "failed",
           completedAt: createTimestamp(),
@@ -374,6 +419,7 @@ export class LoopEngine {
         this.config.maxIterations &&
         this.loop.state.currentIteration >= this.config.maxIterations
       ) {
+        this.emitLog("warn", `Reached maximum iterations limit: ${this.config.maxIterations}`);
         this.updateState({
           status: "max_iterations",
           completedAt: createTimestamp(),
@@ -394,6 +440,7 @@ export class LoopEngine {
       }
 
       // Wait briefly between iterations
+      this.emitLog("debug", "Waiting before next iteration...");
       this.updateState({ status: "waiting" });
       await this.delay(1000);
     }
@@ -405,6 +452,10 @@ export class LoopEngine {
   private async runIteration(): Promise<IterationResult> {
     const iteration = this.loop.state.currentIteration + 1;
     const startedAt = createTimestamp();
+
+    this.emitLog("info", `Starting iteration ${iteration}`, {
+      maxIterations: this.config.maxIterations,
+    });
 
     this.updateState({
       status: "running",
@@ -429,6 +480,7 @@ export class LoopEngine {
 
     try {
       // Build the prompt
+      this.emitLog("debug", "Building prompt for AI agent");
       const prompt = this.buildPrompt(iteration);
 
       // Send prompt and collect response
@@ -437,12 +489,15 @@ export class LoopEngine {
       }
 
       // Send prompt asynchronously
+      this.emitLog("info", "Sending prompt to AI agent...");
       await this.backend.sendPromptAsync(this.sessionId, prompt);
 
       // Subscribe to events and process them
+      this.emitLog("debug", "Subscribing to AI response stream");
       for await (const event of this.backend.subscribeToEvents(this.sessionId)) {
         // Check if aborted
         if (this.aborted) {
+          this.emitLog("info", "Iteration aborted by user");
           break;
         }
 
@@ -453,6 +508,7 @@ export class LoopEngine {
           case "message.start":
             currentMessageId = event.messageId;
             messageCount++;
+            this.emitLog("debug", "AI started generating response");
             break;
 
           case "message.delta":
@@ -468,6 +524,9 @@ export class LoopEngine {
             break;
 
           case "message.complete":
+            this.emitLog("info", "AI finished generating response", {
+              responseLength: responseContent.length,
+            });
             // Emit the complete message
             this.emit({
               type: "loop.message",
@@ -488,6 +547,7 @@ export class LoopEngine {
             const toolId = `tool-${Date.now()}-${toolCallCount}`;
             toolCalls.set(event.toolName, { name: event.toolName, input: event.input });
             toolCallCount++;
+            this.emitLog("debug", `AI calling tool: ${event.toolName}`);
             // Emit tool call event
             this.emit({
               type: "loop.tool_call",
@@ -506,6 +566,7 @@ export class LoopEngine {
 
           case "tool.complete": {
             const toolInfo = toolCalls.get(event.toolName);
+            this.emitLog("debug", `Tool completed: ${event.toolName}`);
             // Emit tool complete event
             this.emit({
               type: "loop.tool_call",
@@ -526,6 +587,7 @@ export class LoopEngine {
           case "error":
             outcome = "error";
             error = event.message;
+            this.emitLog("error", `AI backend error: ${event.message}`);
             break;
         }
 
@@ -536,17 +598,23 @@ export class LoopEngine {
       }
 
       // Check for stop pattern
+      this.emitLog("info", "Evaluating stop pattern...");
       if (outcome !== "error" && this.stopDetector.matches(responseContent)) {
+        this.emitLog("info", "Stop pattern matched - task is complete");
         outcome = "complete";
+      } else if (outcome !== "error") {
+        this.emitLog("info", "Stop pattern not matched - will continue to next iteration");
       }
 
       // Commit changes if git is enabled
       if (this.config.git.enabled && outcome !== "error") {
+        this.emitLog("info", "Checking for changes to commit...");
         await this.commitIteration(iteration, responseContent);
       }
     } catch (err) {
       outcome = "error";
       error = String(err);
+      this.emitLog("error", `Iteration error: ${error}`);
     }
 
     const completedAt = createTimestamp();
@@ -564,6 +632,12 @@ export class LoopEngine {
     this.updateState({
       lastActivityAt: completedAt,
       recentIterations: [...this.loop.state.recentIterations.slice(-9), summary],
+    });
+
+    this.emitLog("info", `Iteration ${iteration} completed`, {
+      outcome,
+      messageCount,
+      toolCallCount,
     });
 
     this.emit({
@@ -616,20 +690,23 @@ export class LoopEngine {
     const hasChanges = await this.git.hasUncommittedChanges(directory);
 
     if (!hasChanges) {
+      this.emitLog("info", "No changes to commit");
       return; // No changes to commit
     }
 
     // Generate commit message based on changes
     let message: string;
     try {
+      this.emitLog("info", "Generating commit message...");
       message = await this.generateCommitMessage(iteration, responseContent);
     } catch (err) {
       // Fallback to generic message if generation fails
-      console.warn(`Failed to generate commit message: ${String(err)}`);
+      this.emitLog("warn", `Failed to generate commit message: ${String(err)}, using fallback`);
       message = `${this.config.git.commitPrefix} Iteration ${iteration}`;
     }
 
     try {
+      this.emitLog("info", "Committing changes...");
       const commitInfo = await this.git.commit(directory, message);
 
       const commit: GitCommit = {
@@ -650,6 +727,11 @@ export class LoopEngine {
         });
       }
 
+      this.emitLog("info", `Committed ${commitInfo.filesChanged} file(s)`, {
+        sha: commitInfo.sha.slice(0, 8),
+        message: message.split("\n")[0],
+      });
+
       this.emit({
         type: "loop.git.commit",
         loopId: this.config.id,
@@ -659,6 +741,7 @@ export class LoopEngine {
       });
     } catch (err) {
       // Log but don't fail the iteration
+      this.emitLog("warn", `Failed to commit: ${String(err)}`);
       console.error(`Failed to commit iteration ${iteration}: ${String(err)}`);
     }
   }
@@ -774,6 +857,25 @@ Output ONLY the commit message, nothing else.`
    */
   private emit(event: LoopEvent): void {
     this.emitter.emit(event);
+  }
+
+  /**
+   * Emit an application log event.
+   * Used to communicate internal loop engine operations to the UI.
+   */
+  private emitLog(
+    level: LogLevel,
+    message: string,
+    details?: Record<string, unknown>
+  ): void {
+    this.emit({
+      type: "loop.log",
+      loopId: this.config.id,
+      level,
+      message,
+      details,
+      timestamp: createTimestamp(),
+    });
   }
 
   /**

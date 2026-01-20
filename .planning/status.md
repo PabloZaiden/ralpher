@@ -685,3 +685,66 @@ src/components/common/
 **Verification Results:**
 - `bun run build` - **PASS**
 - `bun test` - **135 tests PASS**
+
+---
+
+### 2026-01-20 - Application Logging in UI (Current Session)
+
+**Goal:** Show comprehensive application-level logs in the UI, not just AI agent output. Users need to see what the loop engine is doing internally.
+
+**Implementation:**
+
+1. **Added `loop.log` event type in `src/types/events.ts`:**
+   - New `LoopLogEvent` interface with `level`, `message`, `details`, and `timestamp`
+   - New `LogLevel` type: `"info" | "warn" | "error" | "debug"`
+   - Added to the `LoopEvent` union type
+
+2. **Added `emitLog` helper in `src/core/loop-engine.ts`:**
+   - Private helper method to emit log events consistently
+   - Takes `level`, `message`, and optional `details` object
+
+3. **Added comprehensive logging throughout LoopEngine:**
+   - `start()`: Starting loop, git setup, backend connection
+   - `stop()`: Stopping loop, aborting session
+   - `pause()`: Pausing execution
+   - `resume()`: Resuming execution
+   - `setupGitBranch()`: Checking git repo, uncommitted changes, branch creation/checkout
+   - `setupSession()`: Backend connection, session creation
+   - `runLoop()`: Stop pattern detection, max iterations, waiting between iterations
+   - `runIteration()`: Building prompt, sending to AI, subscribing to events, evaluating stop pattern
+   - `commitIteration()`: Checking for changes, generating commit message, committing
+
+4. **Updated `useLoop` hook in `src/hooks/useLoop.ts`:**
+   - Added `LogEntry` interface matching the event structure
+   - Added `logs` state to accumulate log entries
+   - Added handler for `loop.log` events
+   - Added `logs` to `UseLoopResult` interface and return object
+
+5. **Updated `LogViewer` component in `src/components/LogViewer.tsx`:**
+   - Added `LogEntry` interface
+   - Added `logs` prop to accept application logs
+   - Added `getLogLevelColor()` and `getLogLevelBadge()` helpers
+   - Logs are now sorted by timestamp along with messages and tool calls
+   - Each log entry shows: timestamp, level badge (INFO/WARN/ERROR/DEBUG), message, and expandable details
+
+6. **Updated `LoopDetails` component:**
+   - Passes `logs` from `useLoop` to `LogViewer`
+
+**Log Events Emitted:**
+- Loop lifecycle: starting, started, stopping, stopped, pausing, resuming
+- Git operations: checking repo, checking changes, creating/checking out branch, committing
+- Backend operations: connecting, creating session
+- Iteration flow: starting iteration, building prompt, sending to AI, evaluating stop pattern
+- AI events: response started, response complete, tool calls
+- Errors and warnings: failed operations with details
+
+**Files Modified:**
+- `src/types/events.ts` - Added `LoopLogEvent` type and `LogLevel`
+- `src/core/loop-engine.ts` - Added `emitLog()` and comprehensive logging
+- `src/hooks/useLoop.ts` - Added `logs` state and `loop.log` event handling
+- `src/components/LogViewer.tsx` - Added log entry rendering with level badges
+- `src/components/LoopDetails.tsx` - Pass logs to LogViewer
+
+**Verification Results:**
+- `bun run build` - **PASS**
+- `bun test` - **135 tests PASS**

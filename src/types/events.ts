@@ -47,6 +47,7 @@ export type LoopEvent =
   | LoopMessageEvent
   | LoopToolCallEvent
   | LoopProgressEvent
+  | LoopLogEvent
   | LoopGitCommitEvent
   | LoopPausedEvent
   | LoopResumedEvent
@@ -107,6 +108,27 @@ export interface LoopProgressEvent {
   loopId: string;
   iteration: number;
   content: string;
+  timestamp: string;
+}
+
+/**
+ * Log level for application log events.
+ */
+export type LogLevel = "info" | "warn" | "error" | "debug";
+
+/**
+ * Application-level log event.
+ * Used to communicate what the loop engine is doing internally.
+ */
+export interface LoopLogEvent {
+  type: "loop.log";
+  loopId: string;
+  /** Log level */
+  level: LogLevel;
+  /** Log message */
+  message: string;
+  /** Optional additional details */
+  details?: Record<string, unknown>;
   timestamp: string;
 }
 

@@ -14,8 +14,25 @@ import type {
   FileContentResponse,
   MessageData,
   ToolCallData,
+  LogLevel,
 } from "../types";
 import { useLoopSSE } from "./useSSE";
+
+/**
+ * Application log entry for display in the UI.
+ */
+export interface LogEntry {
+  /** Unique ID for the log entry */
+  id: string;
+  /** Log level */
+  level: LogLevel;
+  /** Log message */
+  message: string;
+  /** Optional additional details */
+  details?: Record<string, unknown>;
+  /** ISO timestamp */
+  timestamp: string;
+}
 
 export interface UseLoopResult {
   /** The loop data */
@@ -34,6 +51,8 @@ export interface UseLoopResult {
   toolCalls: ToolCallData[];
   /** Streaming progress content (accumulated text deltas) */
   progressContent: string;
+  /** Application logs from the loop engine */
+  logs: LogEntry[];
   /** Refresh loop data */
   refresh: () => Promise<void>;
   /** Update the loop */
@@ -70,6 +89,7 @@ export function useLoop(loopId: string): UseLoopResult {
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCallData[]>([]);
   const [progressContent, setProgressContent] = useState<string>("");
+  const [logs, setLogs] = useState<LogEntry[]>([]);
 
   // SSE connection for real-time updates
   const { events, status: sseStatus } = useLoopSSE<LoopEvent>(loopId, {
@@ -79,6 +99,20 @@ export function useLoop(loopId: string): UseLoopResult {
   // Handle SSE events
   function handleSSEEvent(event: LoopEvent) {
     switch (event.type) {
+      case "loop.log":
+        // Add log entry
+        setLogs((prev) => [
+          ...prev,
+          {
+            id: `log-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            level: event.level,
+            message: event.message,
+            details: event.details,
+            timestamp: event.timestamp,
+          },
+        ]);
+        break;
+
       case "loop.progress":
         // Accumulate streaming text deltas
         setProgressContent((prev) => prev + event.content);
@@ -105,6 +139,7 @@ export function useLoop(loopId: string): UseLoopResult {
 
       case "loop.iteration.start":
         // Clear messages, tool calls, and progress for new iteration
+        // Keep logs as they show the full history
         setMessages([]);
         setToolCalls([]);
         setProgressContent("");
@@ -368,6 +403,7 @@ export function useLoop(loopId: string): UseLoopResult {
     messages,
     toolCalls,
     progressContent,
+    logs,
     refresh,
     update,
     remove,

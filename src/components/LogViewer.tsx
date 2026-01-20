@@ -3,14 +3,32 @@
  */
 
 import { useEffect, useRef } from "react";
-import type { MessageData, ToolCallData } from "../types";
+import type { MessageData, ToolCallData, LogLevel } from "../types";
 import { Badge } from "./common";
+
+/**
+ * Application log entry for display in the UI.
+ */
+export interface LogEntry {
+  /** Unique ID for the log entry */
+  id: string;
+  /** Log level */
+  level: LogLevel;
+  /** Log message */
+  message: string;
+  /** Optional additional details */
+  details?: Record<string, unknown>;
+  /** ISO timestamp */
+  timestamp: string;
+}
 
 export interface LogViewerProps {
   /** Messages to display */
   messages: MessageData[];
   /** Tool calls to display */
   toolCalls: ToolCallData[];
+  /** Application logs to display */
+  logs?: LogEntry[];
   /** Progress content (streaming text) */
   progressContent?: string;
   /** Whether to auto-scroll to bottom */
@@ -49,9 +67,46 @@ function getToolStatusColor(status: ToolCallData["status"]): string {
   }
 }
 
+/**
+ * Get the color for a log level.
+ */
+function getLogLevelColor(level: LogLevel): string {
+  switch (level) {
+    case "debug":
+      return "text-gray-500";
+    case "info":
+      return "text-cyan-400";
+    case "warn":
+      return "text-yellow-400";
+    case "error":
+      return "text-red-400";
+    default:
+      return "text-gray-400";
+  }
+}
+
+/**
+ * Get the badge variant for a log level.
+ */
+function getLogLevelBadge(level: LogLevel): "default" | "info" | "success" | "warning" | "danger" {
+  switch (level) {
+    case "debug":
+      return "default";
+    case "info":
+      return "info";
+    case "warn":
+      return "warning";
+    case "error":
+      return "danger";
+    default:
+      return "default";
+  }
+}
+
 export function LogViewer({
   messages,
   toolCalls,
+  logs = [],
   progressContent,
   autoScroll = true,
   maxHeight = "500px",
@@ -63,12 +118,13 @@ export function LogViewer({
     if (autoScroll && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [messages, toolCalls, progressContent, autoScroll]);
+  }, [messages, toolCalls, logs, progressContent, autoScroll]);
 
   // Combine and sort entries by timestamp
   const entries: Array<
     | { type: "message"; data: MessageData; timestamp: string }
     | { type: "tool"; data: ToolCallData; timestamp: string }
+    | { type: "log"; data: LogEntry; timestamp: string }
   > = [];
 
   messages.forEach((msg) => {
@@ -78,6 +134,10 @@ export function LogViewer({
   toolCalls.forEach((tool) => {
     // Use the message timestamp or current time for tool calls
     entries.push({ type: "tool", data: tool, timestamp: new Date().toISOString() });
+  });
+
+  logs.forEach((log) => {
+    entries.push({ type: "log", data: log, timestamp: log.timestamp });
   });
 
   // Sort by timestamp
@@ -118,7 +178,7 @@ export function LogViewer({
                   </div>
                 </div>
               );
-            } else {
+            } else if (entry.type === "tool") {
               const tool = entry.data;
               return (
                 <div key={`tool-${tool.id}-${index}`} className="group">
@@ -157,6 +217,37 @@ export function LogViewer({
                             {typeof tool.output === "string"
                               ? tool.output
                               : String(JSON.stringify(tool.output, null, 2))}
+                          </pre>
+                        </details>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            } else {
+              // Log entry
+              const log = entry.data;
+              return (
+                <div key={`log-${log.id}-${index}`} className="group">
+                  <div className="flex items-start gap-3">
+                    <span className="text-gray-500 flex-shrink-0">
+                      {formatTime(log.timestamp)}
+                    </span>
+                    <Badge
+                      variant={getLogLevelBadge(log.level)}
+                      size="sm"
+                    >
+                      {log.level.toUpperCase()}
+                    </Badge>
+                    <div className={`flex-1 ${getLogLevelColor(log.level)}`}>
+                      <span>{log.message}</span>
+                      {log.details && Object.keys(log.details).length > 0 && (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
+                            Details
+                          </summary>
+                          <pre className="mt-1 p-2 bg-gray-800 rounded text-xs overflow-x-auto">
+                            {JSON.stringify(log.details, null, 2)}
                           </pre>
                         </details>
                       )}
