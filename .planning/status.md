@@ -589,7 +589,6 @@ src/components/common/
    - Wrap App with ErrorBoundary and ToastProvider
    - Dark mode toggle in UI
    - Keyboard shortcuts
-   - More detailed diff viewer with syntax highlighting
    - Markdown rendering for plan.md and status.md
    - Loop templates/presets
 
@@ -597,3 +596,73 @@ src/components/common/
    - Test with actual opencode server
    - Verify SSE reconnection behavior
    - Test git operations in real project
+
+---
+
+### 2026-01-20 - UI Fixes and Enhancements (Current Session)
+
+**Goals Completed:**
+
+1. **Fixed real-time logs not showing during loop execution**
+   - **Issue:** The `useLoop` hook tracked `loop.message` and `loop.tool_call` events but wasn't accumulating `loop.progress` streaming text deltas
+   - **Fix in `src/hooks/useLoop.ts`:**
+     - Added `progressContent` state to accumulate streaming text
+     - Handle `loop.progress` events to append to progress content
+     - Clear progress content when `loop.message` (complete message) arrives
+     - Clear progress content on `loop.iteration.start`
+     - Added `progressContent` to the return object
+   - **Fix in `src/components/LoopDetails.tsx`:**
+     - Pass `progressContent` to `LogViewer` component
+   - Now users can see AI output streaming in real-time during loop execution
+
+2. **Fixed placeholder text styling**
+   - **Issue:** Placeholder text in form inputs was indistinguishable from regular text
+   - **Fix in `src/components/CreateLoopForm.tsx`:**
+     - Added `placeholder:text-gray-400 dark:placeholder:text-gray-500` to all input fields
+     - Applied to: name input, directory input, prompt textarea, max iterations input
+   - Placeholders now appear grayed out and clearly distinguished from user input
+
+3. **Made diff panel files expandable/collapsible with actual diff content**
+   - **Enhancement in `src/core/git-service.ts`:**
+     - Added `FileDiffWithContent` interface extending `FileDiff` with optional `patch` field
+     - Added `getFileDiffContent()` method to get diff content for a specific file
+     - Added `getDiffWithContent()` method that returns all diffs with their patch content
+   - **Enhancement in `src/types/api.ts`:**
+     - Added `patch?: string` field to `FileDiff` interface
+   - **Enhancement in `src/api/loops.ts`:**
+     - Updated diff endpoint to use `getDiffWithContent()` instead of `getDiff()`
+   - **Enhancement in `src/components/LoopDetails.tsx`:**
+     - Added `DiffPatchViewer` component with syntax highlighting for diff lines
+     - Added `expandedFiles` state to track which files are expanded
+     - Made file rows clickable with expand/collapse indicators (▶/▼)
+     - Shows actual diff content with color coding (green for additions, red for deletions, blue for hunk headers)
+
+4. **Updated branch naming format**
+   - **Issue:** Branch names used loop ID (`ralph/{loop-id}`) which wasn't human-readable
+   - **New format:** `ralph/{loop-title}-{start-date-and-time}`
+   - **Example:** `ralph/add-dark-mode-2026-01-20-15-30-45`
+   - **Fix in `src/core/loop-engine.ts`:**
+     - Added `generateBranchName()` function that:
+       - Sanitizes loop name (lowercase, remove special chars, replace spaces with hyphens)
+       - Limits name length to 40 characters
+       - Formats timestamp as `YYYY-MM-DD-HH-MM-SS`
+       - Combines: `{prefix}{safe-name}-{timestamp}`
+     - Updated `setupGitBranch()` to use the new function
+   - **Updated test in `tests/e2e/git-workflow.test.ts`:**
+     - Renamed test to "branch name includes loop name and timestamp"
+     - Updated assertions to check for sanitized loop name and date pattern
+
+**Files Modified:**
+- `src/hooks/useLoop.ts` - Added progressContent state and handling
+- `src/components/LoopDetails.tsx` - Pass progressContent to LogViewer, expandable diff UI
+- `src/components/CreateLoopForm.tsx` - Added placeholder styling classes
+- `src/core/git-service.ts` - Added getDiffWithContent and FileDiffWithContent
+- `src/types/api.ts` - Added patch field to FileDiff
+- `src/api/loops.ts` - Use getDiffWithContent in diff endpoint
+- `src/core/loop-engine.ts` - New branch naming with generateBranchName()
+- `tests/e2e/git-workflow.test.ts` - Updated branch name test
+
+**Verification Results:**
+- `bun run build` - **PASS**
+- `bun test` - **135 tests PASS**
+- `bun x tsc --noEmit` - **PASS**

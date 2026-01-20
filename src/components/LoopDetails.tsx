@@ -61,6 +61,35 @@ function getStatusLabel(status: LoopStatus): string {
 }
 
 /**
+ * Render diff patch with syntax highlighting for additions/deletions.
+ */
+function DiffPatchViewer({ patch }: { patch: string }) {
+  const lines = patch.split("\n");
+  
+  return (
+    <pre className="text-xs font-mono overflow-x-auto bg-gray-950 p-3 rounded-b">
+      {lines.map((line, i) => {
+        let className = "text-gray-400";
+        if (line.startsWith("+") && !line.startsWith("+++")) {
+          className = "text-green-400 bg-green-950/50";
+        } else if (line.startsWith("-") && !line.startsWith("---")) {
+          className = "text-red-400 bg-red-950/50";
+        } else if (line.startsWith("@@")) {
+          className = "text-blue-400";
+        } else if (line.startsWith("diff --git") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++")) {
+          className = "text-gray-500";
+        }
+        return (
+          <div key={i} className={className}>
+            {line || " "}
+          </div>
+        );
+      })}
+    </pre>
+  );
+}
+
+/**
  * Check if loop can be started.
  */
 function canStart(status: LoopStatus): boolean {
@@ -103,6 +132,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     sseStatus,
     messages,
     toolCalls,
+    progressContent,
     refresh,
     start,
     stop,
@@ -121,6 +151,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [statusContent, setStatusContent] = useState<FileContentResponse | null>(null);
   const [diffContent, setDiffContent] = useState<FileDiff[]>([]);
   const [loadingContent, setLoadingContent] = useState(false);
+  const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
 
   // Modals
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -211,7 +242,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   if (!loop) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
-        <div className="max-w-7xl mx-auto">
+        <div className="w-full">
           <Button variant="ghost" onClick={onBack}>
             ← Back
           </Button>
@@ -235,7 +266,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="sm" onClick={onBack}>
               ← Back
@@ -278,7 +309,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="px-4 sm:px-6 lg:px-8 py-6">
         {/* Error display */}
         {error && (
           <div className="mb-6 rounded-md bg-red-50 dark:bg-red-900/20 p-4">
@@ -286,9 +317,9 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-6 gap-6">
           {/* Left column - Stats and actions */}
-          <div className="space-y-6">
+          <div className="lg:col-span-1 space-y-6">
             {/* Stats card */}
             <Card title="Statistics">
               <dl className="space-y-3 text-sm">
@@ -421,7 +452,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
           </div>
 
           {/* Right column - Tabs content */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-4 xl:col-span-5">
             {/* Tab navigation */}
             <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
               {tabs.map((tab) => (
@@ -445,6 +476,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 <LogViewer
                   messages={messages}
                   toolCalls={toolCalls}
+                  progressContent={progressContent}
                   maxHeight="600px"
                 />
               )}
@@ -493,35 +525,70 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                     </div>
                   ) : diffContent.length > 0 ? (
                     <div className="space-y-2">
-                      {diffContent.map((file) => (
-                        <div
-                          key={file.path}
-                          className="flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-900 rounded text-sm"
-                        >
-                          <span
-                            className={`font-medium ${
-                              file.status === "added"
-                                ? "text-green-600 dark:text-green-400"
-                                : file.status === "deleted"
-                                ? "text-red-600 dark:text-red-400"
-                                : file.status === "renamed"
-                                ? "text-purple-600 dark:text-purple-400"
-                                : "text-yellow-600 dark:text-yellow-400"
-                            }`}
+                      {diffContent.map((file) => {
+                        const isExpanded = expandedFiles.has(file.path);
+                        const hasPatch = !!file.patch;
+                        
+                        return (
+                          <div
+                            key={file.path}
+                            className="bg-gray-50 dark:bg-gray-900 rounded text-sm overflow-hidden"
                           >
-                            {file.status === "added" && "+"}
-                            {file.status === "deleted" && "-"}
-                            {file.status === "renamed" && "→"}
-                            {file.status === "modified" && "~"}
-                          </span>
-                          <span className="font-mono text-gray-900 dark:text-gray-100 flex-1">
-                            {file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
-                          </span>
-                          <span className="text-gray-500 dark:text-gray-400">
-                            +{file.additions} -{file.deletions}
-                          </span>
-                        </div>
-                      ))}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (hasPatch) {
+                                  setExpandedFiles((prev) => {
+                                    const next = new Set(prev);
+                                    if (isExpanded) {
+                                      next.delete(file.path);
+                                    } else {
+                                      next.add(file.path);
+                                    }
+                                    return next;
+                                  });
+                                }
+                              }}
+                              className={`w-full flex items-center gap-3 p-2 text-left ${
+                                hasPatch ? "cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" : "cursor-default"
+                              }`}
+                            >
+                              {hasPatch && (
+                                <span className="text-gray-400 flex-shrink-0">
+                                  {isExpanded ? "▼" : "▶"}
+                                </span>
+                              )}
+                              <span
+                                className={`font-medium flex-shrink-0 ${
+                                  file.status === "added"
+                                    ? "text-green-600 dark:text-green-400"
+                                    : file.status === "deleted"
+                                    ? "text-red-600 dark:text-red-400"
+                                    : file.status === "renamed"
+                                    ? "text-purple-600 dark:text-purple-400"
+                                    : "text-yellow-600 dark:text-yellow-400"
+                                }`}
+                              >
+                                {file.status === "added" && "+"}
+                                {file.status === "deleted" && "-"}
+                                {file.status === "renamed" && "→"}
+                                {file.status === "modified" && "~"}
+                              </span>
+                              <span className="font-mono text-gray-900 dark:text-gray-100 flex-1 truncate">
+                                {file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
+                              </span>
+                              <span className="text-gray-500 dark:text-gray-400 flex-shrink-0">
+                                <span className="text-green-600 dark:text-green-400">+{file.additions}</span>
+                                {" "}
+                                <span className="text-red-600 dark:text-red-400">-{file.deletions}</span>
+                              </span>
+                            </button>
+                            {isExpanded && file.patch && (
+                              <DiffPatchViewer patch={file.patch} />
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="text-gray-500 dark:text-gray-400 text-center py-8">

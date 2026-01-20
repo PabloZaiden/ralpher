@@ -22,6 +22,15 @@ export interface FileDiff {
   status: "added" | "modified" | "deleted" | "renamed";
   additions: number;
   deletions: number;
+  oldPath?: string;
+}
+
+/**
+ * Extended file diff with actual diff content.
+ */
+export interface FileDiffWithContent extends FileDiff {
+  /** The actual diff patch content */
+  patch?: string;
 }
 
 /**
@@ -330,6 +339,74 @@ export class GitService {
       insertions: insertionsMatch?.[1] ? parseInt(insertionsMatch[1], 10) : 0,
       deletions: deletionsMatch?.[1] ? parseInt(deletionsMatch[1], 10) : 0,
     };
+  }
+
+  /**
+   * Get the actual diff patch content for a specific file.
+   */
+  async getFileDiffContent(
+    directory: string,
+    baseBranch: string,
+    filePath: string
+  ): Promise<string> {
+    const result = await this.runGitCommand(directory, [
+      "diff",
+      baseBranch,
+      "--",
+      filePath,
+    ]);
+    if (!result.success) {
+      throw new Error(`Failed to get file diff: ${result.stderr}`);
+    }
+    return result.stdout;
+  }
+
+  /**
+   * Get diffs with actual patch content for all files.
+   */
+  async getDiffWithContent(
+    directory: string,
+    baseBranch: string
+  ): Promise<FileDiffWithContent[]> {
+    // First get the basic diff info
+    const diffs = await this.getDiff(directory, baseBranch);
+    
+    // Then get the full diff with patches
+    const result = await this.runGitCommand(directory, [
+      "diff",
+      baseBranch,
+    ]);
+    
+    if (!result.success) {
+      // Return diffs without patches if we can't get the full diff
+      return diffs;
+    }
+
+    const fullDiff = result.stdout;
+    const diffsWithContent: FileDiffWithContent[] = [];
+
+    // Parse the full diff to extract per-file patches
+    // Git diff format: "diff --git a/path b/path" separates files
+    const fileSections = fullDiff.split(/^diff --git /m).filter(Boolean);
+
+    for (const diff of diffs) {
+      // Find the section for this file
+      const section = fileSections.find(s => {
+        // Match "a/path b/path" at the start
+        const headerMatch = s.match(/^a\/(.+?) b\/(.+?)\n/);
+        if (headerMatch) {
+          return headerMatch[1] === diff.path || headerMatch[2] === diff.path;
+        }
+        return false;
+      });
+
+      diffsWithContent.push({
+        ...diff,
+        patch: section ? `diff --git ${section}` : undefined,
+      });
+    }
+
+    return diffsWithContent;
   }
 
   /**

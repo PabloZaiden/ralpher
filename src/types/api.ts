@@ -108,6 +108,8 @@ export interface FileDiff {
   deletions: number;
   /** Old path (for renames) */
   oldPath?: string;
+  /** The actual diff patch content */
+  patch?: string;
 }
 
 /**

@@ -310,7 +310,7 @@ export const loopsDataRoutes = {
       }
 
       try {
-        const diffs = await gitService.getDiff(
+        const diffs = await gitService.getDiffWithContent(
           loop.config.directory,
           loop.state.git.originalBranch
         );

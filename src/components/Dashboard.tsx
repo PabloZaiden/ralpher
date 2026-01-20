@@ -92,7 +92,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+        <div className="px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
@@ -126,7 +126,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       </header>
 
       {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="px-4 sm:px-6 lg:px-8 py-8">
         {/* Error display */}
         {error && (
           <div className="mb-6 rounded-md bg-red-50 dark:bg-red-900/20 p-4">
@@ -179,7 +179,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
               Active ({activeLoops.length})
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
               {activeLoops.map((loop) => (
                 <LoopCard
                   key={loop.config.id}
@@ -201,7 +201,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
               Completed ({completedLoops.length})
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
               {completedLoops.map((loop) => (
                 <LoopCard
                   key={loop.config.id}
@@ -223,7 +223,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
               Other ({otherLoops.length})
             </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
               {otherLoops.map((loop) => (
                 <LoopCard
                   key={loop.config.id}

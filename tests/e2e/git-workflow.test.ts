@@ -80,7 +80,7 @@ describe("Git Workflow", () => {
       expect(currentBranch).toMatch(/^feature\//);
     });
 
-    test("branch name includes loop ID", async () => {
+    test("branch name includes loop name and timestamp", async () => {
       const loop = await ctx.manager.createLoop({
         name: "Branch ID Loop",
         directory: ctx.workDir,
@@ -92,8 +92,12 @@ describe("Git Workflow", () => {
       await waitForEvent(ctx.events, "loop.completed");
 
       const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
-      // Branch should contain part of the loop ID
-      expect(currentBranch).toContain(loop.config.id.slice(0, 8));
+      // Branch should contain the sanitized loop name
+      expect(currentBranch).toContain("branch-id-loop");
+      // Branch should start with ralph/ prefix
+      expect(currentBranch).toStartWith("ralph/");
+      // Branch should contain a date component (YYYY-MM-DD format)
+      expect(currentBranch).toMatch(/\d{4}-\d{2}-\d{2}/);
     });
   });
 

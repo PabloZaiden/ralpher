@@ -26,6 +26,32 @@ import { GitService, gitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 
 /**
+ * Generate a git-safe branch name from a loop name and timestamp.
+ * - Converts to lowercase
+ * - Replaces spaces and special characters with hyphens
+ * - Removes consecutive hyphens
+ * - Limits length to avoid overly long branch names
+ */
+function generateBranchName(prefix: string, name: string, timestamp: string): string {
+  // Parse the timestamp to get a readable date-time format
+  const date = new Date(timestamp);
+  const dateStr = date.toISOString()
+    .replace(/[:.]/g, "-")  // Replace : and . with -
+    .replace("T", "-")       // Replace T with -
+    .slice(0, 19);           // Take YYYY-MM-DD-HH-MM-SS
+
+  // Sanitize the name for git branch
+  const safeName = name
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")  // Replace non-alphanumeric with -
+    .replace(/-+/g, "-")          // Collapse multiple hyphens
+    .replace(/^-|-$/g, "")        // Trim leading/trailing hyphens
+    .slice(0, 40);                // Limit length
+
+  return `${prefix}${safeName}-${dateStr}`;
+}
+
+/**
  * Options for creating a LoopEngine.
  */
 export interface LoopEngineOptions {
@@ -220,7 +246,14 @@ export class LoopEngine {
    */
   private async setupGitBranch(): Promise<void> {
     const directory = this.config.directory;
-    const branchName = `${this.config.git.branchPrefix}${this.config.id}`;
+    
+    // Generate branch name using loop name and start timestamp
+    const startTimestamp = this.loop.state.startedAt ?? createTimestamp();
+    const branchName = generateBranchName(
+      this.config.git.branchPrefix,
+      this.config.name,
+      startTimestamp
+    );
 
     // Check if we're in a git repo
     const isRepo = await this.git.isGitRepo(directory);

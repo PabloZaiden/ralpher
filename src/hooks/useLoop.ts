@@ -32,6 +32,8 @@ export interface UseLoopResult {
   messages: MessageData[];
   /** Tool calls from the current/recent iterations */
   toolCalls: ToolCallData[];
+  /** Streaming progress content (accumulated text deltas) */
+  progressContent: string;
   /** Refresh loop data */
   refresh: () => Promise<void>;
   /** Update the loop */
@@ -67,6 +69,7 @@ export function useLoop(loopId: string): UseLoopResult {
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageData[]>([]);
   const [toolCalls, setToolCalls] = useState<ToolCallData[]>([]);
+  const [progressContent, setProgressContent] = useState<string>("");
 
   // SSE connection for real-time updates
   const { events, status: sseStatus } = useLoopSSE<LoopEvent>(loopId, {
@@ -76,7 +79,14 @@ export function useLoop(loopId: string): UseLoopResult {
   // Handle SSE events
   function handleSSEEvent(event: LoopEvent) {
     switch (event.type) {
+      case "loop.progress":
+        // Accumulate streaming text deltas
+        setProgressContent((prev) => prev + event.content);
+        break;
+
       case "loop.message":
+        // Clear progress content when message is complete
+        setProgressContent("");
         setMessages((prev) => [...prev, event.message]);
         break;
 
@@ -94,9 +104,10 @@ export function useLoop(loopId: string): UseLoopResult {
         break;
 
       case "loop.iteration.start":
-        // Clear messages and tool calls for new iteration
+        // Clear messages, tool calls, and progress for new iteration
         setMessages([]);
         setToolCalls([]);
+        setProgressContent("");
         refresh();
         break;
 
@@ -356,6 +367,7 @@ export function useLoop(loopId: string): UseLoopResult {
     events,
     messages,
     toolCalls,
+    progressContent,
     refresh,
     update,
     remove,
