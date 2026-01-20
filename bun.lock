@@ -5,6 +5,7 @@
     "": {
       "name": "bun-react-template",
       "dependencies": {
+        "@opencode-ai/sdk": "^1.1.27",
         "bun-plugin-tailwind": "^0.1.2",
         "react": "^19",
         "react-dom": "^19",
@@ -18,6 +19,8 @@
     },
   },
   "packages": {
+    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.1.27", "", {}, "sha512-ssRZpET3zUNdk1GuF6HwFkNHhCXSTG0lhuPmw9HjifTwv1EVrn8gz7jAuME2OCvUSBvRTesH6Lb0Xt78Qbhzww=="],
+
     "@oven/bun-darwin-aarch64": ["@oven/bun-darwin-aarch64@1.3.6", "", { "os": "darwin", "cpu": "arm64" }, "sha512-27rypIapNkYboOSylkf1tD9UW9Ado2I+P1NBL46Qz29KmOjTL6WuJ7mHDC5O66CYxlOkF5r93NPDAC3lFHYBXw=="],
 
     "@oven/bun-darwin-x64": ["@oven/bun-darwin-x64@1.3.6", "", { "os": "darwin", "cpu": "x64" }, "sha512-I82xGzPkBxzBKgbl8DsA0RfMQCWTWjNmLjIEkW1ECiv3qK02kHGQ5FGUr/29L/SuvnGsULW4tBTRNZiMzL37nA=="],

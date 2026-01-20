@@ -9,6 +9,7 @@
     "build": "bun run build.ts"
   },
   "dependencies": {
+    "@opencode-ai/sdk": "^1.1.27",
     "bun-plugin-tailwind": "^0.1.2",
     "react": "^19",
     "react-dom": "^19",
