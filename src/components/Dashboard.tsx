@@ -1,0 +1,336 @@
+/**
+ * Dashboard component showing all loops in a grid view.
+ */
+
+import { useState } from "react";
+import type { Loop, UncommittedChangesError } from "../types";
+import { useLoops } from "../hooks";
+import { Button, ConfirmModal, Modal } from "./common";
+import { LoopCard } from "./LoopCard";
+import { CreateLoopForm } from "./CreateLoopForm";
+
+export interface DashboardProps {
+  /** Callback when a loop is selected */
+  onSelectLoop?: (loopId: string) => void;
+}
+
+export function Dashboard({ onSelectLoop }: DashboardProps) {
+  const {
+    loops,
+    loading,
+    error,
+    sseStatus,
+    createLoop,
+    startLoop,
+    stopLoop,
+    deleteLoop,
+  } = useLoops();
+
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; loopId: string | null }>({
+    open: false,
+    loopId: null,
+  });
+  const [uncommittedModal, setUncommittedModal] = useState<{
+    open: boolean;
+    loopId: string | null;
+    error: UncommittedChangesError | null;
+  }>({
+    open: false,
+    loopId: null,
+    error: null,
+  });
+  const [deleting, setDeleting] = useState(false);
+
+  // Handle start with uncommitted changes handling
+  async function handleStart(loopId: string) {
+    const result = await startLoop(loopId);
+    if (result.uncommittedError) {
+      setUncommittedModal({
+        open: true,
+        loopId,
+        error: result.uncommittedError,
+      });
+    }
+  }
+
+  // Handle uncommitted changes decision
+  async function handleUncommittedDecision(action: "commit" | "stash") {
+    if (!uncommittedModal.loopId) return;
+    await startLoop(uncommittedModal.loopId, { handleUncommitted: action });
+    setUncommittedModal({ open: false, loopId: null, error: null });
+  }
+
+  // Handle delete confirmation
+  async function handleDeleteConfirm() {
+    if (!deleteConfirm.loopId) return;
+    setDeleting(true);
+    await deleteLoop(deleteConfirm.loopId);
+    setDeleting(false);
+    setDeleteConfirm({ open: false, loopId: null });
+  }
+
+  // Group loops by status
+  const activeLoops = loops.filter(
+    (loop) =>
+      loop.state.status === "running" ||
+      loop.state.status === "waiting" ||
+      loop.state.status === "starting" ||
+      loop.state.status === "paused"
+  );
+  const completedLoops = loops.filter(
+    (loop) => loop.state.status === "completed"
+  );
+  const otherLoops = loops.filter(
+    (loop) =>
+      !["running", "waiting", "starting", "paused", "completed"].includes(
+        loop.state.status
+      )
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Header */}
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                Ralph Loops
+              </h1>
+              {/* SSE Status indicator */}
+              <div className="flex items-center gap-2 text-sm">
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    sseStatus === "open"
+                      ? "bg-green-500"
+                      : sseStatus === "connecting"
+                      ? "bg-yellow-500"
+                      : "bg-red-500"
+                  }`}
+                />
+                <span className="text-gray-500 dark:text-gray-400">
+                  {sseStatus === "open"
+                    ? "Connected"
+                    : sseStatus === "connecting"
+                    ? "Connecting..."
+                    : "Disconnected"}
+                </span>
+              </div>
+            </div>
+            <Button onClick={() => setShowCreateModal(true)}>
+              New Loop
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Error display */}
+        {error && (
+          <div className="mb-6 rounded-md bg-red-50 dark:bg-red-900/20 p-4">
+            <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
+          </div>
+        )}
+
+        {/* Loading state */}
+        {loading && loops.length === 0 && (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent" />
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!loading && loops.length === 0 && (
+          <div className="text-center py-12">
+            <div className="text-gray-400 dark:text-gray-500 mb-4">
+              <svg
+                className="mx-auto h-12 w-12"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+              No loops yet
+            </h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              Create your first Ralph Loop to get started.
+            </p>
+            <div className="mt-4">
+              <Button onClick={() => setShowCreateModal(true)}>
+                Create Loop
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Active loops section */}
+        {activeLoops.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              Active ({activeLoops.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {activeLoops.map((loop) => (
+                <LoopCard
+                  key={loop.config.id}
+                  loop={loop}
+                  onClick={() => onSelectLoop?.(loop.config.id)}
+                  onStop={() => stopLoop(loop.config.id)}
+                  onDelete={() =>
+                    setDeleteConfirm({ open: true, loopId: loop.config.id })
+                  }
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Completed loops section */}
+        {completedLoops.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              Completed ({completedLoops.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {completedLoops.map((loop) => (
+                <LoopCard
+                  key={loop.config.id}
+                  loop={loop}
+                  onClick={() => onSelectLoop?.(loop.config.id)}
+                  onStart={() => handleStart(loop.config.id)}
+                  onDelete={() =>
+                    setDeleteConfirm({ open: true, loopId: loop.config.id })
+                  }
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Other loops section */}
+        {otherLoops.length > 0 && (
+          <section>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              Other ({otherLoops.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {otherLoops.map((loop) => (
+                <LoopCard
+                  key={loop.config.id}
+                  loop={loop}
+                  onClick={() => onSelectLoop?.(loop.config.id)}
+                  onStart={() => handleStart(loop.config.id)}
+                  onStop={() => stopLoop(loop.config.id)}
+                  onDelete={() =>
+                    setDeleteConfirm({ open: true, loopId: loop.config.id })
+                  }
+                />
+              ))}
+            </div>
+          </section>
+        )}
+      </main>
+
+      {/* Create loop modal */}
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="Create New Loop"
+        description="Configure a new Ralph Loop for autonomous AI development."
+        size="lg"
+      >
+        <CreateLoopForm
+          onSubmit={async (request) => {
+            const loop = await createLoop(request);
+            if (loop) {
+              setShowCreateModal(false);
+            }
+          }}
+          onCancel={() => setShowCreateModal(false)}
+        />
+      </Modal>
+
+      {/* Delete confirmation modal */}
+      <ConfirmModal
+        isOpen={deleteConfirm.open}
+        onClose={() => setDeleteConfirm({ open: false, loopId: null })}
+        onConfirm={handleDeleteConfirm}
+        title="Delete Loop"
+        message="Are you sure you want to delete this loop? This action cannot be undone."
+        confirmLabel="Delete"
+        loading={deleting}
+        variant="danger"
+      />
+
+      {/* Uncommitted changes modal */}
+      <Modal
+        isOpen={uncommittedModal.open}
+        onClose={() => setUncommittedModal({ open: false, loopId: null, error: null })}
+        title="Uncommitted Changes Detected"
+        description="The target directory has uncommitted changes. How would you like to proceed?"
+        size="md"
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => setUncommittedModal({ open: false, loopId: null, error: null })}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => handleUncommittedDecision("stash")}
+            >
+              Stash Changes
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => handleUncommittedDecision("commit")}
+            >
+              Commit Changes
+            </Button>
+          </>
+        }
+      >
+        {uncommittedModal.error && (
+          <div>
+            <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
+              {uncommittedModal.error.message}
+            </p>
+            {uncommittedModal.error.changedFiles.length > 0 && (
+              <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-3">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Changed files:
+                </p>
+                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                  {uncommittedModal.error.changedFiles.slice(0, 10).map((file) => (
+                    <li key={file} className="font-mono truncate">
+                      {file}
+                    </li>
+                  ))}
+                  {uncommittedModal.error.changedFiles.length > 10 && (
+                    <li className="text-gray-500">
+                      ...and {uncommittedModal.error.changedFiles.length - 10} more
+                    </li>
+                  )}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+export default Dashboard;

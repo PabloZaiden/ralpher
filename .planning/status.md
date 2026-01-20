@@ -1,8 +1,8 @@
 # Ralph Loops Management System - Implementation Status
 
 **Last Updated:** 2026-01-20  
-**Current Phase:** Phase 4 - API Layer (COMPLETE)  
-**Overall Progress:** Phase 4 Complete, Ready for Phase 5
+**Current Phase:** Phase 5 - Frontend (COMPLETE)  
+**Overall Progress:** Phase 5 Complete, Ready for Phase 6
 
 ---
 
@@ -14,7 +14,7 @@
 | 2 | OpenCode Backend | **Complete** | 5/5 |
 | 3 | Loop Engine + Git | **Complete** | 8/8 |
 | 4 | API Layer | **Complete** | 5/5 |
-| 5 | Frontend | Not Started | 0/9 |
+| 5 | Frontend | **Complete** | 9/9 |
 | 6 | Testing & Polish | Not Started | 0/6 |
 
 ---
@@ -227,26 +227,86 @@ tests/api/
 **System:**
 - `GET /api/health` - Health check
 
-### Verification Results
-
-- `bun run build` - **PASS**
-- `bun test` - **PASS** (108 tests total)
-
 ---
 
 ## Phase 5: Frontend
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 5.1 | Implement useSSE hook | Not Started |
-| 5.2 | Implement useLoops hook | Not Started |
-| 5.3 | Create common UI components | Not Started |
-| 5.4 | Create Dashboard and LoopCard | Not Started |
-| 5.5 | Create LoopDetails with tabs | Not Started |
-| 5.6 | Create LogViewer | Not Started |
-| 5.7 | Create CreateLoopForm | Not Started |
-| 5.8 | Implement client-side routing | Not Started |
-| 5.9 | Add git info to UI | Not Started |
+| 5.1 | Implement useSSE hook | **Complete** |
+| 5.2 | Implement useLoops hook | **Complete** |
+| 5.3 | Create common UI components | **Complete** |
+| 5.4 | Create Dashboard and LoopCard | **Complete** |
+| 5.5 | Create LoopDetails with tabs | **Complete** |
+| 5.6 | Create LogViewer | **Complete** |
+| 5.7 | Create CreateLoopForm | **Complete** |
+| 5.8 | Implement client-side routing | **Complete** |
+| 5.9 | Add git info to UI | **Complete** |
+
+### Files Created in Phase 5
+
+```
+src/hooks/
+├── index.ts          # Central export
+├── useSSE.ts         # SSE connection hook (native EventSource)
+├── useLoops.ts       # Loops state management hook
+└── useLoop.ts        # Single loop hook with real-time updates
+
+src/components/
+├── index.ts          # Central export
+├── common/
+│   ├── index.ts      # Central export
+│   ├── Button.tsx    # Button with variants/sizes/loading
+│   ├── Card.tsx      # Card container component
+│   ├── Badge.tsx     # Status badge with loop status variants
+│   └── Modal.tsx     # Modal and ConfirmModal components
+├── Dashboard.tsx     # Loop grid view with sections
+├── LoopCard.tsx      # Loop summary card with actions
+├── LoopDetails.tsx   # Full loop view with tabs
+├── LogViewer.tsx     # Real-time log/message display
+└── CreateLoopForm.tsx # Loop creation form
+
+src/App.tsx           # Updated with hash-based routing
+```
+
+### Implementation Details
+
+**Hooks:**
+- `useSSE<T>` - Generic SSE hook with native EventSource
+  - Auto-connect on mount
+  - Reconnection handling
+  - Event buffering with max limit
+  - Status tracking (connecting/open/closed/error)
+- `useGlobalSSE` - Convenience hook for `/api/events`
+- `useLoopSSE` - Convenience hook for `/api/loops/:id/events`
+- `useLoops` - Full loops state management
+  - CRUD operations
+  - Control operations (start/stop/pause/resume/accept/discard)
+  - SSE integration for real-time updates
+- `useLoop` - Single loop management
+  - Real-time message/tool call tracking
+  - File content fetching (plan/status/diff)
+
+**Components:**
+- **Button** - Primary/secondary/danger/ghost variants, sm/md/lg sizes, loading state
+- **Card** - Container with optional title/description/actions
+- **Badge** - Status indicators with loop-specific variants
+- **Modal** - Dialog overlay with ConfirmModal convenience wrapper
+- **Dashboard** - Loop grid grouped by status (Active/Completed/Other)
+- **LoopCard** - Summary card with quick actions and live indicator
+- **LoopDetails** - Tabbed view (Log/Plan/Status/Diff) with full controls
+- **LogViewer** - Real-time message and tool call display
+- **CreateLoopForm** - Form with basic and advanced options
+
+**Routing:**
+- Hash-based routing (`#/` and `#/loop/:id`)
+- No external router dependency
+- Clean navigation between Dashboard and LoopDetails
+
+### Verification Results
+
+- `bun run build` - **PASS**
+- `bun test` - **PASS** (108 tests total)
 
 ---
 
@@ -282,12 +342,42 @@ tests/api/
 - [x] F9: Git merge on accept (LoopManager.acceptLoop)
 - [x] F10: Events stream via SSE
 - [x] F11: Persists across restarts (LoopManager state persistence)
-- [ ] F12: Web UI shows loops
-- [ ] F13: Web UI real-time log
+- [x] F12: Web UI shows loops
+- [x] F13: Web UI real-time log
 
 ---
 
 ## Notes
+
+### 2026-01-20 - Phase 5 Complete
+
+- Created React hooks for SSE and loops management
+  - `useSSE` - Native EventSource with auto-reconnect
+  - `useLoops` - Full CRUD + control with SSE integration
+  - `useLoop` - Single loop with real-time message tracking
+- Created common UI components from scratch (no external libraries)
+  - Button, Card, Badge, Modal with Tailwind CSS v4
+  - Loop-specific status variants for Badge
+- Created Dashboard with loop grid grouped by status
+  - Active, Completed, and Other sections
+  - Create loop modal
+  - Uncommitted changes handling modal
+- Created LoopDetails with tabbed interface
+  - Log, Plan, Status, Diff tabs
+  - Full control actions (start/stop/pause/resume/accept/discard)
+  - Git info display (branch, commits)
+- Created LogViewer for real-time message/tool display
+  - Auto-scroll to bottom
+  - Collapsible tool input/output
+  - Streaming progress indicator
+- Created CreateLoopForm with advanced options
+  - Basic fields: name, directory, prompt
+  - Advanced: max iterations, backend mode, git toggle
+- Updated App.tsx with hash-based client-side routing
+  - Dashboard view at `#/`
+  - LoopDetails view at `#/loop/:id`
+- All 108 tests still pass
+- Build succeeds
 
 ### 2026-01-20 - Phase 4 Complete
 
@@ -340,30 +430,21 @@ tests/api/
 
 ## Next Steps
 
-1. **Begin Phase 5: Frontend**
-   - Implement `useSSE` hook for real-time event subscriptions
-   - Implement `useLoops` hook for loops state management
-   - Create common UI components (Button, Card, Badge, Modal)
-   - Create Dashboard with LoopCard grid
-   - Create LoopDetails with tabs (Log, Plan, Status, Diff)
-   - Create LogViewer for real-time message streaming
-   - Create CreateLoopForm modal
-   - Implement client-side routing
-   - Add git info (branch, commits) to UI
+1. **Begin Phase 6: Testing & Polish**
+   - Write E2E tests for full loop workflow
+   - Add comprehensive error handling
+   - Add loading states and skeletons
+   - Update documentation (README, AGENTS.md updates)
 
-2. **Key files to create:**
-   - `src/hooks/useSSE.ts` - SSE connection hook
-   - `src/hooks/useLoops.ts` - Loops state hook
-   - `src/hooks/useLoop.ts` - Single loop hook
-   - `src/components/common/*.tsx` - Shared UI components
-   - `src/components/Dashboard.tsx` - Loop grid view
-   - `src/components/LoopCard.tsx` - Loop summary card
-   - `src/components/LoopDetails.tsx` - Full loop view with tabs
-   - `src/components/LogViewer.tsx` - Real-time log display
-   - `src/components/CreateLoopForm.tsx` - Loop creation form
+2. **Key improvements to consider:**
+   - Dark mode toggle in UI
+   - Keyboard shortcuts
+   - Toast notifications for actions
+   - More detailed diff viewer with syntax highlighting
+   - Markdown rendering for plan.md and status.md
+   - Loop templates/presets
 
 3. **Important considerations:**
-   - Use native `EventSource` API for SSE
-   - Use React 19 with functional components only
-   - Use Tailwind CSS v4 for styling
-   - No external UI libraries - build from scratch
+   - Test with actual opencode server
+   - Verify SSE reconnection behavior
+   - Test git operations in real project

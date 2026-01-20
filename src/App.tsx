@@ -1,31 +1,80 @@
-import { APITester } from "./APITester";
+/**
+ * Main App component with client-side routing.
+ * Manages navigation between Dashboard and LoopDetails views.
+ */
+
+import { useCallback, useEffect, useState } from "react";
+import { Dashboard } from "./components/Dashboard";
+import { LoopDetails } from "./components/LoopDetails";
 import "./index.css";
 
-import logo from "./logo.svg";
-import reactLogo from "./react.svg";
+type Route =
+  | { view: "dashboard" }
+  | { view: "loop"; loopId: string };
+
+/**
+ * Parse the current URL hash into a route.
+ */
+function parseHash(): Route {
+  const hash = window.location.hash.slice(1); // Remove #
+  
+  if (hash.startsWith("/loop/")) {
+    const loopId = hash.slice(6); // Remove /loop/
+    if (loopId) {
+      return { view: "loop", loopId };
+    }
+  }
+  
+  return { view: "dashboard" };
+}
+
+/**
+ * Navigate to a route by updating the hash.
+ */
+function navigateTo(route: Route) {
+  if (route.view === "dashboard") {
+    window.location.hash = "/";
+  } else {
+    window.location.hash = `/loop/${route.loopId}`;
+  }
+}
 
 export function App() {
-  return (
-    <div className="max-w-7xl mx-auto p-8 text-center relative z-10">
-      <div className="flex justify-center items-center gap-8 mb-8">
-        <img
-          src={logo}
-          alt="Bun Logo"
-          className="h-24 p-6 transition-all duration-300 hover:drop-shadow-[0_0_2em_#646cffaa] scale-120"
-        />
-        <img
-          src={reactLogo}
-          alt="React Logo"
-          className="h-24 p-6 transition-all duration-300 hover:drop-shadow-[0_0_2em_#61dafbaa] animate-[spin_20s_linear_infinite]"
-        />
-      </div>
+  const [route, setRoute] = useState<Route>(parseHash);
 
-      <h1 className="text-5xl font-bold my-4 leading-tight">Bun + React</h1>
-      <p>
-        Edit <code className="bg-[#1a1a1a] px-2 py-1 rounded font-mono">src/App.tsx</code> and save to test HMR
-      </p>
-      <APITester />
-    </div>
+  // Handle hash changes
+  useEffect(() => {
+    function handleHashChange() {
+      setRoute(parseHash());
+    }
+
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
+
+  // Navigation handlers
+  const handleSelectLoop = useCallback((loopId: string) => {
+    navigateTo({ view: "loop", loopId });
+  }, []);
+
+  const handleBack = useCallback(() => {
+    navigateTo({ view: "dashboard" });
+  }, []);
+
+  // Render the current view
+  if (route.view === "loop") {
+    return (
+      <LoopDetails
+        loopId={route.loopId}
+        onBack={handleBack}
+      />
+    );
+  }
+
+  return (
+    <Dashboard
+      onSelectLoop={handleSelectLoop}
+    />
   );
 }
 
