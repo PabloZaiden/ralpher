@@ -2,8 +2,8 @@
  * Dashboard component showing all loops in a grid view.
  */
 
-import { useState } from "react";
-import type { Loop, UncommittedChangesError } from "../types";
+import { useState, useCallback, useEffect } from "react";
+import type { Loop, UncommittedChangesError, ModelInfo } from "../types";
 import { useLoops } from "../hooks";
 import { Button, ConfirmModal, Modal } from "./common";
 import { LoopCard } from "./LoopCard";
@@ -41,6 +41,66 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     error: null,
   });
   const [deleting, setDeleting] = useState(false);
+
+  // Model selection state
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [lastModel, setLastModel] = useState<{ providerID: string; modelID: string } | null>(null);
+  const [modelsDirectory, setModelsDirectory] = useState("");
+
+  // Fetch last model on mount
+  useEffect(() => {
+    async function fetchLastModel() {
+      try {
+        const response = await fetch("/api/preferences/last-model");
+        if (response.ok) {
+          const data = await response.json();
+          setLastModel(data);
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+    fetchLastModel();
+  }, []);
+
+  // Fetch models when directory changes
+  const fetchModels = useCallback(async (directory: string) => {
+    if (!directory) {
+      setModels([]);
+      return;
+    }
+
+    setModelsLoading(true);
+    try {
+      const response = await fetch(`/api/models?directory=${encodeURIComponent(directory)}`);
+      if (response.ok) {
+        const data = await response.json() as ModelInfo[];
+        setModels(data);
+      } else {
+        setModels([]);
+      }
+    } catch {
+      setModels([]);
+    } finally {
+      setModelsLoading(false);
+    }
+  }, []);
+
+  // Handle directory change from form
+  const handleDirectoryChange = useCallback((directory: string) => {
+    if (directory !== modelsDirectory) {
+      setModelsDirectory(directory);
+      fetchModels(directory);
+    }
+  }, [modelsDirectory, fetchModels]);
+
+  // Reset model state when modal closes
+  const handleCloseCreateModal = useCallback(() => {
+    setShowCreateModal(false);
+    setModels([]);
+    setModelsDirectory("");
+  }, []);
 
   // Handle start with uncommitted changes handling
   async function handleStart(loopId: string) {
@@ -163,13 +223,8 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               No loops yet
             </h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Create your first Ralph Loop to get started.
+              Click "New Loop" to create your first Ralph Loop.
             </p>
-            <div className="mt-4">
-              <Button onClick={() => setShowCreateModal(true)}>
-                Create Loop
-              </Button>
-            </div>
           </div>
         )}
 
@@ -244,7 +299,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       {/* Create loop modal */}
       <Modal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={handleCloseCreateModal}
         title="Create New Loop"
         description="Configure a new Ralph Loop for autonomous AI development."
         size="lg"
@@ -253,10 +308,18 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           onSubmit={async (request) => {
             const loop = await createLoop(request);
             if (loop) {
-              setShowCreateModal(false);
+              handleCloseCreateModal();
+              // Refresh last model in case it changed
+              if (request.model) {
+                setLastModel(request.model);
+              }
             }
           }}
-          onCancel={() => setShowCreateModal(false)}
+          onCancel={handleCloseCreateModal}
+          models={models}
+          modelsLoading={modelsLoading}
+          lastModel={lastModel}
+          onDirectoryChange={handleDirectoryChange}
         />
       </Modal>
 

@@ -6,6 +6,22 @@
 import type { BackendConfig, GitConfig, Loop, LoopConfig, ModelConfig } from "./loop";
 
 /**
+ * Model information returned by the API.
+ */
+export interface ModelInfo {
+  /** Provider ID (e.g., "anthropic", "openai") */
+  providerID: string;
+  /** Provider display name */
+  providerName: string;
+  /** Model ID (e.g., "claude-sonnet-4-20250514") */
+  modelID: string;
+  /** Model display name */
+  modelName: string;
+  /** Whether the provider is connected (has valid API key) */
+  connected: boolean;
+}
+
+/**
  * Request to create a new loop.
  */
 export interface CreateLoopRequest {

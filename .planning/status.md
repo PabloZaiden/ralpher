@@ -956,3 +956,97 @@ src/components/common/
 - `bun x tsc --noEmit` - **PASS** (no errors)
 - `bun test` - **135 tests PASS**
 - `bun run build` - **PASS**
+
+---
+
+### 2026-01-20 - UI Cleanup (Current Session)
+
+**Issues Fixed:**
+
+1. **Removed "Discard Branch" option**
+   - **Problem:** The discard branch option was redundant since "Delete Loop" now handles cleanup
+   - **Solution:** Removed the "Discard Branch" button from loop details, keeping only "Accept (Merge)" and "Delete Loop"
+   - Removed `discardConfirm` state, `handleDiscard` function, and the confirmation modal
+
+2. **Removed redundant "Create Loop" button in empty state**
+   - **Problem:** The empty state showed a "Create Loop" button, but there's already a "New Loop" button always visible in the header
+   - **Solution:** Removed the button, updated the message to say "Click 'New Loop' to create your first Ralph Loop"
+
+**Files Modified:**
+- `src/components/LoopDetails.tsx` - Removed discard button, modal, state, and handler
+- `src/components/Dashboard.tsx` - Removed redundant "Create Loop" button from empty state
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **135 tests PASS**
+- `bun run build` - **PASS**
+
+---
+
+### 2026-01-20 - Model Selection Feature (Current Session)
+
+**Feature:** Allow users to select the AI model when creating a new loop
+
+**Implementation:**
+
+1. **Added `getModels()` method to OpenCodeBackend** (`src/backends/opencode/index.ts`):
+   - Calls `client.provider.list()` from the OpenCode SDK
+   - Returns list of all available models with provider info and connection status
+   - Added `ModelInfo` interface with providerID, providerName, modelID, modelName, connected fields
+
+2. **Created user preferences persistence** (`src/persistence/preferences.ts`):
+   - New module for storing user preferences
+   - Stores last used model selection in `data/preferences.json`
+   - Functions: `loadPreferences()`, `savePreferences()`, `getLastModel()`, `setLastModel()`
+
+3. **Added API endpoints for models and preferences** (`src/api/models.ts`):
+   - `GET /api/models?directory=<path>` - Get available models from OpenCode for a given directory
+   - `GET /api/preferences/last-model` - Get last used model
+   - `PUT /api/preferences/last-model` - Set last used model
+
+4. **Updated CreateLoopForm component** (`src/components/CreateLoopForm.tsx`):
+   - Added new props: `models`, `modelsLoading`, `lastModel`, `onDirectoryChange`
+   - Added model dropdown with grouped optgroups (connected providers first, then disconnected)
+   - Models are loaded when directory is entered (with 500ms debounce)
+   - Last used model is pre-selected if available
+   - Disconnected provider models are shown but disabled
+
+5. **Updated Dashboard component** (`src/components/Dashboard.tsx`):
+   - Fetches last model on mount
+   - Fetches available models when directory changes in form
+   - Passes models, modelsLoading, lastModel, and onDirectoryChange to CreateLoopForm
+   - Updates lastModel state when loop is created with a model
+
+6. **Updated loops API to save last model** (`src/api/loops.ts`):
+   - When creating a loop with a model, saves it as last used model (fire and forget)
+
+7. **Added ModelInfo to API types** (`src/types/api.ts`):
+   - Added `ModelInfo` interface for API responses
+
+**User Flow:**
+1. User opens "New Loop" modal
+2. User enters the working directory
+3. After 500ms, models are fetched from OpenCode for that directory
+4. Dropdown shows available models grouped by provider (connected first)
+5. If user has previously created a loop, their last model is pre-selected
+6. User selects a model (optional - defaults to opencode config if not selected)
+7. When loop is created, the selected model is saved as last used
+
+**Files Created:**
+- `src/persistence/preferences.ts` - User preferences persistence
+- `src/api/models.ts` - Models and preferences API endpoints
+
+**Files Modified:**
+- `src/backends/opencode/index.ts` - Added `getModels()` method and `ModelInfo` type
+- `src/components/CreateLoopForm.tsx` - Added model dropdown with new props
+- `src/components/Dashboard.tsx` - Added model fetching and state management
+- `src/api/loops.ts` - Save last model when creating loop
+- `src/api/index.ts` - Export new models routes
+- `src/persistence/index.ts` - Export preferences module
+- `src/types/api.ts` - Added `ModelInfo` interface
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **135 tests PASS**
+- `bun run build` - **PASS**
+

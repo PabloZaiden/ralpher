@@ -14,6 +14,22 @@ import type {
   Part,
   AssistantMessage,
 } from "@opencode-ai/sdk";
+
+/**
+ * Model information returned by getModels().
+ */
+export interface ModelInfo {
+  /** Provider ID (e.g., "anthropic", "openai") */
+  providerID: string;
+  /** Provider display name */
+  providerName: string;
+  /** Model ID (e.g., "claude-sonnet-4-20250514") */
+  modelID: string;
+  /** Model display name */
+  modelName: string;
+  /** Whether the provider is connected (has valid API key) */
+  connected: boolean;
+}
 import type {
   AgentBackend,
   BackendConnectionConfig,
@@ -279,6 +295,8 @@ export class OpenCodeBackend implements AgentBackend {
     const emittedMessageStarts = new Set<string>();
     // For tool events: track tool part IDs and their last known status
     const toolPartStatus = new Map<string, string>();
+    // For reasoning: track last known reasoning text length per part ID
+    const reasoningTextLength = new Map<string, number>();
 
     for await (const event of subscription.stream) {
       // Filter events for our session and translate them
@@ -286,7 +304,8 @@ export class OpenCodeBackend implements AgentBackend {
         event as OpenCodeEvent,
         sessionId,
         emittedMessageStarts,
-        toolPartStatus
+        toolPartStatus,
+        reasoningTextLength
       );
       if (translated) {
         yield translated;
@@ -356,12 +375,14 @@ export class OpenCodeBackend implements AgentBackend {
    * @param sessionId - The session ID to filter for
    * @param emittedMessageStarts - Set of message IDs we've already emitted start events for
    * @param toolPartStatus - Map of tool part IDs to their last emitted status
+   * @param reasoningTextLength - Map of reasoning part IDs to their last known text length
    */
   private translateEvent(
     event: OpenCodeEvent,
     sessionId: string,
     emittedMessageStarts: Set<string>,
-    toolPartStatus: Map<string, string>
+    toolPartStatus: Map<string, string>,
+    reasoningTextLength: Map<string, number>
   ): AgentEvent | null {
     switch (event.type) {
       case "message.updated": {
@@ -396,11 +417,25 @@ export class OpenCodeBackend implements AgentBackend {
           }
         } else if (part.type === "reasoning") {
           // Reasoning content (AI thinking/chain of thought)
+          // The SDK may send delta or full text updates
           if (event.properties.delta) {
             return {
               type: "reasoning.delta",
               content: event.properties.delta,
             };
+          } else if (part.text) {
+            // No delta, but we have full text - compute the new content
+            const partId = part.id;
+            const prevLength = reasoningTextLength.get(partId) ?? 0;
+            const newContent = part.text.slice(prevLength);
+            
+            if (newContent.length > 0) {
+              reasoningTextLength.set(partId, part.text.length);
+              return {
+                type: "reasoning.delta",
+                content: newContent,
+              };
+            }
           }
         } else if (part.type === "tool") {
           const state = part.state;
@@ -441,6 +476,16 @@ export class OpenCodeBackend implements AgentBackend {
               message: state.error,
             };
           }
+        } else if (part.type === "step-start") {
+          // Step start - AI is beginning a new step in its reasoning
+          return {
+            type: "message.delta",
+            content: "", // Empty delta to indicate step start (could emit different event type in future)
+          };
+        } else if (part.type === "step-finish") {
+          // Step finish - AI completed a step
+          // The step-finish contains token usage but no content
+          return null;
         }
         return null;
       }
@@ -470,6 +515,55 @@ export class OpenCodeBackend implements AgentBackend {
       default:
         return null;
     }
+  }
+
+  /**
+   * Get available models from the backend.
+   * Returns models from all providers, indicating which are connected.
+   */
+  async getModels(directory: string): Promise<ModelInfo[]> {
+    const client = this.getClient();
+
+    const result = await client.provider.list({
+      query: { directory },
+    });
+
+    if (result.error) {
+      throw new Error(`Failed to get models: ${JSON.stringify(result.error)}`);
+    }
+
+    // The SDK returns provider list with models
+    // We extract what we need without strict type checking since SDK types may vary
+    const data = result.data as {
+      all: Array<{
+        id: string;
+        name: string;
+        models: { [key: string]: { id: string; name: string } };
+      }>;
+      connected: string[];
+    };
+
+    const models: ModelInfo[] = [];
+    const connectedProviders = new Set(data.connected);
+
+    for (const provider of data.all) {
+      const isConnected = connectedProviders.has(provider.id);
+
+      for (const modelId of Object.keys(provider.models)) {
+        const model = provider.models[modelId];
+        if (model) {
+          models.push({
+            providerID: provider.id,
+            providerName: provider.name,
+            modelID: model.id,
+            modelName: model.name,
+            connected: isConnected,
+          });
+        }
+      }
+    }
+
+    return models;
   }
 }
 

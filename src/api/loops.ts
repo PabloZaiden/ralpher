@@ -5,6 +5,7 @@
 
 import { loopManager } from "../core/loop-manager";
 import { gitService } from "../core/git-service";
+import { setLastModel } from "../persistence/preferences";
 import type {
   CreateLoopRequest,
   UpdateLoopRequest,
@@ -89,6 +90,17 @@ export const loopsCrudRoutes = {
           gitBranchPrefix: body.git?.branchPrefix,
           gitCommitPrefix: body.git?.commitPrefix,
         });
+
+        // Save the model as last used if provided
+        if (body.model?.providerID && body.model?.modelID) {
+          // Fire and forget - don't block on this
+          setLastModel({
+            providerID: body.model.providerID,
+            modelID: body.model.modelID,
+          }).catch(() => {
+            // Ignore errors saving preferences
+          });
+        }
 
         return Response.json(loop, { status: 201 });
       } catch (error) {

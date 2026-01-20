@@ -143,7 +143,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     pause,
     resume,
     accept,
-    discard,
     remove,
     getDiff,
     getPlan,
@@ -169,7 +168,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
   // Modals
   const [deleteConfirm, setDeleteConfirm] = useState(false);
-  const [discardConfirm, setDiscardConfirm] = useState(false);
   const [uncommittedModal, setUncommittedModal] = useState<{
     open: boolean;
     error: UncommittedChangesError | null;
@@ -200,22 +198,30 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     prevLogsCount.current = logs.length;
   }, [messages.length, toolCalls.length, logs.length, activeTab]);
 
-  // Detect changes in diff content based on git change events and tool calls
-  // gitChangeCounter increments when iteration ends or git commit happens
-  // toolCalls changes often mean file operations that affect the diff
+  // Detect changes in diff content by fetching when git events occur
+  // Only show indicator if the diff actually changed
   const prevGitChangeCounter = useRef(0);
-  const prevToolCallsForDiff = useRef(0);
+  const prevDiffFileCount = useRef(0);
   useEffect(() => {
-    const hasGitChange = gitChangeCounter > prevGitChangeCounter.current;
-    const hasToolChange = toolCalls.length > prevToolCallsForDiff.current;
-    
-    if ((hasGitChange || hasToolChange) && activeTab !== "diff") {
-      setTabsWithUpdates((prev) => new Set(prev).add("diff"));
+    async function checkDiffChanges() {
+      if (gitChangeCounter > prevGitChangeCounter.current) {
+        // Fetch the latest diff
+        const newDiff = await getDiff();
+        
+        // Check if file count changed (simple heuristic for new changes)
+        if (newDiff.length > prevDiffFileCount.current && activeTab !== "diff") {
+          setTabsWithUpdates((prev) => new Set(prev).add("diff"));
+        }
+        
+        // Update the diff content so it's ready when user switches to tab
+        setDiffContent(newDiff);
+        prevDiffFileCount.current = newDiff.length;
+      }
+      prevGitChangeCounter.current = gitChangeCounter;
     }
     
-    prevGitChangeCounter.current = gitChangeCounter;
-    prevToolCallsForDiff.current = toolCalls.length;
-  }, [gitChangeCounter, toolCalls.length, activeTab]);
+    checkDiffChanges();
+  }, [gitChangeCounter, activeTab, getDiff]);
 
   // Detect changes in plan content
   useEffect(() => {
@@ -294,14 +300,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     setActionLoading(true);
     await accept();
     setActionLoading(false);
-  }
-
-  // Handle discard
-  async function handleDiscard() {
-    setActionLoading(true);
-    await discard();
-    setActionLoading(false);
-    setDiscardConfirm(false);
   }
 
   if (loading && !loop) {
@@ -494,23 +492,14 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   </Button>
                 )}
                 {canAcceptOrDiscard(state.status) && state.git && (
-                  <>
-                    <Button
-                      className="w-full"
-                      variant="primary"
-                      onClick={handleAccept}
-                      loading={actionLoading}
-                    >
-                      Accept (Merge)
-                    </Button>
-                    <Button
-                      className="w-full"
-                      variant="ghost"
-                      onClick={() => setDiscardConfirm(true)}
-                    >
-                      Discard Branch
-                    </Button>
-                  </>
+                  <Button
+                    className="w-full"
+                    variant="primary"
+                    onClick={handleAccept}
+                    loading={actionLoading}
+                  >
+                    Accept (Merge)
+                  </Button>
                 )}
                 <hr className="border-gray-200 dark:border-gray-700" />
                 <Button
@@ -703,18 +692,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         title="Delete Loop"
         message="Are you sure you want to delete this loop? This action cannot be undone."
         confirmLabel="Delete"
-        loading={actionLoading}
-        variant="danger"
-      />
-
-      {/* Discard confirmation modal */}
-      <ConfirmModal
-        isOpen={discardConfirm}
-        onClose={() => setDiscardConfirm(false)}
-        onConfirm={handleDiscard}
-        title="Discard Changes"
-        message="Are you sure you want to discard the git branch? All uncommitted changes will be lost."
-        confirmLabel="Discard"
         loading={actionLoading}
         variant="danger"
       />
