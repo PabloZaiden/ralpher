@@ -32,3 +32,14 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Ralpher data directory (Docker volume mountable)
+# Keep .gitkeep files but ignore all data
+data/*
+!data/.gitkeep
+!data/loops
+!data/sessions
+data/loops/*
+!data/loops/.gitkeep
+data/sessions/*
+!data/sessions/.gitkeep
