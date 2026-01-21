@@ -40,7 +40,6 @@ export function CreateLoopForm({
   const [backendMode, setBackendMode] = useState<"spawn" | "connect">("spawn");
   const [hostname, setHostname] = useState("localhost");
   const [port, setPort] = useState("3000");
-  const [gitEnabled, setGitEnabled] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("");
@@ -99,9 +98,7 @@ export function CreateLoopForm({
           port: parseInt(port, 10),
         }),
       },
-      git: {
-        enabled: gitEnabled,
-      },
+      // Git is always enabled - no toggle exposed to users
     };
 
     // Add model if selected
@@ -301,23 +298,6 @@ export function CreateLoopForm({
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           The prompt sent to the AI agent at the start of each iteration
         </p>
-      </div>
-
-      {/* Git toggle */}
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="gitEnabled"
-          checked={gitEnabled}
-          onChange={(e) => setGitEnabled(e.target.checked)}
-          className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-        />
-        <label
-          htmlFor="gitEnabled"
-          className="text-sm text-gray-700 dark:text-gray-300"
-        >
-          Enable Git integration (branch per loop, commit per iteration)
-        </label>
       </div>
 
       {/* Advanced options toggle */}
