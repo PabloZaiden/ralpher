@@ -54,9 +54,9 @@ export function CreateLoopForm({
   branchesLoading = false,
   currentBranch = "",
 }: CreateLoopFormProps) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState("Continue working on the plan");
   const [directory, setDirectory] = useState("");
-  const [prompt, setPrompt] = useState("");
+  const [prompt, setPrompt] = useState("Do everything that's pending in the plan");
   const [maxIterations, setMaxIterations] = useState<string>("");
   const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>("10");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -209,7 +209,7 @@ export function CreateLoopForm({
           id="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Feature: Add dark mode"
+          placeholder="Continue working on the plan"
           required
           className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
         />
@@ -387,7 +387,7 @@ export function CreateLoopForm({
           id="prompt"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Read AGENTS.md and the documents in .planning/. Continue working on the implementation..."
+          placeholder="Do everything that's pending in the plan"
           required
           rows={5}
           className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
