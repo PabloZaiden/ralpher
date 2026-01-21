@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "start": "NODE_ENV=production bun src/index.ts",
-    "build": "bun src/build.ts",
-    "test": "bun test --timeout 15000"
+    "build": "bun run tsc && bun src/build.ts",
+    "test": "bun test --timeout 15000",
+    "tsc": "bunx tsc --noEmit"
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.1.27",
