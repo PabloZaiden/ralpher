@@ -229,7 +229,7 @@ export function LogViewer({
               // Log entry
               const log = entry.data;
               // Check if this is an AI response log with responseContent
-              const responseContent = log.details?.responseContent;
+              const responseContent = log.details?.["responseContent"];
               const hasResponseContent = typeof responseContent === "string" && responseContent.length > 0;
               // Filter out responseContent from details for separate display
               const otherDetails = log.details

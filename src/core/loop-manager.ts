@@ -8,7 +8,6 @@ import type {
   Loop,
   LoopConfig,
   LoopState,
-  GitCommit,
 } from "../types/loop";
 import type { LoopEvent } from "../types/events";
 import { createTimestamp } from "../types/events";

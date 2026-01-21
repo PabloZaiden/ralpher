@@ -3,7 +3,7 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
-import type { Loop, UncommittedChangesError, ModelInfo } from "../types";
+import type { UncommittedChangesError, ModelInfo } from "../types";
 import { useLoops } from "../hooks";
 import { Button, ConfirmModal, Modal } from "./common";
 import { LoopCard } from "./LoopCard";

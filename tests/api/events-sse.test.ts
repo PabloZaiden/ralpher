@@ -23,7 +23,7 @@ describe("Events SSE API Integration", () => {
     testWorkDir = await mkdtemp(join(tmpdir(), "ralpher-api-events-test-work-"));
 
     // Set env var for persistence
-    process.env.RALPHER_DATA_DIR = testDataDir;
+    process.env["RALPHER_DATA_DIR"] = testDataDir;
 
     // Ensure directories exist
     await ensureDataDirectories();
@@ -47,7 +47,7 @@ describe("Events SSE API Integration", () => {
     await rm(testWorkDir, { recursive: true, force: true });
 
     // Clear env
-    delete process.env.RALPHER_DATA_DIR;
+    delete process.env["RALPHER_DATA_DIR"];
   });
 
   describe("GET /api/events", () => {

@@ -3,7 +3,7 @@
  * These types define the request and response shapes for the REST API.
  */
 
-import type { BackendConfig, GitConfig, Loop, LoopConfig, ModelConfig } from "./loop";
+import type { BackendConfig, GitConfig, Loop, ModelConfig } from "./loop";
 
 /**
  * Model information returned by the API.
@@ -175,27 +175,27 @@ export function validateCreateLoopRequest(req: unknown): string | undefined {
 
   const body = req as Record<string, unknown>;
 
-  if (typeof body.name !== "string" || body.name.trim() === "") {
+  if (typeof body["name"] !== "string" || (body["name"] as string).trim() === "") {
     return "name is required and must be a non-empty string";
   }
 
-  if (typeof body.directory !== "string" || body.directory.trim() === "") {
+  if (typeof body["directory"] !== "string" || (body["directory"] as string).trim() === "") {
     return "directory is required and must be a non-empty string";
   }
 
-  if (typeof body.prompt !== "string" || body.prompt.trim() === "") {
+  if (typeof body["prompt"] !== "string" || (body["prompt"] as string).trim() === "") {
     return "prompt is required and must be a non-empty string";
   }
 
-  if (body.maxIterations !== undefined && typeof body.maxIterations !== "number") {
+  if (body["maxIterations"] !== undefined && typeof body["maxIterations"] !== "number") {
     return "maxIterations must be a number";
   }
 
-  if (body.maxConsecutiveErrors !== undefined && typeof body.maxConsecutiveErrors !== "number") {
+  if (body["maxConsecutiveErrors"] !== undefined && typeof body["maxConsecutiveErrors"] !== "number") {
     return "maxConsecutiveErrors must be a number";
   }
 
-  if (body.stopPattern !== undefined && typeof body.stopPattern !== "string") {
+  if (body["stopPattern"] !== undefined && typeof body["stopPattern"] !== "string") {
     return "stopPattern must be a string";
   }
 

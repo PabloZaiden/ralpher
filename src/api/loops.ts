@@ -10,14 +10,12 @@ import type {
   CreateLoopRequest,
   UpdateLoopRequest,
   StartLoopRequest,
-  SuccessResponse,
   AcceptResponse,
   ErrorResponse,
   UncommittedChangesError,
   FileContentResponse,
 } from "../types/api";
 import { validateCreateLoopRequest } from "../types/api";
-import type { Loop } from "../types/loop";
 
 /**
  * Helper to parse JSON body safely.
@@ -139,7 +137,7 @@ export const loopsCrudRoutes = {
         if (git !== undefined) {
           const existingLoop = await loopManager.getLoop(req.params.id);
           if (existingLoop) {
-            updates.git = { ...existingLoop.config.git, ...git };
+            updates["git"] = { ...existingLoop.config.git, ...git };
           }
         }
 

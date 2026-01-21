@@ -3,8 +3,8 @@
  * Tests use actual HTTP requests to a test server.
  */
 
-import { test, expect, describe, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, mkdir } from "fs/promises";
+import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { serve, type Server } from "bun";
@@ -23,7 +23,7 @@ describe("Loops CRUD API Integration", () => {
     testWorkDir = await mkdtemp(join(tmpdir(), "ralpher-api-crud-test-work-"));
 
     // Set env var for persistence before importing modules
-    process.env.RALPHER_DATA_DIR = testDataDir;
+    process.env["RALPHER_DATA_DIR"] = testDataDir;
 
     // Ensure directories exist
     await ensureDataDirectories();
@@ -47,7 +47,7 @@ describe("Loops CRUD API Integration", () => {
     await rm(testWorkDir, { recursive: true, force: true });
 
     // Clear env
-    delete process.env.RALPHER_DATA_DIR;
+    delete process.env["RALPHER_DATA_DIR"];
   });
 
   describe("GET /api/health", () => {

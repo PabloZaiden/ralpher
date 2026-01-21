@@ -2,14 +2,13 @@
  * Unit tests for LoopEngine and StopPatternDetector.
  */
 
-import { test, expect, describe, beforeEach, afterEach, mock } from "bun:test";
-import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
+import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import {
   LoopEngine,
   StopPatternDetector,
-  type IterationResult,
 } from "../../src/core/loop-engine";
 import { SimpleEventEmitter } from "../../src/core/event-emitter";
 import type { Loop, LoopConfig, LoopState } from "../../src/types/loop";
@@ -24,6 +23,9 @@ import type {
   PromptInput,
 } from "../../src/backends/types";
 import { GitService } from "../../src/core/git-service";
+
+// GitService is used in tests (referenced as type)
+void GitService;
 
 describe("StopPatternDetector", () => {
   test("matches default stop pattern at end of string", () => {

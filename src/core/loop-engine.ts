@@ -11,8 +11,6 @@ import type {
   IterationSummary,
   GitCommit,
   LoopLogEntry,
-  PersistedMessage,
-  PersistedToolCall,
 } from "../types/loop";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import type {
@@ -24,10 +22,9 @@ import type {
 import { createTimestamp } from "../types/events";
 import type {
   AgentBackend,
-  AgentEvent,
   PromptInput,
 } from "../backends/types";
-import { GitService, gitService } from "./git-service";
+import { type GitService, gitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 
 /**
@@ -838,7 +835,7 @@ export class LoopEngine {
    * Uses a consistent template that instructs the AI to follow the planning docs pattern.
    * If a pendingPrompt is set, it overrides the config.prompt for this iteration only.
    */
-  private buildPrompt(iteration: number): PromptInput {
+  private buildPrompt(_iteration: number): PromptInput {
     // Use pendingPrompt if set, otherwise use config.prompt
     const goalPrompt = this.loop.state.pendingPrompt ?? this.config.prompt;
     

@@ -3,7 +3,7 @@
  * Handles model listing and user preferences.
  */
 
-import { OpenCodeBackend, type ModelInfo } from "../backends/opencode";
+import { OpenCodeBackend } from "../backends/opencode";
 import { getLastModel, setLastModel } from "../persistence/preferences";
 import type { ErrorResponse } from "../types/api";
 

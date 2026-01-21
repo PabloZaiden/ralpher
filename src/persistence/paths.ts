@@ -11,7 +11,7 @@ import { join } from "path";
  * Can be overridden via RALPHER_DATA_DIR environment variable.
  */
 export function getDataDir(): string {
-  return process.env.RALPHER_DATA_DIR ?? "./data";
+  return process.env["RALPHER_DATA_DIR"] ?? "./data";
 }
 
 /**

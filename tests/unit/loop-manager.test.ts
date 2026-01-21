@@ -3,7 +3,7 @@
  */
 
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, writeFile } from "fs/promises";
+import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { LoopManager } from "../../src/core/loop-manager";
@@ -95,7 +95,7 @@ describe("LoopManager", () => {
     testWorkDir = await mkdtemp(join(tmpdir(), "ralpher-manager-test-work-"));
 
     // Set env var for persistence
-    process.env.RALPHER_DATA_DIR = testDataDir;
+    process.env["RALPHER_DATA_DIR"] = testDataDir;
 
     // Ensure data directories exist
     const { ensureDataDirectories } = await import("../../src/persistence/paths");
@@ -123,7 +123,7 @@ describe("LoopManager", () => {
     await manager.shutdown();
 
     // Clean up
-    delete process.env.RALPHER_DATA_DIR;
+    delete process.env["RALPHER_DATA_DIR"];
     await rm(testDataDir, { recursive: true });
     await rm(testWorkDir, { recursive: true });
 

@@ -10,7 +10,7 @@ import { GitService } from "../src/core/git-service";
 import { LoopManager } from "../src/core/loop-manager";
 import { backendRegistry } from "../src/backends/registry";
 import { ensureDataDirectories } from "../src/persistence/paths";
-import { createMockBackendFactory, MockBackend } from "./mocks/mock-backend";
+import { MockBackend } from "./mocks/mock-backend";
 import type { LoopEvent } from "../src/types/events";
 
 /**
@@ -63,7 +63,7 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
   const workDir = await mkdtemp(join(tmpdir(), "ralpher-test-work-"));
 
   // Set env var for persistence
-  process.env.RALPHER_DATA_DIR = dataDir;
+  process.env["RALPHER_DATA_DIR"] = dataDir;
   await ensureDataDirectories();
 
   // Create initial files
@@ -128,7 +128,7 @@ export async function teardownTestContext(ctx: TestContext): Promise<void> {
   await backendRegistry.clear();
 
   // Clean up env
-  delete process.env.RALPHER_DATA_DIR;
+  delete process.env["RALPHER_DATA_DIR"];
 
   // Remove temp directories
   await rm(ctx.dataDir, { recursive: true });

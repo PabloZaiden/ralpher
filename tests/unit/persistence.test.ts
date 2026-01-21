@@ -14,12 +14,12 @@ describe("Persistence", () => {
   beforeEach(async () => {
     // Create a temp directory for each test
     testDataDir = await mkdtemp(join(tmpdir(), "ralpher-test-"));
-    process.env.RALPHER_DATA_DIR = testDataDir;
+    process.env["RALPHER_DATA_DIR"] = testDataDir;
   });
 
   afterEach(async () => {
     // Clean up
-    delete process.env.RALPHER_DATA_DIR;
+    delete process.env["RALPHER_DATA_DIR"];
     await rm(testDataDir, { recursive: true });
   });
 
