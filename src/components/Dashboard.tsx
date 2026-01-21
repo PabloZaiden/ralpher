@@ -60,6 +60,9 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   const [lastModel, setLastModel] = useState<{ providerID: string; modelID: string } | null>(null);
   const [modelsDirectory, setModelsDirectory] = useState("");
 
+  // Planning directory check state
+  const [planningWarning, setPlanningWarning] = useState<string | null>(null);
+
   // Fetch last model on mount
   useEffect(() => {
     async function fetchLastModel() {
@@ -99,19 +102,41 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     }
   }, []);
 
+  // Check planning directory when directory changes
+  const checkPlanningDir = useCallback(async (directory: string) => {
+    if (!directory) {
+      setPlanningWarning(null);
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/check-planning-dir?directory=${encodeURIComponent(directory)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setPlanningWarning(data.warning ?? null);
+      } else {
+        setPlanningWarning(null);
+      }
+    } catch {
+      setPlanningWarning(null);
+    }
+  }, []);
+
   // Handle directory change from form
   const handleDirectoryChange = useCallback((directory: string) => {
     if (directory !== modelsDirectory) {
       setModelsDirectory(directory);
       fetchModels(directory);
+      checkPlanningDir(directory);
     }
-  }, [modelsDirectory, fetchModels]);
+  }, [modelsDirectory, fetchModels, checkPlanningDir]);
 
   // Reset model state when modal closes
   const handleCloseCreateModal = useCallback(() => {
     setShowCreateModal(false);
     setModels([]);
     setModelsDirectory("");
+    setPlanningWarning(null);
   }, []);
 
   // Handle start with uncommitted changes handling
@@ -372,6 +397,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           modelsLoading={modelsLoading}
           lastModel={lastModel}
           onDirectoryChange={handleDirectoryChange}
+          planningWarning={planningWarning}
         />
       </Modal>
 

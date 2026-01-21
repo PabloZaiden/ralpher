@@ -417,6 +417,59 @@ export const loopsDataRoutes = {
       return Response.json(response);
     },
   },
+
+  "/api/check-planning-dir": {
+    /**
+     * GET /api/check-planning-dir?directory=<path> - Check if .planning directory exists and has files
+     */
+    async GET(req: Request): Promise<Response> {
+      const url = new URL(req.url);
+      const directory = url.searchParams.get("directory");
+
+      if (!directory) {
+        return errorResponse("invalid_request", "directory query parameter is required", 400);
+      }
+
+      const planningDir = `${directory}/.planning`;
+      
+      try {
+        // Check if directory exists by trying to read it
+        const glob = new Bun.Glob("*");
+        const files: string[] = [];
+        
+        try {
+          for await (const file of glob.scan({ cwd: planningDir, onlyFiles: true })) {
+            files.push(file);
+          }
+        } catch {
+          // Directory doesn't exist or can't be read
+          return Response.json({
+            exists: false,
+            hasFiles: false,
+            files: [],
+            warning: "The .planning directory does not exist. Ralph Loops work best with planning documents.",
+          });
+        }
+
+        if (files.length === 0) {
+          return Response.json({
+            exists: true,
+            hasFiles: false,
+            files: [],
+            warning: "The .planning directory is empty. Consider adding plan.md and status.md files.",
+          });
+        }
+
+        return Response.json({
+          exists: true,
+          hasFiles: true,
+          files,
+        });
+      } catch (error) {
+        return errorResponse("check_failed", String(error), 500);
+      }
+    },
+  },
 };
 
 /**
