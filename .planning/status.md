@@ -1118,3 +1118,53 @@ Updated `src/hooks/useLoop.ts` to also increment `gitChangeCounter` when a tool 
 - `bun run build` - **PASS**
 
 ---
+
+### 2026-01-20 - Messages and Tool Calls Persistence (Current Session)
+
+**Issue Reported:**
+Tool call details (input/output) and messages disappear after page refresh. Only application logs (`loop.log` events) were being persisted to the loop state and restored on refresh. Messages (`loop.message` events) and tool calls (`loop.tool_call` events) were only stored in React state from SSE events.
+
+**Solution:**
+Added persistence for messages and tool calls in the same pattern as logs:
+1. Store messages and tool calls in `LoopState` alongside logs
+2. Persist them when events are emitted from the loop engine
+3. Load them from loop state when the page is refreshed
+
+**Implementation:**
+
+1. **Added new types to `src/types/loop.ts`:**
+   - `PersistedMessage` interface - mirrors `MessageData` for persistence
+   - `PersistedToolCall` interface - mirrors `ToolCallData` for persistence
+   - Added `messages?: PersistedMessage[]` to `LoopState`
+   - Added `toolCalls?: PersistedToolCall[]` to `LoopState`
+   - Updated `createInitialState()` to include empty `messages` and `toolCalls` arrays
+
+2. **Added persistence methods to `src/core/loop-engine.ts`:**
+   - `persistMessage(message: MessageData)` - saves message to loop state
+   - `persistToolCall(toolCall: ToolCallData)` - saves/updates tool call in loop state
+   - `clearIterationData()` - clears messages and tool calls for new iteration
+   - Called `persistMessage()` when emitting `loop.message` events
+   - Called `persistToolCall()` when emitting `loop.tool_call` events (both start and complete)
+   - Called `clearIterationData()` at the start of each iteration
+
+3. **Updated `src/hooks/useLoop.ts`:**
+   - Load persisted messages on page refresh (when `messages.length === 0`)
+   - Load persisted tool calls on page refresh (when `toolCalls.length === 0`)
+   - Added `messages.length` and `toolCalls.length` to `refresh` callback dependencies
+
+**Data Limits:**
+- Messages: Keep last 100 to prevent memory issues
+- Tool calls: Keep last 200 to prevent memory issues
+- Logs: Keep last 500 (unchanged)
+
+**Files Modified:**
+- `src/types/loop.ts` - Added PersistedMessage, PersistedToolCall types and LoopState fields
+- `src/core/loop-engine.ts` - Added persistence methods and calls
+- `src/hooks/useLoop.ts` - Load persisted data on refresh
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **136 tests PASS**
+- `bun run build` - **PASS**
+
+---

@@ -36,7 +36,7 @@ export function CreateLoopForm({
   const [directory, setDirectory] = useState("");
   const [prompt, setPrompt] = useState("");
   const [maxIterations, setMaxIterations] = useState<string>("");
-  const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>("5");
+  const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>("10");
   const [backendMode, setBackendMode] = useState<"spawn" | "connect">("spawn");
   const [hostname, setHostname] = useState("localhost");
   const [port, setPort] = useState("3000");
@@ -121,8 +121,9 @@ export function CreateLoopForm({
 
     if (maxConsecutiveErrors.trim()) {
       const num = parseInt(maxConsecutiveErrors, 10);
-      if (!isNaN(num) && num > 0) {
-        request.maxConsecutiveErrors = num;
+      if (!isNaN(num) && num >= 0) {
+        // 0 means unlimited, positive number is the limit
+        request.maxConsecutiveErrors = num === 0 ? 0 : num;
       }
     }
 
@@ -366,12 +367,12 @@ export function CreateLoopForm({
               id="maxConsecutiveErrors"
               value={maxConsecutiveErrors}
               onChange={(e) => setMaxConsecutiveErrors(e.target.value)}
-              min="1"
-              placeholder="5"
+              min="0"
+              placeholder="10"
               className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Failsafe exit after this many identical consecutive errors (default: 5)
+              Failsafe exit after this many identical consecutive errors. 0 = unlimited. (default: 10)
             </p>
           </div>
 

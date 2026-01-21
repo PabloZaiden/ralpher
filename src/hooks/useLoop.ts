@@ -161,10 +161,8 @@ export function useLoop(loopId: string): UseLoopResult {
         break;
 
       case "loop.iteration.start":
-        // Clear messages, tool calls, and progress for new iteration
-        // Keep logs as they show the full history
-        setMessages([]);
-        setToolCalls([]);
+        // Clear progress content for new iteration
+        // Keep messages, tool calls, and logs as they accumulate across iterations
         setProgressContent("");
         refresh();
         break;
@@ -208,8 +206,10 @@ export function useLoop(loopId: string): UseLoopResult {
       
       // Load persisted logs from loop state on initial load
       // Only load if we have no logs yet (fresh page load)
+      // Load only the latest 1000 to keep UI responsive
       if (data.state.logs && data.state.logs.length > 0 && logs.length === 0) {
-        setLogs(data.state.logs.map((log) => ({
+        const latestLogs = data.state.logs.slice(-1000);
+        setLogs(latestLogs.map((log) => ({
           id: log.id,
           level: log.level,
           message: log.message,
@@ -217,12 +217,40 @@ export function useLoop(loopId: string): UseLoopResult {
           timestamp: log.timestamp,
         })));
       }
+      
+      // Load persisted messages from loop state on initial load
+      // Only load if we have no messages yet (fresh page load)
+      // Load only the latest 1000 to keep UI responsive
+      if (data.state.messages && data.state.messages.length > 0 && messages.length === 0) {
+        const latestMessages = data.state.messages.slice(-1000);
+        setMessages(latestMessages.map((msg) => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.timestamp,
+        })));
+      }
+      
+      // Load persisted tool calls from loop state on initial load
+      // Only load if we have no tool calls yet (fresh page load)
+      // Load only the latest 1000 to keep UI responsive
+      if (data.state.toolCalls && data.state.toolCalls.length > 0 && toolCalls.length === 0) {
+        const latestToolCalls = data.state.toolCalls.slice(-1000);
+        setToolCalls(latestToolCalls.map((tc) => ({
+          id: tc.id,
+          name: tc.name,
+          input: tc.input,
+          output: tc.output,
+          status: tc.status,
+          timestamp: tc.timestamp,
+        })));
+      }
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
     }
-  }, [loopId, logs.length]);
+  }, [loopId, logs.length, messages.length, toolCalls.length]);
 
   // Update the loop
   const update = useCallback(

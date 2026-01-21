@@ -108,6 +108,12 @@ export interface LoopState {
   /** Application logs (persisted for page refresh) */
   logs?: LoopLogEntry[];
 
+  /** Messages from current iteration (persisted for page refresh) */
+  messages?: PersistedMessage[];
+
+  /** Tool calls from current iteration (persisted for page refresh) */
+  toolCalls?: PersistedToolCall[];
+
   /** Consecutive error tracking for failsafe exit */
   consecutiveErrors?: ConsecutiveErrorTracker;
 }
@@ -125,6 +131,40 @@ export interface LoopLogEntry {
   /** Optional additional details */
   details?: Record<string, unknown>;
   /** ISO timestamp */
+  timestamp: string;
+}
+
+/**
+ * A persisted message in the loop state.
+ * Mirrors MessageData from events.ts for persistence.
+ */
+export interface PersistedMessage {
+  /** Message ID */
+  id: string;
+  /** Role (user or assistant) */
+  role: "user" | "assistant";
+  /** Message content */
+  content: string;
+  /** ISO timestamp */
+  timestamp: string;
+}
+
+/**
+ * A persisted tool call in the loop state.
+ * Mirrors ToolCallData from events.ts for persistence.
+ */
+export interface PersistedToolCall {
+  /** Tool call ID */
+  id: string;
+  /** Tool name */
+  name: string;
+  /** Tool input */
+  input: unknown;
+  /** Tool output (if completed) */
+  output?: unknown;
+  /** Status */
+  status: "pending" | "running" | "completed" | "failed";
+  /** Timestamp when the tool call was created/updated */
   timestamp: string;
 }
 
@@ -234,7 +274,7 @@ export interface Loop {
  */
 export const DEFAULT_LOOP_CONFIG = {
   stopPattern: "<promise>COMPLETE</promise>$",
-  maxConsecutiveErrors: 5,
+  maxConsecutiveErrors: 10,
   git: {
     enabled: true,
     branchPrefix: "ralph/",
@@ -256,5 +296,7 @@ export function createInitialState(id: string): LoopState {
     currentIteration: 0,
     recentIterations: [],
     logs: [],
+    messages: [],
+    toolCalls: [],
   };
 }

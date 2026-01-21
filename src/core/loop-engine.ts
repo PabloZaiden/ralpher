@@ -11,6 +11,8 @@ import type {
   IterationSummary,
   GitCommit,
   LoopLogEntry,
+  PersistedMessage,
+  PersistedToolCall,
 } from "../types/loop";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import type {
@@ -441,10 +443,10 @@ export class LoopEngine {
         }
 
         // Log that we're continuing despite the error
-        this.emitLog("warn", "Error occurred but continuing to next iteration (exit criteria not met)", {
+        this.emitLog("warn", "Error occurred but continuing to next iteration", {
           errorMessage,
           consecutiveErrors: this.loop.state.consecutiveErrors?.count ?? 1,
-          maxConsecutiveErrors: this.config.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors,
+          maxConsecutiveErrors: this.config.maxConsecutiveErrors ?? "unlimited",
         });
 
         // Emit error event but don't stop
@@ -499,10 +501,32 @@ export class LoopEngine {
   /**
    * Track consecutive identical errors.
    * Returns true if we should failsafe exit (max consecutive errors reached).
+   * Returns false if maxConsecutiveErrors is undefined or 0 (unlimited).
    */
   private trackConsecutiveError(errorMessage: string): boolean {
     const tracker = this.loop.state.consecutiveErrors;
-    const maxErrors = this.config.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors;
+    const maxErrors = this.config.maxConsecutiveErrors;
+
+    // If maxErrors is undefined or 0, errors are unlimited - never failsafe
+    if (maxErrors === undefined || maxErrors === 0) {
+      // Still track the error count for logging purposes
+      if (tracker && tracker.lastErrorMessage === errorMessage) {
+        this.updateState({
+          consecutiveErrors: {
+            lastErrorMessage: errorMessage,
+            count: tracker.count + 1,
+          },
+        });
+      } else {
+        this.updateState({
+          consecutiveErrors: {
+            lastErrorMessage: errorMessage,
+            count: 1,
+          },
+        });
+      }
+      return false;
+    }
 
     if (tracker && tracker.lastErrorMessage === errorMessage) {
       // Same error as before, increment count
@@ -662,17 +686,21 @@ export class LoopEngine {
             this.emitLog("agent", "AI finished generating response", {
               responseLength: responseContent.length,
             });
+            // Create the message data
+            const messageData: MessageData = {
+              id: currentMessageId || `msg-${Date.now()}`,
+              role: "assistant",
+              content: responseContent,
+              timestamp: createTimestamp(),
+            };
+            // Persist message for page refresh recovery
+            this.persistMessage(messageData);
             // Emit the complete message
             this.emit({
               type: "loop.message",
               loopId: this.config.id,
               iteration,
-              message: {
-                id: currentMessageId || `msg-${Date.now()}`,
-                role: "assistant",
-                content: responseContent,
-                timestamp: createTimestamp(),
-              },
+              message: messageData,
               timestamp: createTimestamp(),
             });
             // Message complete means iteration is done
@@ -690,18 +718,22 @@ export class LoopEngine {
             toolCallCount++;
             this.emitLog("agent", `AI calling tool: ${event.toolName}`);
             const timestamp = createTimestamp();
+            // Create tool call data
+            const toolCallData: ToolCallData = {
+              id: toolId,
+              name: event.toolName,
+              input: event.input,
+              status: "running",
+              timestamp,
+            };
+            // Persist tool call for page refresh recovery
+            this.persistToolCall(toolCallData);
             // Emit tool call event
             this.emit({
               type: "loop.tool_call",
               loopId: this.config.id,
               iteration,
-              tool: {
-                id: toolId,
-                name: event.toolName,
-                input: event.input,
-                status: "running",
-                timestamp,
-              },
+              tool: toolCallData,
               timestamp,
             });
             break;
@@ -709,21 +741,24 @@ export class LoopEngine {
 
           case "tool.complete": {
             const toolInfo = toolCalls.get(event.toolName);
-            this.emitLog("agent", `Tool completed: ${event.toolName}`);
             const timestamp = createTimestamp();
-            // Emit tool complete event - use the same ID from tool.start
+            // Create tool complete data - use the same ID from tool.start
+            const toolCompleteData: ToolCallData = {
+              id: toolInfo?.id ?? `tool-${iteration}-${event.toolName}`,
+              name: event.toolName,
+              input: toolInfo?.input,
+              output: event.output,
+              status: "completed",
+              timestamp,
+            };
+            // Persist tool call update for page refresh recovery
+            this.persistToolCall(toolCompleteData);
+            // Emit tool complete event
             this.emit({
               type: "loop.tool_call",
               loopId: this.config.id,
               iteration,
-              tool: {
-                id: toolInfo?.id ?? `tool-${iteration}-${event.toolName}`,
-                name: event.toolName,
-                input: toolInfo?.input,
-                output: event.output,
-                status: "completed",
-                timestamp,
-              },
+              tool: toolCompleteData,
               timestamp,
             });
             break;
@@ -1044,6 +1079,7 @@ Output ONLY the commit message, nothing else.`
   /**
    * Persist a log entry in the loop state.
    * If isUpdate is true, update an existing entry; otherwise append.
+   * All logs are kept until the loop is merged or deleted.
    */
   private persistLog(entry: LoopLogEntry, isUpdate: boolean): void {
     const logs = this.loop.state.logs ?? [];
@@ -1060,9 +1096,71 @@ Output ONLY the commit message, nothing else.`
       logs.push(entry);
     }
     
-    // Keep only the last 500 logs to prevent memory issues
-    const trimmedLogs = logs.length > 500 ? logs.slice(-500) : logs;
+    this.updateState({ logs });
+  }
+
+  /**
+   * Persist a message in the loop state for page refresh recovery.
+   * All messages are kept until the loop is merged or deleted.
+   */
+  private persistMessage(message: MessageData): void {
+    const messages = this.loop.state.messages ?? [];
     
-    this.updateState({ logs: trimmedLogs });
+    // Check if message already exists (by ID)
+    const existingIndex = messages.findIndex((m) => m.id === message.id);
+    if (existingIndex >= 0) {
+      // Update existing message
+      messages[existingIndex] = {
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp,
+      };
+    } else {
+      // Add new message
+      messages.push({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp,
+      });
+    }
+    
+    this.updateState({ messages });
+  }
+
+  /**
+   * Persist a tool call in the loop state for page refresh recovery.
+   * Updates existing tool call if it exists (by ID), otherwise adds new.
+   * All tool calls are kept until the loop is merged or deleted.
+   */
+  private persistToolCall(toolCall: ToolCallData): void {
+    const toolCalls = this.loop.state.toolCalls ?? [];
+    
+    // Check if tool call already exists (by ID)
+    const existingIndex = toolCalls.findIndex((tc) => tc.id === toolCall.id);
+    if (existingIndex >= 0) {
+      // Update existing tool call
+      toolCalls[existingIndex] = {
+        id: toolCall.id,
+        name: toolCall.name,
+        input: toolCall.input,
+        output: toolCall.output,
+        status: toolCall.status,
+        timestamp: toolCall.timestamp,
+      };
+    } else {
+      // Add new tool call
+      toolCalls.push({
+        id: toolCall.id,
+        name: toolCall.name,
+        input: toolCall.input,
+        output: toolCall.output,
+        status: toolCall.status,
+        timestamp: toolCall.timestamp,
+      });
+    }
+    
+    this.updateState({ toolCalls });
   }
 }
