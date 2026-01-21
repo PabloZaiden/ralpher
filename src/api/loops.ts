@@ -11,6 +11,7 @@ import type {
   UpdateLoopRequest,
   StartLoopRequest,
   AcceptResponse,
+  PushResponse,
   ErrorResponse,
   UncommittedChangesError,
   FileContentResponse,
@@ -237,6 +238,28 @@ export const loopsControlRoutes = {
       const response: AcceptResponse = {
         success: true,
         mergeCommit: result.mergeCommit,
+      };
+      return Response.json(response);
+    },
+  },
+
+  "/api/loops/:id/push": {
+    /**
+     * POST /api/loops/:id/push - Push a completed loop's branch to remote
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      const result = await loopManager.pushLoop(req.params.id);
+
+      if (!result.success) {
+        if (result.error?.includes("not found")) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        return errorResponse("push_failed", result.error ?? "Unknown error", 400);
+      }
+
+      const response: PushResponse = {
+        success: true,
+        remoteBranch: result.remoteBranch,
       };
       return Response.json(response);
     },

@@ -1,8 +1,113 @@
-# Global Server Configuration - Implementation Status
+# Ralpher Implementation Status
 
-## Current Phase: Phase 4 Complete - All Phases Done
+## Latest Feature: Unified Loop Actions - COMPLETE
 
-## Summary
+### Summary
+
+Loop actions now share behavior and code between Dashboard/LoopCard and LoopDetails. All loop actions (start, stop, accept, push, delete, purge) use the same shared utilities, API functions, and modal components.
+
+### Goals
+- [x] Create shared loop status helpers (`canStart`, `canStop`, `canAccept`, `isFinalState`, `getStatusLabel`)
+- [x] Create shared loop action API functions (`startLoopApi`, `stopLoopApi`, `acceptLoopApi`, etc.)
+- [x] Create shared modal components (`DeleteLoopModal`, `PurgeLoopModal`, `UncommittedChangesModal`)
+- [x] Update `LoopCard` to use shared helpers from `src/utils`
+- [x] Update `Dashboard` to use shared modals from `LoopModals.tsx`
+- [x] Update `LoopDetails` to use shared helpers and modals
+- [x] Refactor `useLoops` hook to use shared action API logic
+- [x] Refactor `useLoop` hook to use shared action API logic
+- [x] All tests pass (144 tests)
+
+### Files Created
+| File | Purpose |
+|------|---------|
+| `src/utils/loop-status.ts` | Shared status helper functions |
+| `src/utils/index.ts` | Utils barrel export |
+| `src/hooks/loopActions.ts` | Shared loop action API functions |
+| `src/components/LoopModals.tsx` | Shared modal components (Delete, Purge, UncommittedChanges) |
+
+### Files Modified
+| File | Changes |
+|------|---------|
+| `src/hooks/index.ts` | Added loopActions exports |
+| `src/hooks/useLoops.ts` | Uses shared action APIs, shared result types |
+| `src/hooks/useLoop.ts` | Uses shared action APIs, shared result types |
+| `src/components/LoopCard.tsx` | Uses shared helpers from `src/utils` |
+| `src/components/Dashboard.tsx` | Uses shared modals from `LoopModals.tsx` |
+| `src/components/LoopDetails.tsx` | Uses shared helpers and modals |
+
+### Architecture
+```
+src/utils/loop-status.ts     - Status helpers: canStart, canStop, canAccept, isFinalState, etc.
+src/hooks/loopActions.ts     - API functions: startLoopApi, stopLoopApi, acceptLoopApi, etc.
+src/components/LoopModals.tsx - Modals: DeleteLoopModal, PurgeLoopModal, UncommittedChangesModal
+src/components/AcceptLoopModal.tsx - Modal for accept/push decision (already existed)
+```
+
+### Benefits
+1. **Single source of truth** for loop status logic
+2. **DRY**: No duplicate API call implementations
+3. **Consistent behavior** between Dashboard and LoopDetails
+4. **Easier maintenance**: Changes to modals/actions apply everywhere
+5. **Centralized loading state** in modal components
+
+### Verification
+- [x] `bun x tsc --noEmit` - TypeScript passes
+- [x] `bun run build` - Build succeeds
+- [x] `bun run test` - All 144 tests pass
+
+---
+
+## Previous Feature: Push to Remote - COMPLETE
+
+### Summary
+
+The "Push to Remote" feature is **complete**. When a loop is completed, users can now choose between:
+1. **Accept & Merge**: Merges changes into the original branch locally (existing behavior)
+2. **Push to Remote**: Pushes the working branch to origin (new option)
+
+### Goals
+- [x] Add "pushed" as a new loop status
+- [x] Add `pushBranch()` method to GitService
+- [x] Add `pushLoop()` method to LoopManager
+- [x] Add `POST /api/loops/:id/push` endpoint
+- [x] Update frontend hooks (useLoops, useLoop) with push functionality
+- [x] Add "pushed" Badge variant
+- [x] Create shared AcceptLoopModal with both options
+- [x] Update LoopCard, Dashboard, and LoopDetails to use the modal
+- [x] Loops in "pushed" status can be purged
+- [x] All tests pass (144 tests)
+
+### Files Created
+| File | Purpose |
+|------|---------|
+| `src/components/AcceptLoopModal.tsx` | Shared modal offering Accept & Merge or Push to Remote |
+
+### Files Modified
+| File | Changes |
+|------|---------|
+| `src/types/loop.ts` | Added "pushed" to LoopStatus |
+| `src/types/events.ts` | Added LoopPushedEvent |
+| `src/types/api.ts` | Added PushResponse interface |
+| `src/core/git-service.ts` | Added `pushBranch()` method |
+| `src/core/loop-manager.ts` | Added `pushLoop()`, `PushLoopResult`, updated `purgeLoop()` |
+| `src/api/loops.ts` | Added POST /api/loops/:id/push endpoint |
+| `src/hooks/useLoops.ts` | Added pushLoop function |
+| `src/hooks/useLoop.ts` | Added push function |
+| `src/components/common/Badge.tsx` | Added "pushed" variant (indigo color) |
+| `src/components/LoopCard.tsx` | Updated isFinalState() |
+| `src/components/Dashboard.tsx` | Uses AcceptLoopModal, updated archived filter |
+| `src/components/LoopDetails.tsx` | Uses AcceptLoopModal, button text "Accept" |
+
+### Verification
+- [x] `bun x tsc --noEmit` - TypeScript passes
+- [x] `bun run build` - Build succeeds
+- [x] `bun run test` - All 144 tests pass
+
+---
+
+## Previous Feature: Global Server Configuration - COMPLETE
+
+### Summary
 
 The global server configuration feature is **complete**. OpenCode server settings are now a **global Ralpher-wide setting** instead of per-loop configuration. All phases (1-5) are implemented and all tests pass.
 

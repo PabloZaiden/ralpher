@@ -176,6 +176,7 @@ export type LoopStatus =
   | "failed"         // Error occurred
   | "max_iterations" // Hit iteration limit
   | "merged"         // Changes merged into original branch (final state)
+  | "pushed"         // Branch pushed to remote (final state)
   | "deleted";       // Marked for deletion (final state, awaiting purge)
 
 /**

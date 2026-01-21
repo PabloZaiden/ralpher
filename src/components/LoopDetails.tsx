@@ -3,10 +3,25 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { LoopStatus, FileDiff, FileContentResponse, UncommittedChangesError } from "../types";
+import type { FileDiff, FileContentResponse, UncommittedChangesError } from "../types";
 import { useLoop } from "../hooks";
-import { Badge, Button, Card, ConfirmModal, Modal, getStatusBadgeVariant } from "./common";
+import { Badge, Button, Card, getStatusBadgeVariant } from "./common";
 import { LogViewer } from "./LogViewer";
+import {
+  AcceptLoopModal,
+  DeleteLoopModal,
+  PurgeLoopModal,
+  UncommittedChangesModal,
+} from "./LoopModals";
+import {
+  getStatusLabel,
+  canStart,
+  canStop,
+  canAccept,
+  isFinalState,
+  isLoopActive,
+  isLoopRunning,
+} from "../utils";
 
 export interface LoopDetailsProps {
   /** Loop ID to display */
@@ -31,36 +46,6 @@ const tabs: { id: TabId; label: string }[] = [
 function formatDateTime(isoString: string | undefined): string {
   if (!isoString) return "N/A";
   return new Date(isoString).toLocaleString();
-}
-
-/**
- * Get status label.
- */
-function getStatusLabel(status: LoopStatus): string {
-  switch (status) {
-    case "idle":
-      return "Idle";
-    case "starting":
-      return "Starting";
-    case "running":
-      return "Running";
-    case "waiting":
-      return "Waiting";
-    case "completed":
-      return "Completed";
-    case "stopped":
-      return "Stopped";
-    case "failed":
-      return "Failed";
-    case "max_iterations":
-      return "Max Iterations";
-    case "merged":
-      return "Merged";
-    case "deleted":
-      return "Deleted";
-    default:
-      return status;
-  }
 }
 
 /**
@@ -92,36 +77,6 @@ function DiffPatchViewer({ patch }: { patch: string }) {
   );
 }
 
-/**
- * Check if loop can be started.
- * Only show start for idle or stopped loops, not for completed/failed ones.
- */
-function canStart(status: LoopStatus): boolean {
-  return ["idle", "stopped"].includes(status);
-}
-
-/**
- * Check if loop can be stopped.
- */
-function canStop(status: LoopStatus): boolean {
-  return ["running", "waiting", "starting"].includes(status);
-}
-
-/**
- * Check if loop can be accepted or discarded.
- */
-function canAcceptOrDiscard(status: LoopStatus): boolean {
-  return ["completed", "stopped", "failed", "max_iterations"].includes(status);
-}
-
-/**
- * Check if loop is in a final state (merged or deleted).
- * Only purge is allowed in final states.
- */
-function isFinalState(status: LoopStatus): boolean {
-  return status === "merged" || status === "deleted";
-}
-
 export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const {
     loop,
@@ -135,6 +90,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     start,
     stop,
     accept,
+    push,
     remove,
     purge,
     setPendingPrompt,
@@ -162,14 +118,13 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const prevStatusContent = useRef<string | null>(null);
 
   // Modals
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
-  const [acceptConfirm, setAcceptConfirm] = useState(false);
-  const [purgeConfirm, setPurgeConfirm] = useState(false);
+  const [deleteModal, setDeleteModal] = useState(false);
+  const [acceptModal, setAcceptModal] = useState(false);
+  const [purgeModal, setPurgeModal] = useState(false);
   const [uncommittedModal, setUncommittedModal] = useState<{
     open: boolean;
     error: UncommittedChangesError | null;
   }>({ open: false, error: null });
-  const [actionLoading, setActionLoading] = useState(false);
 
   // Pending prompt editing state
   const [pendingPromptText, setPendingPromptText] = useState("");
@@ -278,50 +233,52 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
   // Handle start
   async function handleStart() {
-    setActionLoading(true);
     const result = await start();
     if (result.uncommittedError) {
       setUncommittedModal({ open: true, error: result.uncommittedError });
     }
-    setActionLoading(false);
   }
 
-  // Handle uncommitted decision
-  async function handleUncommittedDecision(action: "commit" | "stash") {
-    setActionLoading(true);
-    await start({ handleUncommitted: action });
+  // Handle uncommitted decision - commit
+  async function handleUncommittedCommit() {
+    await start({ handleUncommitted: "commit" });
     setUncommittedModal({ open: false, error: null });
-    setActionLoading(false);
+  }
+
+  // Handle uncommitted decision - stash
+  async function handleUncommittedStash() {
+    await start({ handleUncommitted: "stash" });
+    setUncommittedModal({ open: false, error: null });
   }
 
   // Handle delete
   async function handleDelete() {
-    setActionLoading(true);
     const success = await remove();
     if (success) {
       onBack?.();
     }
-    setActionLoading(false);
-    setDeleteConfirm(false);
+    setDeleteModal(false);
   }
 
   // Handle accept
   async function handleAccept() {
-    setActionLoading(true);
     await accept();
-    setActionLoading(false);
-    setAcceptConfirm(false);
+    setAcceptModal(false);
+  }
+
+  // Handle push
+  async function handlePush() {
+    await push();
+    setAcceptModal(false);
   }
 
   // Handle purge
   async function handlePurge() {
-    setActionLoading(true);
     const success = await purge();
     if (success) {
       onBack?.();
     }
-    setActionLoading(false);
-    setPurgeConfirm(false);
+    setPurgeModal(false);
   }
 
   // Handle pending prompt save
@@ -346,11 +303,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       setPendingPromptDirty(false);
     }
     setPendingPromptSaving(false);
-  }
-
-  // Check if the loop is running (can set pending prompt)
-  function isLoopRunning(status: LoopStatus): boolean {
-    return ["running", "starting"].includes(status);
   }
 
   if (loading && !loop) {
@@ -382,7 +334,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   }
 
   const { config, state } = loop;
-  const isActive = ["running", "waiting", "starting"].includes(state.status);
+  const isActive = isLoopActive(state.status);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -509,8 +461,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   <Button
                     className="w-full"
                     variant="danger"
-                    onClick={() => setPurgeConfirm(true)}
-                    loading={actionLoading}
+                    onClick={() => setPurgeModal(true)}
                   >
                     Purge Loop
                   </Button>
@@ -520,7 +471,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                       <Button
                         className="w-full"
                         onClick={handleStart}
-                        loading={actionLoading}
                       >
                         Start Loop
                       </Button>
@@ -530,26 +480,24 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                         className="w-full"
                         variant="danger"
                         onClick={() => stop()}
-                        loading={actionLoading}
                       >
                         Stop Loop
                       </Button>
                     )}
-                    {canAcceptOrDiscard(state.status) && state.git && (
+                    {canAccept(state.status) && state.git && (
                       <Button
                         className="w-full"
                         variant="primary"
-                        onClick={() => setAcceptConfirm(true)}
-                        loading={actionLoading}
+                        onClick={() => setAcceptModal(true)}
                       >
-                        Accept (Merge)
+                        Accept
                       </Button>
                     )}
                     <hr className="border-gray-200 dark:border-gray-700" />
                     <Button
                       className="w-full"
                       variant="danger"
-                      onClick={() => setDeleteConfirm(true)}
+                      onClick={() => setDeleteModal(true)}
                     >
                       Delete Loop
                     </Button>
@@ -810,99 +758,35 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       </main>
 
       {/* Delete confirmation modal */}
-      <ConfirmModal
-        isOpen={deleteConfirm}
-        onClose={() => setDeleteConfirm(false)}
-        onConfirm={handleDelete}
-        title="Delete Loop"
-        message="Are you sure you want to delete this loop? The loop will be marked as deleted and can be purged later to permanently remove it."
-        confirmLabel="Delete"
-        loading={actionLoading}
-        variant="danger"
+      <DeleteLoopModal
+        isOpen={deleteModal}
+        onClose={() => setDeleteModal(false)}
+        onDelete={handleDelete}
       />
 
-      {/* Accept confirmation modal */}
-      <ConfirmModal
-        isOpen={acceptConfirm}
-        onClose={() => setAcceptConfirm(false)}
-        onConfirm={handleAccept}
-        title="Accept Loop"
-        message="Are you sure you want to accept this loop? This will merge the changes into the original branch. This action cannot be undone."
-        confirmLabel="Accept & Merge"
-        loading={actionLoading}
-        variant="primary"
+      {/* Accept/Push modal */}
+      <AcceptLoopModal
+        isOpen={acceptModal}
+        onClose={() => setAcceptModal(false)}
+        onAccept={handleAccept}
+        onPush={handlePush}
       />
 
       {/* Purge confirmation modal */}
-      <ConfirmModal
-        isOpen={purgeConfirm}
-        onClose={() => setPurgeConfirm(false)}
-        onConfirm={handlePurge}
-        title="Purge Loop"
-        message="Are you sure you want to permanently delete this loop? This will remove all loop data and cannot be undone."
-        confirmLabel="Purge"
-        loading={actionLoading}
-        variant="danger"
+      <PurgeLoopModal
+        isOpen={purgeModal}
+        onClose={() => setPurgeModal(false)}
+        onPurge={handlePurge}
       />
 
       {/* Uncommitted changes modal */}
-      <Modal
+      <UncommittedChangesModal
         isOpen={uncommittedModal.open}
         onClose={() => setUncommittedModal({ open: false, error: null })}
-        title="Uncommitted Changes Detected"
-        size="md"
-        footer={
-          <>
-            <Button
-              variant="ghost"
-              onClick={() => setUncommittedModal({ open: false, error: null })}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => handleUncommittedDecision("stash")}
-              loading={actionLoading}
-            >
-              Stash Changes
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => handleUncommittedDecision("commit")}
-              loading={actionLoading}
-            >
-              Commit Changes
-            </Button>
-          </>
-        }
-      >
-        {uncommittedModal.error && (
-          <div>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-              {uncommittedModal.error.message}
-            </p>
-            {uncommittedModal.error.changedFiles.length > 0 && (
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-3">
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Changed files:
-                </p>
-                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                  {uncommittedModal.error.changedFiles.slice(0, 10).map((file) => (
-                    <li key={file} className="font-mono truncate">
-                      {file}
-                    </li>
-                  ))}
-                  {uncommittedModal.error.changedFiles.length > 10 && (
-                    <li className="text-gray-500">
-                      ...and {uncommittedModal.error.changedFiles.length - 10} more
-                    </li>
-                  )}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
+        error={uncommittedModal.error}
+        onCommit={handleUncommittedCommit}
+        onStash={handleUncommittedStash}
+      />
     </div>
   );
 }

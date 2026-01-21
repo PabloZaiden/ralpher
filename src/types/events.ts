@@ -56,7 +56,8 @@ export type LoopEvent =
   | LoopErrorEvent
   | LoopDeletedEvent
   | LoopAcceptedEvent
-  | LoopDiscardedEvent;
+  | LoopDiscardedEvent
+  | LoopPushedEvent;
 
 export interface LoopCreatedEvent {
   type: "loop.created";
@@ -185,6 +186,13 @@ export interface LoopAcceptedEvent {
 export interface LoopDiscardedEvent {
   type: "loop.discarded";
   loopId: string;
+  timestamp: string;
+}
+
+export interface LoopPushedEvent {
+  type: "loop.pushed";
+  loopId: string;
+  remoteBranch: string;
   timestamp: string;
 }
 

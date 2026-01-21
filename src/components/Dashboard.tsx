@@ -5,11 +5,17 @@
 import { useState, useCallback, useEffect } from "react";
 import type { UncommittedChangesError, ModelInfo } from "../types";
 import { useLoops, useServerSettings } from "../hooks";
-import { Button, ConfirmModal, Modal } from "./common";
+import { Button, Modal } from "./common";
 import { LoopCard } from "./LoopCard";
 import { CreateLoopForm } from "./CreateLoopForm";
 import { ConnectionStatusBar } from "./ConnectionStatusBar";
 import { ServerSettingsModal } from "./ServerSettingsModal";
+import {
+  AcceptLoopModal,
+  DeleteLoopModal,
+  PurgeLoopModal,
+  UncommittedChangesModal,
+} from "./LoopModals";
 
 export interface DashboardProps {
   /** Callback when a loop is selected */
@@ -27,6 +33,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     stopLoop,
     deleteLoop,
     acceptLoop,
+    pushLoop,
     purgeLoop,
   } = useLoops();
 
@@ -43,15 +50,15 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; loopId: string | null }>({
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; loopId: string | null }>({
     open: false,
     loopId: null,
   });
-  const [acceptConfirm, setAcceptConfirm] = useState<{ open: boolean; loopId: string | null }>({
+  const [acceptModal, setAcceptModal] = useState<{ open: boolean; loopId: string | null }>({
     open: false,
     loopId: null,
   });
-  const [purgeConfirm, setPurgeConfirm] = useState<{ open: boolean; loopId: string | null }>({
+  const [purgeModal, setPurgeModal] = useState<{ open: boolean; loopId: string | null }>({
     open: false,
     loopId: null,
   });
@@ -64,9 +71,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     loopId: null,
     error: null,
   });
-  const [deleting, setDeleting] = useState(false);
-  const [accepting, setAccepting] = useState(false);
-  const [purging, setPurging] = useState(false);
 
   // Model selection state
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -166,37 +170,44 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   }
 
   // Handle uncommitted changes decision
-  async function handleUncommittedDecision(action: "commit" | "stash") {
+  async function handleUncommittedCommit() {
     if (!uncommittedModal.loopId) return;
-    await startLoop(uncommittedModal.loopId, { handleUncommitted: action });
+    await startLoop(uncommittedModal.loopId, { handleUncommitted: "commit" });
     setUncommittedModal({ open: false, loopId: null, error: null });
   }
 
-  // Handle delete confirmation
-  async function handleDeleteConfirm() {
-    if (!deleteConfirm.loopId) return;
-    setDeleting(true);
-    await deleteLoop(deleteConfirm.loopId);
-    setDeleting(false);
-    setDeleteConfirm({ open: false, loopId: null });
+  async function handleUncommittedStash() {
+    if (!uncommittedModal.loopId) return;
+    await startLoop(uncommittedModal.loopId, { handleUncommitted: "stash" });
+    setUncommittedModal({ open: false, loopId: null, error: null });
   }
 
-  // Handle accept confirmation
-  async function handleAcceptConfirm() {
-    if (!acceptConfirm.loopId) return;
-    setAccepting(true);
-    await acceptLoop(acceptConfirm.loopId);
-    setAccepting(false);
-    setAcceptConfirm({ open: false, loopId: null });
+  // Handle delete
+  async function handleDelete() {
+    if (!deleteModal.loopId) return;
+    await deleteLoop(deleteModal.loopId);
+    setDeleteModal({ open: false, loopId: null });
   }
 
-  // Handle purge confirmation
-  async function handlePurgeConfirm() {
-    if (!purgeConfirm.loopId) return;
-    setPurging(true);
-    await purgeLoop(purgeConfirm.loopId);
-    setPurging(false);
-    setPurgeConfirm({ open: false, loopId: null });
+  // Handle accept
+  async function handleAccept() {
+    if (!acceptModal.loopId) return;
+    await acceptLoop(acceptModal.loopId);
+    setAcceptModal({ open: false, loopId: null });
+  }
+
+  // Handle push
+  async function handlePush() {
+    if (!acceptModal.loopId) return;
+    await pushLoop(acceptModal.loopId);
+    setAcceptModal({ open: false, loopId: null });
+  }
+
+  // Handle purge
+  async function handlePurge() {
+    if (!purgeModal.loopId) return;
+    await purgeLoop(purgeModal.loopId);
+    setPurgeModal({ open: false, loopId: null });
   }
 
   // Group loops by status
@@ -210,11 +221,11 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     (loop) => loop.state.status === "completed"
   );
   const archivedLoops = loops.filter(
-    (loop) => loop.state.status === "merged" || loop.state.status === "deleted"
+    (loop) => loop.state.status === "merged" || loop.state.status === "pushed" || loop.state.status === "deleted"
   );
   const otherLoops = loops.filter(
     (loop) =>
-      !["running", "waiting", "starting", "completed", "merged", "deleted"].includes(
+      !["running", "waiting", "starting", "completed", "merged", "pushed", "deleted"].includes(
         loop.state.status
       )
   );
@@ -321,7 +332,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   onClick={() => onSelectLoop?.(loop.config.id)}
                   onStop={() => stopLoop(loop.config.id)}
                   onDelete={() =>
-                    setDeleteConfirm({ open: true, loopId: loop.config.id })
+                    setDeleteModal({ open: true, loopId: loop.config.id })
                   }
                 />
               ))}
@@ -341,9 +352,9 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   key={loop.config.id}
                   loop={loop}
                   onClick={() => onSelectLoop?.(loop.config.id)}
-                  onAccept={() => setAcceptConfirm({ open: true, loopId: loop.config.id })}
+                  onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
                   onDelete={() =>
-                    setDeleteConfirm({ open: true, loopId: loop.config.id })
+                    setDeleteModal({ open: true, loopId: loop.config.id })
                   }
                 />
               ))}
@@ -365,9 +376,9 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   onClick={() => onSelectLoop?.(loop.config.id)}
                   onStart={() => handleStart(loop.config.id)}
                   onStop={() => stopLoop(loop.config.id)}
-                  onAccept={() => setAcceptConfirm({ open: true, loopId: loop.config.id })}
+                  onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
                   onDelete={() =>
-                    setDeleteConfirm({ open: true, loopId: loop.config.id })
+                    setDeleteModal({ open: true, loopId: loop.config.id })
                   }
                 />
               ))}
@@ -387,7 +398,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   key={loop.config.id}
                   loop={loop}
                   onClick={() => onSelectLoop?.(loop.config.id)}
-                  onPurge={() => setPurgeConfirm({ open: true, loopId: loop.config.id })}
+                  onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
                 />
               ))}
             </div>
@@ -424,98 +435,35 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       </Modal>
 
       {/* Delete confirmation modal */}
-      <ConfirmModal
-        isOpen={deleteConfirm.open}
-        onClose={() => setDeleteConfirm({ open: false, loopId: null })}
-        onConfirm={handleDeleteConfirm}
-        title="Delete Loop"
-        message="Are you sure you want to delete this loop? The loop will be marked as deleted and can be purged later to permanently remove it."
-        confirmLabel="Delete"
-        loading={deleting}
-        variant="danger"
+      <DeleteLoopModal
+        isOpen={deleteModal.open}
+        onClose={() => setDeleteModal({ open: false, loopId: null })}
+        onDelete={handleDelete}
       />
 
-      {/* Accept confirmation modal */}
-      <ConfirmModal
-        isOpen={acceptConfirm.open}
-        onClose={() => setAcceptConfirm({ open: false, loopId: null })}
-        onConfirm={handleAcceptConfirm}
-        title="Accept Loop"
-        message="Are you sure you want to accept this loop? This will merge the changes into the original branch. This action cannot be undone."
-        confirmLabel="Accept & Merge"
-        loading={accepting}
-        variant="primary"
+      {/* Accept/Push modal */}
+      <AcceptLoopModal
+        isOpen={acceptModal.open}
+        onClose={() => setAcceptModal({ open: false, loopId: null })}
+        onAccept={handleAccept}
+        onPush={handlePush}
       />
 
       {/* Purge confirmation modal */}
-      <ConfirmModal
-        isOpen={purgeConfirm.open}
-        onClose={() => setPurgeConfirm({ open: false, loopId: null })}
-        onConfirm={handlePurgeConfirm}
-        title="Purge Loop"
-        message="Are you sure you want to permanently delete this loop? This will remove all loop data and cannot be undone."
-        confirmLabel="Purge"
-        loading={purging}
-        variant="danger"
+      <PurgeLoopModal
+        isOpen={purgeModal.open}
+        onClose={() => setPurgeModal({ open: false, loopId: null })}
+        onPurge={handlePurge}
       />
 
       {/* Uncommitted changes modal */}
-      <Modal
+      <UncommittedChangesModal
         isOpen={uncommittedModal.open}
         onClose={() => setUncommittedModal({ open: false, loopId: null, error: null })}
-        title="Uncommitted Changes Detected"
-        description="The target directory has uncommitted changes. How would you like to proceed?"
-        size="md"
-        footer={
-          <>
-            <Button
-              variant="ghost"
-              onClick={() => setUncommittedModal({ open: false, loopId: null, error: null })}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={() => handleUncommittedDecision("stash")}
-            >
-              Stash Changes
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => handleUncommittedDecision("commit")}
-            >
-              Commit Changes
-            </Button>
-          </>
-        }
-      >
-        {uncommittedModal.error && (
-          <div>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
-              {uncommittedModal.error.message}
-            </p>
-            {uncommittedModal.error.changedFiles.length > 0 && (
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-3">
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Changed files:
-                </p>
-                <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                  {uncommittedModal.error.changedFiles.slice(0, 10).map((file) => (
-                    <li key={file} className="font-mono truncate">
-                      {file}
-                    </li>
-                  ))}
-                  {uncommittedModal.error.changedFiles.length > 10 && (
-                    <li className="text-gray-500">
-                      ...and {uncommittedModal.error.changedFiles.length - 10} more
-                    </li>
-                  )}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </Modal>
+        error={uncommittedModal.error}
+        onCommit={handleUncommittedCommit}
+        onStash={handleUncommittedStash}
+      />
 
       {/* Server Settings modal */}
       <ServerSettingsModal

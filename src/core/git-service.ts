@@ -274,6 +274,36 @@ export class GitService {
   }
 
   /**
+   * Push a branch to the remote.
+   * Creates the remote branch if it doesn't exist.
+   * @param directory - The git repository directory
+   * @param branchName - The branch to push
+   * @param remote - The remote name (default: "origin")
+   * @returns The remote branch name (e.g., "origin/branch-name")
+   */
+  async pushBranch(
+    directory: string,
+    branchName: string,
+    remote = "origin"
+  ): Promise<string> {
+    // First checkout the branch to push
+    await this.checkoutBranch(directory, branchName);
+
+    // Push to remote with -u flag to set upstream
+    const result = await this.runGitCommand(directory, [
+      "push",
+      "-u",
+      remote,
+      branchName,
+    ]);
+    if (!result.success) {
+      throw new Error(`Failed to push branch ${branchName} to ${remote}: ${result.stderr}`);
+    }
+
+    return `${remote}/${branchName}`;
+  }
+
+  /**
    * Get the diff between the current branch and a base branch.
    */
   async getDiff(directory: string, baseBranch: string): Promise<FileDiff[]> {

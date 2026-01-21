@@ -2,8 +2,16 @@
  * LoopCard component for displaying a loop summary in the dashboard grid.
  */
 
-import type { Loop, LoopStatus } from "../types";
+import type { Loop } from "../types";
 import { Badge, getStatusBadgeVariant, Button, Card } from "./common";
+import {
+  getStatusLabel,
+  canStart,
+  canStop,
+  canAccept,
+  isFinalState,
+  isLoopActive,
+} from "../utils";
 
 export interface LoopCardProps {
   /** The loop to display */
@@ -42,67 +50,6 @@ function formatRelativeTime(isoString: string | undefined): string {
   return `${diffDay}d ago`;
 }
 
-/**
- * Get the status label.
- */
-function getStatusLabel(status: LoopStatus): string {
-  switch (status) {
-    case "idle":
-      return "Idle";
-    case "starting":
-      return "Starting";
-    case "running":
-      return "Running";
-    case "waiting":
-      return "Waiting";
-    case "completed":
-      return "Completed";
-    case "stopped":
-      return "Stopped";
-    case "failed":
-      return "Failed";
-    case "max_iterations":
-      return "Max Iterations";
-    case "merged":
-      return "Merged";
-    case "deleted":
-      return "Deleted";
-    default:
-      return status;
-  }
-}
-
-/**
- * Check if the loop can be started.
- * Only show start for idle or stopped loops (not yet run or manually stopped).
- * Completed/failed/max_iterations loops should use "Accept" or be reviewed first.
- */
-function canStart(status: LoopStatus): boolean {
-  return status === "idle" || status === "stopped";
-}
-
-/**
- * Check if the loop can be stopped.
- */
-function canStop(status: LoopStatus): boolean {
-  return status === "running" || status === "waiting" || status === "starting";
-}
-
-/**
- * Check if the loop can be accepted (merged).
- */
-function canAccept(status: LoopStatus): boolean {
-  return status === "completed" || status === "max_iterations" || status === "stopped" || status === "failed";
-}
-
-/**
- * Check if loop is in a final state (merged or deleted).
- * Only purge is allowed in final states.
- */
-function isFinalState(status: LoopStatus): boolean {
-  return status === "merged" || status === "deleted";
-}
-
 export function LoopCard({
   loop,
   onClick,
@@ -113,7 +60,7 @@ export function LoopCard({
   onPurge,
 }: LoopCardProps) {
   const { config, state } = loop;
-  const isActive = state.status === "running" || state.status === "waiting" || state.status === "starting";
+  const isActive = isLoopActive(state.status);
 
   return (
     <Card

@@ -68,6 +68,15 @@ export interface AcceptLoopResult {
 }
 
 /**
+ * Result of pushing a loop branch.
+ */
+export interface PushLoopResult {
+  success: boolean;
+  remoteBranch?: string;
+  error?: string;
+}
+
+/**
  * LoopManager handles the lifecycle of Ralph Loops.
  */
 export class LoopManager {
@@ -364,6 +373,62 @@ export class LoopManager {
   }
 
   /**
+   * Push a completed loop's branch to the remote.
+   * After pushing, the loop status is set to 'pushed' (final state).
+   * The branch is NOT merged locally - it's pushed as-is for PR creation.
+   */
+  async pushLoop(loopId: string): Promise<PushLoopResult> {
+    // Use getLoop to check engine state first
+    const loop = await this.getLoop(loopId);
+    if (!loop) {
+      return { success: false, error: "Loop not found" };
+    }
+
+    // Must be completed or similar terminal states
+    if (loop.state.status !== "completed" && loop.state.status !== "max_iterations") {
+      return { success: false, error: `Cannot push loop in status: ${loop.state.status}` };
+    }
+
+    // Must have git state (branch was created)
+    if (!loop.state.git) {
+      return { success: false, error: "No git branch was created for this loop" };
+    }
+
+    try {
+      // Push the working branch to remote
+      const remoteBranch = await this.git.pushBranch(
+        loop.config.directory,
+        loop.state.git.workingBranch
+      );
+
+      // Switch back to the original branch
+      await this.git.checkoutBranch(
+        loop.config.directory,
+        loop.state.git.originalBranch
+      );
+
+      // Update status to 'pushed' (final state)
+      const updatedState = {
+        ...loop.state,
+        status: "pushed" as const,
+      };
+      await updateLoopState(loopId, updatedState);
+
+      // Emit event
+      this.emitter.emit({
+        type: "loop.pushed",
+        loopId,
+        remoteBranch,
+        timestamp: createTimestamp(),
+      });
+
+      return { success: true, remoteBranch };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  /**
    * Discard a completed loop (delete git branch without merging).
    * Resets the working directory to a clean state.
    */
@@ -410,7 +475,7 @@ export class LoopManager {
 
   /**
    * Purge a loop (permanently delete files).
-   * Only allowed for loops in 'merged' or 'deleted' states.
+   * Only allowed for loops in 'merged', 'pushed', or 'deleted' states.
    */
   async purgeLoop(loopId: string): Promise<{ success: boolean; error?: string }> {
     const loop = await loadLoop(loopId);
@@ -419,8 +484,8 @@ export class LoopManager {
     }
 
     // Only allow purge for final states
-    if (loop.state.status !== "merged" && loop.state.status !== "deleted") {
-      return { success: false, error: `Cannot purge loop in status: ${loop.state.status}. Only merged or deleted loops can be purged.` };
+    if (loop.state.status !== "merged" && loop.state.status !== "pushed" && loop.state.status !== "deleted") {
+      return { success: false, error: `Cannot purge loop in status: ${loop.state.status}. Only merged, pushed, or deleted loops can be purged.` };
     }
 
     // Actually delete the loop file

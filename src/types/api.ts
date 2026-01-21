@@ -87,6 +87,14 @@ export interface AcceptResponse {
 }
 
 /**
+ * Response for loop push operation.
+ */
+export interface PushResponse {
+  success: boolean;
+  remoteBranch?: string;
+}
+
+/**
  * Error response for uncommitted changes.
  */
 export interface UncommittedChangesError {

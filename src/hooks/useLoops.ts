@@ -4,8 +4,20 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest, StartLoopRequest, UncommittedChangesError } from "../types";
+import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest, StartLoopRequest } from "../types";
 import { useGlobalSSE } from "./useSSE";
+import {
+  startLoopApi,
+  stopLoopApi,
+  acceptLoopApi,
+  pushLoopApi,
+  discardLoopApi,
+  deleteLoopApi,
+  purgeLoopApi,
+  type StartLoopResult,
+  type AcceptLoopResult,
+  type PushLoopResult,
+} from "./loopActions";
 
 export interface UseLoopsResult {
   /** Array of all loops */
@@ -25,14 +37,16 @@ export interface UseLoopsResult {
   /** Delete a loop */
   deleteLoop: (id: string) => Promise<boolean>;
   /** Start a loop */
-  startLoop: (id: string, request?: StartLoopRequest) => Promise<{ success: boolean; uncommittedError?: UncommittedChangesError }>;
+  startLoop: (id: string, request?: StartLoopRequest) => Promise<StartLoopResult>;
   /** Stop a loop */
   stopLoop: (id: string) => Promise<boolean>;
   /** Accept (merge) a loop's changes */
-  acceptLoop: (id: string) => Promise<{ success: boolean; mergeCommit?: string }>;
+  acceptLoop: (id: string) => Promise<AcceptLoopResult>;
+  /** Push a loop's branch to remote */
+  pushLoop: (id: string) => Promise<PushLoopResult>;
   /** Discard a loop's changes */
   discardLoop: (id: string) => Promise<boolean>;
-  /** Purge a loop (permanently delete - only for merged/deleted loops) */
+  /** Purge a loop (permanently delete - only for merged/pushed/deleted loops) */
   purgeLoop: (id: string) => Promise<boolean>;
   /** Get a loop by ID */
   getLoop: (id: string) => Loop | undefined;
@@ -67,6 +81,7 @@ export function useLoops(): UseLoopsResult {
       case "loop.stopped":
       case "loop.completed":
       case "loop.accepted":
+      case "loop.pushed":
       case "loop.discarded":
       case "loop.error":
       case "loop.iteration.start":
@@ -169,13 +184,7 @@ export function useLoops(): UseLoopsResult {
   // Delete a loop
   const deleteLoop = useCallback(async (id: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/loops/${id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to delete loop");
-      }
+      await deleteLoopApi(id);
       setLoops((prev) => prev.filter((l) => l.config.id !== id));
       return true;
     } catch (err) {
@@ -186,27 +195,13 @@ export function useLoops(): UseLoopsResult {
 
   // Start a loop
   const startLoop = useCallback(
-    async (id: string, request?: StartLoopRequest): Promise<{ success: boolean; uncommittedError?: UncommittedChangesError }> => {
+    async (id: string, request?: StartLoopRequest): Promise<StartLoopResult> => {
       try {
-        const response = await fetch(`/api/loops/${id}/start`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(request || {}),
-        });
-
-        if (response.status === 409) {
-          // Uncommitted changes error
-          const errorData = (await response.json()) as UncommittedChangesError;
-          return { success: false, uncommittedError: errorData };
+        const result = await startLoopApi(id, request);
+        if (result.success) {
+          await refreshLoop(id);
         }
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Failed to start loop");
-        }
-
-        await refreshLoop(id);
-        return { success: true };
+        return result;
       } catch (err) {
         setError(String(err));
         return { success: false };
@@ -218,13 +213,7 @@ export function useLoops(): UseLoopsResult {
   // Stop a loop
   const stopLoop = useCallback(async (id: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/loops/${id}/stop`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to stop loop");
-      }
+      await stopLoopApi(id);
       await refreshLoop(id);
       return true;
     } catch (err) {
@@ -234,18 +223,23 @@ export function useLoops(): UseLoopsResult {
   }, [refreshLoop]);
 
   // Accept a loop's changes
-  const acceptLoop = useCallback(async (id: string): Promise<{ success: boolean; mergeCommit?: string }> => {
+  const acceptLoop = useCallback(async (id: string): Promise<AcceptLoopResult> => {
     try {
-      const response = await fetch(`/api/loops/${id}/accept`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to accept loop");
-      }
-      const data = await response.json();
+      const result = await acceptLoopApi(id);
       await refreshLoop(id);
-      return { success: true, mergeCommit: data.mergeCommit };
+      return result;
+    } catch (err) {
+      setError(String(err));
+      return { success: false };
+    }
+  }, [refreshLoop]);
+
+  // Push a loop's branch to remote
+  const pushLoop = useCallback(async (id: string): Promise<PushLoopResult> => {
+    try {
+      const result = await pushLoopApi(id);
+      await refreshLoop(id);
+      return result;
     } catch (err) {
       setError(String(err));
       return { success: false };
@@ -255,13 +249,7 @@ export function useLoops(): UseLoopsResult {
   // Discard a loop's changes
   const discardLoop = useCallback(async (id: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/loops/${id}/discard`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to discard loop");
-      }
+      await discardLoopApi(id);
       await refreshLoop(id);
       return true;
     } catch (err) {
@@ -273,13 +261,7 @@ export function useLoops(): UseLoopsResult {
   // Purge a loop (permanently delete)
   const purgeLoop = useCallback(async (id: string): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/loops/${id}/purge`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to purge loop");
-      }
+      await purgeLoopApi(id);
       setLoops((prev) => prev.filter((l) => l.config.id !== id));
       return true;
     } catch (err) {
@@ -313,6 +295,7 @@ export function useLoops(): UseLoopsResult {
     startLoop,
     stopLoop,
     acceptLoop,
+    pushLoop,
     discardLoop,
     purgeLoop,
     getLoop,

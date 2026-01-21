@@ -9,7 +9,6 @@ import type {
   LoopEvent,
   UpdateLoopRequest,
   StartLoopRequest,
-  UncommittedChangesError,
   FileDiff,
   FileContentResponse,
   MessageData,
@@ -17,6 +16,20 @@ import type {
   LogLevel,
 } from "../types";
 import { useLoopSSE } from "./useSSE";
+import {
+  startLoopApi,
+  stopLoopApi,
+  acceptLoopApi,
+  pushLoopApi,
+  discardLoopApi,
+  deleteLoopApi,
+  purgeLoopApi,
+  setPendingPromptApi,
+  clearPendingPromptApi,
+  type StartLoopResult,
+  type AcceptLoopResult,
+  type PushLoopResult,
+} from "./loopActions";
 
 /**
  * Application log entry for display in the UI.
@@ -62,14 +75,16 @@ export interface UseLoopResult {
   /** Delete the loop */
   remove: () => Promise<boolean>;
   /** Start the loop */
-  start: (request?: StartLoopRequest) => Promise<{ success: boolean; uncommittedError?: UncommittedChangesError }>;
+  start: (request?: StartLoopRequest) => Promise<StartLoopResult>;
   /** Stop the loop */
   stop: () => Promise<boolean>;
   /** Accept (merge) the loop's changes */
-  accept: () => Promise<{ success: boolean; mergeCommit?: string }>;
+  accept: () => Promise<AcceptLoopResult>;
+  /** Push the loop's branch to remote */
+  push: () => Promise<PushLoopResult>;
   /** Discard the loop's changes */
   discard: () => Promise<boolean>;
-  /** Purge the loop (permanently delete - only for merged/deleted loops) */
+  /** Purge the loop (permanently delete - only for merged/pushed/deleted loops) */
   purge: () => Promise<boolean>;
   /** Set a pending prompt for the next iteration (only works when loop is running) */
   setPendingPrompt: (prompt: string) => Promise<boolean>;
@@ -173,6 +188,7 @@ export function useLoop(loopId: string): UseLoopResult {
       case "loop.stopped":
       case "loop.completed":
       case "loop.accepted":
+      case "loop.pushed":
       case "loop.discarded":
       case "loop.error":
         refresh();
@@ -279,13 +295,7 @@ export function useLoop(loopId: string): UseLoopResult {
   // Delete the loop
   const remove = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/loops/${loopId}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to delete loop");
-      }
+      await deleteLoopApi(loopId);
       setLoop(null);
       return true;
     } catch (err) {
@@ -296,26 +306,13 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Start the loop
   const start = useCallback(
-    async (request?: StartLoopRequest): Promise<{ success: boolean; uncommittedError?: UncommittedChangesError }> => {
+    async (request?: StartLoopRequest): Promise<StartLoopResult> => {
       try {
-        const response = await fetch(`/api/loops/${loopId}/start`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(request || {}),
-        });
-
-        if (response.status === 409) {
-          const errorData = (await response.json()) as UncommittedChangesError;
-          return { success: false, uncommittedError: errorData };
+        const result = await startLoopApi(loopId, request);
+        if (result.success) {
+          await refresh();
         }
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Failed to start loop");
-        }
-
-        await refresh();
-        return { success: true };
+        return result;
       } catch (err) {
         setError(String(err));
         return { success: false };
@@ -327,13 +324,7 @@ export function useLoop(loopId: string): UseLoopResult {
   // Stop the loop
   const stop = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/loops/${loopId}/stop`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to stop loop");
-      }
+      await stopLoopApi(loopId);
       await refresh();
       return true;
     } catch (err) {
@@ -343,18 +334,23 @@ export function useLoop(loopId: string): UseLoopResult {
   }, [loopId, refresh]);
 
   // Accept the loop's changes
-  const accept = useCallback(async (): Promise<{ success: boolean; mergeCommit?: string }> => {
+  const accept = useCallback(async (): Promise<AcceptLoopResult> => {
     try {
-      const response = await fetch(`/api/loops/${loopId}/accept`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to accept loop");
-      }
-      const data = await response.json();
+      const result = await acceptLoopApi(loopId);
       await refresh();
-      return { success: true, mergeCommit: data.mergeCommit };
+      return result;
+    } catch (err) {
+      setError(String(err));
+      return { success: false };
+    }
+  }, [loopId, refresh]);
+
+  // Push the loop's branch to remote
+  const push = useCallback(async (): Promise<PushLoopResult> => {
+    try {
+      const result = await pushLoopApi(loopId);
+      await refresh();
+      return result;
     } catch (err) {
       setError(String(err));
       return { success: false };
@@ -364,13 +360,7 @@ export function useLoop(loopId: string): UseLoopResult {
   // Discard the loop's changes
   const discard = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/loops/${loopId}/discard`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to discard loop");
-      }
+      await discardLoopApi(loopId);
       await refresh();
       return true;
     } catch (err) {
@@ -382,13 +372,7 @@ export function useLoop(loopId: string): UseLoopResult {
   // Purge the loop (permanently delete)
   const purge = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/loops/${loopId}/purge`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to purge loop");
-      }
+      await purgeLoopApi(loopId);
       setLoop(null);
       return true;
     } catch (err) {
@@ -401,15 +385,7 @@ export function useLoop(loopId: string): UseLoopResult {
   const setPendingPrompt = useCallback(
     async (prompt: string): Promise<boolean> => {
       try {
-        const response = await fetch(`/api/loops/${loopId}/pending-prompt`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt }),
-        });
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.message || "Failed to set pending prompt");
-        }
+        await setPendingPromptApi(loopId, prompt);
         await refresh();
         return true;
       } catch (err) {
@@ -423,13 +399,7 @@ export function useLoop(loopId: string): UseLoopResult {
   // Clear the pending prompt
   const clearPendingPrompt = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch(`/api/loops/${loopId}/pending-prompt`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to clear pending prompt");
-      }
+      await clearPendingPromptApi(loopId);
       await refresh();
       return true;
     } catch (err) {
@@ -502,6 +472,7 @@ export function useLoop(loopId: string): UseLoopResult {
     start,
     stop,
     accept,
+    push,
     discard,
     purge,
     setPendingPrompt,
