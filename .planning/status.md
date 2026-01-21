@@ -1100,3 +1100,21 @@ The `delay(1000)` call between iterations was blocking. When the async generator
 - `bun run build` - **PASS**
 
 ---
+
+### 2026-01-20 - Diff Indicator Fix (Current Session)
+
+**Issue Reported:**
+The Diff tab indicator wasn't showing when files were modified. It only triggered on `loop.iteration.end` and `loop.git.commit` events.
+
+**Fix Applied:**
+Updated `src/hooks/useLoop.ts` to also increment `gitChangeCounter` when a tool call completes (`event.tool.status === "completed"`). Since tools like write, edit, and bash often modify files, this ensures the diff indicator shows as soon as changes are made.
+
+**Files Modified:**
+- `src/hooks/useLoop.ts` - Increment gitChangeCounter on tool completion
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **136 tests PASS**
+- `bun run build` - **PASS**
+
+---

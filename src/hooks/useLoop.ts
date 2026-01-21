@@ -154,6 +154,10 @@ export function useLoop(loopId: string): UseLoopResult {
           }
           return [...prev, event.tool];
         });
+        // When a tool completes, it may have modified files - trigger diff check
+        if (event.tool.status === "completed") {
+          setGitChangeCounter((prev) => prev + 1);
+        }
         break;
 
       case "loop.iteration.start":
