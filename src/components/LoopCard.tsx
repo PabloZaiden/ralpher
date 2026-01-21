@@ -18,6 +18,8 @@ export interface LoopCardProps {
   onAccept?: () => void;
   /** Callback when delete button is clicked */
   onDelete?: () => void;
+  /** Callback when purge button is clicked */
+  onPurge?: () => void;
 }
 
 /**
@@ -61,6 +63,10 @@ function getStatusLabel(status: LoopStatus): string {
       return "Failed";
     case "max_iterations":
       return "Max Iterations";
+    case "merged":
+      return "Merged";
+    case "deleted":
+      return "Deleted";
     default:
       return status;
   }
@@ -89,6 +95,14 @@ function canAccept(status: LoopStatus): boolean {
   return status === "completed" || status === "max_iterations" || status === "stopped" || status === "failed";
 }
 
+/**
+ * Check if loop is in a final state (merged or deleted).
+ * Only purge is allowed in final states.
+ */
+function isFinalState(status: LoopStatus): boolean {
+  return status === "merged" || status === "deleted";
+}
+
 export function LoopCard({
   loop,
   onClick,
@@ -96,6 +110,7 @@ export function LoopCard({
   onStop,
   onAccept,
   onDelete,
+  onPurge,
 }: LoopCardProps) {
   const { config, state } = loop;
   const isActive = state.status === "running" || state.status === "waiting" || state.status === "starting";
@@ -165,54 +180,72 @@ export function LoopCard({
 
       {/* Actions */}
       <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
-        {canStart(state.status) && onStart && (
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              onStart();
-            }}
-          >
-            Start
-          </Button>
-        )}
-        {canStop(state.status) && onStop && (
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={(e) => {
-              e.stopPropagation();
-              onStop();
-            }}
-          >
-            Stop
-          </Button>
-        )}
-        {canAccept(state.status) && state.git && onAccept && (
-          <Button
-            size="sm"
-            variant="primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              onAccept();
-            }}
-          >
-            Accept
-          </Button>
-        )}
-        {onDelete && (
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="ml-auto text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-          >
-            Delete
-          </Button>
+        {/* Final state - only show Purge */}
+        {isFinalState(state.status) ? (
+          onPurge && (
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPurge();
+              }}
+            >
+              Purge
+            </Button>
+          )
+        ) : (
+          <>
+            {canStart(state.status) && onStart && (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStart();
+                }}
+              >
+                Start
+              </Button>
+            )}
+            {canStop(state.status) && onStop && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStop();
+                }}
+              >
+                Stop
+              </Button>
+            )}
+            {canAccept(state.status) && state.git && onAccept && (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAccept();
+                }}
+              >
+                Accept
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="ml-auto text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+              >
+                Delete
+              </Button>
+            )}
+          </>
         )}
       </div>
     </Card>

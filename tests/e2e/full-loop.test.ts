@@ -248,7 +248,7 @@ describe("Full Loop Workflow", () => {
       expect(fetched!.config.name).toBe("Updated Name");
     });
 
-    test("deletes a loop", async () => {
+    test("soft-deletes a loop (marks as deleted)", async () => {
       const loop = await ctx.manager.createLoop({
         name: "To Delete",
         directory: ctx.workDir,
@@ -258,11 +258,32 @@ describe("Full Loop Workflow", () => {
       const deleted = await ctx.manager.deleteLoop(loop.config.id);
       expect(deleted).toBe(true);
 
+      // Soft delete: loop still exists but with status "deleted"
       const fetched = await ctx.manager.getLoop(loop.config.id);
-      expect(fetched).toBeNull();
+      expect(fetched).not.toBeNull();
+      expect(fetched!.state.status).toBe("deleted");
 
       // Verify delete event
       expect(countEvents(ctx.events, "loop.deleted")).toBe(1);
+    });
+
+    test("purges a deleted loop", async () => {
+      const loop = await ctx.manager.createLoop({
+        name: "To Purge",
+        directory: ctx.workDir,
+        prompt: "Purge me",
+      });
+
+      // Soft delete first
+      await ctx.manager.deleteLoop(loop.config.id);
+
+      // Then purge
+      const purgeResult = await ctx.manager.purgeLoop(loop.config.id);
+      expect(purgeResult.success).toBe(true);
+
+      // Now it should be actually gone
+      const fetched = await ctx.manager.getLoop(loop.config.id);
+      expect(fetched).toBeNull();
     });
 
     test("returns null/false for non-existent loops", async () => {

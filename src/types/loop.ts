@@ -189,7 +189,9 @@ export type LoopStatus =
   | "completed"      // Successfully completed (stop pattern matched)
   | "stopped"        // Manually stopped
   | "failed"         // Error occurred
-  | "max_iterations"; // Hit iteration limit
+  | "max_iterations" // Hit iteration limit
+  | "merged"         // Changes merged into original branch (final state)
+  | "deleted";       // Marked for deletion (final state, awaiting purge)
 
 /**
  * Backend session information.

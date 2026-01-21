@@ -32,6 +32,8 @@ export interface UseLoopsResult {
   acceptLoop: (id: string) => Promise<{ success: boolean; mergeCommit?: string }>;
   /** Discard a loop's changes */
   discardLoop: (id: string) => Promise<boolean>;
+  /** Purge a loop (permanently delete - only for merged/deleted loops) */
+  purgeLoop: (id: string) => Promise<boolean>;
   /** Get a loop by ID */
   getLoop: (id: string) => Loop | undefined;
 }
@@ -268,6 +270,24 @@ export function useLoops(): UseLoopsResult {
     }
   }, [refreshLoop]);
 
+  // Purge a loop (permanently delete)
+  const purgeLoop = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/loops/${id}/purge`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to purge loop");
+      }
+      setLoops((prev) => prev.filter((l) => l.config.id !== id));
+      return true;
+    } catch (err) {
+      setError(String(err));
+      return false;
+    }
+  }, []);
+
   // Get a loop by ID
   const getLoop = useCallback(
     (id: string): Loop | undefined => {
@@ -294,6 +314,7 @@ export function useLoops(): UseLoopsResult {
     stopLoop,
     acceptLoop,
     discardLoop,
+    purgeLoop,
     getLoop,
   };
 }

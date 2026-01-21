@@ -14,7 +14,9 @@ export type BadgeVariant =
   | "running"
   | "completed"
   | "stopped"
-  | "failed";
+  | "failed"
+  | "merged"
+  | "deleted";
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   /** Visual variant */
@@ -37,6 +39,9 @@ const variantClasses: Record<BadgeVariant, string> = {
   completed: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300",
   stopped: "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300",
   failed: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300",
+  // Final states
+  merged: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
+  deleted: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500",
 };
 
 const sizeClasses = {
@@ -79,6 +84,10 @@ export function getStatusBadgeVariant(status: string): BadgeVariant {
       return "stopped";
     case "failed":
       return "failed";
+    case "merged":
+      return "merged";
+    case "deleted":
+      return "deleted";
     default:
       return "default";
   }

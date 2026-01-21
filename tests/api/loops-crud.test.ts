@@ -281,7 +281,37 @@ describe("Loops CRUD API Integration", () => {
       const body = await response.json();
       expect(body.success).toBe(true);
 
-      // Verify it's deleted
+      // Verify it's soft-deleted (still exists but with status "deleted")
+      const getResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      expect(getResponse.status).toBe(200);
+      const getBody = await getResponse.json();
+      expect(getBody.state.status).toBe("deleted");
+    });
+
+    test("purges a deleted loop", async () => {
+      // Create a loop first
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "To Purge",
+          directory: testWorkDir,
+          prompt: "Purge me",
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Soft delete it
+      await fetch(`${baseUrl}/api/loops/${loopId}`, { method: "DELETE" });
+
+      // Purge it
+      const purgeResponse = await fetch(`${baseUrl}/api/loops/${loopId}/purge`, {
+        method: "POST",
+      });
+      expect(purgeResponse.status).toBe(200);
+
+      // Verify it's actually deleted
       const getResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
       expect(getResponse.status).toBe(404);
     });

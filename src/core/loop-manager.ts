@@ -206,8 +206,9 @@ export class LoopManager {
   }
 
   /**
-   * Delete a loop.
+   * Delete a loop (soft delete - marks as deleted, doesn't remove files).
    * If git is enabled and there's a working branch, discards it first.
+   * Use purgeLoop() to actually delete the files.
    */
   async deleteLoop(loopId: string): Promise<boolean> {
     // Stop if running
@@ -217,9 +218,12 @@ export class LoopManager {
 
     // Get loop to check for git branch
     const loop = await loadLoop(loopId);
+    if (!loop) {
+      return false;
+    }
     
     // If git is enabled and has a working branch, discard it first
-    if (loop && loop.config.git.enabled && loop.state.git?.workingBranch) {
+    if (loop.config.git.enabled && loop.state.git?.workingBranch) {
       const discardResult = await this.discardLoop(loopId);
       if (!discardResult.success) {
         // Log but don't fail the delete - user explicitly wants to delete
@@ -227,17 +231,20 @@ export class LoopManager {
       }
     }
 
-    const deleted = await deleteLoopFile(loopId);
+    // Update status to 'deleted' (soft delete - final state)
+    const updatedState = {
+      ...loop.state,
+      status: "deleted" as const,
+    };
+    await updateLoopState(loopId, updatedState);
 
-    if (deleted) {
-      this.emitter.emit({
-        type: "loop.deleted",
-        loopId,
-        timestamp: createTimestamp(),
-      });
-    }
+    this.emitter.emit({
+      type: "loop.deleted",
+      loopId,
+      timestamp: createTimestamp(),
+    });
 
-    return deleted;
+    return true;
   }
 
   /**
@@ -325,6 +332,7 @@ export class LoopManager {
 
   /**
    * Accept a completed loop (merge git branch).
+   * After merging, the loop status is set to 'merged' (final state).
    */
   async acceptLoop(loopId: string): Promise<AcceptLoopResult> {
     // Use getLoop to check engine state first
@@ -353,6 +361,13 @@ export class LoopManager {
 
       // Delete the working branch
       await this.git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
+
+      // Update status to 'merged' (final state)
+      const updatedState = {
+        ...loop.state,
+        status: "merged" as const,
+      };
+      await updateLoopState(loopId, updatedState);
 
       // Emit event
       this.emitter.emit({
@@ -411,6 +426,30 @@ export class LoopManager {
     } catch (error) {
       return { success: false, error: String(error) };
     }
+  }
+
+  /**
+   * Purge a loop (permanently delete files).
+   * Only allowed for loops in 'merged' or 'deleted' states.
+   */
+  async purgeLoop(loopId: string): Promise<{ success: boolean; error?: string }> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      return { success: false, error: "Loop not found" };
+    }
+
+    // Only allow purge for final states
+    if (loop.state.status !== "merged" && loop.state.status !== "deleted") {
+      return { success: false, error: `Cannot purge loop in status: ${loop.state.status}. Only merged or deleted loops can be purged.` };
+    }
+
+    // Actually delete the loop file
+    const deleted = await deleteLoopFile(loopId);
+    if (!deleted) {
+      return { success: false, error: "Failed to delete loop file" };
+    }
+
+    return { success: true };
   }
 
   /**

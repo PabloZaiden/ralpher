@@ -69,6 +69,8 @@ export interface UseLoopResult {
   accept: () => Promise<{ success: boolean; mergeCommit?: string }>;
   /** Discard the loop's changes */
   discard: () => Promise<boolean>;
+  /** Purge the loop (permanently delete - only for merged/deleted loops) */
+  purge: () => Promise<boolean>;
   /** Get the git diff */
   getDiff: () => Promise<FileDiff[]>;
   /** Get the plan.md content */
@@ -373,6 +375,24 @@ export function useLoop(loopId: string): UseLoopResult {
     }
   }, [loopId, refresh]);
 
+  // Purge the loop (permanently delete)
+  const purge = useCallback(async (): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/loops/${loopId}/purge`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to purge loop");
+      }
+      setLoop(null);
+      return true;
+    } catch (err) {
+      setError(String(err));
+      return false;
+    }
+  }, [loopId]);
+
   // Get the git diff
   const getDiff = useCallback(async (): Promise<FileDiff[]> => {
     try {
@@ -438,6 +458,7 @@ export function useLoop(loopId: string): UseLoopResult {
     stop,
     accept,
     discard,
+    purge,
     getDiff,
     getPlan,
     getStatusFile,

@@ -54,6 +54,10 @@ function getStatusLabel(status: LoopStatus): string {
       return "Failed";
     case "max_iterations":
       return "Max Iterations";
+    case "merged":
+      return "Merged";
+    case "deleted":
+      return "Deleted";
     default:
       return status;
   }
@@ -110,6 +114,14 @@ function canAcceptOrDiscard(status: LoopStatus): boolean {
   return ["completed", "stopped", "failed", "max_iterations"].includes(status);
 }
 
+/**
+ * Check if loop is in a final state (merged or deleted).
+ * Only purge is allowed in final states.
+ */
+function isFinalState(status: LoopStatus): boolean {
+  return status === "merged" || status === "deleted";
+}
+
 export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const {
     loop,
@@ -126,6 +138,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     stop,
     accept,
     remove,
+    purge,
     getDiff,
     getPlan,
     getStatusFile,
@@ -150,6 +163,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
   // Modals
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [acceptConfirm, setAcceptConfirm] = useState(false);
+  const [purgeConfirm, setPurgeConfirm] = useState(false);
   const [uncommittedModal, setUncommittedModal] = useState<{
     open: boolean;
     error: UncommittedChangesError | null;
@@ -282,6 +297,18 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     setActionLoading(true);
     await accept();
     setActionLoading(false);
+    setAcceptConfirm(false);
+  }
+
+  // Handle purge
+  async function handlePurge() {
+    setActionLoading(true);
+    const success = await purge();
+    if (success) {
+      onBack?.();
+    }
+    setActionLoading(false);
+    setPurgeConfirm(false);
   }
 
   if (loading && !loop) {
@@ -435,43 +462,57 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
             {/* Actions card */}
             <Card title="Actions">
               <div className="space-y-2">
-                {canStart(state.status) && (
-                  <Button
-                    className="w-full"
-                    onClick={handleStart}
-                    loading={actionLoading}
-                  >
-                    Start Loop
-                  </Button>
-                )}
-                {canStop(state.status) && (
+                {/* Final state - only show Purge */}
+                {isFinalState(state.status) ? (
                   <Button
                     className="w-full"
                     variant="danger"
-                    onClick={() => stop()}
+                    onClick={() => setPurgeConfirm(true)}
                     loading={actionLoading}
                   >
-                    Stop Loop
+                    Purge Loop
                   </Button>
+                ) : (
+                  <>
+                    {canStart(state.status) && (
+                      <Button
+                        className="w-full"
+                        onClick={handleStart}
+                        loading={actionLoading}
+                      >
+                        Start Loop
+                      </Button>
+                    )}
+                    {canStop(state.status) && (
+                      <Button
+                        className="w-full"
+                        variant="danger"
+                        onClick={() => stop()}
+                        loading={actionLoading}
+                      >
+                        Stop Loop
+                      </Button>
+                    )}
+                    {canAcceptOrDiscard(state.status) && state.git && (
+                      <Button
+                        className="w-full"
+                        variant="primary"
+                        onClick={() => setAcceptConfirm(true)}
+                        loading={actionLoading}
+                      >
+                        Accept (Merge)
+                      </Button>
+                    )}
+                    <hr className="border-gray-200 dark:border-gray-700" />
+                    <Button
+                      className="w-full"
+                      variant="danger"
+                      onClick={() => setDeleteConfirm(true)}
+                    >
+                      Delete Loop
+                    </Button>
+                  </>
                 )}
-                {canAcceptOrDiscard(state.status) && state.git && (
-                  <Button
-                    className="w-full"
-                    variant="primary"
-                    onClick={handleAccept}
-                    loading={actionLoading}
-                  >
-                    Accept (Merge)
-                  </Button>
-                )}
-                <hr className="border-gray-200 dark:border-gray-700" />
-                <Button
-                  className="w-full"
-                  variant="danger"
-                  onClick={() => setDeleteConfirm(true)}
-                >
-                  Delete Loop
-                </Button>
               </div>
             </Card>
           </div>
@@ -652,8 +693,32 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         onClose={() => setDeleteConfirm(false)}
         onConfirm={handleDelete}
         title="Delete Loop"
-        message="Are you sure you want to delete this loop? This action cannot be undone."
+        message="Are you sure you want to delete this loop? The loop will be marked as deleted and can be purged later to permanently remove it."
         confirmLabel="Delete"
+        loading={actionLoading}
+        variant="danger"
+      />
+
+      {/* Accept confirmation modal */}
+      <ConfirmModal
+        isOpen={acceptConfirm}
+        onClose={() => setAcceptConfirm(false)}
+        onConfirm={handleAccept}
+        title="Accept Loop"
+        message="Are you sure you want to accept this loop? This will merge the changes into the original branch. This action cannot be undone."
+        confirmLabel="Accept & Merge"
+        loading={actionLoading}
+        variant="primary"
+      />
+
+      {/* Purge confirmation modal */}
+      <ConfirmModal
+        isOpen={purgeConfirm}
+        onClose={() => setPurgeConfirm(false)}
+        onConfirm={handlePurge}
+        title="Purge Loop"
+        message="Are you sure you want to permanently delete this loop? This will remove all loop data and cannot be undone."
+        confirmLabel="Purge"
         loading={actionLoading}
         variant="danger"
       />

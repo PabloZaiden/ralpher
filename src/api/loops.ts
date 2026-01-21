@@ -266,6 +266,24 @@ export const loopsControlRoutes = {
       return successResponse();
     },
   },
+
+  "/api/loops/:id/purge": {
+    /**
+     * POST /api/loops/:id/purge - Permanently delete a merged or deleted loop
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      const result = await loopManager.purgeLoop(req.params.id);
+
+      if (!result.success) {
+        if (result.error?.includes("not found")) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        return errorResponse("purge_failed", result.error ?? "Unknown error", 400);
+      }
+
+      return successResponse();
+    },
+  },
 };
 
 /**

@@ -238,7 +238,7 @@ describe("LoopManager", () => {
   });
 
   describe("deleteLoop", () => {
-    test("deletes a loop", async () => {
+    test("soft-deletes a loop (marks as deleted)", async () => {
       const loop = await manager.createLoop({
         name: "To Delete",
         directory: testWorkDir,
@@ -248,12 +248,45 @@ describe("LoopManager", () => {
       const deleted = await manager.deleteLoop(loop.config.id);
       expect(deleted).toBe(true);
 
+      // Soft delete: loop still exists but with status "deleted"
       const fetched = await manager.getLoop(loop.config.id);
-      expect(fetched).toBeNull();
+      expect(fetched).not.toBeNull();
+      expect(fetched!.state.status).toBe("deleted");
 
       // Check delete event
       const deleteEvents = emittedEvents.filter((e) => e.type === "loop.deleted");
       expect(deleteEvents.length).toBe(1);
+    });
+
+    test("purges a deleted loop", async () => {
+      const loop = await manager.createLoop({
+        name: "To Purge",
+        directory: testWorkDir,
+        prompt: "Test",
+      });
+
+      // First soft delete
+      await manager.deleteLoop(loop.config.id);
+      
+      // Then purge
+      const purgeResult = await manager.purgeLoop(loop.config.id);
+      expect(purgeResult.success).toBe(true);
+
+      // Now it should be actually gone
+      const fetched = await manager.getLoop(loop.config.id);
+      expect(fetched).toBeNull();
+    });
+
+    test("cannot purge a non-deleted/non-merged loop", async () => {
+      const loop = await manager.createLoop({
+        name: "Cannot Purge",
+        directory: testWorkDir,
+        prompt: "Test",
+      });
+
+      const purgeResult = await manager.purgeLoop(loop.config.id);
+      expect(purgeResult.success).toBe(false);
+      expect(purgeResult.error).toContain("Cannot purge loop in status");
     });
 
     test("returns false for non-existent loop", async () => {

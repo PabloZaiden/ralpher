@@ -25,10 +25,19 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     stopLoop,
     deleteLoop,
     acceptLoop,
+    purgeLoop,
   } = useLoops();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; loopId: string | null }>({
+    open: false,
+    loopId: null,
+  });
+  const [acceptConfirm, setAcceptConfirm] = useState<{ open: boolean; loopId: string | null }>({
+    open: false,
+    loopId: null,
+  });
+  const [purgeConfirm, setPurgeConfirm] = useState<{ open: boolean; loopId: string | null }>({
     open: false,
     loopId: null,
   });
@@ -42,6 +51,8 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     error: null,
   });
   const [deleting, setDeleting] = useState(false);
+  const [accepting, setAccepting] = useState(false);
+  const [purging, setPurging] = useState(false);
 
   // Model selection state
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -131,6 +142,24 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     setDeleteConfirm({ open: false, loopId: null });
   }
 
+  // Handle accept confirmation
+  async function handleAcceptConfirm() {
+    if (!acceptConfirm.loopId) return;
+    setAccepting(true);
+    await acceptLoop(acceptConfirm.loopId);
+    setAccepting(false);
+    setAcceptConfirm({ open: false, loopId: null });
+  }
+
+  // Handle purge confirmation
+  async function handlePurgeConfirm() {
+    if (!purgeConfirm.loopId) return;
+    setPurging(true);
+    await purgeLoop(purgeConfirm.loopId);
+    setPurging(false);
+    setPurgeConfirm({ open: false, loopId: null });
+  }
+
   // Group loops by status
   const activeLoops = loops.filter(
     (loop) =>
@@ -141,9 +170,12 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   const completedLoops = loops.filter(
     (loop) => loop.state.status === "completed"
   );
+  const archivedLoops = loops.filter(
+    (loop) => loop.state.status === "merged" || loop.state.status === "deleted"
+  );
   const otherLoops = loops.filter(
     (loop) =>
-      !["running", "waiting", "starting", "completed"].includes(
+      !["running", "waiting", "starting", "completed", "merged", "deleted"].includes(
         loop.state.status
       )
   );
@@ -262,7 +294,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   key={loop.config.id}
                   loop={loop}
                   onClick={() => onSelectLoop?.(loop.config.id)}
-                  onAccept={() => acceptLoop(loop.config.id)}
+                  onAccept={() => setAcceptConfirm({ open: true, loopId: loop.config.id })}
                   onDelete={() =>
                     setDeleteConfirm({ open: true, loopId: loop.config.id })
                   }
@@ -274,7 +306,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
 
         {/* Other loops section */}
         {otherLoops.length > 0 && (
-          <section>
+          <section className="mb-8">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
               Other ({otherLoops.length})
             </h2>
@@ -286,10 +318,29 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   onClick={() => onSelectLoop?.(loop.config.id)}
                   onStart={() => handleStart(loop.config.id)}
                   onStop={() => stopLoop(loop.config.id)}
-                  onAccept={() => acceptLoop(loop.config.id)}
+                  onAccept={() => setAcceptConfirm({ open: true, loopId: loop.config.id })}
                   onDelete={() =>
                     setDeleteConfirm({ open: true, loopId: loop.config.id })
                   }
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Archived loops section (merged/deleted) */}
+        {archivedLoops.length > 0 && (
+          <section>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              Archived ({archivedLoops.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+              {archivedLoops.map((loop) => (
+                <LoopCard
+                  key={loop.config.id}
+                  loop={loop}
+                  onClick={() => onSelectLoop?.(loop.config.id)}
+                  onPurge={() => setPurgeConfirm({ open: true, loopId: loop.config.id })}
                 />
               ))}
             </div>
@@ -330,9 +381,33 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         onClose={() => setDeleteConfirm({ open: false, loopId: null })}
         onConfirm={handleDeleteConfirm}
         title="Delete Loop"
-        message="Are you sure you want to delete this loop? This action cannot be undone."
+        message="Are you sure you want to delete this loop? The loop will be marked as deleted and can be purged later to permanently remove it."
         confirmLabel="Delete"
         loading={deleting}
+        variant="danger"
+      />
+
+      {/* Accept confirmation modal */}
+      <ConfirmModal
+        isOpen={acceptConfirm.open}
+        onClose={() => setAcceptConfirm({ open: false, loopId: null })}
+        onConfirm={handleAcceptConfirm}
+        title="Accept Loop"
+        message="Are you sure you want to accept this loop? This will merge the changes into the original branch. This action cannot be undone."
+        confirmLabel="Accept & Merge"
+        loading={accepting}
+        variant="primary"
+      />
+
+      {/* Purge confirmation modal */}
+      <ConfirmModal
+        isOpen={purgeConfirm.open}
+        onClose={() => setPurgeConfirm({ open: false, loopId: null })}
+        onConfirm={handlePurgeConfirm}
+        title="Purge Loop"
+        message="Are you sure you want to permanently delete this loop? This will remove all loop data and cannot be undone."
+        confirmLabel="Purge"
+        loading={purging}
         variant="danger"
       />
 
