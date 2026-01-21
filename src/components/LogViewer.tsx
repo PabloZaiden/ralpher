@@ -29,8 +29,6 @@ export interface LogViewerProps {
   toolCalls: ToolCallData[];
   /** Application logs to display */
   logs?: LogEntry[];
-  /** Progress content (streaming text) */
-  progressContent?: string;
   /** Whether to auto-scroll to bottom */
   autoScroll?: boolean;
   /** Maximum height */
@@ -111,7 +109,6 @@ export function LogViewer({
   messages,
   toolCalls,
   logs = [],
-  progressContent,
   autoScroll = true,
   maxHeight = "500px",
 }: LogViewerProps) {
@@ -122,7 +119,7 @@ export function LogViewer({
     if (autoScroll && containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [messages, toolCalls, logs, progressContent, autoScroll]);
+  }, [messages, toolCalls, logs, autoScroll]);
 
   // Combine and sort entries by timestamp
   const entries: Array<
@@ -147,7 +144,7 @@ export function LogViewer({
   // Sort by timestamp
   entries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-  const isEmpty = entries.length === 0 && !progressContent;
+  const isEmpty = entries.length === 0;
 
   return (
     <div
@@ -231,6 +228,17 @@ export function LogViewer({
             } else {
               // Log entry
               const log = entry.data;
+              // Check if this is an AI response log with responseContent
+              const responseContent = log.details?.responseContent;
+              const hasResponseContent = typeof responseContent === "string" && responseContent.length > 0;
+              // Filter out responseContent from details for separate display
+              const otherDetails = log.details
+                ? Object.fromEntries(
+                    Object.entries(log.details).filter(([key]) => key !== "responseContent")
+                  )
+                : undefined;
+              const hasOtherDetails = otherDetails && Object.keys(otherDetails).length > 0;
+
               return (
                 <div key={`log-${log.id}-${index}`} className="group">
                   <div className="flex items-start gap-3">
@@ -245,13 +253,20 @@ export function LogViewer({
                     </Badge>
                     <div className={`flex-1 ${getLogLevelColor(log.level)}`}>
                       <span>{log.message}</span>
-                      {log.details && Object.keys(log.details).length > 0 && (
+                      {/* Show responseContent as proper text */}
+                      {hasResponseContent && (
+                        <div className="mt-2 p-3 bg-gray-800 rounded whitespace-pre-wrap break-words text-gray-200 text-xs leading-relaxed">
+                          {responseContent}
+                        </div>
+                      )}
+                      {/* Show other details as JSON */}
+                      {hasOtherDetails && (
                         <details className="mt-1">
                           <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
                             Details
                           </summary>
                           <pre className="mt-1 p-2 bg-gray-800 rounded text-xs overflow-x-auto">
-                            {JSON.stringify(log.details, null, 2)}
+                            {JSON.stringify(otherDetails, null, 2)}
                           </pre>
                         </details>
                       )}
@@ -261,21 +276,6 @@ export function LogViewer({
               );
             }
           })}
-
-          {/* Streaming progress content */}
-          {progressContent && (
-            <div className="flex items-start gap-3">
-              <span className="text-gray-500 flex-shrink-0">
-                {formatTime(new Date().toISOString())}
-              </span>
-              <span className="text-blue-400 flex-shrink-0 animate-pulse">
-                ...
-              </span>
-              <div className="flex-1 whitespace-pre-wrap break-words text-gray-300">
-                {progressContent}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

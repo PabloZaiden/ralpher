@@ -74,7 +74,7 @@ describe("Loops Control API Integration", () => {
       },
 
       async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
-        // Not used in tests
+        // Signal that we're ready for events
       },
 
       async abortSession(_sessionId: string): Promise<void> {
@@ -82,7 +82,10 @@ describe("Loops Control API Integration", () => {
       },
 
       async *subscribeToEvents(_sessionId: string): AsyncIterable<AgentEvent> {
-        // Not used in tests
+        // Yield complete message with stop pattern
+        yield { type: "message.start", messageId: `msg-${Date.now()}` };
+        yield { type: "message.delta", content: "<promise>COMPLETE</promise>" };
+        yield { type: "message.complete", content: "<promise>COMPLETE</promise>" };
       },
     };
   }

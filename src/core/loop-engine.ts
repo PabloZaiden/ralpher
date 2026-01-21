@@ -229,7 +229,7 @@ export class LoopEngine {
    * Pause the loop execution.
    */
   pause(): void {
-    if (this.loop.state.status !== "running" && this.loop.state.status !== "waiting") {
+    if (this.loop.state.status !== "running") {
       throw new Error(`Cannot pause loop in status: ${this.loop.state.status}`);
     }
 
@@ -369,7 +369,18 @@ export class LoopEngine {
    * Now continues on errors unless max consecutive identical errors is reached.
    */
   private async runLoop(): Promise<void> {
+    this.emitLog("debug", "Entering runLoop", {
+      aborted: this.aborted,
+      status: this.loop.state.status,
+      shouldContinue: this.shouldContinue(),
+    });
+
     while (!this.aborted && this.shouldContinue()) {
+      this.emitLog("debug", "Loop iteration check passed", {
+        aborted: this.aborted,
+        status: this.loop.state.status,
+      });
+
       if (this.loop.state.status === "paused") {
         this.emitLog("debug", "Loop is paused, waiting for resume");
         return; // Will resume later
@@ -473,14 +484,16 @@ export class LoopEngine {
 
       // Check if aborted during iteration
       if (this.aborted) {
+        this.emitLog("debug", "Aborted during iteration, exiting runLoop");
         return; // Stop method already updated status
       }
-
-      // Wait briefly between iterations
-      this.emitLog("debug", "Waiting before next iteration...");
-      this.updateState({ status: "waiting" });
-      await this.delay(1000);
     }
+
+    this.emitLog("debug", "Exiting runLoop - loop condition not met", {
+      aborted: this.aborted,
+      status: this.loop.state.status,
+      shouldContinue: this.shouldContinue(),
+    });
   }
 
   /**
@@ -545,9 +558,13 @@ export class LoopEngine {
     let outcome: IterationResult["outcome"] = "continue";
     let error: string | undefined;
     let currentMessageId: string | null = null;
-    let currentResponseLogId: string | null = null;
-    let currentReasoningLogId: string | null = null;
     const toolCalls = new Map<string, { id: string; name: string; input: unknown }>();
+    
+    // Track current log entries for combining consecutive deltas
+    let currentResponseLogId: string | null = null;
+    let currentResponseLogContent = "";
+    let currentReasoningLogId: string | null = null;
+    let currentReasoningLogContent = "";
 
     try {
       // Build the prompt
@@ -565,6 +582,7 @@ export class LoopEngine {
 
       // Subscribe to events and process them
       this.emitLog("debug", "Subscribing to AI response stream");
+
       for await (const event of this.backend.subscribeToEvents(this.sessionId)) {
         // Check if aborted
         if (this.aborted) {
@@ -579,19 +597,29 @@ export class LoopEngine {
           case "message.start":
             currentMessageId = event.messageId;
             messageCount++;
-            // Create a log entry that we'll update with response content
-            currentResponseLogId = this.emitLog("agent", "AI started generating response", {
-              responseContent: "",
-            });
+            // Reset response log tracking
+            currentResponseLogId = null;
+            currentResponseLogContent = "";
+            // Log that AI started generating
+            this.emitLog("agent", "AI started generating response");
             break;
 
           case "message.delta":
             responseContent += event.content;
-            // Update the response log entry with accumulated content
-            if (currentResponseLogId) {
-              this.emitLog("agent", "AI generating response...", {
-                responseContent,
-              }, currentResponseLogId);
+            // Combine consecutive deltas into the same log entry
+            if (event.content.trim()) {
+              currentResponseLogContent += event.content;
+              if (currentResponseLogId) {
+                // Update existing log entry
+                this.emitLog("agent", "AI generating response...", {
+                  responseContent: currentResponseLogContent,
+                }, currentResponseLogId);
+              } else {
+                // Create new log entry
+                currentResponseLogId = this.emitLog("agent", "AI generating response...", {
+                  responseContent: currentResponseLogContent,
+                });
+              }
             }
             // Emit progress event for streaming text
             this.emit({
@@ -605,34 +633,35 @@ export class LoopEngine {
 
           case "reasoning.delta":
             // AI reasoning/thinking content (chain of thought)
-            if (!currentReasoningLogId) {
-              // Create a new log entry for reasoning on first delta
-              currentReasoningLogId = this.emitLog("agent", "AI reasoning...", {
-                reasoningContent: event.content,
-              });
-            }
             reasoningContent += event.content;
-            // Update the reasoning log entry with accumulated content
-            this.emitLog("agent", "AI reasoning...", {
-              reasoningContent,
-            }, currentReasoningLogId);
+            // Combine consecutive reasoning deltas into the same log entry
+            if (event.content.trim()) {
+              currentReasoningLogContent += event.content;
+              if (currentReasoningLogId) {
+                // Update existing log entry
+                this.emitLog("agent", "AI reasoning...", {
+                  responseContent: currentReasoningLogContent,
+                }, currentReasoningLogId);
+              } else {
+                // Create new log entry
+                currentReasoningLogId = this.emitLog("agent", "AI reasoning...", {
+                  responseContent: currentReasoningLogContent,
+                });
+              }
+            }
             break;
 
           case "message.complete":
-            // Final update to the reasoning log if there was reasoning
-            if (currentReasoningLogId && reasoningContent) {
-              this.emitLog("agent", "AI finished reasoning", {
-                reasoningContent,
-                reasoningLength: reasoningContent.length,
-              }, currentReasoningLogId);
-            }
-            // Final update to the response log with complete content
-            if (currentResponseLogId) {
-              this.emitLog("agent", "AI finished generating response", {
-                responseContent,
-                responseLength: responseContent.length,
-              }, currentResponseLogId);
-            }
+            // Reset log tracking
+            currentResponseLogId = null;
+            currentResponseLogContent = "";
+            currentReasoningLogId = null;
+            currentReasoningLogContent = "";
+            // Log that AI finished (no need to include full content here,
+            // the final ASSISTANT message will show it)
+            this.emitLog("agent", "AI finished generating response", {
+              responseLength: responseContent.length,
+            });
             // Emit the complete message
             this.emit({
               type: "loop.message",
@@ -650,6 +679,11 @@ export class LoopEngine {
             break;
 
           case "tool.start": {
+            // Reset response/reasoning log tracking when a tool starts
+            currentResponseLogId = null;
+            currentResponseLogContent = "";
+            currentReasoningLogId = null;
+            currentReasoningLogContent = "";
             // Use tool name as the base ID so we can match start/complete events
             const toolId = `tool-${iteration}-${event.toolName}-${toolCallCount}`;
             toolCalls.set(event.toolName, { id: toolId, name: event.toolName, input: event.input });
@@ -704,9 +738,12 @@ export class LoopEngine {
 
         // If message is complete or error occurred, stop listening
         if (event.type === "message.complete" || event.type === "error") {
+          this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
           break;
         }
       }
+
+      this.emitLog("debug", "Exited event stream loop", { outcome, error });
 
       // Check for stop pattern
       this.emitLog("info", "Evaluating stop pattern...");
@@ -924,11 +961,7 @@ Output ONLY the commit message, nothing else.`
    */
   private shouldContinue(): boolean {
     const status = this.loop.state.status;
-    return (
-      status === "running" ||
-      status === "waiting" ||
-      status === "starting"
-    );
+    return status === "running" || status === "starting";
   }
 
   /**
@@ -1031,12 +1064,5 @@ Output ONLY the commit message, nothing else.`
     const trimmedLogs = logs.length > 500 ? logs.slice(-500) : logs;
     
     this.updateState({ logs: trimmedLogs });
-  }
-
-  /**
-   * Delay for a given number of milliseconds.
-   */
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

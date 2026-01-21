@@ -1050,3 +1050,53 @@ src/components/common/
 - `bun test` - **135 tests PASS**
 - `bun run build` - **PASS**
 
+---
+
+### 2026-01-20 - Loop Continuation Bug Fix (Current Session)
+
+**Issue Reported:**
+User observed that after an error occurred during iteration (e.g., "File not found"), the loop engine logged "Waiting before next iteration..." but then hung indefinitely instead of continuing to the next iteration.
+
+**Root Cause:**
+The `delay(1000)` call between iterations was blocking. When the async generator for SSE events was broken out of (on error), the underlying HTTP connection cleanup may have been interfering with the subsequent delay/continuation.
+
+**Fixes Applied:**
+
+1. **Removed the delay between iterations** (`src/core/loop-engine.ts`):
+   - Removed `await this.delay(1000)` between iterations
+   - Removed the "waiting" status since it's no longer used
+   - Removed the unused `delay()` method
+   - Updated `shouldContinue()` to only check for "running" and "starting" statuses
+   - Updated `pause()` to only check for "running" status
+
+2. **Added AbortController to SSE subscription** (`src/backends/opencode/index.ts`):
+   - Added `AbortController` to properly cancel the SSE subscription when consumer breaks out
+   - Added `try/finally` block to ensure `abortController.abort()` is called on cleanup
+   - This ensures the underlying HTTP connection is properly closed
+
+3. **Added debug logging** (`src/core/loop-engine.ts`):
+   - Added logging at `runLoop` entry with state details
+   - Added logging after each iteration check
+   - Added logging when exiting `runLoop` with reason
+
+4. **Added test for error-then-continue scenario** (`tests/unit/loop-engine.test.ts`):
+   - New test: "continues to next iteration after error event from backend"
+   - Tests that iteration 1 can error, and iteration 2 continues and completes
+   - Includes timeout to detect if engine hangs
+
+5. **Fixed mock backend in loops-control tests** (`tests/api/loops-control.test.ts`):
+   - Updated `subscribeToEvents` to yield proper events (message.start, message.delta, message.complete)
+   - Previously yielded nothing, which caused tests to hang
+
+**Files Modified:**
+- `src/core/loop-engine.ts` - Removed delay, added logging, cleaned up waiting status
+- `src/backends/opencode/index.ts` - Added AbortController for SSE cleanup
+- `tests/unit/loop-engine.test.ts` - Added error-continuation test
+- `tests/api/loops-control.test.ts` - Fixed mock backend subscribeToEvents
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **136 tests PASS** (1 new test)
+- `bun run build` - **PASS**
+
+---

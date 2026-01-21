@@ -346,6 +346,69 @@ describe("LoopEngine", () => {
     expect(errorEvents.length).toBe(1);
   });
 
+  test("continues to next iteration after error event from backend", async () => {
+    // This test validates that when the backend emits an error event mid-stream,
+    // the engine correctly continues to the next iteration instead of stopping.
+    const loop = createTestLoop({ maxIterations: 3, maxConsecutiveErrors: 3 });
+
+    let iterationCount = 0;
+
+    // Create a mock backend that:
+    // - Iteration 1: starts responding, then emits an error
+    // - Iteration 2: completes successfully with COMPLETE pattern
+    const baseMock = createMockBackend([]);
+    mockBackend = {
+      ...baseMock,
+      async sendPromptAsync(): Promise<void> {
+        iterationCount++;
+      },
+      async *subscribeToEvents(): AsyncIterable<AgentEvent> {
+        if (iterationCount === 1) {
+          // First iteration: start responding, then error
+          yield { type: "message.start", messageId: `msg-${Date.now()}` };
+          yield { type: "message.delta", content: "Starting to work..." };
+          // Now emit an error (simulating backend error like file not found)
+          yield { type: "error", message: "Error: File not found: /some/file.ts" };
+        } else if (iterationCount === 2) {
+          // Second iteration: complete successfully
+          yield { type: "message.start", messageId: `msg-${Date.now()}` };
+          yield { type: "message.delta", content: "Fixed it! <promise>COMPLETE</promise>" };
+          yield { type: "message.complete", content: "Fixed it! <promise>COMPLETE</promise>" };
+        }
+      },
+    };
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      eventEmitter: emitter,
+    });
+
+    // Add timeout to detect if the engine hangs
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Test timed out - engine hung after error")), 5000);
+    });
+
+    await Promise.race([engine.start(), timeoutPromise]);
+
+    // Should have completed successfully after 2 iterations
+    expect(engine.state.status).toBe("completed");
+    expect(engine.state.currentIteration).toBe(2);
+
+    // Check iteration summaries
+    expect(engine.state.recentIterations.length).toBe(2);
+    expect(engine.state.recentIterations[0]!.outcome).toBe("error");
+    expect(engine.state.recentIterations[1]!.outcome).toBe("complete");
+
+    // Check that error event was emitted for iteration 1
+    const errorEvents = emittedEvents.filter((e) => e.type === "loop.error");
+    expect(errorEvents.length).toBe(1);
+
+    // Check that both iteration start events were emitted
+    const iterationStartEvents = emittedEvents.filter((e) => e.type === "loop.iteration.start");
+    expect(iterationStartEvents.length).toBe(2);
+  }, 10000); // 10 second timeout for the test itself
+
   test("records iteration summaries", async () => {
     const loop = createTestLoop({ maxIterations: 3 });
     mockBackend = createMockBackend([

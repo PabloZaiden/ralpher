@@ -286,8 +286,12 @@ export class OpenCodeBackend implements AgentBackend {
   async *subscribeToEvents(sessionId: string): AsyncIterable<AgentEvent> {
     const client = this.getClient();
 
+    // Create AbortController to allow cancellation when consumer breaks
+    const abortController = new AbortController();
+
     const subscription = await client.event.subscribe({
       query: { directory: this.directory },
+      signal: abortController.signal,
     });
 
     // Track emitted events to avoid duplicates
@@ -298,18 +302,23 @@ export class OpenCodeBackend implements AgentBackend {
     // For reasoning: track last known reasoning text length per part ID
     const reasoningTextLength = new Map<string, number>();
 
-    for await (const event of subscription.stream) {
-      // Filter events for our session and translate them
-      const translated = this.translateEvent(
-        event as OpenCodeEvent,
-        sessionId,
-        emittedMessageStarts,
-        toolPartStatus,
-        reasoningTextLength
-      );
-      if (translated) {
-        yield translated;
+    try {
+      for await (const event of subscription.stream) {
+        // Filter events for our session and translate them
+        const translated = this.translateEvent(
+          event as OpenCodeEvent,
+          sessionId,
+          emittedMessageStarts,
+          toolPartStatus,
+          reasoningTextLength
+        );
+        if (translated) {
+          yield translated;
+        }
       }
+    } finally {
+      // Abort the subscription when the consumer breaks out of the loop
+      abortController.abort();
     }
   }
 

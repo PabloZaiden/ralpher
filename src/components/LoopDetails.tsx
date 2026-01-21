@@ -545,7 +545,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   messages={messages}
                   toolCalls={toolCalls}
                   logs={logs}
-                  progressContent={progressContent}
                   maxHeight="600px"
                 />
               )}
