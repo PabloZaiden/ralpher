@@ -35,6 +35,9 @@ export interface LoopConfig {
 
   /** Git integration settings */
   git: GitConfig;
+
+  /** Base branch to create the loop from (if different from current when started) */
+  baseBranch?: string;
 }
 
 /**

@@ -67,6 +67,31 @@ export class GitService {
   }
 
   /**
+   * Get all local branch names.
+   * Returns branches sorted by name, with the current branch marked.
+   */
+  async getLocalBranches(directory: string): Promise<{ name: string; current: boolean }[]> {
+    const result = await this.runGitCommand(directory, ["branch", "--format=%(refname:short)|%(HEAD)"]);
+    if (!result.success) {
+      throw new Error(`Failed to get local branches: ${result.stderr}`);
+    }
+
+    const lines = result.stdout.trim().split("\n").filter(Boolean);
+    const branches = lines.map((line) => {
+      const [name, head] = line.split("|");
+      return {
+        name: name?.trim() ?? "",
+        current: head?.trim() === "*",
+      };
+    }).filter((b) => b.name.length > 0);
+
+    // Sort by name
+    branches.sort((a, b) => a.name.localeCompare(b.name));
+
+    return branches;
+  }
+
+  /**
    * Check if there are uncommitted changes (staged or unstaged).
    */
   async hasUncommittedChanges(directory: string): Promise<boolean> {

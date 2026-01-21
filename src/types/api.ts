@@ -41,6 +41,8 @@ export interface CreateLoopRequest {
   stopPattern?: string;
   /** Git configuration (optional, uses defaults) */
   git?: Partial<GitConfig>;
+  /** Base branch to create the loop from (default: current branch) */
+  baseBranch?: string;
 }
 
 /**

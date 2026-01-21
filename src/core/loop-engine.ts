@@ -273,6 +273,15 @@ export class LoopEngine {
       throw new Error("Directory has uncommitted changes. Please commit or stash them first.");
     }
 
+    // If a base branch was specified, checkout that branch first
+    if (this.config.baseBranch) {
+      const currentBranch = await this.git.getCurrentBranch(directory);
+      if (currentBranch !== this.config.baseBranch) {
+        this.emitLog("info", `Switching to base branch: ${this.config.baseBranch}`);
+        await this.git.checkoutBranch(directory, this.config.baseBranch);
+      }
+    }
+
     // Get the current branch (original branch)
     const originalBranch = await this.git.getCurrentBranch(directory);
     this.emitLog("info", `Current branch: ${originalBranch}`);

@@ -48,6 +48,8 @@ export interface CreateLoopOptions {
   gitBranchPrefix?: string;
   /** Git commit prefix (default: "[Ralph]") */
   gitCommitPrefix?: string;
+  /** Base branch to create the loop from (default: current branch) */
+  baseBranch?: string;
 }
 
 /**
@@ -117,6 +119,7 @@ export class LoopManager {
         branchPrefix: options.gitBranchPrefix ?? DEFAULT_LOOP_CONFIG.git.branchPrefix,
         commitPrefix: options.gitCommitPrefix ?? DEFAULT_LOOP_CONFIG.git.commitPrefix,
       },
+      baseBranch: options.baseBranch,
     };
 
     const state = createInitialState(id);

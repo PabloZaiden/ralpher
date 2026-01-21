@@ -83,6 +83,7 @@ export const loopsCrudRoutes = {
           stopPattern: body.stopPattern,
           gitBranchPrefix: body.git?.branchPrefix,
           gitCommitPrefix: body.git?.commitPrefix,
+          baseBranch: body.baseBranch,
         });
 
         // Save the model as last used if provided

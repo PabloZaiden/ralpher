@@ -6,6 +6,16 @@ import { useState, useEffect, type FormEvent } from "react";
 import type { CreateLoopRequest, ModelInfo } from "../types";
 import { Button } from "./common";
 
+/**
+ * Branch information for the branch selector.
+ */
+export interface BranchInfo {
+  /** Branch name */
+  name: string;
+  /** Whether this is the current branch */
+  current: boolean;
+}
+
 export interface CreateLoopFormProps {
   /** Callback when form is submitted */
   onSubmit: (request: CreateLoopRequest) => Promise<void>;
@@ -19,10 +29,16 @@ export interface CreateLoopFormProps {
   modelsLoading?: boolean;
   /** Last used model */
   lastModel?: { providerID: string; modelID: string } | null;
-  /** Callback when directory changes (to reload models) */
+  /** Callback when directory changes (to reload models and branches) */
   onDirectoryChange?: (directory: string) => void;
   /** Warning about .planning directory */
   planningWarning?: string | null;
+  /** Available branches for the directory */
+  branches?: BranchInfo[];
+  /** Whether branches are loading */
+  branchesLoading?: boolean;
+  /** Current branch name */
+  currentBranch?: string;
 }
 
 export function CreateLoopForm({
@@ -34,6 +50,9 @@ export function CreateLoopForm({
   lastModel,
   onDirectoryChange,
   planningWarning,
+  branches = [],
+  branchesLoading = false,
+  currentBranch = "",
 }: CreateLoopFormProps) {
   const [name, setName] = useState("");
   const [directory, setDirectory] = useState("");
@@ -43,6 +62,15 @@ export function CreateLoopForm({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("");
+  const [selectedBranch, setSelectedBranch] = useState<string>("");
+
+  // Reset selected branch when current branch changes (directory changed)
+  useEffect(() => {
+    // Default to current branch when it changes
+    if (currentBranch) {
+      setSelectedBranch(currentBranch);
+    }
+  }, [currentBranch]);
 
   // Set initial model when lastModel or models change
   useEffect(() => {
@@ -115,6 +143,11 @@ export function CreateLoopForm({
         // 0 means unlimited, positive number is the limit
         request.maxConsecutiveErrors = num === 0 ? 0 : num;
       }
+    }
+
+    // Add base branch if different from current
+    if (selectedBranch && selectedBranch !== currentBranch) {
+      request.baseBranch = selectedBranch;
     }
 
     try {
@@ -220,6 +253,59 @@ export function CreateLoopForm({
             <span>{planningWarning}</span>
           </div>
         )}
+      </div>
+
+      {/* Base Branch Selection */}
+      <div>
+        <label
+          htmlFor="branch"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+        >
+          Base Branch
+        </label>
+        <select
+          id="branch"
+          value={selectedBranch}
+          onChange={(e) => setSelectedBranch(e.target.value)}
+          disabled={branchesLoading || branches.length === 0}
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 font-mono text-sm"
+        >
+          {branchesLoading && (
+            <option value="">Loading branches...</option>
+          )}
+          {!branchesLoading && branches.length === 0 && (
+            <option value="">Enter directory to load branches</option>
+          )}
+          {!branchesLoading && branches.length > 0 && (
+            <>
+              {/* Current branch first */}
+              {currentBranch && (
+                <option value={currentBranch}>
+                  {currentBranch} (current)
+                </option>
+              )}
+              {/* Main branch if not current */}
+              {branches.some((b) => b.name === "main" && !b.current) && (
+                <option value="main">main</option>
+              )}
+              {/* Separator if we have special branches */}
+              {(currentBranch || branches.some((b) => b.name === "main")) && branches.length > 1 && (
+                <option disabled>──────────</option>
+              )}
+              {/* Other branches sorted by name */}
+              {branches
+                .filter((b) => !b.current && b.name !== "main")
+                .map((branch) => (
+                  <option key={branch.name} value={branch.name}>
+                    {branch.name}
+                  </option>
+                ))}
+            </>
+          )}
+        </select>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Branch to base the loop on (default: current branch)
+        </p>
       </div>
 
       {/* Model Selection */}

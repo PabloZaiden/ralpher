@@ -4,6 +4,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import type { UncommittedChangesError, ModelInfo } from "../types";
+import type { BranchInfo } from "./CreateLoopForm";
 import { useLoops, useServerSettings } from "../hooks";
 import { Button, Modal } from "./common";
 import { LoopCard } from "./LoopCard";
@@ -81,6 +82,11 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   // Planning directory check state
   const [planningWarning, setPlanningWarning] = useState<string | null>(null);
 
+  // Branch selection state
+  const [branches, setBranches] = useState<BranchInfo[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [currentBranch, setCurrentBranch] = useState("");
+
   // Fetch last model on mount
   useEffect(() => {
     async function fetchLastModel() {
@@ -140,14 +146,42 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     }
   }, []);
 
+  // Fetch branches when directory changes
+  const fetchBranches = useCallback(async (directory: string) => {
+    if (!directory) {
+      setBranches([]);
+      setCurrentBranch("");
+      return;
+    }
+
+    setBranchesLoading(true);
+    try {
+      const response = await fetch(`/api/git/branches?directory=${encodeURIComponent(directory)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setBranches(data.branches ?? []);
+        setCurrentBranch(data.currentBranch ?? "");
+      } else {
+        setBranches([]);
+        setCurrentBranch("");
+      }
+    } catch {
+      setBranches([]);
+      setCurrentBranch("");
+    } finally {
+      setBranchesLoading(false);
+    }
+  }, []);
+
   // Handle directory change from form
   const handleDirectoryChange = useCallback((directory: string) => {
     if (directory !== modelsDirectory) {
       setModelsDirectory(directory);
       fetchModels(directory);
       checkPlanningDir(directory);
+      fetchBranches(directory);
     }
-  }, [modelsDirectory, fetchModels, checkPlanningDir]);
+  }, [modelsDirectory, fetchModels, checkPlanningDir, fetchBranches]);
 
   // Reset model state when modal closes
   const handleCloseCreateModal = useCallback(() => {
@@ -155,6 +189,8 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     setModels([]);
     setModelsDirectory("");
     setPlanningWarning(null);
+    setBranches([]);
+    setCurrentBranch("");
   }, []);
 
   // Handle start with uncommitted changes handling
@@ -431,6 +467,9 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           lastModel={lastModel}
           onDirectoryChange={handleDirectoryChange}
           planningWarning={planningWarning}
+          branches={branches}
+          branchesLoading={branchesLoading}
+          currentBranch={currentBranch}
         />
       </Modal>
 
