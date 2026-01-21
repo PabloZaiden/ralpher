@@ -25,6 +25,19 @@ When working on tasks, follow this general workflow to ensure clarity and goal a
 
 Ralpher is a full-stack Bun + React application for controlling and managing Ralph Loops in opencode. It uses Bun's native bundler and server, React 19 for the frontend, and Tailwind CSS v4 for styling.
 
+### What is a Ralph Loop?
+
+A Ralph Loop is an autonomous AI development pattern that uses an external loop to repeatedly feed prompts to an AI agent. Each iteration starts with a fresh context window, relying on `.planning/` documents for state persistence. The loop terminates when the AI outputs `<promise>COMPLETE</promise>`.
+
+### Key Features
+
+- REST API for loop management (CRUD, control, events)
+- Real-time SSE streaming for log updates
+- Git integration (branch per loop, commit per iteration, merge on accept)
+- Web dashboard for monitoring and control
+- Model selection from available providers
+- Pending prompt feature (modify next iteration while running)
+
 ## Technology Stack
 
 | Category | Technology |
@@ -33,8 +46,62 @@ Ralpher is a full-stack Bun + React application for controlling and managing Ral
 | Language | TypeScript (strict mode) |
 | Frontend | React 19 |
 | Styling | Tailwind CSS v4 |
+| AI Integration | @opencode-ai/sdk |
 | Module System | ES Modules |
 
+## Project Structure
+
+```
+ralpher/
+├── src/
+│   ├── index.ts              # Server entry point
+│   ├── api/                   # REST API endpoints
+│   │   ├── index.ts           # Route aggregation
+│   │   ├── loops.ts           # Loop CRUD and control
+│   │   ├── events.ts          # SSE streaming
+│   │   ├── models.ts          # Model listing and preferences
+│   │   └── health.ts          # Health check
+│   ├── core/                  # Business logic
+│   │   ├── loop-engine.ts     # Loop execution engine
+│   │   ├── loop-manager.ts    # Loop lifecycle management
+│   │   ├── git-service.ts     # Git operations
+│   │   └── event-emitter.ts   # Event pub/sub + SSE
+│   ├── backends/              # AI backend abstraction
+│   │   ├── types.ts           # AgentBackend interface
+│   │   ├── registry.ts        # Backend registry
+│   │   └── opencode/          # OpenCode SDK integration
+│   ├── persistence/           # Data storage
+│   │   ├── paths.ts           # Path configuration
+│   │   ├── loops.ts           # Loop storage
+│   │   ├── sessions.ts        # Session mappings
+│   │   └── preferences.ts     # User preferences
+│   ├── types/                 # TypeScript types
+│   │   ├── loop.ts            # Loop types
+│   │   ├── events.ts          # Event types
+│   │   └── api.ts             # API request/response types
+│   ├── components/            # React components
+│   │   ├── Dashboard.tsx      # Loop grid view
+│   │   ├── LoopDetails.tsx    # Detail view with tabs
+│   │   ├── LogViewer.tsx      # Real-time log display
+│   │   ├── CreateLoopForm.tsx # Loop creation form
+│   │   └── common/            # Shared UI components
+│   └── hooks/                 # React hooks
+│       ├── useSSE.ts          # SSE connection
+│       ├── useLoops.ts        # Loops state management
+│       └── useLoop.ts         # Single loop management
+├── tests/                     # Test files
+│   ├── setup.ts               # Test utilities
+│   ├── mocks/                 # Mock implementations
+│   ├── unit/                  # Unit tests
+│   ├── api/                   # API integration tests
+│   └── e2e/                   # End-to-end tests
+├── data/                      # Runtime data (gitignored)
+├── docs/                      # Documentation
+│   └── API.md                 # API reference
+└── .planning/                 # Planning documents
+    ├── plan.md                # Implementation plan
+    └── status.md              # Implementation status
+```
 
 ## Build, Lint, and Test Commands
 
@@ -108,6 +175,16 @@ test.only("this specific test", () => {
 bun x tsc --noEmit
 ```
 
+### Verification Checklist
+
+Before considering any task complete, run:
+
+```bash
+bun x tsc --noEmit  # TypeScript - should have 0 errors
+bun run build       # Build - should succeed
+bun run test        # Tests - should all pass
+```
+
 ## Code Style Guidelines
 
 ### Imports
@@ -155,6 +232,7 @@ export default MyComponent;  // Optional
 - Use `as` for type assertions: `formData.get("key") as string`
 - Use `Partial<T>` for optional config objects
 - Non-null assertions (`!`) are acceptable when the value is guaranteed
+- **Use bracket notation for index signatures**: `process.env["VAR"]` not `process.env.VAR`
 
 ### Naming Conventions
 
@@ -233,32 +311,44 @@ export function MyComponent() {
 
 ## API Routes
 
-Define routes in `src/index.ts` using Bun's route-based API:
+Define routes in `src/api/` modules using Bun's route-based API:
 
 ```typescript
-const server = serve({
-  routes: {
-    "/api/endpoint": {
-      async GET(req) {
-        return Response.json({ data: "value" });
-      },
+export const myRoutes = {
+  "/api/endpoint": {
+    async GET(req) {
+      return Response.json({ data: "value" });
     },
-    "/api/endpoint/:param": async req => {
-      return Response.json({ param: req.params.param });
+    async POST(req) {
+      const body = await req.json();
+      return Response.json({ received: body }, { status: 201 });
     },
   },
-});
+  "/api/endpoint/:param": async (req: Request & { params: { param: string } }) => {
+    return Response.json({ param: req.params.param });
+  },
+};
 ```
+
+Routes are aggregated in `src/api/index.ts` and spread into the server.
 
 ## Environment Variables
 
-- Public env vars must use `BUN_PUBLIC_*` prefix
-- `.env` files are gitignored - never commit secrets
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `RALPHER_PORT` | Server port | `3000` |
+| `PORT` | Alternative port variable | `3000` |
+| `RALPHER_DATA_DIR` | Data directory | `./data` |
 
-## Bun specifics
+- Public env vars must use `BUN_PUBLIC_*` prefix for client-side access
+- `.env` files are gitignored - never commit secrets
+- Access env vars with bracket notation: `process.env["VAR_NAME"]`
+
+## Bun Specifics
+
 This is a Bun-only project. Never check if something might not be supported in another environment. You can assume Bun is always available.
 
-Always use Bun features and APIs where possible.
+Always use Bun features and APIs where possible:
 
 - Use `bun <file>` instead of `node <file>` or `ts-node <file>`
 - Use `bun test` instead of `jest` or `vitest`
@@ -266,12 +356,22 @@ Always use Bun features and APIs where possible.
 - Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
 - Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
 - Use `bunx <package> <command>` instead of `npx <package> <command>`
-- Bun automatically loads .env, so don't use dotenv.
+- Bun automatically loads .env, so don't use dotenv
 
 ## APIs
 
 - Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+- Use `Bun.$` for shell commands instead of execa
+
+```typescript
+// File operations
+const file = Bun.file("path/to/file");
+const content = await file.text();
+await Bun.write("path/to/file", content);
+
+// Shell commands
+const result = await Bun.$`git status`.text();
+```
 
 ## Testing
 
@@ -280,7 +380,7 @@ Use `bun run test` to run all the tests.
 
 Always run `bun run test` when you think you are done making changes.
 
-```ts#index.test.ts
+```typescript
 import { test, expect } from "bun:test";
 
 test("hello world", () => {
@@ -288,10 +388,67 @@ test("hello world", () => {
 });
 ```
 
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
+### Test Patterns
 
-## General guidelines
+1. **Unit tests** (`tests/unit/`): Test individual functions and classes
+2. **API tests** (`tests/api/`): Test HTTP endpoints with real requests
+3. **E2E tests** (`tests/e2e/`): Test full workflows
+
+Use the test utilities from `tests/setup.ts`:
+
+```typescript
+import { setupTestContext, teardownTestContext } from "../setup";
+
+let context: Awaited<ReturnType<typeof setupTestContext>>;
+
+beforeEach(async () => {
+  context = await setupTestContext({ initGit: true });
+});
+
+afterEach(async () => {
+  await teardownTestContext(context);
+});
+```
+
+## Git Integration
+
+Git is always enabled for all loops. The system manages:
+
+- **Branch creation**: `ralph/{loop-name}-{timestamp}` on loop start
+- **Commits**: After each iteration with AI-generated messages
+- **Merge**: On accept, merges the branch back to original
+- **Cleanup**: On discard, deletes the working branch
+
+## General Guidelines
 
 - Git operations are allowed. The system manages git branches, commits, and merges for Ralph Loops.
 - Always prefer simplicity, usability and top level type safety over cleverness.
 - Before doing something, check the patterns used in the rest of the codebase.
+- Keep the `.planning/status.md` file updated with progress.
+
+## Common Patterns
+
+### Adding a New API Endpoint
+
+1. Add the route handler in the appropriate `src/api/*.ts` file
+2. Export from `src/api/index.ts`
+3. Add types in `src/types/api.ts` if needed
+4. Add tests in `tests/api/`
+
+### Adding a New Event Type
+
+1. Add the type to `src/types/events.ts`
+2. Emit the event from `src/core/loop-engine.ts`
+3. Handle in `src/hooks/useLoop.ts` if needed for UI
+4. Update `src/components/LogViewer.tsx` if displayed
+
+### Fixing TypeScript Errors
+
+Common fixes:
+
+1. **Unused imports**: Remove or use them
+2. **Unused parameters**: Prefix with `_` (e.g., `_unused`)
+3. **Index signature access**: Use `obj["prop"]` instead of `obj.prop` for `Record<string, unknown>` and `process.env`
+4. **Type-only imports**: Use `import type { X }` for types not used as values
+
+For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
