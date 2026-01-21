@@ -71,6 +71,10 @@ export interface UseLoopResult {
   discard: () => Promise<boolean>;
   /** Purge the loop (permanently delete - only for merged/deleted loops) */
   purge: () => Promise<boolean>;
+  /** Set a pending prompt for the next iteration (only works when loop is running) */
+  setPendingPrompt: (prompt: string) => Promise<boolean>;
+  /** Clear the pending prompt (only works when loop is running) */
+  clearPendingPrompt: () => Promise<boolean>;
   /** Get the git diff */
   getDiff: () => Promise<FileDiff[]>;
   /** Get the plan.md content */
@@ -393,6 +397,47 @@ export function useLoop(loopId: string): UseLoopResult {
     }
   }, [loopId]);
 
+  // Set a pending prompt for the next iteration
+  const setPendingPrompt = useCallback(
+    async (prompt: string): Promise<boolean> => {
+      try {
+        const response = await fetch(`/api/loops/${loopId}/pending-prompt`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt }),
+        });
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.message || "Failed to set pending prompt");
+        }
+        await refresh();
+        return true;
+      } catch (err) {
+        setError(String(err));
+        return false;
+      }
+    },
+    [loopId, refresh]
+  );
+
+  // Clear the pending prompt
+  const clearPendingPrompt = useCallback(async (): Promise<boolean> => {
+    try {
+      const response = await fetch(`/api/loops/${loopId}/pending-prompt`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to clear pending prompt");
+      }
+      await refresh();
+      return true;
+    } catch (err) {
+      setError(String(err));
+      return false;
+    }
+  }, [loopId, refresh]);
+
   // Get the git diff
   const getDiff = useCallback(async (): Promise<FileDiff[]> => {
     try {
@@ -459,6 +504,8 @@ export function useLoop(loopId: string): UseLoopResult {
     accept,
     discard,
     purge,
+    setPendingPrompt,
+    clearPendingPrompt,
     getDiff,
     getPlan,
     getStatusFile,

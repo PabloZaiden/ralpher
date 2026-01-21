@@ -232,6 +232,29 @@ export class LoopEngine {
   }
 
   /**
+   * Set a pending prompt for the next iteration.
+   * This will override config.prompt for the next iteration only.
+   */
+  setPendingPrompt(prompt: string): void {
+    this.updateState({
+      pendingPrompt: prompt,
+    });
+    this.emitLog("info", "Pending prompt set for next iteration", {
+      promptLength: prompt.length,
+    });
+  }
+
+  /**
+   * Clear the pending prompt.
+   */
+  clearPendingPrompt(): void {
+    this.updateState({
+      pendingPrompt: undefined,
+    });
+    this.emitLog("info", "Pending prompt cleared");
+  }
+
+  /**
    * Set up the git branch for this loop.
    */
   private async setupGitBranch(): Promise<void> {
@@ -817,13 +840,29 @@ export class LoopEngine {
   /**
    * Build the prompt for an iteration.
    * Uses a consistent template that instructs the AI to follow the planning docs pattern.
+   * If a pendingPrompt is set, it overrides the config.prompt for this iteration only.
    */
   private buildPrompt(iteration: number): PromptInput {
+    // Use pendingPrompt if set, otherwise use config.prompt
+    const goalPrompt = this.loop.state.pendingPrompt ?? this.config.prompt;
+    
+    // Clear the pending prompt after consumption (it's a one-time override)
+    if (this.loop.state.pendingPrompt) {
+      this.emitLog("info", "Using pending prompt for this iteration", {
+        originalPrompt: this.config.prompt.slice(0, 50) + (this.config.prompt.length > 50 ? "..." : ""),
+        pendingPrompt: goalPrompt.slice(0, 50) + (goalPrompt.length > 50 ? "..." : ""),
+      });
+      // Clear it so next iteration uses config.prompt again
+      this.updateState({
+        pendingPrompt: undefined,
+      });
+    }
+
     const text = `- Read AGENTS.md, read the document in the \`./.planning\` folder, pick up the most important set of tasks to continue with, and make sure you make a plan with coding tasks that includes updating the docs with your progress and what the next steps to work on are, at the end. Don't ask for confirmation and start working on it right away.
 
 - Make sure that the implementations and fixes you make don't contradict the core design principles outlined in AGENTS.md and the planning document.
 
-- Goal: ${this.config.prompt}
+- Goal: ${goalPrompt}
 
 - Add tasks to the plan to achieve the goal.
 

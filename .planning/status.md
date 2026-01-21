@@ -1096,8 +1096,75 @@ The `delay(1000)` call between iterations was blocking. When the async generator
 
 **Verification Results:**
 - `bun x tsc --noEmit` - **PASS** (no errors)
-- `bun test` - **136 tests PASS** (1 new test)
+- `bun test` - **136 tests PASS**
 - `bun run build` - **PASS**
+
+---
+
+### 2026-01-20 - Pending Prompt (Next Iteration Tuning) Feature (IN PROGRESS)
+
+**Goal:** Allow users to modify/tune the prompt that will be used for the NEXT iteration of an ongoing loop, without affecting the current iteration.
+
+**Use Case:**
+- User starts a loop with a prompt like "Implement dark mode"
+- During iteration 1, user realizes they forgot to mention "also update the tests"
+- User can now update the "pending prompt" which will be used starting from iteration 2
+- The current iteration continues with the original prompt
+
+**Design:**
+
+1. **State:**
+   - Add `pendingPrompt?: string` to `LoopState`
+   - When set, the next iteration uses `pendingPrompt` instead of `config.prompt`
+   - After the iteration starts, `pendingPrompt` is cleared (consumed)
+
+2. **API:**
+   - `PUT /api/loops/:id/pending-prompt` - Set the pending prompt for next iteration
+   - `DELETE /api/loops/:id/pending-prompt` - Clear the pending prompt
+   - Both work only when loop is in running/starting states
+
+3. **UI:**
+   - Prompt tab shows both "Original Prompt" and "Pending Prompt (for next iteration)"
+   - When loop is running, show editable textarea for pending prompt
+   - Show indicator when a pending prompt is set
+   - Clear pending prompt button
+
+**Goals Checklist:**
+- [x] `pendingPrompt` field added to `LoopState`
+- [x] API endpoint to set/clear pending prompt
+- [x] LoopEngine uses pendingPrompt when building prompt for iteration
+- [x] pendingPrompt is cleared after being used
+- [x] UI allows editing pending prompt while loop is running
+- [x] UI shows indicator when pending prompt differs from original ("Scheduled" badge)
+- [x] Tests for pending prompt functionality (8 new tests)
+- [x] All verification passes
+
+**Files Modified:**
+- `src/types/loop.ts` - Added `pendingPrompt?: string` to LoopState
+- `src/api/loops.ts` - Added PUT/DELETE `/api/loops/:id/pending-prompt` endpoints
+- `src/core/loop-engine.ts` - Added `setPendingPrompt()`, `clearPendingPrompt()` methods; Updated `buildPrompt()` to use pendingPrompt and clear after use
+- `src/core/loop-manager.ts` - Added `setPendingPrompt()`, `clearPendingPrompt()` methods that delegate to engine
+- `src/hooks/useLoop.ts` - Added `setPendingPrompt()`, `clearPendingPrompt()` methods and interface
+- `src/components/LoopDetails.tsx` - Replaced Prompt tab with full editor: shows original prompt (read-only), pending prompt editor when running, "Scheduled" indicator
+
+**Tests Added:**
+- `tests/unit/loop-engine.test.ts`:
+  - "setPendingPrompt updates state"
+  - "buildPrompt uses pendingPrompt and clears it after use"
+- `tests/api/loops-control.test.ts`:
+  - "PUT /api/loops/:id/pending-prompt returns 409 when loop is not running"
+  - "PUT /api/loops/:id/pending-prompt requires prompt in body"
+  - "PUT /api/loops/:id/pending-prompt rejects empty prompt"
+  - "DELETE /api/loops/:id/pending-prompt returns 409 when loop is not running"
+  - "PUT /api/loops/:id/pending-prompt returns 404 for non-existent loop"
+  - "DELETE /api/loops/:id/pending-prompt returns 404 for non-existent loop"
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **147 tests PASS** (8 new tests)
+- `bun run build` - **PASS**
+
+**Status:** COMPLETE
 
 ---
 

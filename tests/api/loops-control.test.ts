@@ -446,4 +446,124 @@ describe("Loops Control API Integration", () => {
       expect(response.status).toBe(404);
     });
   });
+
+  describe("Pending Prompt API", () => {
+    test("PUT /api/loops/:id/pending-prompt returns 409 when loop is not running", async () => {
+      // Create a loop but don't start it
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Pending Prompt Test (Idle)",
+          directory: testWorkDir,
+          prompt: "Test prompt",
+          backend: { type: "mock" },
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Try to set pending prompt on idle loop
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "New prompt" }),
+      });
+
+      expect(response.status).toBe(409);
+      const body = await response.json();
+      expect(body.error).toBe("not_running");
+    });
+
+    test("PUT /api/loops/:id/pending-prompt requires prompt in body", async () => {
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Pending Prompt Test (No Body)",
+          directory: testWorkDir,
+          prompt: "Test prompt",
+          backend: { type: "mock" },
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Try without prompt
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toBe("invalid_body");
+    });
+
+    test("PUT /api/loops/:id/pending-prompt rejects empty prompt", async () => {
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Pending Prompt Test (Empty)",
+          directory: testWorkDir,
+          prompt: "Test prompt",
+          backend: { type: "mock" },
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Try with empty prompt
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "   " }),
+      });
+
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toBe("validation_error");
+    });
+
+    test("DELETE /api/loops/:id/pending-prompt returns 409 when loop is not running", async () => {
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Pending Prompt Delete Test",
+          directory: testWorkDir,
+          prompt: "Test prompt",
+          backend: { type: "mock" },
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
+        method: "DELETE",
+      });
+
+      expect(response.status).toBe(409);
+      const body = await response.json();
+      expect(body.error).toBe("not_running");
+    });
+
+    test("PUT /api/loops/:id/pending-prompt returns 404 for non-existent loop", async () => {
+      const response = await fetch(`${baseUrl}/api/loops/non-existent/pending-prompt`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: "Test" }),
+      });
+      expect(response.status).toBe(404);
+    });
+
+    test("DELETE /api/loops/:id/pending-prompt returns 404 for non-existent loop", async () => {
+      const response = await fetch(`${baseUrl}/api/loops/non-existent/pending-prompt`, {
+        method: "DELETE",
+      });
+      expect(response.status).toBe(404);
+    });
+  });
 });

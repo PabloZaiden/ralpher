@@ -489,4 +489,52 @@ describe("LoopEngine", () => {
     expect(engine.state.recentIterations[0]!.outcome).toBe("continue");
     expect(engine.state.recentIterations[2]!.outcome).toBe("complete");
   });
+
+  test("setPendingPrompt updates state", async () => {
+    const loop = createTestLoop({ maxIterations: 1 });
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      eventEmitter: emitter,
+    });
+
+    // Set pending prompt
+    engine.setPendingPrompt("New modified prompt");
+    expect(engine.state.pendingPrompt).toBe("New modified prompt");
+
+    // Clear pending prompt
+    engine.clearPendingPrompt();
+    expect(engine.state.pendingPrompt).toBeUndefined();
+  });
+
+  test("buildPrompt uses pendingPrompt and clears it after use", async () => {
+    const loop = createTestLoop({ maxIterations: 2 });
+    mockBackend = createMockBackend([
+      "First iteration response",
+      "<promise>COMPLETE</promise>",
+    ]);
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      eventEmitter: emitter,
+    });
+
+    // Set pending prompt before starting
+    engine.setPendingPrompt("Modified goal for iteration 1");
+    expect(engine.state.pendingPrompt).toBe("Modified goal for iteration 1");
+
+    // Start the loop - first iteration should consume the pending prompt
+    await engine.start();
+
+    // After the loop completes, pending prompt should be cleared
+    expect(engine.state.pendingPrompt).toBeUndefined();
+
+    // Check that log events were emitted for pending prompt usage
+    const pendingPromptLogs = emittedEvents.filter(
+      (e) => e.type === "loop.log" && e.message.includes("pending prompt")
+    );
+    expect(pendingPromptLogs.length).toBeGreaterThan(0);
+  });
 });

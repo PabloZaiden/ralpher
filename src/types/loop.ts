@@ -116,6 +116,9 @@ export interface LoopState {
 
   /** Consecutive error tracking for failsafe exit */
   consecutiveErrors?: ConsecutiveErrorTracker;
+
+  /** Pending prompt for the next iteration (if set, overrides config.prompt for next iteration only) */
+  pendingPrompt?: string;
 }
 
 /**

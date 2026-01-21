@@ -139,6 +139,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     accept,
     remove,
     purge,
+    setPendingPrompt,
+    clearPendingPrompt,
     getDiff,
     getPlan,
     getStatusFile,
@@ -170,6 +172,19 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     error: UncommittedChangesError | null;
   }>({ open: false, error: null });
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Pending prompt editing state
+  const [pendingPromptText, setPendingPromptText] = useState("");
+  const [pendingPromptDirty, setPendingPromptDirty] = useState(false);
+  const [pendingPromptSaving, setPendingPromptSaving] = useState(false);
+
+  // Initialize pending prompt text from loop state when it changes
+  useEffect(() => {
+    if (loop?.state.pendingPrompt !== undefined) {
+      setPendingPromptText(loop.state.pendingPrompt ?? "");
+      setPendingPromptDirty(false);
+    }
+  }, [loop?.state.pendingPrompt]);
 
   // Clear update indicator when switching to a tab
   function handleTabChange(tabId: TabId) {
@@ -309,6 +324,35 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     }
     setActionLoading(false);
     setPurgeConfirm(false);
+  }
+
+  // Handle pending prompt save
+  async function handleSavePendingPrompt() {
+    if (!pendingPromptText.trim()) {
+      return;
+    }
+    setPendingPromptSaving(true);
+    const success = await setPendingPrompt(pendingPromptText.trim());
+    if (success) {
+      setPendingPromptDirty(false);
+    }
+    setPendingPromptSaving(false);
+  }
+
+  // Handle pending prompt clear
+  async function handleClearPendingPrompt() {
+    setPendingPromptSaving(true);
+    const success = await clearPendingPrompt();
+    if (success) {
+      setPendingPromptText("");
+      setPendingPromptDirty(false);
+    }
+    setPendingPromptSaving(false);
+  }
+
+  // Check if the loop is running (can set pending prompt)
+  function isLoopRunning(status: LoopStatus): boolean {
+    return ["running", "starting"].includes(status);
   }
 
   if (loading && !loop) {
@@ -554,15 +598,95 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
               )}
 
               {activeTab === "prompt" && (
-                <div className="p-4">
-                  <div className="mb-3">
-                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                <div className="p-4 space-y-6">
+                  {/* Original Task Prompt (read-only) */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                       Original Task Prompt
                     </h3>
+                    <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4">
+                      {config.prompt || "No prompt specified."}
+                    </pre>
                   </div>
-                  <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4">
-                    {config.prompt || "No prompt specified."}
-                  </pre>
+
+                  {/* Pending Prompt Editor (only when running) */}
+                  {isLoopRunning(state.status) && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                          Pending Prompt for Next Iteration
+                          {state.pendingPrompt && (
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                              Scheduled
+                            </span>
+                          )}
+                        </h3>
+                        {pendingPromptDirty && (
+                          <span className="text-xs text-yellow-600 dark:text-yellow-400">
+                            Unsaved changes
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                        Modify the prompt for the next iteration. The current iteration will continue with the original prompt.
+                      </p>
+                      <textarea
+                        value={pendingPromptText}
+                        onChange={(e) => {
+                          setPendingPromptText(e.target.value);
+                          setPendingPromptDirty(true);
+                        }}
+                        placeholder="Enter a modified prompt for the next iteration..."
+                        rows={5}
+                        className="w-full px-3 py-2 text-sm font-mono rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        disabled={pendingPromptSaving}
+                      />
+                      <div className="flex gap-2 mt-2">
+                        <Button
+                          size="sm"
+                          onClick={handleSavePendingPrompt}
+                          disabled={!pendingPromptText.trim() || pendingPromptSaving}
+                        >
+                          {pendingPromptSaving ? "Saving..." : state.pendingPrompt ? "Update Pending Prompt" : "Set Pending Prompt"}
+                        </Button>
+                        {state.pendingPrompt && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={handleClearPendingPrompt}
+                            disabled={pendingPromptSaving}
+                          >
+                            Clear Pending Prompt
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Show existing pending prompt for non-running loops (read-only info) */}
+                  {!isLoopRunning(state.status) && state.pendingPrompt && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+                        Pending Prompt (Unused)
+                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
+                          Not Applied
+                        </span>
+                      </h3>
+                      <pre className="whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4 border border-dashed border-gray-300 dark:border-gray-600">
+                        {state.pendingPrompt}
+                      </pre>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        This pending prompt was set but the loop is no longer running.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Info message when loop is not running and no pending prompt */}
+                  {!isLoopRunning(state.status) && !state.pendingPrompt && (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Pending prompts can only be set while the loop is running. Start the loop to modify the prompt for subsequent iterations.
+                    </p>
+                  )}
                 </div>
               )}
 

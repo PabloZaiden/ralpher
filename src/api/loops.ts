@@ -284,6 +284,55 @@ export const loopsControlRoutes = {
       return successResponse();
     },
   },
+
+  "/api/loops/:id/pending-prompt": {
+    /**
+     * PUT /api/loops/:id/pending-prompt - Set the pending prompt for next iteration
+     */
+    async PUT(req: Request & { params: { id: string } }): Promise<Response> {
+      const body = await parseBody<{ prompt: string }>(req);
+      if (!body || typeof body.prompt !== "string") {
+        return errorResponse("invalid_body", "Request body must contain a 'prompt' string");
+      }
+
+      if (!body.prompt.trim()) {
+        return errorResponse("validation_error", "Prompt cannot be empty");
+      }
+
+      const result = await loopManager.setPendingPrompt(req.params.id, body.prompt);
+
+      if (!result.success) {
+        if (result.error?.includes("not found")) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        if (result.error?.includes("not running")) {
+          return errorResponse("not_running", result.error, 409);
+        }
+        return errorResponse("set_pending_prompt_failed", result.error ?? "Unknown error", 400);
+      }
+
+      return successResponse();
+    },
+
+    /**
+     * DELETE /api/loops/:id/pending-prompt - Clear the pending prompt
+     */
+    async DELETE(req: Request & { params: { id: string } }): Promise<Response> {
+      const result = await loopManager.clearPendingPrompt(req.params.id);
+
+      if (!result.success) {
+        if (result.error?.includes("not found")) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        if (result.error?.includes("not running")) {
+          return errorResponse("not_running", result.error, 409);
+        }
+        return errorResponse("clear_pending_prompt_failed", result.error ?? "Unknown error", 400);
+      }
+
+      return successResponse();
+    },
+  },
 };
 
 /**

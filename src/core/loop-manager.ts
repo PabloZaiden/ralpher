@@ -453,6 +453,47 @@ export class LoopManager {
   }
 
   /**
+   * Set the pending prompt for the next iteration.
+   * This will override config.prompt for the next iteration only.
+   * Only works when the loop is running/starting.
+   */
+  async setPendingPrompt(loopId: string, prompt: string): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      // Check if loop exists but isn't running
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      return { success: false, error: "Loop is not running. Pending prompts can only be set for running loops." };
+    }
+
+    // Update the state with the pending prompt
+    engine.setPendingPrompt(prompt);
+
+    return { success: true };
+  }
+
+  /**
+   * Clear the pending prompt for a loop.
+   * Only works when the loop is running/starting.
+   */
+  async clearPendingPrompt(loopId: string): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      return { success: false, error: "Loop is not running. Pending prompts can only be cleared for running loops." };
+    }
+
+    engine.clearPendingPrompt();
+
+    return { success: true };
+  }
+
+  /**
    * Check if a loop is currently running.
    */
   isRunning(loopId: string): boolean {
