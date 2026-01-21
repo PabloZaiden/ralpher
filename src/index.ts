@@ -12,7 +12,11 @@ import "./backends/register"; // Auto-register backends
 // Ensure data directories exist on startup
 await ensureDataDirectories();
 
+// Port can be configured via PORT or RALPHER_PORT environment variable
+const port = parseInt(process.env["RALPHER_PORT"] ?? process.env["PORT"] ?? "3000", 10);
+
 const server = serve({
+  port,
   routes: {
     // API routes
     ...apiRoutes,

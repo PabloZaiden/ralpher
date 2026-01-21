@@ -51,29 +51,37 @@ bun --hot src/index.ts
 ### Production
 
 ```bash
-# Build for production
+# Build standalone executable
 bun run build
 
-# Start production server
+# Or run directly without building
 bun start
 ```
 
-### Build Options
+The build creates a single standalone executable at `dist/ralpher` that includes the Bun runtime and all dependencies. No installation required on the target machine.
 
-The build script (`build.ts`) accepts CLI flags:
+### Cross-compilation
+
+To build for a different platform, pass the `--target` option:
 
 ```bash
-bun run build.ts --outdir=dist --minify --sourcemap=linked
-bun run build.ts --help  # Show all options
+bun run build --target=linux-x64
+bun run build --target=linux-arm64
+bun run build --target=darwin-x64
+bun run build --target=darwin-arm64
+bun run build --target=windows-x64
 ```
 
 ### Testing
 
-**No test framework is currently configured.** To add tests, use Bun's built-in test runner:
+Tests are configured using Bun's built-in test runner:
 
 ```bash
 # Run all tests
 bun test
+
+# Run all tests (via npm script with timeout)
+bun run test
 
 # Run a single test file
 bun test path/to/file.test.ts

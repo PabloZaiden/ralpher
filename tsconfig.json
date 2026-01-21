@@ -26,9 +26,9 @@
       "@/*": ["./src/*"]
     },
 
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noPropertyAccessFromIndexSignature": true
   },
 
   "exclude": ["dist", "node_modules"]

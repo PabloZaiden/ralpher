@@ -1273,3 +1273,55 @@ Removed the `enabled` field from `GitConfig` interface and all related checks. G
 - `bun run build` - **PASS**
 
 ---
+
+### 2026-01-20 - Replaced Build Script with Standalone Executable (Current Session)
+
+**Issue:**
+The old `build.ts` script only built client-side assets to `dist/`, which was useless because:
+1. Bun's `serve()` with HTML imports already handles client bundling at runtime
+2. The `dist/` folder wasn't used by anything for deployment
+
+**Solution:**
+Replaced with a proper production build script that creates a **standalone executable** using `bun build --compile`.
+
+**Changes Made:**
+
+1. **Removed old build script:**
+   - Deleted `build.ts` (root level)
+   - Deleted `dist/` directory with old client-only assets
+
+2. **Created new build script at `scripts/build.ts`:**
+   - Uses `bun build --compile` to create a standalone executable
+   - Includes the Bun runtime and all dependencies
+   - Supports cross-compilation with `--target` flag (e.g., `linux-x64`, `darwin-arm64`)
+   - Supports custom output name with `--output` flag
+   - Output: `dist/ralpher` (~55 MB standalone executable)
+
+3. **Updated `package.json`:**
+   - Changed `build` script to `bun run scripts/build.ts`
+   - Added `test` script with timeout: `bun test --timeout 15000`
+
+4. **Updated `AGENTS.md`:**
+   - Updated production build documentation
+   - Documented cross-compilation options
+   - Fixed test section to reflect configured test runner
+
+**New Build Usage:**
+```bash
+bun run build                       # Build for current platform
+bun run build --target=linux-x64    # Cross-compile for Linux
+bun run build --output=my-app       # Custom output name
+./dist/ralpher                      # Run the standalone executable
+```
+
+**Files Changed:**
+- Deleted: `build.ts`
+- Created: `scripts/build.ts`
+- Modified: `package.json`, `AGENTS.md`
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **144 tests PASS**
+- `bun run build` - **PASS** (produces 55 MB standalone executable)
+
+---
