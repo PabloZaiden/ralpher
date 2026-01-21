@@ -150,17 +150,16 @@ describe("Loops Control API Integration", () => {
           directory: testWorkDir,
           prompt: "Test prompt",
           backend: { type: "mock" },
-          git: { enabled: false },
         }),
       });
       const createBody = await createResponse.json();
       const loopId = createBody.config.id;
 
-      // Start it
+      // Start it (use commit to handle any leftover uncommitted changes from other tests)
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ handleUncommitted: "commit" }),
       });
 
       expect(response.status).toBe(200);
@@ -178,11 +177,11 @@ describe("Loops Control API Integration", () => {
       expect(response.status).toBe(404);
     });
 
-    test("returns 409 for uncommitted changes when git enabled", async () => {
+    test("returns 409 for uncommitted changes", async () => {
       // Create uncommitted changes
       await writeFile(join(testWorkDir, "uncommitted.txt"), "uncommitted content");
 
-      // Create a loop with git enabled
+      // Create a loop
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -191,7 +190,6 @@ describe("Loops Control API Integration", () => {
           directory: testWorkDir,
           prompt: "Test prompt",
           backend: { type: "mock" },
-          git: { enabled: true },
         }),
       });
       const createBody = await createResponse.json();
@@ -223,7 +221,7 @@ describe("Loops Control API Integration", () => {
           directory: testWorkDir,
           prompt: "Test prompt",
           backend: { type: "mock" },
-          git: { enabled: true },
+          git: { branchPrefix: "ralph/" },
         }),
       });
       const createBody = await createResponse.json();
@@ -270,16 +268,16 @@ describe("Loops Control API Integration", () => {
   });
 
   describe("POST /api/loops/:id/accept", () => {
-    test("returns error for loop with git disabled", async () => {
+    test("returns error for loop that was never started (idle status)", async () => {
+      // Create a loop but don't start it - it will be in idle status
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Accept No Git Loop",
+          name: "Accept Idle Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
           backend: { type: "mock" },
-          git: { enabled: false },
         }),
       });
       const createBody = await createResponse.json();
@@ -290,6 +288,9 @@ describe("Loops Control API Integration", () => {
       });
 
       expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toBe("accept_failed");
+      expect(body.message).toContain("Cannot accept loop in status: idle");
     });
 
     test("returns 404 for non-existent loop", async () => {
@@ -302,16 +303,16 @@ describe("Loops Control API Integration", () => {
   });
 
   describe("POST /api/loops/:id/discard", () => {
-    test("returns error for loop with git disabled", async () => {
+    test("returns error for loop without git branch (not started)", async () => {
+      // Create a loop but don't start it - no git branch created
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Discard No Git Loop",
+          name: "Discard No Branch Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
           backend: { type: "mock" },
-          git: { enabled: false },
         }),
       });
       const createBody = await createResponse.json();
@@ -322,6 +323,9 @@ describe("Loops Control API Integration", () => {
       });
 
       expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toBe("discard_failed");
+      expect(body.message).toContain("No git branch");
     });
 
     test("returns 404 for non-existent loop", async () => {
@@ -339,16 +343,15 @@ describe("Loops Control API Integration", () => {
       expect(response.status).toBe(404);
     });
 
-    test("returns 400 for loop with git disabled", async () => {
+    test("returns 400 for loop without git branch (not started)", async () => {
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Diff No Git Loop",
+          name: "Diff No Git Branch Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
           backend: { type: "mock" },
-          git: { enabled: false },
         }),
       });
       const createBody = await createResponse.json();
@@ -358,7 +361,7 @@ describe("Loops Control API Integration", () => {
 
       expect(response.status).toBe(400);
       const body = await response.json();
-      expect(body.error).toBe("git_disabled");
+      expect(body.error).toBe("no_git_branch");
     });
   });
 

@@ -19,6 +19,7 @@ describe("Full Loop Workflow", () => {
   beforeEach(async () => {
     ctx = await setupTestContext({
       useMockBackend: true,
+      initGit: true,
       mockResponses: [
         "Working on iteration 1...",
         "Working on iteration 2...",
@@ -45,7 +46,7 @@ describe("Full Loop Workflow", () => {
       expect(loop.config.prompt).toBe("Implement a feature");
       expect(loop.config.backend.type).toBe("opencode");
       expect(loop.config.backend.mode).toBe("spawn");
-      expect(loop.config.git.enabled).toBe(true);
+      expect(loop.config.git.branchPrefix).toBe("ralph/");
       expect(loop.state.status).toBe("idle");
       expect(loop.state.currentIteration).toBe(0);
 
@@ -62,14 +63,12 @@ describe("Full Loop Workflow", () => {
         backendHostname: "localhost",
         backendPort: 8080,
         maxIterations: 10,
-        gitEnabled: false,
       });
 
       expect(loop.config.backend.mode).toBe("connect");
       expect(loop.config.backend.hostname).toBe("localhost");
       expect(loop.config.backend.port).toBe(8080);
       expect(loop.config.maxIterations).toBe(10);
-      expect(loop.config.git.enabled).toBe(false);
     });
 
     test("persists loop to disk", async () => {
@@ -92,7 +91,6 @@ describe("Full Loop Workflow", () => {
         name: "Execute Loop",
         directory: ctx.workDir,
         prompt: "Do the work",
-        gitEnabled: false, // Disable git for simpler test
       });
 
       // Start the loop
@@ -134,7 +132,6 @@ describe("Full Loop Workflow", () => {
         directory: ctx.workDir,
         prompt: "Work forever",
         maxIterations: 2,
-        gitEnabled: false,
       });
 
       await ctx.manager.startLoop(loop.config.id);
@@ -160,7 +157,6 @@ describe("Full Loop Workflow", () => {
         name: "Stoppable Loop",
         directory: ctx.workDir,
         prompt: "Do work",
-        gitEnabled: false,
       });
 
       // Start the loop
@@ -187,7 +183,6 @@ describe("Full Loop Workflow", () => {
         name: "Error Loop",
         directory: ctx.workDir,
         prompt: "Cause error",
-        gitEnabled: false,
         // Set maxConsecutiveErrors to 1 so it fails after first error
         maxConsecutiveErrors: 1,
       });
@@ -304,7 +299,6 @@ describe("Full Loop Workflow", () => {
         name: "Track State",
         directory: ctx.workDir,
         prompt: "Track me",
-        gitEnabled: false,
       });
 
       // Before start
@@ -327,7 +321,6 @@ describe("Full Loop Workflow", () => {
         name: "Summary Loop",
         directory: ctx.workDir,
         prompt: "Track iterations",
-        gitEnabled: false,
       });
 
       await ctx.manager.startLoop(loop.config.id);

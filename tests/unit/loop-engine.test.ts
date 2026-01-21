@@ -143,7 +143,7 @@ describe("LoopEngine", () => {
       updatedAt: new Date().toISOString(),
       backend: { type: "opencode", mode: "spawn" },
       stopPattern: "<promise>COMPLETE</promise>$",
-      git: { enabled: false, branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+      git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
       ...overrides,
     };
 
@@ -162,6 +162,14 @@ describe("LoopEngine", () => {
     emittedEvents = [];
     emitter = new SimpleEventEmitter<LoopEvent>();
     emitter.subscribe((event) => emittedEvents.push(event));
+    
+    // Initialize git in the test directory (git is always required)
+    await Bun.$`git init`.cwd(testDir).quiet();
+    await Bun.$`git config user.email "test@test.com"`.cwd(testDir).quiet();
+    await Bun.$`git config user.name "Test User"`.cwd(testDir).quiet();
+    await writeFile(join(testDir, ".gitkeep"), "");
+    await Bun.$`git add .`.cwd(testDir).quiet();
+    await Bun.$`git commit -m "Initial commit"`.cwd(testDir).quiet();
   });
 
   afterEach(async () => {

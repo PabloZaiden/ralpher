@@ -92,7 +92,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Custom task",
           maxIterations: 10,
           stopPattern: "<done>FINISHED</done>$",
-          git: { enabled: false },
+          git: { branchPrefix: "custom/" },
         }),
       });
 
@@ -100,7 +100,7 @@ describe("Loops CRUD API Integration", () => {
       const body = await response.json();
       expect(body.config.maxIterations).toBe(10);
       expect(body.config.stopPattern).toBe("<done>FINISHED</done>$");
-      expect(body.config.git.enabled).toBe(false);
+      expect(body.config.git.branchPrefix).toBe("custom/");
     });
 
     test("returns 400 for invalid JSON", async () => {

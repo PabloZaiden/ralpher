@@ -67,7 +67,7 @@ describe("Persistence", () => {
           updatedAt: new Date().toISOString(),
           backend: { type: "opencode" as const, mode: "spawn" as const },
           stopPattern: "<promise>COMPLETE</promise>$",
-          git: { enabled: true, branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+          git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
         },
         state: {
           id: "test-loop-123",
@@ -111,7 +111,7 @@ describe("Persistence", () => {
           updatedAt: new Date().toISOString(),
           backend: { type: "opencode" as const, mode: "spawn" as const },
           stopPattern: "<promise>COMPLETE</promise>$",
-          git: { enabled: true, branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+          git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
         },
         state: {
           id: "delete-me",
@@ -146,7 +146,7 @@ describe("Persistence", () => {
           updatedAt: "2024-01-01T00:00:00Z",
           backend: { type: "opencode" as const, mode: "spawn" as const },
           stopPattern: "<promise>COMPLETE</promise>$",
-          git: { enabled: true, branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+          git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
         },
         state: {
           id: "loop-1",
@@ -166,7 +166,7 @@ describe("Persistence", () => {
           updatedAt: "2024-01-02T00:00:00Z",
           backend: { type: "opencode" as const, mode: "spawn" as const },
           stopPattern: "<promise>COMPLETE</promise>$",
-          git: { enabled: true, branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+          git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
         },
         state: {
           id: "loop-2",

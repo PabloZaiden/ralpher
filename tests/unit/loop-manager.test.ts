@@ -145,7 +145,7 @@ describe("LoopManager", () => {
       expect(loop.config.prompt).toBe("Do something");
       expect(loop.config.backend.type).toBe("opencode");
       expect(loop.config.backend.mode).toBe("spawn");
-      expect(loop.config.git.enabled).toBe(true);
+      expect(loop.config.git.branchPrefix).toBe("ralph/");
       expect(loop.state.status).toBe("idle");
 
       // Check event was emitted
@@ -162,14 +162,12 @@ describe("LoopManager", () => {
         backendHostname: "localhost",
         backendPort: 8080,
         maxIterations: 10,
-        gitEnabled: false,
       });
 
       expect(loop.config.backend.mode).toBe("connect");
       expect(loop.config.backend.hostname).toBe("localhost");
       expect(loop.config.backend.port).toBe(8080);
       expect(loop.config.maxIterations).toBe(10);
-      expect(loop.config.git.enabled).toBe(false);
     });
   });
 
@@ -301,7 +299,6 @@ describe("LoopManager", () => {
         name: "Not Running",
         directory: testWorkDir,
         prompt: "Test",
-        gitEnabled: false,
       });
 
       expect(manager.isRunning(loop.config.id)).toBe(false);

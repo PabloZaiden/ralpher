@@ -86,7 +86,6 @@ export const loopsCrudRoutes = {
           maxIterations: body.maxIterations,
           maxConsecutiveErrors: body.maxConsecutiveErrors,
           stopPattern: body.stopPattern,
-          gitEnabled: body.git?.enabled,
           gitBranchPrefix: body.git?.branchPrefix,
           gitCommitPrefix: body.git?.commitPrefix,
         });
@@ -349,8 +348,8 @@ export const loopsDataRoutes = {
         return errorResponse("not_found", "Loop not found", 404);
       }
 
-      if (!loop.config.git.enabled || !loop.state.git) {
-        return errorResponse("git_disabled", "Git is not enabled for this loop", 400);
+      if (!loop.state.git) {
+        return errorResponse("no_git_branch", "No git branch was created for this loop", 400);
       }
 
       try {

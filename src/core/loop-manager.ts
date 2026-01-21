@@ -53,8 +53,6 @@ export interface CreateLoopOptions {
   maxConsecutiveErrors?: number;
   /** Custom stop pattern (default: "<promise>COMPLETE</promise>$") */
   stopPattern?: string;
-  /** Enable git integration (default: true) */
-  gitEnabled?: boolean;
   /** Git branch prefix (default: "ralph/") */
   gitBranchPrefix?: string;
   /** Git commit prefix (default: "[Ralph]") */
@@ -122,7 +120,6 @@ export class LoopManager {
       maxConsecutiveErrors: options.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors,
       stopPattern: options.stopPattern ?? DEFAULT_LOOP_CONFIG.stopPattern,
       git: {
-        enabled: options.gitEnabled ?? DEFAULT_LOOP_CONFIG.git.enabled,
         branchPrefix: options.gitBranchPrefix ?? DEFAULT_LOOP_CONFIG.git.branchPrefix,
         commitPrefix: options.gitCommitPrefix ?? DEFAULT_LOOP_CONFIG.git.commitPrefix,
       },
@@ -222,8 +219,8 @@ export class LoopManager {
       return false;
     }
     
-    // If git is enabled and has a working branch, discard it first
-    if (loop.config.git.enabled && loop.state.git?.workingBranch) {
+    // If there's a working branch, discard it first
+    if (loop.state.git?.workingBranch) {
       const discardResult = await this.discardLoop(loopId);
       if (!discardResult.success) {
         // Log but don't fail the delete - user explicitly wants to delete
@@ -261,31 +258,29 @@ export class LoopManager {
       throw new Error("Loop is already running");
     }
 
-    // Check for uncommitted changes if git is enabled
-    if (loop.config.git.enabled) {
-      const hasChanges = await this.git.hasUncommittedChanges(loop.config.directory);
+    // Check for uncommitted changes
+    const hasChanges = await this.git.hasUncommittedChanges(loop.config.directory);
 
-      if (hasChanges) {
-        if (!options?.handleUncommitted) {
-          const changedFiles = await this.git.getChangedFiles(loop.config.directory);
-          const error = new Error("Directory has uncommitted changes") as Error & {
-            code: string;
-            changedFiles: string[];
-          };
-          error.code = "UNCOMMITTED_CHANGES";
-          error.changedFiles = changedFiles;
-          throw error;
-        }
+    if (hasChanges) {
+      if (!options?.handleUncommitted) {
+        const changedFiles = await this.git.getChangedFiles(loop.config.directory);
+        const error = new Error("Directory has uncommitted changes") as Error & {
+          code: string;
+          changedFiles: string[];
+        };
+        error.code = "UNCOMMITTED_CHANGES";
+        error.changedFiles = changedFiles;
+        throw error;
+      }
 
-        // Handle uncommitted changes
-        if (options.handleUncommitted === "commit") {
-          await this.git.commit(
-            loop.config.directory,
-            "[Pre-Ralph] Uncommitted changes"
-          );
-        } else if (options.handleUncommitted === "stash") {
-          await this.git.stash(loop.config.directory);
-        }
+      // Handle uncommitted changes
+      if (options.handleUncommitted === "commit") {
+        await this.git.commit(
+          loop.config.directory,
+          "[Pre-Ralph] Uncommitted changes"
+        );
+      } else if (options.handleUncommitted === "stash") {
+        await this.git.stash(loop.config.directory);
       }
     }
 
@@ -346,9 +341,9 @@ export class LoopManager {
       return { success: false, error: `Cannot accept loop in status: ${loop.state.status}` };
     }
 
-    // Must have git enabled
-    if (!loop.config.git.enabled || !loop.state.git) {
-      return { success: false, error: "Git is not enabled for this loop" };
+    // Must have git state (branch was created)
+    if (!loop.state.git) {
+      return { success: false, error: "No git branch was created for this loop" };
     }
 
     try {
@@ -394,9 +389,9 @@ export class LoopManager {
       return { success: false, error: "Loop not found" };
     }
 
-    // Must have git enabled
-    if (!loop.config.git.enabled || !loop.state.git) {
-      return { success: false, error: "Git is not enabled for this loop" };
+    // Must have git state (branch was created)
+    if (!loop.state.git) {
+      return { success: false, error: "No git branch was created for this loop" };
     }
 
     try {

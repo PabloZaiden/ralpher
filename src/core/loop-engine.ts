@@ -167,13 +167,9 @@ export class LoopEngine {
     });
 
     try {
-      // Set up git branch if enabled
-      if (this.config.git.enabled) {
-        this.emitLog("info", "Setting up git branch...");
-        await this.setupGitBranch();
-      } else {
-        this.emitLog("info", "Git integration disabled, skipping branch setup");
-      }
+      // Set up git branch
+      this.emitLog("info", "Setting up git branch...");
+      await this.setupGitBranch();
 
       // Create backend session
       this.emitLog("info", "Connecting to AI backend...", { 
@@ -781,8 +777,8 @@ export class LoopEngine {
         this.emitLog("info", "Stop pattern not matched - will continue to next iteration");
       }
 
-      // Commit changes if git is enabled
-      if (this.config.git.enabled && outcome !== "error") {
+      // Commit changes after iteration
+      if (outcome !== "error") {
         this.emitLog("info", "Checking for changes to commit...");
         await this.commitIteration(iteration, responseContent);
       }

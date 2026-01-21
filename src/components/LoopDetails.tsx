@@ -478,7 +478,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
             </Card>
 
             {/* Git info card */}
-            {config.git.enabled && state.git && (
+            {state.git && (
               <Card title="Git">
                 <dl className="space-y-3 text-sm">
                   <div>

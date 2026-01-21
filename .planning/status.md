@@ -1235,3 +1235,41 @@ Added persistence for messages and tool calls in the same pattern as logs:
 - `bun run build` - **PASS**
 
 ---
+
+### 2026-01-20 - Removed Git Toggle Option (Current Session)
+
+**Issue Reported:**
+The option to disable git integration was breaking other things. Git should always be enabled.
+
+**Solution:**
+Removed the `enabled` field from `GitConfig` interface and all related checks. Git is now always enabled for all loops.
+
+**Changes Made:**
+
+1. **Source Files Modified:**
+   - `src/types/loop.ts` - Removed `enabled` field from `GitConfig` interface; Removed `enabled: true` from `DEFAULT_LOOP_CONFIG.git`
+   - `src/core/loop-manager.ts` - Removed `gitEnabled?: boolean` from `CreateLoopOptions`; Removed git.enabled checks from `createLoop()`, `deleteLoop()`, `startLoop()`, `acceptLoop()`, `discardLoop()`
+   - `src/core/loop-engine.ts` - Removed `if (this.config.git.enabled)` checks - now always sets up git branch and commits
+   - `src/api/loops.ts` - Removed `gitEnabled: body.git?.enabled` from createLoop call
+   - `src/components/LoopDetails.tsx` - Changed `{config.git.enabled && state.git && (` to `{state.git && (`
+   - `src/components/CreateLoopForm.tsx` - Removed gitEnabled checkbox
+
+2. **Test Files Modified:**
+   - `tests/unit/persistence.test.ts` - Removed `enabled: true` from git config objects (4 places)
+   - `tests/unit/loop-manager.test.ts` - Removed `gitEnabled` option from tests
+   - `tests/unit/loop-engine.test.ts` - Removed `enabled: false` from git config; Added git initialization in `beforeEach()`
+   - `tests/e2e/full-loop.test.ts` - Removed all `gitEnabled: false` options; Added `initGit: true` to test setup
+   - `tests/e2e/git-workflow.test.ts` - Removed all `gitEnabled: true` options; Removed 3 tests for "git disabled" behavior
+   - `tests/api/loops-crud.test.ts` - Updated test to use `git: { branchPrefix: "custom/" }` instead of `git: { enabled: false }`
+   - `tests/api/loops-control.test.ts` - Removed `git: { enabled: true/false }` options; Updated test descriptions from "git disabled" to "idle status"
+
+**Test Count Change:**
+- Before: ~147 tests
+- After: 144 tests (removed 3 tests that tested "git disabled" behavior)
+
+**Verification Results:**
+- `bun x tsc --noEmit` - **PASS** (no errors)
+- `bun test` - **144 tests PASS**
+- `bun run build` - **PASS**
+
+---

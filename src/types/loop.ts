@@ -66,10 +66,9 @@ export interface ModelConfig {
 
 /**
  * Git integration configuration.
+ * Git is always enabled for loops.
  */
 export interface GitConfig {
-  /** Whether git integration is enabled. Default: true */
-  enabled: boolean;
   /** Branch name prefix. Default: "ralph/" */
   branchPrefix: string;
   /** Commit message prefix. Default: "[Ralph]" */
@@ -99,7 +98,7 @@ export interface LoopState {
   /** Error tracking */
   error?: LoopError;
 
-  /** Git state (when git.enabled) */
+  /** Git state */
   git?: GitState;
 
   /** Iteration history (last N for display) */
@@ -280,7 +279,6 @@ export const DEFAULT_LOOP_CONFIG = {
   stopPattern: "<promise>COMPLETE</promise>$",
   maxConsecutiveErrors: 10,
   git: {
-    enabled: true,
     branchPrefix: "ralph/",
     commitPrefix: "[Ralph]",
   },

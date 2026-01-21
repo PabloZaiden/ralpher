@@ -40,7 +40,6 @@ describe("Git Workflow", () => {
         name: "Git Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
-        gitEnabled: true,
       });
 
       // Get original branch
@@ -69,7 +68,6 @@ describe("Git Workflow", () => {
         name: "Custom Prefix Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
-        gitEnabled: true,
         gitBranchPrefix: "feature/",
       });
 
@@ -85,7 +83,6 @@ describe("Git Workflow", () => {
         name: "Branch ID Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
-        gitEnabled: true,
       });
 
       await ctx.manager.startLoop(loop.config.id);
@@ -114,7 +111,6 @@ describe("Git Workflow", () => {
         name: "Commit Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
-        gitEnabled: true,
       });
 
       // Create a file to track changes
@@ -141,7 +137,6 @@ describe("Git Workflow", () => {
         name: "Custom Commit Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
-        gitEnabled: true,
         gitCommitPrefix: "[CustomPrefix]",
       });
 
@@ -160,7 +155,6 @@ describe("Git Workflow", () => {
         name: "Uncommitted Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
-        gitEnabled: true,
       });
 
       try {
@@ -182,7 +176,6 @@ describe("Git Workflow", () => {
         name: "Handle Uncommitted Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
-        gitEnabled: true,
       });
 
       // Start with handleUncommitted option
@@ -203,7 +196,6 @@ describe("Git Workflow", () => {
         name: "Stash Uncommitted Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
-        gitEnabled: true,
       });
 
       // Start with handleUncommitted option
@@ -222,7 +214,6 @@ describe("Git Workflow", () => {
         name: "Accept Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
-        gitEnabled: true,
       });
 
       const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
@@ -257,30 +248,12 @@ describe("Git Workflow", () => {
         name: "Not Completed Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
-        gitEnabled: true,
       });
 
       const result = await ctx.manager.acceptLoop(loop.config.id);
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Cannot accept loop");
-    });
-
-    test("returns error when accepting loop without git", async () => {
-      const loop = await ctx.manager.createLoop({
-        name: "No Git Loop",
-        directory: ctx.workDir,
-        prompt: "Make changes",
-        gitEnabled: false,
-      });
-
-      await ctx.manager.startLoop(loop.config.id);
-      await waitForEvent(ctx.events, "loop.completed");
-
-      const result = await ctx.manager.acceptLoop(loop.config.id);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("Git is not enabled");
     });
   });
 
@@ -290,7 +263,6 @@ describe("Git Workflow", () => {
         name: "Discard Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
-        gitEnabled: true,
       });
 
       const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
@@ -317,47 +289,6 @@ describe("Git Workflow", () => {
 
       // Verify event was emitted
       expect(countEvents(ctx.events, "loop.discarded")).toBe(1);
-    });
-
-    test("returns error when discarding loop without git", async () => {
-      const loop = await ctx.manager.createLoop({
-        name: "No Git Loop",
-        directory: ctx.workDir,
-        prompt: "Make changes",
-        gitEnabled: false,
-      });
-
-      await ctx.manager.startLoop(loop.config.id);
-      await waitForEvent(ctx.events, "loop.completed");
-
-      const result = await ctx.manager.discardLoop(loop.config.id);
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("Git is not enabled");
-    });
-  });
-
-  describe("Git Disabled", () => {
-    test("does not create branch when git is disabled", async () => {
-      const loop = await ctx.manager.createLoop({
-        name: "No Git Loop",
-        directory: ctx.workDir,
-        prompt: "Make changes",
-        gitEnabled: false,
-      });
-
-      const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
-
-      await ctx.manager.startLoop(loop.config.id);
-      await waitForEvent(ctx.events, "loop.completed");
-
-      // Should still be on original branch
-      const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
-      expect(currentBranch).toBe(originalBranch);
-
-      // No git state in loop
-      const finalLoop = await ctx.manager.getLoop(loop.config.id);
-      expect(finalLoop!.state.git).toBeUndefined();
     });
   });
 });
