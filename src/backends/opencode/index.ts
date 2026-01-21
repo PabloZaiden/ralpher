@@ -99,20 +99,31 @@ export class OpenCodeBackend implements AgentBackend {
     const port = config.port ?? 4096;
     const baseUrl = `http://${hostname}:${port}`;
 
-    this.client = createOpencodeClient({
+    // Build client config with optional Basic auth
+    const clientConfig: Parameters<typeof createOpencodeClient>[0] = {
       baseUrl,
       directory: config.directory,
-    });
+    };
+
+    // If password provided, use Basic auth with fixed username "opencode"
+    if (config.password) {
+      const credentials = Buffer.from(`opencode:${config.password}`).toString("base64");
+      clientConfig.headers = {
+        Authorization: `Basic ${credentials}`,
+      };
+    }
+
+    this.client = createOpencodeClient(clientConfig);
 
     // Verify connection by checking health
-    // The SDK doesn't have a global.health() in my reading, so we try to list sessions
-    try {
-      await this.client.session.list({
-        query: { directory: config.directory },
-      });
-    } catch (error) {
+    // The SDK doesn't throw on auth failure - it returns { error } instead
+    const result = await this.client.session.list({
+      query: { directory: config.directory },
+    });
+
+    if (result.error) {
       this.client = null;
-      throw new Error(`Failed to connect to opencode at ${baseUrl}: ${String(error)}`);
+      throw new Error(`Failed to connect to opencode at ${baseUrl}: ${JSON.stringify(result.error)}`);
     }
   }
 

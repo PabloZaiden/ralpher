@@ -14,6 +14,8 @@ export interface BackendConnectionConfig {
   hostname?: string;
   /** Port for connect mode */
   port?: number;
+  /** Password for connect mode (optional) */
+  password?: string;
   /** Working directory for the backend */
   directory: string;
 }

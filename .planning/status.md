@@ -1,6 +1,101 @@
 # Ralpher Implementation Status
 
-## Latest Feature: Unified Loop Actions - COMPLETE
+## Latest Feature: Password Support for OpenCode Server - COMPLETE
+
+### Summary
+
+Added optional password/authentication token support for connecting to remote OpenCode servers. Users can now enter a password when in "connect" mode to authenticate with protected servers.
+
+### Goals
+- [x] Add `password` field to `ServerSettings` type
+- [x] Add `password` field to `BackendConnectionConfig` type
+- [x] Update `BackendManager` to pass password in connection configs
+- [x] Update OpenCode backend to use `auth` option for Bearer token
+- [x] Add password input field in `ServerSettingsModal`
+- [x] All tests pass (144 tests)
+
+### Files Modified
+| File | Changes |
+|------|---------|
+| `src/types/settings.ts` | Added `password?: string` to `ServerSettings` |
+| `src/backends/types.ts` | Added `password?: string` to `BackendConnectionConfig` |
+| `src/core/backend-manager.ts` | Pass `password` in connection config for `connect()` and `testConnection()` |
+| `src/backends/opencode/index.ts` | Use `auth: config.password` when creating client |
+| `src/components/ServerSettingsModal.tsx` | Added password state, handlers, and input field |
+
+### Notes
+- Password is stored in plain text in `preferences.json` (user requested this)
+- Password field only shown in "connect" mode
+- Uses OpenCode SDK's `auth` option which sends Bearer token in Authorization header
+
+### Verification
+- [x] `bun x tsc --noEmit` - TypeScript passes
+- [x] `bun run build` - Build succeeds
+- [x] `bun run test` - All 144 tests pass
+
+---
+
+## Previous Feature: Base Branch Selection - COMPLETE
+
+### Summary
+
+Added ability to select which branch to base a new loop on when creating a loop.
+
+### Goals
+- [x] Add `GET /api/git/branches` endpoint
+- [x] Add `getLocalBranches()` to GitService
+- [x] Add `baseBranch` to loop types and create options
+- [x] Update LoopEngine to checkout base branch before creating working branch
+- [x] Add branch selector dropdown to CreateLoopForm
+- [x] Current branch shown first, main differentiated, others sorted alphabetically
+
+### Files Created
+| File | Purpose |
+|------|---------|
+| `src/api/git.ts` | Git API endpoint for fetching branches |
+
+### Files Modified
+| File | Changes |
+|------|---------|
+| `src/core/git-service.ts` | Added `getLocalBranches()` method |
+| `src/api/index.ts` | Added git routes |
+| `src/types/api.ts` | Added `baseBranch?: string` to `CreateLoopRequest` |
+| `src/types/loop.ts` | Added `baseBranch?: string` to `LoopConfig` |
+| `src/core/loop-manager.ts` | Added `baseBranch` to `CreateLoopOptions` |
+| `src/api/loops.ts` | Passed `baseBranch` through to loop creation |
+| `src/core/loop-engine.ts` | `setupGitBranch()` checks out base branch first if specified |
+| `src/components/CreateLoopForm.tsx` | Added branch selector dropdown |
+| `src/components/Dashboard.tsx` | Added branch fetching and passing to form |
+
+---
+
+## Previous Feature: Push Loop Returns to Original Branch - COMPLETE
+
+### Summary
+
+Updated `pushLoop()` in LoopManager to checkout the original branch after pushing, so the user isn't left on the working branch.
+
+---
+
+## Previous Feature: Accept Loop Modal Styling - COMPLETE
+
+### Summary
+
+Updated `AcceptLoopModal.tsx` so both explanation boxes have neutral gray styling by default, and highlight with blue styling on button hover. Both action buttons use `variant="secondary"`.
+
+---
+
+## Previous Feature: Default Loop Name and Prompt - COMPLETE
+
+### Summary
+
+Updated `CreateLoopForm.tsx` with default values:
+- Default name: `"Continue working on the plan"`
+- Default prompt: `"Do everything that's pending in the plan"`
+
+---
+
+## Previous Feature: Unified Loop Actions - COMPLETE
 
 ### Summary
 

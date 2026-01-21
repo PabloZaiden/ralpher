@@ -92,6 +92,7 @@ class BackendManager {
       mode: this.settings.mode,
       hostname: this.settings.hostname,
       port: this.settings.port,
+      password: this.settings.password,
       directory,
     };
 
@@ -155,6 +156,7 @@ class BackendManager {
       mode: settings.mode,
       hostname: settings.hostname,
       port: settings.port,
+      password: settings.password,
       directory,
     };
 

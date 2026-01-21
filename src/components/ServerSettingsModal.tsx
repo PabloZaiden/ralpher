@@ -43,6 +43,7 @@ export function ServerSettingsModal({
   const [mode, setMode] = useState<"spawn" | "connect">("spawn");
   const [hostname, setHostname] = useState("localhost");
   const [port, setPort] = useState("4096");
+  const [password, setPassword] = useState("");
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
@@ -52,6 +53,7 @@ export function ServerSettingsModal({
       setMode(settings.mode);
       setHostname(settings.hostname ?? "localhost");
       setPort(String(settings.port ?? 4096));
+      setPassword(settings.password ?? "");
       setTestResult(null);
       setIsDirty(false);
     }
@@ -66,6 +68,7 @@ export function ServerSettingsModal({
       ...(mode === "connect" && {
         hostname: hostname.trim(),
         port: parseInt(port, 10) || 4096,
+        password: password.trim() || undefined,
       }),
     };
 
@@ -84,6 +87,7 @@ export function ServerSettingsModal({
       ...(mode === "connect" && {
         hostname: hostname.trim(),
         port: parseInt(port, 10) || 4096,
+        password: password.trim() || undefined,
       }),
     };
 
@@ -106,6 +110,12 @@ export function ServerSettingsModal({
 
   function handlePortChange(value: string) {
     setPort(value);
+    setTestResult(null);
+    setIsDirty(true);
+  }
+
+  function handlePasswordChange(value: string) {
+    setPassword(value);
     setTestResult(null);
     setIsDirty(true);
   }
@@ -254,6 +264,27 @@ export function ServerSettingsModal({
                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                 />
               </div>
+            </div>
+
+            {/* Password */}
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                Password (optional)
+              </label>
+              <input
+                type="password"
+                id="password"
+                value={password}
+                onChange={(e) => handlePasswordChange(e.target.value)}
+                placeholder="Leave empty if no authentication required"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Authentication token for the OpenCode server
+              </p>
             </div>
 
             {/* Test Connection Button */}

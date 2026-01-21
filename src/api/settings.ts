@@ -55,6 +55,7 @@ export const settingsRoutes = {
           mode: body.mode,
           hostname: body.hostname,
           port: body.port,
+          password: body.password,
         };
 
         await backendManager.updateSettings(settings);
@@ -112,6 +113,7 @@ export const settingsRoutes = {
             mode: body.mode,
             hostname: body.hostname,
             port: body.port,
+            password: body.password,
           },
           directory
         );

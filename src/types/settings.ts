@@ -21,6 +21,8 @@ export interface ServerSettings {
   hostname?: string;
   /** Port for connect mode */
   port?: number;
+  /** Password for connect mode (optional, stored in plain text) */
+  password?: string;
 }
 
 /**
