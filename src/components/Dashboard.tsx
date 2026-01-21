@@ -174,14 +174,26 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   }, []);
 
   // Handle directory change from form
+  // Skip local filesystem checks (planning dir, branches) when using remote server
   const handleDirectoryChange = useCallback((directory: string) => {
     if (directory !== modelsDirectory) {
       setModelsDirectory(directory);
       fetchModels(directory);
-      checkPlanningDir(directory);
-      fetchBranches(directory);
+      
+      // Only check local filesystem when in spawn mode (local server)
+      // Default to spawn if settings not loaded yet
+      const isRemote = serverSettings?.mode === "connect";
+      if (!isRemote) {
+        checkPlanningDir(directory);
+        fetchBranches(directory);
+      } else {
+        // Clear local-only state when using remote server
+        setPlanningWarning(null);
+        setBranches([]);
+        setCurrentBranch("");
+      }
     }
-  }, [modelsDirectory, fetchModels, checkPlanningDir, fetchBranches]);
+  }, [modelsDirectory, fetchModels, checkPlanningDir, fetchBranches, serverSettings?.mode]);
 
   // Reset model state when modal closes
   const handleCloseCreateModal = useCallback(() => {
@@ -470,6 +482,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           branches={branches}
           branchesLoading={branchesLoading}
           currentBranch={currentBranch}
+          isRemoteServer={serverSettings?.mode === "connect"}
         />
       </Modal>
 

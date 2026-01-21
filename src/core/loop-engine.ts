@@ -332,6 +332,7 @@ export class LoopEngine {
         mode: settings.mode,
         hostname: settings.hostname,
         port: settings.port,
+        password: settings.password,
         directory: this.config.directory,
       });
       this.emitLog("info", "Backend connection established");

@@ -50,6 +50,7 @@ export const modelsRoutes = {
           mode: settings.mode,
           hostname: settings.hostname,
           port: settings.port,
+          password: settings.password,
           directory,
         });
 
