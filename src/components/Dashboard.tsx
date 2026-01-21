@@ -24,6 +24,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     startLoop,
     stopLoop,
     deleteLoop,
+    acceptLoop,
   } = useLoops();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -135,15 +136,14 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     (loop) =>
       loop.state.status === "running" ||
       loop.state.status === "waiting" ||
-      loop.state.status === "starting" ||
-      loop.state.status === "paused"
+      loop.state.status === "starting"
   );
   const completedLoops = loops.filter(
     (loop) => loop.state.status === "completed"
   );
   const otherLoops = loops.filter(
     (loop) =>
-      !["running", "waiting", "starting", "paused", "completed"].includes(
+      !["running", "waiting", "starting", "completed"].includes(
         loop.state.status
       )
   );
@@ -262,7 +262,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   key={loop.config.id}
                   loop={loop}
                   onClick={() => onSelectLoop?.(loop.config.id)}
-                  onStart={() => handleStart(loop.config.id)}
+                  onAccept={() => acceptLoop(loop.config.id)}
                   onDelete={() =>
                     setDeleteConfirm({ open: true, loopId: loop.config.id })
                   }
@@ -286,6 +286,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   onClick={() => onSelectLoop?.(loop.config.id)}
                   onStart={() => handleStart(loop.config.id)}
                   onStop={() => stopLoop(loop.config.id)}
+                  onAccept={() => acceptLoop(loop.config.id)}
                   onDelete={() =>
                     setDeleteConfirm({ open: true, loopId: loop.config.id })
                   }

@@ -269,60 +269,6 @@ describe("Loops Control API Integration", () => {
     });
   });
 
-  describe("POST /api/loops/:id/pause", () => {
-    test("returns 409 for non-running loop", async () => {
-      // Create a loop but don't start it
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Pause Test Loop",
-          directory: testWorkDir,
-          prompt: "Test prompt",
-          backend: { type: "mock" },
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
-
-      // Try to pause
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/pause`, {
-        method: "POST",
-      });
-
-      expect(response.status).toBe(409);
-      const body = await response.json();
-      expect(body.error).toBe("not_running");
-    });
-  });
-
-  describe("POST /api/loops/:id/resume", () => {
-    test("returns 409 for non-running loop", async () => {
-      // Create a loop but don't start it
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Resume Test Loop",
-          directory: testWorkDir,
-          prompt: "Test prompt",
-          backend: { type: "mock" },
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
-
-      // Try to resume
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/resume`, {
-        method: "POST",
-      });
-
-      expect(response.status).toBe(409);
-      const body = await response.json();
-      expect(body.error).toBe("not_running");
-    });
-  });
-
   describe("POST /api/loops/:id/accept", () => {
     test("returns error for loop with git disabled", async () => {
       const createResponse = await fetch(`${baseUrl}/api/loops`, {

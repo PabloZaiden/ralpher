@@ -51,8 +51,6 @@ export type LoopEvent =
   | LoopProgressEvent
   | LoopLogEvent
   | LoopGitCommitEvent
-  | LoopPausedEvent
-  | LoopResumedEvent
   | LoopCompletedEvent
   | LoopStoppedEvent
   | LoopErrorEvent
@@ -146,18 +144,6 @@ export interface LoopGitCommitEvent {
   loopId: string;
   iteration: number;
   commit: GitCommit;
-  timestamp: string;
-}
-
-export interface LoopPausedEvent {
-  type: "loop.paused";
-  loopId: string;
-  timestamp: string;
-}
-
-export interface LoopResumedEvent {
-  type: "loop.resumed";
-  loopId: string;
   timestamp: string;
 }
 

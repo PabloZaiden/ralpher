@@ -1,6 +1,6 @@
 /**
  * Loops API endpoints for Ralph Loops Management System.
- * Handles CRUD operations and loop control (start, stop, pause, resume, accept, discard).
+ * Handles CRUD operations and loop control (start, stop, accept, discard).
  */
 
 import { loopManager } from "../core/loop-manager";
@@ -168,7 +168,7 @@ export const loopsCrudRoutes = {
 };
 
 /**
- * Loops control routes (start, stop, pause, resume, accept, discard).
+ * Loops control routes (start, stop, accept, discard).
  */
 export const loopsControlRoutes = {
   "/api/loops/:id/start": {
@@ -223,42 +223,6 @@ export const loopsControlRoutes = {
           return errorResponse("not_running", "Loop is not running", 409);
         }
         return errorResponse("stop_failed", message, 500);
-      }
-    },
-  },
-
-  "/api/loops/:id/pause": {
-    /**
-     * POST /api/loops/:id/pause - Pause a loop
-     */
-    async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      try {
-        await loopManager.pauseLoop(req.params.id);
-        return successResponse();
-      } catch (error) {
-        const message = String(error);
-        if (message.includes("not running")) {
-          return errorResponse("not_running", "Loop is not running", 409);
-        }
-        return errorResponse("pause_failed", message, 500);
-      }
-    },
-  },
-
-  "/api/loops/:id/resume": {
-    /**
-     * POST /api/loops/:id/resume - Resume a paused loop
-     */
-    async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      try {
-        await loopManager.resumeLoop(req.params.id);
-        return successResponse();
-      } catch (error) {
-        const message = String(error);
-        if (message.includes("not running")) {
-          return errorResponse("not_running", "Loop is not running", 409);
-        }
-        return errorResponse("resume_failed", message, 500);
       }
     },
   },

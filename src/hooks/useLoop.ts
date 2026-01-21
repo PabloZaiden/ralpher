@@ -65,10 +65,6 @@ export interface UseLoopResult {
   start: (request?: StartLoopRequest) => Promise<{ success: boolean; uncommittedError?: UncommittedChangesError }>;
   /** Stop the loop */
   stop: () => Promise<boolean>;
-  /** Pause the loop */
-  pause: () => Promise<boolean>;
-  /** Resume the loop */
-  resume: () => Promise<boolean>;
   /** Accept (merge) the loop's changes */
   accept: () => Promise<{ success: boolean; mergeCommit?: string }>;
   /** Discard the loop's changes */
@@ -169,8 +165,6 @@ export function useLoop(loopId: string): UseLoopResult {
 
       case "loop.started":
       case "loop.stopped":
-      case "loop.paused":
-      case "loop.resumed":
       case "loop.completed":
       case "loop.accepted":
       case "loop.discarded":
@@ -342,42 +336,6 @@ export function useLoop(loopId: string): UseLoopResult {
     }
   }, [loopId, refresh]);
 
-  // Pause the loop
-  const pause = useCallback(async (): Promise<boolean> => {
-    try {
-      const response = await fetch(`/api/loops/${loopId}/pause`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to pause loop");
-      }
-      await refresh();
-      return true;
-    } catch (err) {
-      setError(String(err));
-      return false;
-    }
-  }, [loopId, refresh]);
-
-  // Resume the loop
-  const resume = useCallback(async (): Promise<boolean> => {
-    try {
-      const response = await fetch(`/api/loops/${loopId}/resume`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to resume loop");
-      }
-      await refresh();
-      return true;
-    } catch (err) {
-      setError(String(err));
-      return false;
-    }
-  }, [loopId, refresh]);
-
   // Accept the loop's changes
   const accept = useCallback(async (): Promise<{ success: boolean; mergeCommit?: string }> => {
     try {
@@ -478,8 +436,6 @@ export function useLoop(loopId: string): UseLoopResult {
     remove,
     start,
     stop,
-    pause,
-    resume,
     accept,
     discard,
     getDiff,

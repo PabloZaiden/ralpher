@@ -186,7 +186,6 @@ export type LoopStatus =
   | "starting"       // Initializing backend connection
   | "running"        // Actively executing an iteration
   | "waiting"        // Between iterations
-  | "paused"         // Manually paused
   | "completed"      // Successfully completed (stop pattern matched)
   | "stopped"        // Manually stopped
   | "failed"         // Error occurred

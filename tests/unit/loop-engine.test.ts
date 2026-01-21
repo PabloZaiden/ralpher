@@ -281,9 +281,9 @@ describe("LoopEngine", () => {
     expect(engine.state.status).toBe("stopped");
   });
 
-  test("pause and resume works", async () => {
-    // For this test, we just verify that the engine correctly handles
-    // the pause method when it's in a pauseable state
+  test("completes on second iteration", async () => {
+    // This test verifies that the engine correctly runs multiple iterations
+    // and completes when the stop pattern is detected
     const loop = createTestLoop({ maxIterations: 5 });
 
     // Create a backend that completes on 2nd iteration using async streaming

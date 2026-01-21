@@ -28,10 +28,6 @@ export interface UseLoopsResult {
   startLoop: (id: string, request?: StartLoopRequest) => Promise<{ success: boolean; uncommittedError?: UncommittedChangesError }>;
   /** Stop a loop */
   stopLoop: (id: string) => Promise<boolean>;
-  /** Pause a loop */
-  pauseLoop: (id: string) => Promise<boolean>;
-  /** Resume a loop */
-  resumeLoop: (id: string) => Promise<boolean>;
   /** Accept (merge) a loop's changes */
   acceptLoop: (id: string) => Promise<{ success: boolean; mergeCommit?: string }>;
   /** Discard a loop's changes */
@@ -67,8 +63,6 @@ export function useLoops(): UseLoopsResult {
 
       case "loop.started":
       case "loop.stopped":
-      case "loop.paused":
-      case "loop.resumed":
       case "loop.completed":
       case "loop.accepted":
       case "loop.discarded":
@@ -237,42 +231,6 @@ export function useLoops(): UseLoopsResult {
     }
   }, [refreshLoop]);
 
-  // Pause a loop
-  const pauseLoop = useCallback(async (id: string): Promise<boolean> => {
-    try {
-      const response = await fetch(`/api/loops/${id}/pause`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to pause loop");
-      }
-      await refreshLoop(id);
-      return true;
-    } catch (err) {
-      setError(String(err));
-      return false;
-    }
-  }, [refreshLoop]);
-
-  // Resume a loop
-  const resumeLoop = useCallback(async (id: string): Promise<boolean> => {
-    try {
-      const response = await fetch(`/api/loops/${id}/resume`, {
-        method: "POST",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to resume loop");
-      }
-      await refreshLoop(id);
-      return true;
-    } catch (err) {
-      setError(String(err));
-      return false;
-    }
-  }, [refreshLoop]);
-
   // Accept a loop's changes
   const acceptLoop = useCallback(async (id: string): Promise<{ success: boolean; mergeCommit?: string }> => {
     try {
@@ -334,8 +292,6 @@ export function useLoops(): UseLoopsResult {
     deleteLoop,
     startLoop,
     stopLoop,
-    pauseLoop,
-    resumeLoop,
     acceptLoop,
     discardLoop,
     getLoop,

@@ -73,7 +73,7 @@ export function Modal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Overlay */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -83,13 +83,13 @@ export function Modal({
 
       {/* Modal */}
       <div
-        className={`relative w-full ${sizeClasses[size]} mx-4 rounded-lg bg-white shadow-xl dark:bg-gray-800`}
+        className={`relative w-full ${sizeClasses[size]} rounded-lg bg-white shadow-xl dark:bg-gray-800 max-h-[calc(100vh-2rem)] flex flex-col`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
       >
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+        <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700 flex-shrink-0">
           <div>
             <h2
               id="modal-title"
@@ -126,12 +126,12 @@ export function Modal({
           )}
         </div>
 
-        {/* Content */}
-        <div className="px-6 py-4">{children}</div>
+        {/* Content - scrollable */}
+        <div className="px-6 py-4 overflow-y-auto flex-1">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4 dark:border-gray-700">
+          <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4 dark:border-gray-700 flex-shrink-0">
             {footer}
           </div>
         )}

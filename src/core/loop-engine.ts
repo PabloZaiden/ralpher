@@ -232,44 +232,6 @@ export class LoopEngine {
   }
 
   /**
-   * Pause the loop execution.
-   */
-  pause(): void {
-    if (this.loop.state.status !== "running") {
-      throw new Error(`Cannot pause loop in status: ${this.loop.state.status}`);
-    }
-
-    this.emitLog("info", "Pausing loop execution");
-    this.updateState({ status: "paused" });
-
-    this.emit({
-      type: "loop.paused",
-      loopId: this.config.id,
-      timestamp: createTimestamp(),
-    });
-  }
-
-  /**
-   * Resume a paused loop.
-   */
-  async resume(): Promise<void> {
-    if (this.loop.state.status !== "paused") {
-      throw new Error(`Cannot resume loop in status: ${this.loop.state.status}`);
-    }
-
-    this.emitLog("info", "Resuming loop execution");
-
-    this.emit({
-      type: "loop.resumed",
-      loopId: this.config.id,
-      timestamp: createTimestamp(),
-    });
-
-    // Continue the loop
-    await this.runLoop();
-  }
-
-  /**
    * Set up the git branch for this loop.
    */
   private async setupGitBranch(): Promise<void> {
@@ -386,11 +348,6 @@ export class LoopEngine {
         aborted: this.aborted,
         status: this.loop.state.status,
       });
-
-      if (this.loop.state.status === "paused") {
-        this.emitLog("debug", "Loop is paused, waiting for resume");
-        return; // Will resume later
-      }
 
       const iterationResult = await this.runIteration();
 

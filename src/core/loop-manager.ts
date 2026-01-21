@@ -324,33 +324,6 @@ export class LoopManager {
   }
 
   /**
-   * Pause a running loop.
-   */
-  async pauseLoop(loopId: string): Promise<void> {
-    const engine = this.engines.get(loopId);
-    if (!engine) {
-      throw new Error("Loop is not running");
-    }
-
-    engine.pause();
-
-    // Persist state
-    await updateLoopState(loopId, engine.state);
-  }
-
-  /**
-   * Resume a paused loop.
-   */
-  async resumeLoop(loopId: string): Promise<void> {
-    const engine = this.engines.get(loopId);
-    if (!engine) {
-      throw new Error("Loop is not running");
-    }
-
-    await engine.resume();
-  }
-
-  /**
    * Accept a completed loop (merge git branch).
    */
   async acceptLoop(loopId: string): Promise<AcceptLoopResult> {

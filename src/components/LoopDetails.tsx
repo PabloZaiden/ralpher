@@ -46,8 +46,6 @@ function getStatusLabel(status: LoopStatus): string {
       return "Running";
     case "waiting":
       return "Waiting";
-    case "paused":
-      return "Paused";
     case "completed":
       return "Completed";
     case "stopped":
@@ -102,21 +100,7 @@ function canStart(status: LoopStatus): boolean {
  * Check if loop can be stopped.
  */
 function canStop(status: LoopStatus): boolean {
-  return ["running", "waiting", "starting", "paused"].includes(status);
-}
-
-/**
- * Check if loop can be paused.
- */
-function canPause(status: LoopStatus): boolean {
-  return ["running", "waiting"].includes(status);
-}
-
-/**
- * Check if loop can be resumed.
- */
-function canResume(status: LoopStatus): boolean {
-  return status === "paused";
+  return ["running", "waiting", "starting"].includes(status);
 }
 
 /**
@@ -140,8 +124,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     refresh,
     start,
     stop,
-    pause,
-    resume,
     accept,
     remove,
     getDiff,
@@ -331,7 +313,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   }
 
   const { config, state } = loop;
-  const isActive = ["running", "waiting", "starting", "paused"].includes(state.status);
+  const isActive = ["running", "waiting", "starting"].includes(state.status);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -462,25 +444,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                     Start Loop
                   </Button>
                 )}
-                {canPause(state.status) && (
-                  <Button
-                    className="w-full"
-                    variant="secondary"
-                    onClick={() => pause()}
-                    loading={actionLoading}
-                  >
-                    Pause
-                  </Button>
-                )}
-                {canResume(state.status) && (
-                  <Button
-                    className="w-full"
-                    onClick={() => resume()}
-                    loading={actionLoading}
-                  >
-                    Resume
-                  </Button>
-                )}
                 {canStop(state.status) && (
                   <Button
                     className="w-full"
@@ -504,7 +467,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 <hr className="border-gray-200 dark:border-gray-700" />
                 <Button
                   className="w-full"
-                  variant="ghost"
+                  variant="danger"
                   onClick={() => setDeleteConfirm(true)}
                 >
                   Delete Loop

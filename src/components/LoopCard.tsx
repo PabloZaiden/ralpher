@@ -14,6 +14,8 @@ export interface LoopCardProps {
   onStart?: () => void;
   /** Callback when stop button is clicked */
   onStop?: () => void;
+  /** Callback when accept button is clicked (merge) */
+  onAccept?: () => void;
   /** Callback when delete button is clicked */
   onDelete?: () => void;
 }
@@ -51,8 +53,6 @@ function getStatusLabel(status: LoopStatus): string {
       return "Running";
     case "waiting":
       return "Waiting";
-    case "paused":
-      return "Paused";
     case "completed":
       return "Completed";
     case "stopped":
@@ -68,16 +68,25 @@ function getStatusLabel(status: LoopStatus): string {
 
 /**
  * Check if the loop can be started.
+ * Only show start for idle or stopped loops (not yet run or manually stopped).
+ * Completed/failed/max_iterations loops should use "Accept" or be reviewed first.
  */
 function canStart(status: LoopStatus): boolean {
-  return status === "idle" || status === "stopped" || status === "completed" || status === "failed" || status === "max_iterations";
+  return status === "idle" || status === "stopped";
 }
 
 /**
  * Check if the loop can be stopped.
  */
 function canStop(status: LoopStatus): boolean {
-  return status === "running" || status === "waiting" || status === "starting" || status === "paused";
+  return status === "running" || status === "waiting" || status === "starting";
+}
+
+/**
+ * Check if the loop can be accepted (merged).
+ */
+function canAccept(status: LoopStatus): boolean {
+  return status === "completed" || status === "max_iterations" || status === "stopped" || status === "failed";
 }
 
 export function LoopCard({
@@ -85,6 +94,7 @@ export function LoopCard({
   onClick,
   onStart,
   onStop,
+  onAccept,
   onDelete,
 }: LoopCardProps) {
   const { config, state } = loop;
@@ -177,6 +187,18 @@ export function LoopCard({
             }}
           >
             Stop
+          </Button>
+        )}
+        {canAccept(state.status) && state.git && onAccept && (
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAccept();
+            }}
+          >
+            Accept
           </Button>
         )}
         {onDelete && (
