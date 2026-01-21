@@ -285,12 +285,15 @@ export class LoopManager {
     // Get backend
     const backend = getBackend(loop.config.backend.type);
 
-    // Create engine
+    // Create engine with persistence callback
     const engine = new LoopEngine({
       loop,
       backend,
       gitService: this.git,
       eventEmitter: this.emitter,
+      onPersistState: async (state) => {
+        await updateLoopState(loopId, state);
+      },
     });
 
     this.engines.set(loopId, engine);

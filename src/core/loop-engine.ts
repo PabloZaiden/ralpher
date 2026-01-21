@@ -68,6 +68,8 @@ export interface LoopEngineOptions {
   gitService?: GitService;
   /** Event emitter instance (optional, defaults to global) */
   eventEmitter?: SimpleEventEmitter<LoopEvent>;
+  /** Callback to persist state to disk (optional) */
+  onPersistState?: (state: LoopState) => Promise<void>;
 }
 
 /**
@@ -119,6 +121,7 @@ export class LoopEngine {
   private stopDetector: StopPatternDetector;
   private aborted = false;
   private sessionId: string | null = null;
+  private onPersistState?: (state: LoopState) => Promise<void>;
 
   constructor(options: LoopEngineOptions) {
     this.loop = options.loop;
@@ -126,6 +129,7 @@ export class LoopEngine {
     this.git = options.gitService ?? gitService;
     this.emitter = options.eventEmitter ?? loopEventEmitter;
     this.stopDetector = new StopPatternDetector(options.loop.config.stopPattern);
+    this.onPersistState = options.onPersistState;
   }
 
   /**
@@ -414,6 +418,12 @@ export class LoopEngine {
         const errorMessage = iterationResult.error ?? "Unknown error";
         this.emitLog("error", `Iteration failed with error: ${errorMessage}`);
 
+        // Error iterations don't count towards maxIterations - roll back the counter
+        // This treats the error as a retry, not a completed iteration
+        this.updateState({
+          currentIteration: this.loop.state.currentIteration - 1,
+        });
+
         // Track consecutive identical errors
         const shouldFailsafe = this.trackConsecutiveError(errorMessage);
 
@@ -442,8 +452,8 @@ export class LoopEngine {
           return;
         }
 
-        // Log that we're continuing despite the error
-        this.emitLog("warn", "Error occurred but continuing to next iteration", {
+        // Log that we're continuing despite the error (as a retry)
+        this.emitLog("warn", "Error occurred, retrying iteration", {
           errorMessage,
           consecutiveErrors: this.loop.state.consecutiveErrors?.count ?? 1,
           maxConsecutiveErrors: this.config.maxConsecutiveErrors ?? "unlimited",
@@ -458,7 +468,7 @@ export class LoopEngine {
           timestamp: createTimestamp(),
         });
 
-        // Continue to next iteration instead of stopping
+        // Continue to retry (next iteration will use same iteration number)
       } else {
         // Successful iteration (outcome === "continue") - clear error tracker
         this.updateState({ consecutiveErrors: undefined });
@@ -761,6 +771,8 @@ export class LoopEngine {
               tool: toolCompleteData,
               timestamp,
             });
+            // Persist to disk after each tool completion (tool calls can take a while)
+            await this.triggerPersistence();
             break;
           }
 
@@ -830,6 +842,10 @@ export class LoopEngine {
       outcome,
       timestamp: completedAt,
     });
+
+    // Persist state to disk at the end of each iteration
+    // This ensures messages, tool calls, and logs survive server restart
+    await this.triggerPersistence();
 
     return {
       continue: outcome === "continue",
@@ -1029,6 +1045,20 @@ Output ONLY the commit message, nothing else.`
    */
   private updateState(update: Partial<LoopState>): void {
     Object.assign(this.loop.state, update);
+  }
+
+  /**
+   * Trigger disk persistence of the current state.
+   * This is called at key points to ensure data survives server restart.
+   */
+  private async triggerPersistence(): Promise<void> {
+    if (this.onPersistState) {
+      try {
+        await this.onPersistState(this.loop.state);
+      } catch (error) {
+        console.error(`Failed to persist loop state: ${String(error)}`);
+      }
+    }
   }
 
   /**

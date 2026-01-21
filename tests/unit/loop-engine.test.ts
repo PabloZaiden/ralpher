@@ -346,9 +346,10 @@ describe("LoopEngine", () => {
     expect(errorEvents.length).toBe(1);
   });
 
-  test("continues to next iteration after error event from backend", async () => {
+  test("continues to next iteration after error event from backend (error doesn't count towards max iterations)", async () => {
     // This test validates that when the backend emits an error event mid-stream,
     // the engine correctly continues to the next iteration instead of stopping.
+    // Also validates that error iterations don't count towards maxIterations.
     const loop = createTestLoop({ maxIterations: 3, maxConsecutiveErrors: 3 });
 
     let iterationCount = 0;
@@ -391,11 +392,14 @@ describe("LoopEngine", () => {
 
     await Promise.race([engine.start(), timeoutPromise]);
 
-    // Should have completed successfully after 2 iterations
+    // Should have completed successfully
     expect(engine.state.status).toBe("completed");
-    expect(engine.state.currentIteration).toBe(2);
+    
+    // Error iteration doesn't count - only the successful one counts
+    // So currentIteration should be 1, not 2
+    expect(engine.state.currentIteration).toBe(1);
 
-    // Check iteration summaries
+    // Check iteration summaries - still have 2 attempts recorded
     expect(engine.state.recentIterations.length).toBe(2);
     expect(engine.state.recentIterations[0]!.outcome).toBe("error");
     expect(engine.state.recentIterations[1]!.outcome).toBe("complete");
@@ -408,6 +412,61 @@ describe("LoopEngine", () => {
     const iterationStartEvents = emittedEvents.filter((e) => e.type === "loop.iteration.start");
     expect(iterationStartEvents.length).toBe(2);
   }, 10000); // 10 second timeout for the test itself
+
+  test("multiple errors don't count towards maxIterations limit", async () => {
+    // If maxIterations is 2, and we have 3 errors followed by 2 successes,
+    // we should hit maxIterations after 2 successful iterations, not fail early.
+    const loop = createTestLoop({ maxIterations: 2, maxConsecutiveErrors: 10 });
+
+    let attemptCount = 0;
+
+    const baseMock = createMockBackend([]);
+    mockBackend = {
+      ...baseMock,
+      async sendPromptAsync(): Promise<void> {
+        attemptCount++;
+      },
+      async *subscribeToEvents(): AsyncIterable<AgentEvent> {
+        if (attemptCount <= 3) {
+          // First 3 attempts: emit errors
+          yield { type: "message.start", messageId: `msg-${Date.now()}` };
+          yield { type: "error", message: `Error attempt ${attemptCount}` };
+        } else {
+          // After that: success (no COMPLETE pattern, so it continues)
+          yield { type: "message.start", messageId: `msg-${Date.now()}` };
+          yield { type: "message.delta", content: "Success!" };
+          yield { type: "message.complete", content: "Success!" };
+        }
+      },
+    };
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      eventEmitter: emitter,
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Test timed out")), 5000);
+    });
+
+    await Promise.race([engine.start(), timeoutPromise]);
+
+    // Should have hit maxIterations after 2 successful iterations
+    expect(engine.state.status).toBe("max_iterations");
+    expect(engine.state.currentIteration).toBe(2);
+
+    // Total attempts should be 5 (3 errors + 2 successes)
+    expect(attemptCount).toBe(5);
+
+    // recentIterations should have all 5 attempts
+    expect(engine.state.recentIterations.length).toBe(5);
+    expect(engine.state.recentIterations[0]!.outcome).toBe("error");
+    expect(engine.state.recentIterations[1]!.outcome).toBe("error");
+    expect(engine.state.recentIterations[2]!.outcome).toBe("error");
+    expect(engine.state.recentIterations[3]!.outcome).toBe("continue");
+    expect(engine.state.recentIterations[4]!.outcome).toBe("continue");
+  }, 10000);
 
   test("records iteration summaries", async () => {
     const loop = createTestLoop({ maxIterations: 3 });
