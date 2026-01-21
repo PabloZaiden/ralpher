@@ -161,6 +161,7 @@ See [docs/API.md](docs/API.md) for complete API documentation.
 | `/api/loops/:id/start` | POST | Start loop execution |
 | `/api/loops/:id/stop` | POST | Stop loop execution |
 | `/api/loops/:id/accept` | POST | Merge git branch |
+| `/api/loops/:id/push` | POST | Push branch to remote |
 | `/api/loops/:id/discard` | POST | Delete git branch |
 | `/api/loops/:id/pending-prompt` | PUT | Set next iteration prompt |
 | `/api/events` | GET | SSE stream for all events |

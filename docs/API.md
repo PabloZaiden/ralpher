@@ -62,10 +62,6 @@ List all loops.
       "prompt": "Implement feature X",
       "createdAt": "2026-01-20T10:00:00.000Z",
       "updatedAt": "2026-01-20T10:00:00.000Z",
-      "backend": {
-        "type": "opencode",
-        "mode": "spawn"
-      },
       "stopPattern": "<promise>COMPLETE</promise>$",
       "git": {
         "branchPrefix": "ralph/",
@@ -93,11 +89,6 @@ Create a new loop.
 | `name` | string | Yes | Human-readable name |
 | `directory` | string | Yes | Absolute path to working directory |
 | `prompt` | string | Yes | Task prompt/PRD |
-| `backend` | object | No | Backend configuration |
-| `backend.type` | string | No | Backend type (default: "opencode") |
-| `backend.mode` | string | No | "spawn" or "connect" (default: "spawn") |
-| `backend.hostname` | string | No | Hostname for connect mode |
-| `backend.port` | number | No | Port for connect mode |
 | `model` | object | No | Model selection |
 | `model.providerID` | string | No | Provider ID (e.g., "anthropic") |
 | `model.modelID` | string | No | Model ID (e.g., "claude-sonnet-4-20250514") |
@@ -107,6 +98,7 @@ Create a new loop.
 | `git` | object | No | Git configuration |
 | `git.branchPrefix` | string | No | Branch prefix (default: "ralph/") |
 | `git.commitPrefix` | string | No | Commit message prefix (default: "[Ralph]") |
+| `baseBranch` | string | No | Base branch to create the loop from (default: current branch) |
 
 **Example Request**
 
@@ -274,6 +266,26 @@ Accept a completed loop and merge its branch.
 |--------|-------|-------------|
 | 404 | `not_found` | Loop not found |
 | 400 | `accept_failed` | Cannot accept (e.g., loop still running) |
+
+#### POST /api/loops/:id/push
+
+Push a completed loop's branch to remote for PR workflow.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "remoteBranch": "ralph/my-feature"
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 400 | `push_failed` | Cannot push (e.g., loop still running or no remote) |
 
 #### POST /api/loops/:id/discard
 
@@ -540,6 +552,130 @@ Check if a directory has a `.planning` folder with files.
 
 ---
 
+### Server Settings
+
+#### GET /api/settings/server
+
+Get current server settings.
+
+**Response**
+
+```json
+{
+  "mode": "spawn",
+  "hostname": null,
+  "port": null,
+  "password": null
+}
+```
+
+#### PUT /api/settings/server
+
+Update server settings.
+
+**Request Body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `mode` | string | Yes | "spawn" (local opencode) or "connect" (remote server) |
+| `hostname` | string | For connect | Hostname for connect mode |
+| `port` | number | No | Port for connect mode |
+| `password` | string | No | Password for Basic auth in connect mode |
+
+**Response**
+
+```json
+{
+  "success": true,
+  "settings": {
+    "mode": "connect",
+    "hostname": "remote.example.com",
+    "port": 8080,
+    "password": "***"
+  }
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `invalid_mode` | mode must be "spawn" or "connect" |
+| 400 | `missing_hostname` | hostname is required for connect mode |
+
+#### GET /api/settings/server/status
+
+Get connection status.
+
+**Response**
+
+```json
+{
+  "connected": true,
+  "mode": "spawn",
+  "serverUrl": "http://localhost:41234"
+}
+```
+
+#### POST /api/settings/server/test
+
+Test connection with provided settings.
+
+**Request Body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `mode` | string | Yes | "spawn" or "connect" |
+| `hostname` | string | For connect | Hostname for connect mode |
+| `port` | number | No | Port for connect mode |
+| `password` | string | No | Password for Basic auth |
+| `directory` | string | No | Directory to test with (defaults to current) |
+
+**Response**
+
+```json
+{
+  "success": true,
+  "message": "Connection successful"
+}
+```
+
+---
+
+### Git
+
+#### GET /api/git/branches
+
+Get all local branches for a directory.
+
+**Query Parameters**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `directory` | Yes | Directory path to check |
+
+**Response**
+
+```json
+{
+  "currentBranch": "main",
+  "branches": [
+    { "name": "main", "current": true },
+    { "name": "feature/auth", "current": false },
+    { "name": "ralph/add-tests", "current": false }
+  ]
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `missing_parameter` | directory query parameter is required |
+| 400 | `not_git_repo` | Directory is not a git repository |
+
+---
+
 ### Events (SSE)
 
 #### GET /api/events
@@ -574,6 +710,7 @@ Each event is a JSON object with a `type` field:
 | `loop.error` | Error occurred |
 | `loop.deleted` | Loop was deleted |
 | `loop.accepted` | Branch was merged |
+| `loop.pushed` | Branch was pushed to remote |
 | `loop.discarded` | Branch was deleted |
 
 **Example Event**
@@ -609,6 +746,7 @@ Same format as `/api/events` but only includes events for the specified loop ID.
 | `failed` | Error occurred |
 | `max_iterations` | Hit iteration limit |
 | `merged` | Changes merged (final state) |
+| `pushed` | Branch pushed to remote (final state) |
 | `deleted` | Marked for deletion (final state) |
 
 ### File Diff Status

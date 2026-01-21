@@ -35,7 +35,7 @@ export interface CreateLoopRequest {
   model?: ModelConfig;
   /** Optional iteration limit */
   maxIterations?: number;
-  /** Maximum consecutive identical errors before failsafe exit (default: 5) */
+  /** Maximum consecutive identical errors before failsafe exit (default: 10) */
   maxConsecutiveErrors?: number;
   /** Regex for completion detection (optional, uses default) */
   stopPattern?: string;
