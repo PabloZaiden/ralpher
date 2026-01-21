@@ -19,7 +19,7 @@ import {
   listLoops,
   updateLoopState,
 } from "../persistence/loops";
-import { getBackend } from "../backends/registry";
+import { backendManager } from "./backend-manager";
 import { GitService, gitService } from "./git-service";
 import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
@@ -34,14 +34,6 @@ export interface CreateLoopOptions {
   directory: string;
   /** The task prompt/PRD */
   prompt: string;
-  /** Backend type (default: "opencode") */
-  backendType?: string;
-  /** Backend mode (default: "spawn") */
-  backendMode?: "spawn" | "connect";
-  /** Backend hostname for connect mode */
-  backendHostname?: string;
-  /** Backend port for connect mode */
-  backendPort?: number;
   /** Model provider ID */
   modelProviderID?: string;
   /** Model ID */
@@ -105,12 +97,6 @@ export class LoopManager {
       prompt: options.prompt,
       createdAt: now,
       updatedAt: now,
-      backend: {
-        type: (options.backendType as "opencode") ?? DEFAULT_LOOP_CONFIG.backend.type,
-        mode: options.backendMode ?? DEFAULT_LOOP_CONFIG.backend.mode,
-        hostname: options.backendHostname,
-        port: options.backendPort,
-      },
       model:
         options.modelProviderID && options.modelID
           ? { providerID: options.modelProviderID, modelID: options.modelID }
@@ -283,8 +269,8 @@ export class LoopManager {
       }
     }
 
-    // Get backend
-    const backend = getBackend(loop.config.backend.type);
+    // Get backend from global manager
+    const backend = backendManager.getBackend();
 
     // Create engine with persistence callback
     const engine = new LoopEngine({

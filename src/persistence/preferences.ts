@@ -1,10 +1,11 @@
 /**
  * User preferences persistence for Ralph Loops Management System.
- * Stores user preferences like last used model selection.
+ * Stores user preferences like last used model selection and server settings.
  */
 
 import { join } from "path";
 import { getDataDir } from "./paths";
+import { DEFAULT_SERVER_SETTINGS, type ServerSettings } from "../types/settings";
 
 /**
  * User preferences structure.
@@ -15,6 +16,8 @@ export interface UserPreferences {
     providerID: string;
     modelID: string;
   };
+  /** Global server settings */
+  serverSettings?: ServerSettings;
 }
 
 /**
@@ -70,5 +73,23 @@ export async function setLastModel(model: {
 }): Promise<void> {
   const prefs = await loadPreferences();
   prefs.lastModel = model;
+  await savePreferences(prefs);
+}
+
+/**
+ * Get the server settings.
+ * Returns default settings if not set.
+ */
+export async function getServerSettings(): Promise<ServerSettings> {
+  const prefs = await loadPreferences();
+  return prefs.serverSettings ?? DEFAULT_SERVER_SETTINGS;
+}
+
+/**
+ * Set the server settings.
+ */
+export async function setServerSettings(settings: ServerSettings): Promise<void> {
+  const prefs = await loadPreferences();
+  prefs.serverSettings = settings;
   await savePreferences(prefs);
 }

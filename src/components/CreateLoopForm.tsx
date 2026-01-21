@@ -40,9 +40,6 @@ export function CreateLoopForm({
   const [prompt, setPrompt] = useState("");
   const [maxIterations, setMaxIterations] = useState<string>("");
   const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>("10");
-  const [backendMode, setBackendMode] = useState<"spawn" | "connect">("spawn");
-  const [hostname, setHostname] = useState("localhost");
-  const [port, setPort] = useState("3000");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("");
@@ -93,14 +90,7 @@ export function CreateLoopForm({
       name: name.trim(),
       directory: directory.trim(),
       prompt: prompt.trim(),
-      backend: {
-        type: "opencode",
-        mode: backendMode,
-        ...(backendMode === "connect" && {
-          hostname: hostname.trim(),
-          port: parseInt(port, 10),
-        }),
-      },
+      // Backend settings are now global (not per-loop)
       // Git is always enabled - no toggle exposed to users
     };
 
@@ -376,77 +366,6 @@ export function CreateLoopForm({
               Failsafe exit after this many identical consecutive errors. 0 = unlimited. (default: 10)
             </p>
           </div>
-
-          {/* Backend mode */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Backend Mode
-            </label>
-            <div className="mt-2 flex gap-4">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="backendMode"
-                  value="spawn"
-                  checked={backendMode === "spawn"}
-                  onChange={() => setBackendMode("spawn")}
-                  className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  Spawn new server
-                </span>
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="backendMode"
-                  value="connect"
-                  checked={backendMode === "connect"}
-                  onChange={() => setBackendMode("connect")}
-                  className="h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700 dark:text-gray-300">
-                  Connect to existing
-                </span>
-              </label>
-            </div>
-          </div>
-
-          {/* Connect mode options */}
-          {backendMode === "connect" && (
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <label
-                  htmlFor="hostname"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Hostname
-                </label>
-                <input
-                  type="text"
-                  id="hostname"
-                  value={hostname}
-                  onChange={(e) => setHostname(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                />
-              </div>
-              <div className="w-24">
-                <label
-                  htmlFor="port"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Port
-                </label>
-                <input
-                  type="number"
-                  id="port"
-                  value={port}
-                  onChange={(e) => setPort(e.target.value)}
-                  className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                />
-              </div>
-            </div>
-          )}
         </div>
       )}
 

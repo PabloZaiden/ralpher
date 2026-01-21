@@ -21,9 +21,6 @@ export interface LoopConfig {
   /** ISO timestamp of last update */
   updatedAt: string;
 
-  /** Backend configuration */
-  backend: BackendConfig;
-
   /** Model configuration (optional - inherits from backend config) */
   model?: ModelConfig;
 
@@ -38,20 +35,6 @@ export interface LoopConfig {
 
   /** Git integration settings */
   git: GitConfig;
-}
-
-/**
- * Backend connection configuration.
- */
-export interface BackendConfig {
-  /** Backend type (extensible for future backends) */
-  type: "opencode";
-  /** Spawn new server or connect to existing */
-  mode: "spawn" | "connect";
-  /** Hostname for connect mode */
-  hostname?: string;
-  /** Port for connect mode */
-  port?: number;
 }
 
 /**
@@ -281,10 +264,6 @@ export const DEFAULT_LOOP_CONFIG = {
   git: {
     branchPrefix: "ralph/",
     commitPrefix: "[Ralph]",
-  },
-  backend: {
-    type: "opencode" as const,
-    mode: "spawn" as const,
   },
 } as const;
 

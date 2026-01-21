@@ -1,0 +1,47 @@
+/**
+ * Server settings types for Ralph Loops Management System.
+ * Defines global server configuration that applies to all loops.
+ */
+
+/**
+ * Server connection mode.
+ * - "spawn": Spawn a local opencode server on demand
+ * - "connect": Connect to an existing remote opencode server
+ */
+export type ServerMode = "spawn" | "connect";
+
+/**
+ * Global server settings.
+ * Persisted in preferences and used for all loop operations.
+ */
+export interface ServerSettings {
+  /** Connection mode */
+  mode: ServerMode;
+  /** Hostname for connect mode */
+  hostname?: string;
+  /** Port for connect mode */
+  port?: number;
+}
+
+/**
+ * Default server settings.
+ * Uses spawn mode (local server) by default.
+ */
+export const DEFAULT_SERVER_SETTINGS: ServerSettings = {
+  mode: "spawn",
+};
+
+/**
+ * Connection status information.
+ * Returned by the status endpoint and used in the UI.
+ */
+export interface ConnectionStatus {
+  /** Whether currently connected to a server */
+  connected: boolean;
+  /** Current mode (spawn or connect) */
+  mode: ServerMode;
+  /** Server URL when connected in connect mode */
+  serverUrl?: string;
+  /** Error message if connection failed */
+  error?: string;
+}

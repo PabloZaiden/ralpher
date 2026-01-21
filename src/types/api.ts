@@ -3,7 +3,7 @@
  * These types define the request and response shapes for the REST API.
  */
 
-import type { BackendConfig, GitConfig, Loop, ModelConfig } from "./loop";
+import type { GitConfig, Loop, ModelConfig } from "./loop";
 
 /**
  * Model information returned by the API.
@@ -31,8 +31,6 @@ export interface CreateLoopRequest {
   directory: string;
   /** The task prompt/PRD */
   prompt: string;
-  /** Backend configuration (optional, uses defaults) */
-  backend?: Partial<BackendConfig>;
   /** Model configuration (optional) */
   model?: ModelConfig;
   /** Optional iteration limit */

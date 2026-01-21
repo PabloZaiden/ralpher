@@ -7,6 +7,7 @@ import { healthRoutes } from "./health";
 import { loopsRoutes } from "./loops";
 import { eventsRoutes } from "./events";
 import { modelsAndPreferencesRoutes } from "./models";
+import { settingsRoutes } from "./settings";
 
 /**
  * All API routes combined.
@@ -17,6 +18,7 @@ export const apiRoutes = {
   ...loopsRoutes,
   ...eventsRoutes,
   ...modelsAndPreferencesRoutes,
+  ...settingsRoutes,
 };
 
 // Re-export individual route modules
@@ -24,3 +26,4 @@ export * from "./health";
 export * from "./loops";
 export * from "./events";
 export * from "./models";
+export * from "./settings";

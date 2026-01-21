@@ -4,10 +4,12 @@
 
 import { useState, useCallback, useEffect } from "react";
 import type { UncommittedChangesError, ModelInfo } from "../types";
-import { useLoops } from "../hooks";
+import { useLoops, useServerSettings } from "../hooks";
 import { Button, ConfirmModal, Modal } from "./common";
 import { LoopCard } from "./LoopCard";
 import { CreateLoopForm } from "./CreateLoopForm";
+import { ConnectionStatusBar } from "./ConnectionStatusBar";
+import { ServerSettingsModal } from "./ServerSettingsModal";
 
 export interface DashboardProps {
   /** Callback when a loop is selected */
@@ -27,6 +29,18 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     acceptLoop,
     purgeLoop,
   } = useLoops();
+
+  // Server settings state
+  const {
+    settings: serverSettings,
+    status: serverStatus,
+    loading: serverLoading,
+    saving: serverSaving,
+    testing: serverTesting,
+    updateSettings: updateServerSettings,
+    testConnection: testServerConnection,
+  } = useServerSettings();
+  const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; loopId: string | null }>({
@@ -215,8 +229,16 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 Ralph Loops
               </h1>
-              {/* SSE Status indicator */}
-              <div className="flex items-center gap-2 text-sm">
+              {/* Server Settings */}
+              <ConnectionStatusBar
+                settings={serverSettings}
+                status={serverStatus}
+                loading={serverLoading}
+                onClick={() => setShowServerSettingsModal(true)}
+              />
+              {/* SSE Status indicator - Ralpher connection */}
+              <div className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md bg-gray-100 dark:bg-gray-800">
+                <span className="text-gray-500 dark:text-gray-400 font-medium">Ralpher:</span>
                 <span
                   className={`h-2 w-2 rounded-full ${
                     sseStatus === "open"
@@ -226,7 +248,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                       : "bg-red-500"
                   }`}
                 />
-                <span className="text-gray-500 dark:text-gray-400">
+                <span className="text-gray-700 dark:text-gray-300">
                   {sseStatus === "open"
                     ? "Connected"
                     : sseStatus === "connecting"
@@ -494,6 +516,18 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           </div>
         )}
       </Modal>
+
+      {/* Server Settings modal */}
+      <ServerSettingsModal
+        isOpen={showServerSettingsModal}
+        onClose={() => setShowServerSettingsModal(false)}
+        settings={serverSettings}
+        status={serverStatus}
+        onSave={updateServerSettings}
+        onTest={testServerConnection}
+        saving={serverSaving}
+        testing={serverTesting}
+      />
     </div>
   );
 }

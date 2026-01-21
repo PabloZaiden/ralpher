@@ -44,8 +44,7 @@ describe("Full Loop Workflow", () => {
       expect(loop.config.name).toBe("Test Loop");
       expect(loop.config.directory).toBe(ctx.workDir);
       expect(loop.config.prompt).toBe("Implement a feature");
-      expect(loop.config.backend.type).toBe("opencode");
-      expect(loop.config.backend.mode).toBe("spawn");
+      // Backend is now global, not per-loop
       expect(loop.config.git.branchPrefix).toBe("ralph/");
       expect(loop.state.status).toBe("idle");
       expect(loop.state.currentIteration).toBe(0);
@@ -59,15 +58,11 @@ describe("Full Loop Workflow", () => {
         name: "Custom Loop",
         directory: ctx.workDir,
         prompt: "Custom task",
-        backendMode: "connect",
-        backendHostname: "localhost",
-        backendPort: 8080,
+        // Backend options removed - now global
         maxIterations: 10,
       });
 
-      expect(loop.config.backend.mode).toBe("connect");
-      expect(loop.config.backend.hostname).toBe("localhost");
-      expect(loop.config.backend.port).toBe(8080);
+      // Backend is now global, not per-loop config
       expect(loop.config.maxIterations).toBe(10);
     });
 

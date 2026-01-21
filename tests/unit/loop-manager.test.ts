@@ -143,8 +143,7 @@ describe("LoopManager", () => {
       expect(loop.config.name).toBe("Test Loop");
       expect(loop.config.directory).toBe(testWorkDir);
       expect(loop.config.prompt).toBe("Do something");
-      expect(loop.config.backend.type).toBe("opencode");
-      expect(loop.config.backend.mode).toBe("spawn");
+      // Backend is now global, not per-loop config
       expect(loop.config.git.branchPrefix).toBe("ralph/");
       expect(loop.state.status).toBe("idle");
 
@@ -158,15 +157,11 @@ describe("LoopManager", () => {
         name: "Custom Loop",
         directory: testWorkDir,
         prompt: "Custom task",
-        backendMode: "connect",
-        backendHostname: "localhost",
-        backendPort: 8080,
+        // Backend options removed - now global
         maxIterations: 10,
       });
 
-      expect(loop.config.backend.mode).toBe("connect");
-      expect(loop.config.backend.hostname).toBe("localhost");
-      expect(loop.config.backend.port).toBe(8080);
+      // Backend is now global, not per-loop config
       expect(loop.config.maxIterations).toBe(10);
     });
   });

@@ -143,7 +143,7 @@ describe("LoopEngine", () => {
       prompt: "Do something",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      backend: { type: "opencode", mode: "spawn" },
+      // Backend is now global, not per-loop config
       stopPattern: "<promise>COMPLETE</promise>$",
       git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
       ...overrides,

@@ -9,6 +9,7 @@ import { SimpleEventEmitter } from "../src/core/event-emitter";
 import { GitService } from "../src/core/git-service";
 import { LoopManager } from "../src/core/loop-manager";
 import { backendRegistry } from "../src/backends/registry";
+import { backendManager } from "../src/core/backend-manager";
 import { ensureDataDirectories } from "../src/persistence/paths";
 import { MockBackend } from "./mocks/mock-backend";
 import type { LoopEvent } from "../src/types/events";
@@ -98,6 +99,8 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
   if (useMockBackend) {
     mockBackend = new MockBackend({ responses: mockResponses });
     backendRegistry.register("opencode", () => mockBackend!);
+    // Also set the mock backend in the global backend manager
+    backendManager.setBackendForTesting(mockBackend);
   }
 
   // Create manager
@@ -126,6 +129,9 @@ export async function teardownTestContext(ctx: TestContext): Promise<void> {
 
   // Clear registry
   await backendRegistry.clear();
+
+  // Reset global backend manager
+  backendManager.resetForTesting();
 
   // Clean up env
   delete process.env["RALPHER_DATA_DIR"];

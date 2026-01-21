@@ -3,6 +3,7 @@
  * Handles model listing and user preferences.
  */
 
+import { backendManager } from "../core/backend-manager";
 import { OpenCodeBackend } from "../backends/opencode";
 import { getLastModel, setLastModel } from "../persistence/preferences";
 import type { ErrorResponse } from "../types/api";
@@ -24,6 +25,10 @@ export const modelsRoutes = {
      * GET /api/models - Get available models
      * Query params:
      *   - directory: working directory (required)
+     * 
+     * Uses the global backend manager settings to fetch models.
+     * For spawn mode: creates a temporary connection
+     * For connect mode: uses the remote server
      */
     async GET(req: Request): Promise<Response> {
       const url = new URL(req.url);
@@ -33,13 +38,18 @@ export const modelsRoutes = {
         return errorResponse("missing_directory", "directory query parameter is required");
       }
 
-      // Create a temporary backend connection to get models
+      const settings = backendManager.getSettings();
+      
+      // Create a temporary backend to get models (don't reuse the global one)
+      // This avoids interfering with any running loops
       const backend = new OpenCodeBackend();
       
       try {
-        // Connect in spawn mode to get models
+        // Connect using global settings
         await backend.connect({
-          mode: "spawn",
+          mode: settings.mode,
+          hostname: settings.hostname,
+          port: settings.port,
           directory,
         });
 

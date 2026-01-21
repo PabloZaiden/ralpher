@@ -7,13 +7,17 @@ import { serve } from "bun";
 import index from "./index.html";
 import { apiRoutes } from "./api";
 import { ensureDataDirectories } from "./persistence/paths";
+import { backendManager } from "./core/backend-manager";
 import "./backends/register"; // Auto-register backends
 
 // Ensure data directories exist on startup
 await ensureDataDirectories();
 
-// Port can be configured via PORT or RALPHER_PORT environment variable
-const port = parseInt(process.env["RALPHER_PORT"] ?? process.env["PORT"] ?? "3000", 10);
+// Initialize the global backend manager (loads settings from preferences)
+await backendManager.initialize();
+
+// Port can be configured via RALPHER_PORT environment variable
+const port = parseInt(process.env["RALPHER_PORT"] ?? "3000", 10);
 
 const server = serve({
   port,

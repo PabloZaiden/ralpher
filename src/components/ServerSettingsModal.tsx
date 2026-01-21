@@ -1,0 +1,334 @@
+/**
+ * ServerSettingsModal component for configuring global server settings.
+ * Allows switching between spawn (local) and connect (remote) modes.
+ */
+
+import { useState, useEffect, type FormEvent } from "react";
+import { Modal, Button, Badge } from "./common";
+import type { ServerSettings, ConnectionStatus } from "../types/settings";
+
+export interface ServerSettingsModalProps {
+  /** Whether the modal is open */
+  isOpen: boolean;
+  /** Callback when modal should close */
+  onClose: () => void;
+  /** Current server settings */
+  settings: ServerSettings | null;
+  /** Current connection status */
+  status: ConnectionStatus | null;
+  /** Callback to save settings */
+  onSave: (settings: ServerSettings) => Promise<boolean>;
+  /** Callback to test connection */
+  onTest: (settings: ServerSettings) => Promise<{ success: boolean; error?: string }>;
+  /** Whether saving is in progress */
+  saving?: boolean;
+  /** Whether testing is in progress */
+  testing?: boolean;
+}
+
+/**
+ * ServerSettingsModal provides UI for configuring server connection settings.
+ */
+export function ServerSettingsModal({
+  isOpen,
+  onClose,
+  settings,
+  status,
+  onSave,
+  onTest,
+  saving = false,
+  testing = false,
+}: ServerSettingsModalProps) {
+  // Form state
+  const [mode, setMode] = useState<"spawn" | "connect">("spawn");
+  const [hostname, setHostname] = useState("localhost");
+  const [port, setPort] = useState("4096");
+  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+
+  // Initialize form from settings when modal opens
+  useEffect(() => {
+    if (isOpen && settings) {
+      setMode(settings.mode);
+      setHostname(settings.hostname ?? "localhost");
+      setPort(String(settings.port ?? 4096));
+      setTestResult(null);
+      setIsDirty(false);
+    }
+  }, [isOpen, settings]);
+
+  // Handle form submission
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+
+    const newSettings: ServerSettings = {
+      mode,
+      ...(mode === "connect" && {
+        hostname: hostname.trim(),
+        port: parseInt(port, 10) || 4096,
+      }),
+    };
+
+    const success = await onSave(newSettings);
+    if (success) {
+      onClose();
+    }
+  }
+
+  // Handle test connection
+  async function handleTest() {
+    setTestResult(null);
+    
+    const testSettings: ServerSettings = {
+      mode,
+      ...(mode === "connect" && {
+        hostname: hostname.trim(),
+        port: parseInt(port, 10) || 4096,
+      }),
+    };
+
+    const result = await onTest(testSettings);
+    setTestResult(result);
+  }
+
+  // Mark as dirty when form values change
+  function handleModeChange(newMode: "spawn" | "connect") {
+    setMode(newMode);
+    setTestResult(null);
+    setIsDirty(true);
+  }
+
+  function handleHostnameChange(value: string) {
+    setHostname(value);
+    setTestResult(null);
+    setIsDirty(true);
+  }
+
+  function handlePortChange(value: string) {
+    setPort(value);
+    setTestResult(null);
+    setIsDirty(true);
+  }
+
+  // Validation
+  const isValid = mode === "spawn" || (hostname.trim().length > 0);
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Server Settings"
+      description="Configure how Ralpher connects to the OpenCode server"
+      size="md"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="server-settings-form"
+            loading={saving}
+            disabled={!isValid || !isDirty}
+          >
+            Save Changes
+          </Button>
+        </>
+      }
+    >
+      <form id="server-settings-form" onSubmit={handleSubmit} className="space-y-6">
+        {/* Connection Status */}
+        <div className="flex items-center gap-2 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
+          <span className="text-sm text-gray-600 dark:text-gray-400">Current Status:</span>
+          {status?.connected ? (
+            <Badge variant="success">Connected</Badge>
+          ) : status?.error ? (
+            <Badge variant="error">Error</Badge>
+          ) : (
+            <Badge variant="warning">Idle</Badge>
+          )}
+          {status?.error && (
+            <span className="text-xs text-red-600 dark:text-red-400 truncate flex-1">
+              {status.error}
+            </span>
+          )}
+        </div>
+
+        {/* Server Mode */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+            Server Mode
+          </label>
+          <div className="space-y-3">
+            {/* Spawn Mode */}
+            <label
+              className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                mode === "spawn"
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                  : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+              }`}
+            >
+              <input
+                type="radio"
+                name="mode"
+                value="spawn"
+                checked={mode === "spawn"}
+                onChange={() => handleModeChange("spawn")}
+                className="mt-1 h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <div>
+                <div className="font-medium text-gray-900 dark:text-gray-100">
+                  Spawn Local Server
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Automatically start a local OpenCode server on demand.
+                  Best for local development.
+                </div>
+              </div>
+            </label>
+
+            {/* Connect Mode */}
+            <label
+              className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
+                mode === "connect"
+                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                  : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+              }`}
+            >
+              <input
+                type="radio"
+                name="mode"
+                value="connect"
+                checked={mode === "connect"}
+                onChange={() => handleModeChange("connect")}
+                className="mt-1 h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <div className="flex-1">
+                <div className="font-medium text-gray-900 dark:text-gray-100">
+                  Connect to Existing Server
+                </div>
+                <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  Connect to a remote OpenCode server.
+                  Use for production or shared environments.
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* Connection Settings (only shown in connect mode) */}
+        {mode === "connect" && (
+          <div className="space-y-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
+            <div className="flex gap-4">
+              <div className="flex-1">
+                <label
+                  htmlFor="hostname"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
+                  Hostname
+                </label>
+                <input
+                  type="text"
+                  id="hostname"
+                  value={hostname}
+                  onChange={(e) => handleHostnameChange(e.target.value)}
+                  placeholder="localhost or remote-server.example.com"
+                  required
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                />
+              </div>
+              <div className="w-28">
+                <label
+                  htmlFor="port"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                >
+                  Port
+                </label>
+                <input
+                  type="number"
+                  id="port"
+                  value={port}
+                  onChange={(e) => handlePortChange(e.target.value)}
+                  min="1"
+                  max="65535"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                />
+              </div>
+            </div>
+
+            {/* Test Connection Button */}
+            <div className="flex items-center gap-4">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={handleTest}
+                loading={testing}
+                disabled={!hostname.trim()}
+              >
+                Test Connection
+              </Button>
+              
+              {/* Test Result */}
+              {testResult && (
+                <div className="flex items-center gap-2">
+                  {testResult.success ? (
+                    <>
+                      <CheckIcon className="w-5 h-5 text-green-500" />
+                      <span className="text-sm text-green-600 dark:text-green-400">
+                        Connection successful
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <XIcon className="w-5 h-5 text-red-500" />
+                      <span className="text-sm text-red-600 dark:text-red-400">
+                        {testResult.error ?? "Connection failed"}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </form>
+    </Modal>
+  );
+}
+
+/**
+ * Simple check icon.
+ */
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+    </svg>
+  );
+}
+
+/**
+ * Simple X icon.
+ */
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
+export default ServerSettingsModal;

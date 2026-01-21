@@ -25,204 +25,7 @@ When working on tasks, follow this general workflow to ensure clarity and goal a
 
 Ralpher is a full-stack Bun + React application for controlling and managing Ralph Loops in opencode. It uses Bun's native bundler and server, React 19 for the frontend, and Tailwind CSS v4 for styling.
 
-### What is a Ralph Loop?
-
-A Ralph Loop is an autonomous AI development pattern that uses an external loop to repeatedly feed prompts to an AI agent. Each iteration starts with a fresh context window, relying on `.planning/` documents for state persistence. The loop terminates when the AI outputs `<promise>COMPLETE</promise>`.
-
-### Key Features
-
-- REST API for loop management (CRUD, control, events)
-- Real-time SSE streaming for log updates
-- Git integration (branch per loop, commit per iteration, merge on accept)
-- Web dashboard for monitoring and control
-- Model selection from available providers
-- Pending prompt feature (modify next iteration while running)
-
-## Technology Stack
-
-| Category | Technology |
-|----------|------------|
-| Runtime | Bun (v1.3.5+) |
-| Language | TypeScript (strict mode) |
-| Frontend | React 19 |
-| Styling | Tailwind CSS v4 |
-| AI Integration | @opencode-ai/sdk |
-| Module System | ES Modules |
-
-## Project Structure
-
-```
-ralpher/
-├── src/
-│   ├── index.ts              # Server entry point
-│   ├── api/                   # REST API endpoints
-│   │   ├── index.ts           # Route aggregation
-│   │   ├── loops.ts           # Loop CRUD and control
-│   │   ├── events.ts          # SSE streaming
-│   │   ├── models.ts          # Model listing and preferences
-│   │   └── health.ts          # Health check
-│   ├── core/                  # Business logic
-│   │   ├── loop-engine.ts     # Loop execution engine
-│   │   ├── loop-manager.ts    # Loop lifecycle management
-│   │   ├── git-service.ts     # Git operations
-│   │   └── event-emitter.ts   # Event pub/sub + SSE
-│   ├── backends/              # AI backend abstraction
-│   │   ├── types.ts           # AgentBackend interface
-│   │   ├── registry.ts        # Backend registry
-│   │   └── opencode/          # OpenCode SDK integration
-│   ├── persistence/           # Data storage
-│   │   ├── paths.ts           # Path configuration
-│   │   ├── loops.ts           # Loop storage
-│   │   ├── sessions.ts        # Session mappings
-│   │   └── preferences.ts     # User preferences
-│   ├── types/                 # TypeScript types
-│   │   ├── loop.ts            # Loop types
-│   │   ├── events.ts          # Event types
-│   │   └── api.ts             # API request/response types
-│   ├── components/            # React components
-│   │   ├── Dashboard.tsx      # Loop grid view
-│   │   ├── LoopDetails.tsx    # Detail view with tabs
-│   │   ├── LogViewer.tsx      # Real-time log display
-│   │   ├── CreateLoopForm.tsx # Loop creation form
-│   │   └── common/            # Shared UI components
-│   └── hooks/                 # React hooks
-│       ├── useSSE.ts          # SSE connection
-│       ├── useLoops.ts        # Loops state management
-│       └── useLoop.ts         # Single loop management
-├── tests/                     # Test files
-│   ├── setup.ts               # Test utilities
-│   ├── mocks/                 # Mock implementations
-│   ├── unit/                  # Unit tests
-│   ├── api/                   # API integration tests
-│   └── e2e/                   # End-to-end tests
-├── data/                      # Runtime data (gitignored)
-├── docs/                      # Documentation
-│   └── API.md                 # API reference
-└── .planning/                 # Planning documents
-    ├── plan.md                # Implementation plan
-    └── status.md              # Implementation status
-```
-
-## Build, Lint, and Test Commands
-
-### Development
-
-```bash
-# Start development server with hot reload
-bun dev
-
-# Alternative: run directly
-bun --hot src/index.ts
-```
-
-### Production
-
-```bash
-# Build standalone executable
-bun run build
-
-# Or run directly without building
-bun start
-```
-
-The build creates a single standalone executable at `dist/ralpher` that includes the Bun runtime and all dependencies. No installation required on the target machine.
-
-### Cross-compilation
-
-To build for a different platform, pass the `--target` option:
-
-```bash
-bun run build --target=linux-x64
-bun run build --target=linux-arm64
-bun run build --target=darwin-x64
-bun run build --target=darwin-arm64
-bun run build --target=windows-x64
-```
-
-### Testing
-
-Tests are configured using Bun's built-in test runner:
-
-```bash
-# Run all tests
-bun test
-
-# Run all tests (via npm script with timeout)
-bun run test
-
-# Run a single test file
-bun test path/to/file.test.ts
-
-# Run tests matching a pattern
-bun test --test-name-pattern "pattern"
-
-# Watch mode
-bun test --watch
-```
-
-Use `.only` to run a specific test:
-
-```typescript
-test.only("this specific test", () => {
-  // ...
-});
-```
-
-### Type Checking
-
-```bash
-# Run TypeScript type checking
-bun x tsc --noEmit
-```
-
-### Verification Checklist
-
-Before considering any task complete, run:
-
-```bash
-bun x tsc --noEmit  # TypeScript - should have 0 errors
-bun run build       # Build - should succeed
-bun run test        # Tests - should all pass
-```
-
-## Code Style Guidelines
-
-### Imports
-
-1. **Order imports by category:**
-   - Third-party packages first (react, bun, fs)
-   - Local modules second
-   - Assets last (CSS, SVG)
-
-2. **Use named imports for packages and components:**
-   ```typescript
-   import { serve } from "bun";
-   import { useRef, type FormEvent } from "react";
-   import { APITester } from "./APITester";
-   ```
-
-3. **Use default imports for assets and plugins:**
-   ```typescript
-   import plugin from "bun-plugin-tailwind";
-   import logo from "./logo.svg";
-   ```
-
-4. **Use `type` modifier for type-only imports:**
-   ```typescript
-   import { useRef, type FormEvent } from "react";
-   ```
-
-5. **Path alias available:** `@/*` maps to `./src/*`
-
-### Exports
-
-- Prefer named exports for components
-- Optionally add default export for main component files
-
-```typescript
-export function MyComponent() { ... }
-export default MyComponent;  // Optional
-```
+For more project information, see the [README.md](README.md).
 
 ### TypeScript
 
@@ -332,18 +135,6 @@ export const myRoutes = {
 
 Routes are aggregated in `src/api/index.ts` and spread into the server.
 
-## Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `RALPHER_PORT` | Server port | `3000` |
-| `PORT` | Alternative port variable | `3000` |
-| `RALPHER_DATA_DIR` | Data directory | `./data` |
-
-- Public env vars must use `BUN_PUBLIC_*` prefix for client-side access
-- `.env` files are gitignored - never commit secrets
-- Access env vars with bracket notation: `process.env["VAR_NAME"]`
-
 ## Bun Specifics
 
 This is a Bun-only project. Never check if something might not be supported in another environment. You can assume Bun is always available.
@@ -357,6 +148,8 @@ Always use Bun features and APIs where possible:
 - Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
 - Use `bunx <package> <command>` instead of `npx <package> <command>`
 - Bun automatically loads .env, so don't use dotenv
+
+For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.
 
 ## APIs
 
@@ -410,15 +203,6 @@ afterEach(async () => {
 });
 ```
 
-## Git Integration
-
-Git is always enabled for all loops. The system manages:
-
-- **Branch creation**: `ralph/{loop-name}-{timestamp}` on loop start
-- **Commits**: After each iteration with AI-generated messages
-- **Merge**: On accept, merges the branch back to original
-- **Cleanup**: On discard, deletes the working branch
-
 ## General Guidelines
 
 - Git operations are allowed. The system manages git branches, commits, and merges for Ralph Loops.
@@ -435,13 +219,6 @@ Git is always enabled for all loops. The system manages:
 3. Add types in `src/types/api.ts` if needed
 4. Add tests in `tests/api/`
 
-### Adding a New Event Type
-
-1. Add the type to `src/types/events.ts`
-2. Emit the event from `src/core/loop-engine.ts`
-3. Handle in `src/hooks/useLoop.ts` if needed for UI
-4. Update `src/components/LogViewer.tsx` if displayed
-
 ### Fixing TypeScript Errors
 
 Common fixes:
@@ -450,5 +227,3 @@ Common fixes:
 2. **Unused parameters**: Prefix with `_` (e.g., `_unused`)
 3. **Index signature access**: Use `obj["prop"]` instead of `obj.prop` for `Record<string, unknown>` and `process.env`
 4. **Type-only imports**: Use `import type { X }` for types not used as values
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.mdx`.

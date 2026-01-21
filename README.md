@@ -83,7 +83,6 @@ bun run build --target=bun-windows-x64
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `RALPHER_PORT` | Server port | `3000` |
-| `PORT` | Alternative port variable | `3000` |
 | `RALPHER_DATA_DIR` | Data directory for persistence | `./data` |
 
 ### Data Directory

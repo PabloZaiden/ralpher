@@ -24,6 +24,7 @@ import type {
   AgentBackend,
   PromptInput,
 } from "../backends/types";
+import { backendManager } from "./backend-manager";
 import { type GitService, gitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 
@@ -169,10 +170,7 @@ export class LoopEngine {
       await this.setupGitBranch();
 
       // Create backend session
-      this.emitLog("info", "Connecting to AI backend...", { 
-        backendType: this.config.backend.type,
-        mode: this.config.backend.mode 
-      });
+      this.emitLog("info", "Connecting to AI backend...");
       await this.setupSession();
 
       // Emit started event
@@ -308,19 +306,23 @@ export class LoopEngine {
 
   /**
    * Set up the backend session.
+   * Uses global backend settings from backendManager.
    */
   private async setupSession(): Promise<void> {
+    // Get global server settings from backendManager
+    const settings = backendManager.getSettings();
+    
     // Connect to backend if not already connected
     if (!this.backend.isConnected()) {
       this.emitLog("info", "Backend not connected, establishing connection...", {
-        mode: this.config.backend.mode,
-        hostname: this.config.backend.hostname,
-        port: this.config.backend.port,
+        mode: settings.mode,
+        hostname: settings.hostname,
+        port: settings.port,
       });
       await this.backend.connect({
-        mode: this.config.backend.mode,
-        hostname: this.config.backend.hostname,
-        port: this.config.backend.port,
+        mode: settings.mode,
+        hostname: settings.hostname,
+        port: settings.port,
         directory: this.config.directory,
       });
       this.emitLog("info", "Backend connection established");
@@ -338,12 +340,15 @@ export class LoopEngine {
     this.sessionId = session.id;
     this.emitLog("info", `AI session created`, { sessionId: session.id });
 
+    // Store session info - use hostname for connect mode, undefined for spawn mode
+    const serverUrl = settings.mode === "connect" && settings.hostname
+      ? `http://${settings.hostname}:${settings.port ?? 4096}`
+      : undefined;
+
     this.updateState({
       session: {
         id: session.id,
-        serverUrl: this.config.backend.hostname
-          ? `http://${this.config.backend.hostname}:${this.config.backend.port ?? 4096}`
-          : undefined,
+        serverUrl,
       },
     });
   }
