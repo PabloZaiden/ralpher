@@ -1,8 +1,11 @@
 /**
  * Git service for Ralph Loops Management System.
- * Provides git operations using Bun.$ shell commands.
+ * Provides git operations using a CommandExecutor abstraction.
  * All operations are isolated to a specific directory.
  */
+
+import type { CommandExecutor } from "./command-executor";
+import { LocalCommandExecutor } from "./local-command-executor";
 
 /**
  * Result of a git command execution.
@@ -44,9 +47,27 @@ export interface CommitInfo {
 
 /**
  * GitService provides git operations for Ralph Loops.
- * Uses Bun.$ for all shell commands.
+ * Uses a CommandExecutor for running git commands, allowing for both
+ * local execution (spawn mode) and remote execution (connect mode).
  */
 export class GitService {
+  private executor: CommandExecutor;
+
+  /**
+   * Create a new GitService.
+   * @param executor - The command executor to use. Defaults to LocalCommandExecutor.
+   */
+  constructor(executor?: CommandExecutor) {
+    this.executor = executor ?? new LocalCommandExecutor();
+  }
+
+  /**
+   * Create a new GitService with the specified executor.
+   * This is useful for creating a service that runs commands remotely.
+   */
+  static withExecutor(executor: CommandExecutor): GitService {
+    return new GitService(executor);
+  }
   /**
    * Check if a directory is a git repository.
    */
@@ -484,34 +505,22 @@ export class GitService {
 
   /**
    * Run a git command in the specified directory.
-   * Uses Bun.$ for shell execution.
+   * Uses the CommandExecutor for shell execution.
    */
   private async runGitCommand(
     directory: string,
     args: string[]
   ): Promise<GitCommandResult> {
-    try {
-      const result = await Bun.$`git -C ${directory} ${args}`.quiet();
-      return {
-        success: true,
-        stdout: result.stdout.toString(),
-        stderr: result.stderr.toString(),
-        exitCode: result.exitCode,
-      };
-    } catch (error) {
-      // Bun.$ throws on non-zero exit codes by default
-      const bunError = error as {
-        stdout?: Buffer;
-        stderr?: Buffer;
-        exitCode?: number;
-      };
-      return {
-        success: false,
-        stdout: bunError.stdout?.toString() ?? "",
-        stderr: bunError.stderr?.toString() ?? String(error),
-        exitCode: bunError.exitCode ?? 1,
-      };
-    }
+    // Use git with -C flag to run in the specified directory
+    const result = await this.executor.exec("git", ["-C", directory, ...args], {
+      cwd: directory,
+    });
+    return {
+      success: result.success,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+    };
   }
 }
 

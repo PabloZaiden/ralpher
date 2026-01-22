@@ -154,6 +154,21 @@ export class OpenCodeBackend implements AgentBackend {
   }
 
   /**
+   * Get the SDK client for advanced operations.
+   * Returns null if not connected.
+   */
+  getSdkClient(): OpencodeClient | null {
+    return this.client;
+  }
+
+  /**
+   * Get the current directory.
+   */
+  getDirectory(): string {
+    return this.directory;
+  }
+
+  /**
    * Get the client, throwing if not connected.
    */
   private getClient(): OpencodeClient {

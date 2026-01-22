@@ -105,7 +105,6 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
 
   // Create manager
   const manager = new LoopManager({
-    gitService: git,
     eventEmitter: emitter,
   });
 

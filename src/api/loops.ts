@@ -1,10 +1,15 @@
 /**
  * Loops API endpoints for Ralph Loops Management System.
  * Handles CRUD operations and loop control (start, stop, accept, discard).
+ * 
+ * Uses the CommandExecutor abstraction to support both:
+ * - Spawn mode: Commands run locally via Bun.$
+ * - Connect mode: Commands run remotely via PTY+WebSocket
  */
 
 import { loopManager } from "../core/loop-manager";
-import { gitService } from "../core/git-service";
+import { backendManager } from "../core/backend-manager";
+import { GitService } from "../core/git-service";
 import { setLastModel } from "../persistence/preferences";
 import type {
   CreateLoopRequest,
@@ -371,7 +376,11 @@ export const loopsDataRoutes = {
       }
 
       try {
-        const diffs = await gitService.getDiffWithContent(
+        // Get mode-appropriate git service
+        const executor = backendManager.getCommandExecutor(loop.config.directory);
+        const git = GitService.withExecutor(executor);
+
+        const diffs = await git.getDiffWithContent(
           loop.config.directory,
           loop.state.git.originalBranch
         );
@@ -392,16 +401,18 @@ export const loopsDataRoutes = {
         return errorResponse("not_found", "Loop not found", 404);
       }
 
+      // Get mode-appropriate command executor
+      const executor = backendManager.getCommandExecutor(loop.config.directory);
       const planPath = `${loop.config.directory}/.planning/plan.md`;
-      const file = Bun.file(planPath);
 
       const response: FileContentResponse = {
         content: "",
         exists: false,
       };
 
-      if (await file.exists()) {
-        response.content = await file.text();
+      const content = await executor.readFile(planPath);
+      if (content !== null) {
+        response.content = content;
         response.exists = true;
       }
 
@@ -419,16 +430,18 @@ export const loopsDataRoutes = {
         return errorResponse("not_found", "Loop not found", 404);
       }
 
+      // Get mode-appropriate command executor
+      const executor = backendManager.getCommandExecutor(loop.config.directory);
       const statusPath = `${loop.config.directory}/.planning/status.md`;
-      const file = Bun.file(statusPath);
 
       const response: FileContentResponse = {
         content: "",
         exists: false,
       };
 
-      if (await file.exists()) {
-        response.content = await file.text();
+      const content = await executor.readFile(statusPath);
+      if (content !== null) {
+        response.content = content;
         response.exists = true;
       }
 
@@ -451,16 +464,13 @@ export const loopsDataRoutes = {
       const planningDir = `${directory}/.planning`;
       
       try {
-        // Check if directory exists by trying to read it
-        const glob = new Bun.Glob("*");
-        const files: string[] = [];
+        // Get mode-appropriate command executor
+        const executor = backendManager.getCommandExecutor(directory);
+
+        // Check if directory exists
+        const exists = await executor.directoryExists(planningDir);
         
-        try {
-          for await (const file of glob.scan({ cwd: planningDir, onlyFiles: true })) {
-            files.push(file);
-          }
-        } catch {
-          // Directory doesn't exist or can't be read
+        if (!exists) {
           return Response.json({
             exists: false,
             hasFiles: false,
@@ -468,6 +478,9 @@ export const loopsDataRoutes = {
             warning: "The .planning directory does not exist. Ralph Loops work best with planning documents.",
           });
         }
+
+        // List files in the directory
+        const files = await executor.listDirectory(planningDir);
 
         if (files.length === 0) {
           return Response.json({

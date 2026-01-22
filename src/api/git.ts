@@ -1,9 +1,14 @@
 /**
  * Git API endpoints for Ralph Loops Management System.
  * Provides git information for directories.
+ * 
+ * Uses the CommandExecutor abstraction to support both:
+ * - Spawn mode: Git commands run locally via Bun.$
+ * - Connect mode: Git commands run remotely via PTY+WebSocket
  */
 
-import { gitService } from "../core/git-service";
+import { backendManager } from "../core/backend-manager";
+import { GitService } from "../core/git-service";
 
 /**
  * Branch information returned by the API.
@@ -25,6 +30,16 @@ export interface BranchesResponse {
   branches: BranchInfo[];
 }
 
+/**
+ * Get a GitService configured for the current backend mode.
+ * In spawn mode, uses local execution.
+ * In connect mode, uses remote execution via PTY+WebSocket.
+ */
+function getGitService(directory: string): GitService {
+  const executor = backendManager.getCommandExecutor(directory);
+  return GitService.withExecutor(executor);
+}
+
 export const gitRoutes = {
   /**
    * GET /api/git/branches
@@ -44,8 +59,11 @@ export const gitRoutes = {
       }
 
       try {
+        // Get mode-appropriate git service
+        const git = getGitService(directory);
+
         // Check if it's a git repo
-        const isGitRepo = await gitService.isGitRepo(directory);
+        const isGitRepo = await git.isGitRepo(directory);
         if (!isGitRepo) {
           return Response.json(
             { error: "not_git_repo", message: "Directory is not a git repository" },
@@ -53,7 +71,7 @@ export const gitRoutes = {
           );
         }
 
-        const branches = await gitService.getLocalBranches(directory);
+        const branches = await git.getLocalBranches(directory);
         const currentBranch = branches.find((b) => b.current)?.name ?? "";
 
         const response: BranchesResponse = {

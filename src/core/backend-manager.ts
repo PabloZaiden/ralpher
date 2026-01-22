@@ -13,6 +13,9 @@ import {
 } from "../types/settings";
 import { loopEventEmitter } from "./event-emitter";
 import type { LoopEvent } from "../types/events";
+import type { CommandExecutor } from "./command-executor";
+import { LocalCommandExecutor } from "./local-command-executor";
+import { RemoteCommandExecutor } from "./remote-command-executor";
 
 /**
  * Server status events.
@@ -210,6 +213,43 @@ class BackendManager {
    */
   isConnected(): boolean {
     return this.backend?.isConnected() ?? false;
+  }
+
+  /**
+   * Get a CommandExecutor appropriate for the current mode.
+   * - Spawn mode: Returns LocalCommandExecutor (commands run locally)
+   * - Connect mode: Returns RemoteCommandExecutor (commands run on remote server via PTY+WebSocket)
+   * 
+   * @param directory - The directory to run commands in (for remote execution context)
+   * @returns A CommandExecutor instance
+   */
+  getCommandExecutor(directory?: string): CommandExecutor {
+    // If not connected or in spawn mode, use local executor
+    if (!this.backend?.isConnected() || this.settings.mode === "spawn") {
+      return new LocalCommandExecutor();
+    }
+
+    // In connect mode, use remote executor
+    const client = this.backend.getSdkClient();
+    if (!client) {
+      // Fallback to local if no client available
+      return new LocalCommandExecutor();
+    }
+
+    // Use the provided directory or the backend's current directory
+    const dir = directory ?? this.backend.getDirectory();
+    
+    // Build base URL from settings
+    const hostname = this.settings.hostname ?? "127.0.0.1";
+    const port = this.settings.port ?? 4096;
+    const baseUrl = `http://${hostname}:${port}`;
+
+    return new RemoteCommandExecutor({
+      client,
+      directory: dir,
+      baseUrl,
+      password: this.settings.password,
+    });
   }
 
   /**
