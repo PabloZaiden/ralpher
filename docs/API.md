@@ -676,21 +676,41 @@ Get all local branches for a directory.
 
 ---
 
-### Events (SSE)
+### Events (WebSocket)
 
-#### GET /api/events
+#### WS /api/ws
 
-Server-Sent Events stream for all loop events.
+WebSocket endpoint for real-time event streaming. Supports optional loop filtering.
 
-**Headers**
+**Query Parameters**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `loopId` | No | Filter events to a specific loop |
+
+**Connection URL Examples**
 
 ```
-Content-Type: text/event-stream
-Cache-Control: no-cache
-Connection: keep-alive
+ws://localhost:3000/api/ws              # All events
+ws://localhost:3000/api/ws?loopId=abc   # Events for loop "abc" only
+wss://example.com/api/ws                # Secure WebSocket
 ```
 
-**Events**
+**Connection Message**
+
+Upon successful connection, the server sends a confirmation:
+
+```json
+{"type":"connected","loopId":null}
+```
+
+If `loopId` was specified:
+
+```json
+{"type":"connected","loopId":"abc-123"}
+```
+
+**Event Types**
 
 Each event is a JSON object with a `type` field:
 
@@ -713,21 +733,51 @@ Each event is a JSON object with a `type` field:
 | `loop.pushed` | Branch was pushed to remote |
 | `loop.discarded` | Branch was deleted |
 
-**Example Event**
+**Keep-Alive**
 
+Send a ping message to receive a pong response:
+
+```json
+// Client sends:
+{"type":"ping"}
+
+// Server responds:
+{"type":"pong"}
 ```
-data: {"type":"loop.iteration.start","loopId":"abc-123","iteration":3,"timestamp":"2026-01-20T10:15:00.000Z"}
 
-data: {"type":"loop.log","loopId":"abc-123","id":"log-1","level":"info","message":"Sending prompt to AI","timestamp":"2026-01-20T10:15:01.000Z"}
+**Example Events**
 
-data: {"type":"loop.tool_call","loopId":"abc-123","iteration":3,"tool":{"id":"tc-1","name":"Write","input":{"path":"/src/foo.ts"},"status":"running"},"timestamp":"2026-01-20T10:15:05.000Z"}
+```json
+{"type":"loop.iteration.start","loopId":"abc-123","iteration":3,"timestamp":"2026-01-20T10:15:00.000Z"}
+
+{"type":"loop.log","loopId":"abc-123","id":"log-1","level":"info","message":"Sending prompt to AI","timestamp":"2026-01-20T10:15:01.000Z"}
+
+{"type":"loop.tool_call","loopId":"abc-123","iteration":3,"tool":{"id":"tc-1","name":"Write","input":{"path":"/src/foo.ts"},"status":"running"},"timestamp":"2026-01-20T10:15:05.000Z"}
 ```
 
-#### GET /api/loops/:id/events
+**JavaScript Example**
 
-Server-Sent Events stream filtered to a specific loop.
+```javascript
+const ws = new WebSocket('ws://localhost:3000/api/ws');
 
-Same format as `/api/events` but only includes events for the specified loop ID.
+ws.onopen = () => {
+  console.log('Connected');
+};
+
+ws.onmessage = (event) => {
+  const data = JSON.parse(event.data);
+  if (data.type === 'connected') {
+    console.log('Connection confirmed');
+    return;
+  }
+  console.log('Event:', data.type, data);
+};
+
+ws.onclose = () => {
+  console.log('Disconnected');
+  // Implement reconnection logic as needed
+};
+```
 
 ---
 

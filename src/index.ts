@@ -1,13 +1,14 @@
 /**
  * Main server entry point for Ralph Loops Management System.
- * Uses Bun's native serve() with route-based API.
+ * Uses Bun's native serve() with route-based API and WebSocket support.
  */
 
-import { serve } from "bun";
+import { serve, type Server } from "bun";
 import index from "./index.html";
 import { apiRoutes } from "./api";
 import { ensureDataDirectories } from "./persistence/paths";
 import { backendManager } from "./core/backend-manager";
+import { websocketHandlers, type WebSocketData } from "./api/websocket";
 import "./backends/register"; // Auto-register backends
 
 // Ensure data directories exist on startup
@@ -19,15 +20,36 @@ await backendManager.initialize();
 // Port can be configured via RALPHER_PORT environment variable
 const port = parseInt(process.env["RALPHER_PORT"] ?? "3000", 10);
 
-const server = serve({
+const server = serve<WebSocketData>({
   port,
   routes: {
     // API routes
     ...apiRoutes,
 
+    // WebSocket endpoint for real-time events
+    "/api/ws": (req: Request, server: Server<WebSocketData>) => {
+      const url = new URL(req.url);
+      const loopId = url.searchParams.get("loopId") ?? undefined;
+
+      const upgraded = server.upgrade(req, {
+        data: { loopId } as WebSocketData,
+      });
+
+      if (upgraded) {
+        // Return undefined to indicate successful upgrade (Bun handles the response)
+        return undefined;
+      }
+
+      // Upgrade failed
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    },
+
     // Serve index.html for all unmatched routes (SPA fallback)
     "/*": index,
   },
+
+  // WebSocket handlers
+  websocket: websocketHandlers,
 
   development: process.env.NODE_ENV !== "production" && {
     // Enable browser hot reloading in development

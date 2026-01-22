@@ -164,8 +164,7 @@ See [docs/API.md](docs/API.md) for complete API documentation.
 | `/api/loops/:id/push` | POST | Push branch to remote |
 | `/api/loops/:id/discard` | POST | Delete git branch |
 | `/api/loops/:id/pending-prompt` | PUT | Set next iteration prompt |
-| `/api/events` | GET | SSE stream for all events |
-| `/api/loops/:id/events` | GET | SSE stream for one loop |
+| `/api/ws` | WebSocket | Real-time events stream |
 
 ## Technology Stack
 
@@ -176,7 +175,7 @@ See [docs/API.md](docs/API.md) for complete API documentation.
 | Frontend | React 19 |
 | Styling | Tailwind CSS v4 |
 | AI Integration | @opencode-ai/sdk |
-| Real-time | Server-Sent Events (SSE) |
+| Real-time | WebSocket |
 
 ## Testing
 

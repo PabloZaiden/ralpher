@@ -28,7 +28,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     loops,
     loading,
     error,
-    sseStatus,
+    connectionStatus,
     createLoop,
     startLoop,
     stopLoop,
@@ -295,22 +295,22 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                 loading={serverLoading}
                 onClick={() => setShowServerSettingsModal(true)}
               />
-              {/* SSE Status indicator - Ralpher connection */}
+              {/* WebSocket Status indicator - Ralpher connection */}
               <div className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md bg-gray-100 dark:bg-gray-800">
                 <span className="text-gray-500 dark:text-gray-400 font-medium">Ralpher:</span>
                 <span
                   className={`h-2 w-2 rounded-full ${
-                    sseStatus === "open"
+                    connectionStatus === "open"
                       ? "bg-green-500"
-                      : sseStatus === "connecting"
+                      : connectionStatus === "connecting"
                       ? "bg-yellow-500"
                       : "bg-red-500"
                   }`}
                 />
                 <span className="text-gray-700 dark:text-gray-300">
-                  {sseStatus === "open"
+                  {connectionStatus === "open"
                     ? "Connected"
-                    : sseStatus === "connecting"
+                    : connectionStatus === "connecting"
                     ? "Connecting..."
                     : "Disconnected"}
                 </span>

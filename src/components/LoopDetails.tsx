@@ -82,7 +82,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     loop,
     loading,
     error,
-    sseStatus,
+    connectionStatus,
     messages,
     toolCalls,
     logs,
@@ -364,19 +364,19 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 {config.directory}
               </p>
             </div>
-            {/* SSE Status */}
+            {/* WebSocket Status */}
             <div className="flex items-center gap-2 text-sm">
               <span
                 className={`h-2 w-2 rounded-full ${
-                  sseStatus === "open"
+                  connectionStatus === "open"
                     ? "bg-green-500"
-                    : sseStatus === "connecting"
+                    : connectionStatus === "connecting"
                     ? "bg-yellow-500"
                     : "bg-red-500"
                 }`}
               />
               <span className="text-gray-500 dark:text-gray-400">
-                {sseStatus === "open" ? "Live" : sseStatus === "connecting" ? "Connecting..." : "Disconnected"}
+                {connectionStatus === "open" ? "Live" : connectionStatus === "connecting" ? "Connecting..." : "Disconnected"}
               </span>
             </div>
           </div>

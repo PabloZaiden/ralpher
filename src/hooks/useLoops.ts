@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest, StartLoopRequest } from "../types";
-import { useGlobalSSE } from "./useSSE";
+import { useGlobalEvents } from "./useWebSocket";
 import {
   startLoopApi,
   stopLoopApi,
@@ -26,8 +26,8 @@ export interface UseLoopsResult {
   loading: boolean;
   /** Error message if any */
   error: string | null;
-  /** SSE connection status */
-  sseStatus: "connecting" | "open" | "closed" | "error";
+  /** WebSocket connection status */
+  connectionStatus: "connecting" | "open" | "closed" | "error";
   /** Refresh loops from the server */
   refresh: () => Promise<void>;
   /** Create a new loop */
@@ -53,20 +53,20 @@ export interface UseLoopsResult {
 }
 
 /**
- * Hook for managing loops state with real-time updates via SSE.
+ * Hook for managing loops state with real-time updates via WebSocket.
  */
 export function useLoops(): UseLoopsResult {
   const [loops, setLoops] = useState<Loop[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // SSE connection for real-time updates
-  const { status: sseStatus } = useGlobalSSE<LoopEvent>({
-    onEvent: handleSSEEvent,
+  // WebSocket connection for real-time updates
+  const { status: connectionStatus } = useGlobalEvents<LoopEvent>({
+    onEvent: handleEvent,
   });
 
-  // Handle SSE events to update loops state
-  function handleSSEEvent(event: LoopEvent) {
+  // Handle events to update loops state
+  function handleEvent(event: LoopEvent) {
     switch (event.type) {
       case "loop.created":
         // Refresh to get the full loop data
@@ -287,7 +287,7 @@ export function useLoops(): UseLoopsResult {
     loops,
     loading,
     error,
-    sseStatus,
+    connectionStatus,
     refresh,
     createLoop,
     updateLoop,

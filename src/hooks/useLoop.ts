@@ -15,7 +15,7 @@ import type {
   ToolCallData,
   LogLevel,
 } from "../types";
-import { useLoopSSE } from "./useSSE";
+import { useLoopEvents } from "./useWebSocket";
 import {
   startLoopApi,
   stopLoopApi,
@@ -54,8 +54,8 @@ export interface UseLoopResult {
   loading: boolean;
   /** Error message if any */
   error: string | null;
-  /** SSE connection status */
-  sseStatus: "connecting" | "open" | "closed" | "error";
+  /** WebSocket connection status */
+  connectionStatus: "connecting" | "open" | "closed" | "error";
   /** Recent events for this loop */
   events: LoopEvent[];
   /** Messages from the current/recent iterations */
@@ -111,13 +111,13 @@ export function useLoop(loopId: string): UseLoopResult {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [gitChangeCounter, setGitChangeCounter] = useState(0);
 
-  // SSE connection for real-time updates
-  const { events, status: sseStatus } = useLoopSSE<LoopEvent>(loopId, {
-    onEvent: handleSSEEvent,
+  // WebSocket connection for real-time updates
+  const { events, status: connectionStatus } = useLoopEvents<LoopEvent>(loopId, {
+    onEvent: handleEvent,
   });
 
-  // Handle SSE events
-  function handleSSEEvent(event: LoopEvent) {
+  // Handle events
+  function handleEvent(event: LoopEvent) {
     switch (event.type) {
       case "loop.log":
         // Update existing log entry or add new one
@@ -459,7 +459,7 @@ export function useLoop(loopId: string): UseLoopResult {
     loop,
     loading,
     error,
-    sseStatus,
+    connectionStatus,
     events,
     messages,
     toolCalls,

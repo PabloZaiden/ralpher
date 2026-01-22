@@ -5,7 +5,6 @@
 
 import { healthRoutes } from "./health";
 import { loopsRoutes } from "./loops";
-import { eventsRoutes } from "./events";
 import { modelsAndPreferencesRoutes } from "./models";
 import { settingsRoutes } from "./settings";
 import { gitRoutes } from "./git";
@@ -13,11 +12,11 @@ import { gitRoutes } from "./git";
 /**
  * All API routes combined.
  * Can be spread into Bun's serve() routes option.
+ * Note: WebSocket endpoint is handled separately in src/index.ts
  */
 export const apiRoutes = {
   ...healthRoutes,
   ...loopsRoutes,
-  ...eventsRoutes,
   ...modelsAndPreferencesRoutes,
   ...settingsRoutes,
   ...gitRoutes,
@@ -26,7 +25,7 @@ export const apiRoutes = {
 // Re-export individual route modules
 export * from "./health";
 export * from "./loops";
-export * from "./events";
 export * from "./models";
 export * from "./settings";
 export * from "./git";
+export * from "./websocket";
