@@ -8,11 +8,13 @@ import { loopManager } from "../core/loop-manager";
 
 /**
  * SSE headers for proper streaming.
+ * X-Accel-Buffering: no tells Nginx-based proxies to disable buffering.
  */
 const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
-  "Cache-Control": "no-cache",
+  "Cache-Control": "no-cache, no-transform",
   "Connection": "keep-alive",
+  "X-Accel-Buffering": "no",
 };
 
 /**
