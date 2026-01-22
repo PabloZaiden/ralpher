@@ -254,7 +254,8 @@ export class LoopManager {
 
     // Get the appropriate command executor for the current mode
     // (local for spawn mode, remote for connect mode)
-    const executor = backendManager.getCommandExecutor(loop.config.directory);
+    // Use async version to ensure connection is established in connect mode
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
     const git = GitService.withExecutor(executor);
 
     // Check for uncommitted changes
@@ -348,7 +349,7 @@ export class LoopManager {
 
     try {
       // Get the appropriate command executor for the current mode
-      const executor = backendManager.getCommandExecutor(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
       const git = GitService.withExecutor(executor);
 
       // Merge working branch into original branch
@@ -406,7 +407,7 @@ export class LoopManager {
 
     try {
       // Get the appropriate command executor for the current mode
-      const executor = backendManager.getCommandExecutor(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
       const git = GitService.withExecutor(executor);
 
       // Push the working branch to remote
@@ -460,7 +461,7 @@ export class LoopManager {
 
     try {
       // Get the appropriate command executor for the current mode
-      const executor = backendManager.getCommandExecutor(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
       const git = GitService.withExecutor(executor);
 
       // First, reset any uncommitted changes on the working branch

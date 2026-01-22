@@ -35,8 +35,8 @@ export interface BranchesResponse {
  * In spawn mode, uses local execution.
  * In connect mode, uses remote execution via PTY+WebSocket.
  */
-function getGitService(directory: string): GitService {
-  const executor = backendManager.getCommandExecutor(directory);
+async function getGitService(directory: string): Promise<GitService> {
+  const executor = await backendManager.getCommandExecutorAsync(directory);
   return GitService.withExecutor(executor);
 }
 
@@ -60,7 +60,7 @@ export const gitRoutes = {
 
       try {
         // Get mode-appropriate git service
-        const git = getGitService(directory);
+        const git = await getGitService(directory);
 
         // Check if it's a git repo
         const isGitRepo = await git.isGitRepo(directory);

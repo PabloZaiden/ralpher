@@ -511,10 +511,25 @@ export class GitService {
     directory: string,
     args: string[]
   ): Promise<GitCommandResult> {
+    const cmdStr = `git ${args.join(" ")}`;
+    console.log(`[GitService] Running: ${cmdStr} in ${directory}`);
+    
     // Use git with -C flag to run in the specified directory
     const result = await this.executor.exec("git", ["-C", directory, ...args], {
       cwd: directory,
     });
+    
+    if (!result.success) {
+      console.error(`[GitService] Command failed: ${cmdStr}`);
+      console.error(`[GitService]   exitCode: ${result.exitCode}`);
+      console.error(`[GitService]   stderr: ${result.stderr || "(empty)"}`);
+      if (result.stdout) {
+        console.error(`[GitService]   stdout: ${result.stdout.slice(0, 300)}${result.stdout.length > 300 ? "..." : ""}`);
+      }
+    } else {
+      console.log(`[GitService] Command succeeded: ${cmdStr}`);
+    }
+    
     return {
       success: result.success,
       stdout: result.stdout,

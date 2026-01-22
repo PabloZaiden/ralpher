@@ -1,6 +1,6 @@
 /**
  * Remote command executor for connect mode.
- * Uses the opencode SDK's VCS/file APIs where available, and PTY with WebSocket for shell commands.
+ * Runs all commands on the remote opencode server via PTY with WebSocket.
  * 
  * For PTY-based command execution:
  * 1. Create a PTY session via REST API
@@ -11,6 +11,9 @@
 
 import type { OpencodeClient } from "@opencode-ai/sdk";
 import type { CommandExecutor, CommandResult, CommandOptions } from "./command-executor";
+
+/** Log prefix for remote executor messages */
+const LOG_PREFIX = "[RemoteExecutor]";
 
 /**
  * Configuration for the remote command executor.
@@ -29,6 +32,9 @@ export interface RemoteCommandExecutorConfig {
 /**
  * RemoteCommandExecutor runs commands on a remote opencode server.
  * Used when Ralpher is running in connect mode (code is on remote machine).
+ * 
+ * All commands (including git) are executed via PTY with WebSocket output capture.
+ * This ensures consistent behavior with actual command execution on the remote server.
  */
 export class RemoteCommandExecutor implements CommandExecutor {
   private client: OpencodeClient;
@@ -41,154 +47,24 @@ export class RemoteCommandExecutor implements CommandExecutor {
     this.directory = config.directory;
     this.baseUrl = config.baseUrl;
     this.password = config.password;
+    console.log(`${LOG_PREFIX} Created executor for directory: ${config.directory}, baseUrl: ${config.baseUrl}`);
   }
 
   /**
-   * Execute a shell command on the remote server.
-   * 
-   * For git queries, we use the SDK's VCS and file APIs for efficiency.
-   * For other commands, we use PTY-based execution with WebSocket output capture.
+   * Execute a shell command on the remote server via PTY.
    */
   async exec(command: string, args: string[], options?: CommandOptions): Promise<CommandResult> {
-    // Handle common git commands using SDK APIs
-    if (command === "git") {
-      return this.execGitCommand(args, options);
+    const cmdStr = `${command} ${args.join(" ")}`;
+    console.log(`${LOG_PREFIX} exec: ${cmdStr}`);
+    const result = await this.execViaPty(command, args, options);
+    if (result.success) {
+      console.log(`${LOG_PREFIX} exec SUCCESS: ${cmdStr}`);
+    } else {
+      console.error(`${LOG_PREFIX} exec FAILED: ${cmdStr}`);
+      console.error(`${LOG_PREFIX}   stderr: ${result.stderr || "(empty)"}`);
+      console.error(`${LOG_PREFIX}   stdout: ${result.stdout.slice(0, 500)}${result.stdout.length > 500 ? "..." : ""}`);
     }
-
-    // For non-git commands, use PTY with WebSocket
-    return this.execViaPty(command, args, options);
-  }
-
-  /**
-   * Execute git commands using SDK APIs where possible.
-   */
-  private async execGitCommand(args: string[], options?: CommandOptions): Promise<CommandResult> {
-    // Filter out -C flag and directory from args (we use the directory from config)
-    const filteredArgs = this.filterGitArgs(args);
-    const subcommand = filteredArgs[0];
-
-    // git rev-parse --abbrev-ref HEAD -> get current branch
-    if (subcommand === "rev-parse" && filteredArgs.includes("--abbrev-ref") && filteredArgs.includes("HEAD")) {
-      try {
-        const result = await this.client.vcs.get({
-          query: { directory: this.directory },
-        });
-        if (result.error) {
-          return {
-            success: false,
-            stdout: "",
-            stderr: JSON.stringify(result.error),
-            exitCode: 1,
-          };
-        }
-        const branch = (result.data as { branch: string })?.branch ?? "";
-        return {
-          success: true,
-          stdout: branch + "\n",
-          stderr: "",
-          exitCode: 0,
-        };
-      } catch (error) {
-        return {
-          success: false,
-          stdout: "",
-          stderr: String(error),
-          exitCode: 1,
-        };
-      }
-    }
-
-    // git rev-parse --is-inside-work-tree -> check if git repo
-    if (subcommand === "rev-parse" && filteredArgs.includes("--is-inside-work-tree")) {
-      try {
-        const result = await this.client.vcs.get({
-          query: { directory: this.directory },
-        });
-        if (result.error) {
-          return {
-            success: false,
-            stdout: "",
-            stderr: "Not a git repository",
-            exitCode: 1,
-          };
-        }
-        return {
-          success: true,
-          stdout: "true\n",
-          stderr: "",
-          exitCode: 0,
-        };
-      } catch {
-        return {
-          success: false,
-          stdout: "",
-          stderr: "Not a git repository",
-          exitCode: 1,
-        };
-      }
-    }
-
-    // git status --porcelain -> get changed files
-    if (subcommand === "status" && filteredArgs.includes("--porcelain")) {
-      try {
-        const result = await this.client.file.status({
-          query: { directory: this.directory },
-        });
-        if (result.error) {
-          return {
-            success: false,
-            stdout: "",
-            stderr: JSON.stringify(result.error),
-            exitCode: 1,
-          };
-        }
-        // Convert file status to porcelain format
-        const files = result.data as Array<{ path: string; status: string }> ?? [];
-        const output = files.map((f) => {
-          const statusChar = f.status === "added" ? "A" : f.status === "deleted" ? "D" : "M";
-          return ` ${statusChar} ${f.path}`;
-        }).join("\n");
-        return {
-          success: true,
-          stdout: output ? output + "\n" : "",
-          stderr: "",
-          exitCode: 0,
-        };
-      } catch (error) {
-        return {
-          success: false,
-          stdout: "",
-          stderr: String(error),
-          exitCode: 1,
-        };
-      }
-    }
-
-    // For other git commands, use PTY with WebSocket
-    return this.execViaPty("git", args, options);
-  }
-
-  /**
-   * Filter out -C flag and directory from git args.
-   * The -C flag is used by GitService to specify directory, but we handle that via config.
-   */
-  private filterGitArgs(args: string[]): string[] {
-    const filtered: string[] = [];
-    let skipNext = false;
-    
-    for (const arg of args) {
-      if (skipNext) {
-        skipNext = false;
-        continue;
-      }
-      if (arg === "-C") {
-        skipNext = true;
-        continue;
-      }
-      filtered.push(arg);
-    }
-    
-    return filtered;
+    return result;
   }
 
   /**
@@ -203,11 +79,15 @@ export class RemoteCommandExecutor implements CommandExecutor {
   private async execViaPty(command: string, args: string[], options?: CommandOptions): Promise<CommandResult> {
     const cwd = options?.cwd ?? this.directory;
     const timeout = options?.timeout ?? 30000;
+    const cmdStr = `${command} ${args.join(" ")}`;
+
+    console.log(`${LOG_PREFIX} PTY exec: ${cmdStr} in ${cwd} (timeout: ${timeout}ms)`);
 
     let ptyId: string | null = null;
     
     try {
       // 1. Create PTY session
+      console.log(`${LOG_PREFIX} Creating PTY session...`);
       const createResult = await this.client.pty.create({
         body: {
           command,
@@ -219,43 +99,53 @@ export class RemoteCommandExecutor implements CommandExecutor {
       });
 
       if (createResult.error) {
+        const errMsg = `Failed to create PTY session: ${JSON.stringify(createResult.error)}`;
+        console.error(`${LOG_PREFIX} ${errMsg}`);
         return {
           success: false,
           stdout: "",
-          stderr: `Failed to create PTY session: ${JSON.stringify(createResult.error)}`,
+          stderr: errMsg,
           exitCode: 1,
         };
       }
 
       ptyId = createResult.data?.id ?? null;
       if (!ptyId) {
+        const errMsg = "PTY session created but no ID returned";
+        console.error(`${LOG_PREFIX} ${errMsg}`);
         return {
           success: false,
           stdout: "",
-          stderr: "PTY session created but no ID returned",
+          stderr: errMsg,
           exitCode: 1,
         };
       }
 
+      console.log(`${LOG_PREFIX} PTY session created: ${ptyId}`);
+
       // 2. Connect via WebSocket and collect output
-      const result = await this.connectAndCollectOutput(ptyId, timeout);
+      console.log(`${LOG_PREFIX} Connecting to PTY via WebSocket...`);
+      const result = await this.connectAndCollectOutput(ptyId, timeout, cmdStr);
 
       return result;
     } catch (error) {
+      const errMsg = String(error);
+      console.error(`${LOG_PREFIX} PTY exec exception: ${errMsg}`);
       return {
         success: false,
         stdout: "",
-        stderr: String(error),
+        stderr: errMsg,
         exitCode: 1,
       };
     } finally {
       // 3. Clean up the PTY session
       if (ptyId) {
+        console.log(`${LOG_PREFIX} Cleaning up PTY session: ${ptyId}`);
         await this.client.pty.remove({
           path: { id: ptyId },
           query: { directory: this.directory },
-        }).catch(() => {
-          // Ignore cleanup errors
+        }).catch((err) => {
+          console.warn(`${LOG_PREFIX} Failed to cleanup PTY session ${ptyId}: ${String(err)}`);
         });
       }
     }
@@ -264,10 +154,11 @@ export class RemoteCommandExecutor implements CommandExecutor {
   /**
    * Connect to a PTY session via WebSocket and collect all output.
    */
-  private async connectAndCollectOutput(ptyId: string, timeout: number): Promise<CommandResult> {
+  private async connectAndCollectOutput(ptyId: string, timeout: number, cmdStr: string): Promise<CommandResult> {
     return new Promise((resolve) => {
       // Build WebSocket URL
       const wsUrl = this.buildWebSocketUrl(ptyId);
+      console.log(`${LOG_PREFIX} WebSocket URL: ${wsUrl.replace(/auth=[^&]+/, "auth=***")}`);
       
       let output = "";
       let exitCode = 0;
@@ -295,6 +186,7 @@ export class RemoteCommandExecutor implements CommandExecutor {
 
       // Set timeout
       const timeoutId = setTimeout(() => {
+        console.error(`${LOG_PREFIX} Command timed out after ${timeout}ms: ${cmdStr}`);
         resolveOnce({
           success: false,
           stdout: output,
@@ -304,29 +196,30 @@ export class RemoteCommandExecutor implements CommandExecutor {
       }, timeout);
 
       try {
-        // Create WebSocket connection
-        // Note: Browser WebSocket doesn't support custom headers, so we add auth via query param if needed
-        const wsUrlWithAuth = this.password 
-          ? `${wsUrl}&auth=${encodeURIComponent(Buffer.from(`opencode:${this.password}`).toString("base64"))}`
-          : wsUrl;
+        // Create WebSocket connection with auth headers
+        // Bun's WebSocket supports custom headers (unlike browser WebSocket)
+        const wsOptions: { headers?: Record<string, string> } = {};
+        if (this.password) {
+          const credentials = Buffer.from(`opencode:${this.password}`).toString("base64");
+          wsOptions.headers = {
+            Authorization: `Basic ${credentials}`,
+          };
+        }
 
-        ws = new WebSocket(wsUrlWithAuth);
+        ws = new WebSocket(wsUrl, wsOptions as ConstructorParameters<typeof WebSocket>[1]);
 
         ws.onopen = () => {
-          // Connection established - PTY is running
+          console.log(`${LOG_PREFIX} WebSocket connected for PTY: ${ptyId}`);
         };
 
         ws.onmessage = (event) => {
           // Collect terminal output
           const data = typeof event.data === "string" ? event.data : event.data.toString();
           output += data;
-          
-          // Check for exit code in output (some terminals output this)
-          // We'll also check via polling as a fallback
         };
 
-        ws.onclose = async () => {
-          // WebSocket closed - check if PTY exited
+        ws.onclose = async (event) => {
+          console.log(`${LOG_PREFIX} WebSocket closed for PTY: ${ptyId} (code: ${event.code}, reason: ${event.reason || "none"})`);
           clearTimeout(timeoutId);
           
           // Get final PTY status to determine exit code
@@ -338,19 +231,22 @@ export class RemoteCommandExecutor implements CommandExecutor {
             
             if (!statusResult.error && statusResult.data) {
               const ptyInfo = statusResult.data;
+              console.log(`${LOG_PREFIX} PTY status: ${ptyInfo.status}`);
               if (ptyInfo.status === "exited") {
-                // Try to extract exit code from the response
-                // The PTY info might include exit code in extended properties
                 exitCode = 0; // Default to success if PTY exited cleanly
               }
             }
-          } catch {
-            // Ignore status check errors - PTY might already be cleaned up
+          } catch (err) {
+            console.warn(`${LOG_PREFIX} Failed to get PTY status: ${String(err)}`);
           }
 
           // Determine success based on output patterns
-          // For git commands, we can check for common error patterns
           const hasError = this.detectErrorInOutput(output);
+          if (hasError) {
+            console.warn(`${LOG_PREFIX} Error pattern detected in output for: ${cmdStr}`);
+          }
+          
+          console.log(`${LOG_PREFIX} Command completed: ${cmdStr} (success: ${!hasError}, outputLen: ${output.length})`);
           
           resolveOnce({
             success: !hasError && exitCode === 0,
@@ -360,7 +256,8 @@ export class RemoteCommandExecutor implements CommandExecutor {
           });
         };
 
-        ws.onerror = () => {
+        ws.onerror = (event) => {
+          console.error(`${LOG_PREFIX} WebSocket error for PTY: ${ptyId}`, event);
           clearTimeout(timeoutId);
           resolveOnce({
             success: false,
@@ -370,6 +267,7 @@ export class RemoteCommandExecutor implements CommandExecutor {
           });
         };
       } catch (error) {
+        console.error(`${LOG_PREFIX} Failed to create WebSocket: ${String(error)}`);
         clearTimeout(timeoutId);
         resolveOnce({
           success: false,
@@ -419,6 +317,7 @@ export class RemoteCommandExecutor implements CommandExecutor {
    * Check if a file exists on the remote server.
    */
   async fileExists(path: string): Promise<boolean> {
+    console.log(`${LOG_PREFIX} fileExists: ${path}`);
     try {
       const result = await this.client.file.read({
         query: {
@@ -426,9 +325,11 @@ export class RemoteCommandExecutor implements CommandExecutor {
           path,
         },
       });
-      // If we can read it, it exists
-      return !result.error;
-    } catch {
+      const exists = !result.error;
+      console.log(`${LOG_PREFIX} fileExists: ${path} = ${exists}`);
+      return exists;
+    } catch (err) {
+      console.error(`${LOG_PREFIX} fileExists error for ${path}: ${String(err)}`);
       return false;
     }
   }
@@ -437,6 +338,7 @@ export class RemoteCommandExecutor implements CommandExecutor {
    * Check if a directory exists on the remote server.
    */
   async directoryExists(path: string): Promise<boolean> {
+    console.log(`${LOG_PREFIX} directoryExists: ${path}`);
     try {
       const result = await this.client.file.list({
         query: {
@@ -444,9 +346,11 @@ export class RemoteCommandExecutor implements CommandExecutor {
           path,
         },
       });
-      // If we can list it, it exists and is a directory
-      return !result.error;
-    } catch {
+      const exists = !result.error;
+      console.log(`${LOG_PREFIX} directoryExists: ${path} = ${exists}`);
+      return exists;
+    } catch (err) {
+      console.error(`${LOG_PREFIX} directoryExists error for ${path}: ${String(err)}`);
       return false;
     }
   }
@@ -455,6 +359,7 @@ export class RemoteCommandExecutor implements CommandExecutor {
    * Read a file's contents from the remote server.
    */
   async readFile(path: string): Promise<string | null> {
+    console.log(`${LOG_PREFIX} readFile: ${path}`);
     try {
       const result = await this.client.file.read({
         query: {
@@ -464,17 +369,21 @@ export class RemoteCommandExecutor implements CommandExecutor {
       });
 
       if (result.error) {
+        console.warn(`${LOG_PREFIX} readFile error for ${path}: ${JSON.stringify(result.error)}`);
         return null;
       }
 
       // The file.read endpoint returns FileContent which has a content field
       const data = result.data as { type: string; content: string };
       if (data?.type === "text") {
+        console.log(`${LOG_PREFIX} readFile: ${path} = ${data.content.length} bytes`);
         return data.content;
       }
 
+      console.warn(`${LOG_PREFIX} readFile: ${path} has unexpected type: ${data?.type}`);
       return null;
-    } catch {
+    } catch (err) {
+      console.error(`${LOG_PREFIX} readFile exception for ${path}: ${String(err)}`);
       return null;
     }
   }
@@ -483,6 +392,7 @@ export class RemoteCommandExecutor implements CommandExecutor {
    * List files in a directory on the remote server.
    */
   async listDirectory(path: string): Promise<string[]> {
+    console.log(`${LOG_PREFIX} listDirectory: ${path}`);
     try {
       const result = await this.client.file.list({
         query: {
@@ -492,13 +402,17 @@ export class RemoteCommandExecutor implements CommandExecutor {
       });
 
       if (result.error) {
+        console.warn(`${LOG_PREFIX} listDirectory error for ${path}: ${JSON.stringify(result.error)}`);
         return [];
       }
 
       // The file.list endpoint returns FileNode[] which has name property
       const data = result.data as Array<{ name: string }>;
-      return data?.map((f) => f.name) ?? [];
-    } catch {
+      const files = data?.map((f) => f.name) ?? [];
+      console.log(`${LOG_PREFIX} listDirectory: ${path} = ${files.length} files`);
+      return files;
+    } catch (err) {
+      console.error(`${LOG_PREFIX} listDirectory exception for ${path}: ${String(err)}`);
       return [];
     }
   }

@@ -220,19 +220,31 @@ class BackendManager {
    * - Spawn mode: Returns LocalCommandExecutor (commands run locally)
    * - Connect mode: Returns RemoteCommandExecutor (commands run on remote server via PTY+WebSocket)
    * 
+   * Note: This method is synchronous and cannot establish connections.
+   * For connect mode, ensure connect() has been called first.
+   * 
    * @param directory - The directory to run commands in (for remote execution context)
    * @returns A CommandExecutor instance
    */
   getCommandExecutor(directory?: string): CommandExecutor {
-    // If not connected or in spawn mode, use local executor
-    if (!this.backend?.isConnected() || this.settings.mode === "spawn") {
+    // In spawn mode, always use local executor
+    if (this.settings.mode === "spawn") {
+      console.log(`[BackendManager] Using LocalCommandExecutor (spawn mode)`);
       return new LocalCommandExecutor();
     }
 
-    // In connect mode, use remote executor
+    // In connect mode, check if we have a connected backend
+    if (!this.backend?.isConnected()) {
+      console.error(`[BackendManager] Connect mode but backend not connected! Call connect() first.`);
+      console.error(`[BackendManager] Falling back to LocalCommandExecutor (this will likely fail)`);
+      return new LocalCommandExecutor();
+    }
+
+    // In connect mode with connected backend, use remote executor
     const client = this.backend.getSdkClient();
     if (!client) {
       // Fallback to local if no client available
+      console.warn("[BackendManager] No SDK client available, falling back to LocalCommandExecutor");
       return new LocalCommandExecutor();
     }
 
@@ -244,12 +256,37 @@ class BackendManager {
     const port = this.settings.port ?? 4096;
     const baseUrl = `http://${hostname}:${port}`;
 
+    console.log(`[BackendManager] Using RemoteCommandExecutor (baseUrl: ${baseUrl}, directory: ${dir})`);
     return new RemoteCommandExecutor({
       client,
       directory: dir,
       baseUrl,
       password: this.settings.password,
     });
+  }
+
+  /**
+   * Get a CommandExecutor appropriate for the current mode.
+   * This async version will establish a connection if needed in connect mode.
+   * 
+   * @param directory - The directory to run commands in (required for connect mode)
+   * @returns A CommandExecutor instance
+   */
+  async getCommandExecutorAsync(directory: string): Promise<CommandExecutor> {
+    // In spawn mode, always use local executor
+    if (this.settings.mode === "spawn") {
+      console.log(`[BackendManager] Using LocalCommandExecutor (spawn mode)`);
+      return new LocalCommandExecutor();
+    }
+
+    // In connect mode, ensure we're connected
+    if (!this.backend?.isConnected()) {
+      console.log(`[BackendManager] Connect mode - establishing connection to remote server...`);
+      await this.connect(directory);
+    }
+
+    // Now get the executor (should be connected)
+    return this.getCommandExecutor(directory);
   }
 
   /**

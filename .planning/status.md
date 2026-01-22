@@ -114,13 +114,10 @@ All planned features have been implemented.
 ## RemoteCommandExecutor Flow
 
 ```
-Command Execution:
+Command Execution (ALL commands go through PTY):
 1. exec("git", ["checkout", "-b", "feature"])
    │
-   ├── Is common git query? (rev-parse, status --porcelain)
-   │   └── YES → Use SDK API directly (faster)
-   │
-   └── NO → Use PTY with WebSocket
+   └── Use PTY with WebSocket
        ├── 1. POST /pty (create session)
        ├── 2. Connect WebSocket to /pty/{id}/connect
        ├── 3. Collect output from message events
@@ -134,6 +131,10 @@ File Operations:
 - directoryExists(path) → client.file.list() and check for error
 - listDirectory(path) → client.file.list()
 ```
+
+Note: We previously tried using SDK APIs (vcs.get, file.status) for common git queries,
+but this caused issues because the SDK APIs have different semantics and error handling
+than actual git commands. All git operations now go through PTY for consistency.
 
 ---
 

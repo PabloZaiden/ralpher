@@ -377,7 +377,7 @@ export const loopsDataRoutes = {
 
       try {
         // Get mode-appropriate git service
-        const executor = backendManager.getCommandExecutor(loop.config.directory);
+        const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
         const git = GitService.withExecutor(executor);
 
         const diffs = await git.getDiffWithContent(
@@ -402,7 +402,7 @@ export const loopsDataRoutes = {
       }
 
       // Get mode-appropriate command executor
-      const executor = backendManager.getCommandExecutor(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
       const planPath = `${loop.config.directory}/.planning/plan.md`;
 
       const response: FileContentResponse = {
@@ -431,7 +431,7 @@ export const loopsDataRoutes = {
       }
 
       // Get mode-appropriate command executor
-      const executor = backendManager.getCommandExecutor(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
       const statusPath = `${loop.config.directory}/.planning/status.md`;
 
       const response: FileContentResponse = {
@@ -465,7 +465,7 @@ export const loopsDataRoutes = {
       
       try {
         // Get mode-appropriate command executor
-        const executor = backendManager.getCommandExecutor(directory);
+        const executor = await backendManager.getCommandExecutorAsync(directory);
 
         // Check if directory exists
         const exists = await executor.directoryExists(planningDir);
