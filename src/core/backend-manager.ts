@@ -14,8 +14,12 @@ import {
 import { loopEventEmitter } from "./event-emitter";
 import type { LoopEvent } from "../types/events";
 import type { CommandExecutor } from "./command-executor";
-import { LocalCommandExecutor } from "./local-command-executor";
-import { RemoteCommandExecutor } from "./remote-command-executor";
+import { CommandExecutorImpl } from "./remote-command-executor";
+
+/**
+ * Factory function type for creating command executors.
+ */
+export type CommandExecutorFactory = (directory: string) => CommandExecutor;
 
 /**
  * Server status events.
@@ -58,6 +62,8 @@ class BackendManager {
   private settings: ServerSettings = DEFAULT_SERVER_SETTINGS;
   private connectionError: string | null = null;
   private initialized = false;
+  /** Custom executor factory for testing */
+  private testExecutorFactory: CommandExecutorFactory | null = null;
 
   /**
    * Initialize the backend manager.
@@ -216,36 +222,31 @@ class BackendManager {
   }
 
   /**
-   * Get a CommandExecutor appropriate for the current mode.
-   * - Spawn mode: Returns LocalCommandExecutor (commands run locally)
-   * - Connect mode: Returns RemoteCommandExecutor (commands run on remote server via PTY+WebSocket)
+   * Get a CommandExecutor for running commands on the opencode server.
+   * All commands go through the PTY+WebSocket connection, regardless of mode.
+   * Commands are queued to ensure only one runs at a time.
    * 
    * Note: This method is synchronous and cannot establish connections.
-   * For connect mode, ensure connect() has been called first.
+   * Ensure connect() has been called first.
    * 
-   * @param directory - The directory to run commands in (for remote execution context)
+   * @param directory - The directory to run commands in
    * @returns A CommandExecutor instance
    */
   getCommandExecutor(directory?: string): CommandExecutor {
-    // In spawn mode, always use local executor
-    if (this.settings.mode === "spawn") {
-      console.log(`[BackendManager] Using LocalCommandExecutor (spawn mode)`);
-      return new LocalCommandExecutor();
+    // Use test factory if set (for testing)
+    if (this.testExecutorFactory) {
+      return this.testExecutorFactory(directory ?? ".");
     }
 
-    // In connect mode, check if we have a connected backend
+    // Check if we have a connected backend
     if (!this.backend?.isConnected()) {
-      console.error(`[BackendManager] Connect mode but backend not connected! Call connect() first.`);
-      console.error(`[BackendManager] Falling back to LocalCommandExecutor (this will likely fail)`);
-      return new LocalCommandExecutor();
+      throw new Error("[BackendManager] Backend not connected! Call connect() first.");
     }
 
-    // In connect mode with connected backend, use remote executor
+    // Get the SDK client
     const client = this.backend.getSdkClient();
     if (!client) {
-      // Fallback to local if no client available
-      console.warn("[BackendManager] No SDK client available, falling back to LocalCommandExecutor");
-      return new LocalCommandExecutor();
+      throw new Error("[BackendManager] No SDK client available");
     }
 
     // Use the provided directory or the backend's current directory
@@ -256,8 +257,8 @@ class BackendManager {
     const port = this.settings.port ?? 4096;
     const baseUrl = `http://${hostname}:${port}`;
 
-    console.log(`[BackendManager] Using RemoteCommandExecutor (baseUrl: ${baseUrl}, directory: ${dir})`);
-    return new RemoteCommandExecutor({
+    console.log(`[BackendManager] Creating CommandExecutor (baseUrl: ${baseUrl}, directory: ${dir})`);
+    return new CommandExecutorImpl({
       client,
       directory: dir,
       baseUrl,
@@ -266,22 +267,23 @@ class BackendManager {
   }
 
   /**
-   * Get a CommandExecutor appropriate for the current mode.
-   * This async version will establish a connection if needed in connect mode.
+   * Get a CommandExecutor for running commands on the opencode server.
+   * This async version will establish a connection if needed.
+   * All commands go through the PTY+WebSocket connection, regardless of mode.
+   * Commands are queued to ensure only one runs at a time.
    * 
-   * @param directory - The directory to run commands in (required for connect mode)
+   * @param directory - The directory to run commands in (required)
    * @returns A CommandExecutor instance
    */
   async getCommandExecutorAsync(directory: string): Promise<CommandExecutor> {
-    // In spawn mode, always use local executor
-    if (this.settings.mode === "spawn") {
-      console.log(`[BackendManager] Using LocalCommandExecutor (spawn mode)`);
-      return new LocalCommandExecutor();
+    // Use test factory if set (for testing)
+    if (this.testExecutorFactory) {
+      return this.testExecutorFactory(directory);
     }
 
-    // In connect mode, ensure we're connected
+    // Ensure we're connected
     if (!this.backend?.isConnected()) {
-      console.log(`[BackendManager] Connect mode - establishing connection to remote server...`);
+      console.log(`[BackendManager] Establishing connection to server...`);
       await this.connect(directory);
     }
 
@@ -299,6 +301,14 @@ class BackendManager {
   }
 
   /**
+   * Set a custom command executor factory (for testing).
+   * This bypasses the normal PTY-based executor creation.
+   */
+  setExecutorFactoryForTesting(factory: CommandExecutorFactory): void {
+    this.testExecutorFactory = factory;
+  }
+
+  /**
    * Reset the backend manager (for testing).
    * Clears the backend and resets initialization state.
    */
@@ -307,6 +317,7 @@ class BackendManager {
     this.settings = DEFAULT_SERVER_SETTINGS;
     this.connectionError = null;
     this.initialized = false;
+    this.testExecutorFactory = null;
   }
 
   /**

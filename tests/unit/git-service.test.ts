@@ -7,6 +7,7 @@ import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { GitService } from "../../src/core/git-service";
+import { TestCommandExecutor } from "../mocks/mock-executor";
 
 describe("GitService", () => {
   let testDir: string;
@@ -15,7 +16,8 @@ describe("GitService", () => {
   beforeEach(async () => {
     // Create a temp directory for each test
     testDir = await mkdtemp(join(tmpdir(), "ralpher-git-test-"));
-    git = new GitService();
+    const executor = new TestCommandExecutor();
+    git = new GitService(executor);
 
     // Initialize a git repo
     await Bun.$`git init ${testDir}`.quiet();

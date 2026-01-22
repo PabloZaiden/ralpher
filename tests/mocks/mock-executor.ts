@@ -1,16 +1,17 @@
 /**
- * Local command executor for spawn mode.
- * Uses Bun.$ for shell commands and Bun.file for file operations.
+ * Mock command executor for testing.
+ * Runs commands locally using Bun.$ and Bun.file APIs.
+ * This is only used in tests - production code uses CommandExecutorImpl via PTY.
  */
 
 import { readdir } from "node:fs/promises";
-import type { CommandExecutor, CommandResult, CommandOptions } from "./command-executor";
+import type { CommandExecutor, CommandResult, CommandOptions } from "../../src/core/command-executor";
 
 /**
- * LocalCommandExecutor runs commands locally using Bun.$ and file APIs.
- * Used when Ralpher is running in spawn mode (code is local).
+ * TestCommandExecutor runs commands locally for testing purposes.
+ * Uses Bun.$ for shell commands and Bun.file for file operations.
  */
-export class LocalCommandExecutor implements CommandExecutor {
+export class TestCommandExecutor implements CommandExecutor {
   /**
    * Execute a shell command locally.
    */
@@ -90,6 +91,6 @@ export class LocalCommandExecutor implements CommandExecutor {
 }
 
 /**
- * Singleton instance for convenience.
+ * Singleton instance for convenience in tests.
  */
-export const localCommandExecutor = new LocalCommandExecutor();
+export const testCommandExecutor = new TestCommandExecutor();

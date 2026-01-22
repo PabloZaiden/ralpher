@@ -1,27 +1,29 @@
 /**
- * Remote command executor for connect mode.
- * Runs all commands on the remote opencode server via PTY with WebSocket.
+ * Command executor that runs all commands via PTY with WebSocket.
+ * Works for both spawn mode (local opencode server) and connect mode (remote server).
  * 
  * For PTY-based command execution:
  * 1. Create a PTY session via REST API
  * 2. Connect to the PTY via WebSocket to capture output
  * 3. Wait for the command to complete and collect all output
  * 4. Clean up the PTY session
+ * 
+ * Commands are queued and executed one at a time to prevent overwhelming the server.
  */
 
 import type { OpencodeClient } from "@opencode-ai/sdk";
 import type { CommandExecutor, CommandResult, CommandOptions } from "./command-executor";
 
-/** Log prefix for remote executor messages */
-const LOG_PREFIX = "[RemoteExecutor]";
+/** Log prefix for executor messages */
+const LOG_PREFIX = "[CommandExecutor]";
 
 /**
- * Configuration for the remote command executor.
+ * Configuration for the command executor.
  */
-export interface RemoteCommandExecutorConfig {
+export interface CommandExecutorConfig {
   /** The opencode SDK client */
   client: OpencodeClient;
-  /** The directory on the remote server */
+  /** The directory on the server */
   directory: string;
   /** Base URL for the opencode server (e.g., "http://localhost:4096") */
   baseUrl: string;
@@ -30,19 +32,29 @@ export interface RemoteCommandExecutorConfig {
 }
 
 /**
- * RemoteCommandExecutor runs commands on a remote opencode server.
- * Used when Ralpher is running in connect mode (code is on remote machine).
+ * CommandExecutorImpl runs commands on an opencode server via PTY.
+ * Works for both spawn mode (local server) and connect mode (remote server).
  * 
  * All commands (including git) are executed via PTY with WebSocket output capture.
- * This ensures consistent behavior with actual command execution on the remote server.
+ * Commands are queued to ensure only one runs at a time.
  */
-export class RemoteCommandExecutor implements CommandExecutor {
+export class CommandExecutorImpl implements CommandExecutor {
   private client: OpencodeClient;
   private directory: string;
   private baseUrl: string;
   private password?: string;
+  
+  /** Queue of pending commands */
+  private commandQueue: Array<{
+    execute: () => Promise<CommandResult>;
+    resolve: (result: CommandResult) => void;
+    reject: (error: Error) => void;
+  }> = [];
+  
+  /** Whether a command is currently executing */
+  private isExecuting = false;
 
-  constructor(config: RemoteCommandExecutorConfig) {
+  constructor(config: CommandExecutorConfig) {
     this.client = config.client;
     this.directory = config.directory;
     this.baseUrl = config.baseUrl;
@@ -51,20 +63,60 @@ export class RemoteCommandExecutor implements CommandExecutor {
   }
 
   /**
-   * Execute a shell command on the remote server via PTY.
+   * Execute a shell command via PTY.
+   * Commands are queued and executed one at a time.
    */
   async exec(command: string, args: string[], options?: CommandOptions): Promise<CommandResult> {
     const cmdStr = `${command} ${args.join(" ")}`;
-    console.log(`${LOG_PREFIX} exec: ${cmdStr}`);
-    const result = await this.execViaPty(command, args, options);
-    if (result.success) {
-      console.log(`${LOG_PREFIX} exec SUCCESS: ${cmdStr}`);
-    } else {
-      console.error(`${LOG_PREFIX} exec FAILED: ${cmdStr}`);
-      console.error(`${LOG_PREFIX}   stderr: ${result.stderr || "(empty)"}`);
-      console.error(`${LOG_PREFIX}   stdout: ${result.stdout.slice(0, 500)}${result.stdout.length > 500 ? "..." : ""}`);
+    console.log(`${LOG_PREFIX} exec (queued): ${cmdStr}`);
+    
+    // Create a promise that will be resolved when the command completes
+    return new Promise<CommandResult>((resolve, reject) => {
+      const executeCommand = async (): Promise<CommandResult> => {
+        console.log(`${LOG_PREFIX} exec (starting): ${cmdStr}`);
+        const result = await this.execViaPty(command, args, options);
+        if (result.success) {
+          console.log(`${LOG_PREFIX} exec SUCCESS: ${cmdStr}`);
+        } else {
+          console.error(`${LOG_PREFIX} exec FAILED: ${cmdStr}`);
+          console.error(`${LOG_PREFIX}   stderr: ${result.stderr || "(empty)"}`);
+          console.error(`${LOG_PREFIX}   stdout: ${result.stdout.slice(0, 500)}${result.stdout.length > 500 ? "..." : ""}`);
+        }
+        return result;
+      };
+      
+      // Add to queue
+      this.commandQueue.push({ execute: executeCommand, resolve, reject });
+      
+      // Start processing if not already running
+      this.processQueue();
+    });
+  }
+  
+  /**
+   * Process the command queue, executing one command at a time.
+   */
+  private async processQueue(): Promise<void> {
+    // If already executing, the current execution will pick up remaining items
+    if (this.isExecuting) {
+      return;
     }
-    return result;
+    
+    this.isExecuting = true;
+    
+    while (this.commandQueue.length > 0) {
+      const item = this.commandQueue.shift();
+      if (!item) break;
+      
+      try {
+        const result = await item.execute();
+        item.resolve(result);
+      } catch (error) {
+        item.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    }
+    
+    this.isExecuting = false;
   }
 
   /**
@@ -123,9 +175,13 @@ export class RemoteCommandExecutor implements CommandExecutor {
 
       console.log(`${LOG_PREFIX} PTY session created: ${ptyId}`);
 
-      // 2. Connect via WebSocket and collect output
+      // 2. Small delay to ensure PTY is ready for WebSocket connection
+      // This helps prevent "Expected 101 status code" errors
+      await this.delay(50);
+
+      // 3. Connect via WebSocket and collect output (with retry)
       console.log(`${LOG_PREFIX} Connecting to PTY via WebSocket...`);
-      const result = await this.connectAndCollectOutput(ptyId, timeout, cmdStr);
+      const result = await this.connectWithRetry(ptyId, timeout, cmdStr);
 
       return result;
     } catch (error) {
@@ -138,7 +194,7 @@ export class RemoteCommandExecutor implements CommandExecutor {
         exitCode: 1,
       };
     } finally {
-      // 3. Clean up the PTY session
+      // 4. Clean up the PTY session
       if (ptyId) {
         console.log(`${LOG_PREFIX} Cleaning up PTY session: ${ptyId}`);
         await this.client.pty.remove({
@@ -149,6 +205,49 @@ export class RemoteCommandExecutor implements CommandExecutor {
         });
       }
     }
+  }
+
+  /**
+   * Helper to delay execution.
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Connect to PTY with retry logic for transient connection failures.
+   * Retries up to 3 times with exponential backoff.
+   */
+  private async connectWithRetry(ptyId: string, timeout: number, cmdStr: string): Promise<CommandResult> {
+    const maxRetries = 3;
+    const baseDelay = 100; // ms
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const result = await this.connectAndCollectOutput(ptyId, timeout, cmdStr);
+      
+      // If successful or not a connection error, return immediately
+      if (result.success || !result.stderr?.includes("WebSocket connection error")) {
+        return result;
+      }
+      
+      // If this was a WebSocket connection error and we have retries left
+      if (attempt < maxRetries) {
+        const delayMs = baseDelay * Math.pow(2, attempt - 1); // 100, 200, 400
+        console.log(`${LOG_PREFIX} WebSocket connection failed, retrying in ${delayMs}ms (attempt ${attempt}/${maxRetries})...`);
+        await this.delay(delayMs);
+      } else {
+        console.error(`${LOG_PREFIX} WebSocket connection failed after ${maxRetries} attempts`);
+        return result;
+      }
+    }
+    
+    // Should never reach here, but TypeScript needs it
+    return {
+      success: false,
+      stdout: "",
+      stderr: "Max retries exceeded",
+      exitCode: 1,
+    };
   }
 
   /**
@@ -314,7 +413,8 @@ export class RemoteCommandExecutor implements CommandExecutor {
   }
 
   /**
-   * Check if a file exists on the remote server.
+   * Check if a file exists on the server.
+   * Uses REST API (not PTY), so doesn't need to be queued.
    */
   async fileExists(path: string): Promise<boolean> {
     console.log(`${LOG_PREFIX} fileExists: ${path}`);
@@ -335,7 +435,8 @@ export class RemoteCommandExecutor implements CommandExecutor {
   }
 
   /**
-   * Check if a directory exists on the remote server.
+   * Check if a directory exists on the server.
+   * Uses REST API (not PTY), so doesn't need to be queued.
    */
   async directoryExists(path: string): Promise<boolean> {
     console.log(`${LOG_PREFIX} directoryExists: ${path}`);
@@ -356,7 +457,8 @@ export class RemoteCommandExecutor implements CommandExecutor {
   }
 
   /**
-   * Read a file's contents from the remote server.
+   * Read a file's contents from the server.
+   * Uses REST API (not PTY), so doesn't need to be queued.
    */
   async readFile(path: string): Promise<string | null> {
     console.log(`${LOG_PREFIX} readFile: ${path}`);
@@ -389,7 +491,8 @@ export class RemoteCommandExecutor implements CommandExecutor {
   }
 
   /**
-   * List files in a directory on the remote server.
+   * List files in a directory on the server.
+   * Uses REST API (not PTY), so doesn't need to be queued.
    */
   async listDirectory(path: string): Promise<string[]> {
     console.log(`${LOG_PREFIX} listDirectory: ${path}`);
@@ -417,3 +520,10 @@ export class RemoteCommandExecutor implements CommandExecutor {
     }
   }
 }
+
+/**
+ * Backward-compatible aliases.
+ * @deprecated Use CommandExecutorImpl and CommandExecutorConfig instead
+ */
+export { CommandExecutorImpl as RemoteCommandExecutor };
+export type { CommandExecutorConfig as RemoteCommandExecutorConfig };

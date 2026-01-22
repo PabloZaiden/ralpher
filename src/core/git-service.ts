@@ -5,7 +5,6 @@
  */
 
 import type { CommandExecutor } from "./command-executor";
-import { LocalCommandExecutor } from "./local-command-executor";
 
 /**
  * Result of a git command execution.
@@ -55,15 +54,14 @@ export class GitService {
 
   /**
    * Create a new GitService.
-   * @param executor - The command executor to use. Defaults to LocalCommandExecutor.
+   * @param executor - The command executor to use (required)
    */
-  constructor(executor?: CommandExecutor) {
-    this.executor = executor ?? new LocalCommandExecutor();
+  constructor(executor: CommandExecutor) {
+    this.executor = executor;
   }
 
   /**
    * Create a new GitService with the specified executor.
-   * This is useful for creating a service that runs commands remotely.
    */
   static withExecutor(executor: CommandExecutor): GitService {
     return new GitService(executor);
@@ -353,6 +351,7 @@ export class GitService {
    * Get the diff between the current branch and a base branch.
    */
   async getDiff(directory: string, baseBranch: string): Promise<FileDiff[]> {
+    // Get numstat for additions/deletions counts
     const result = await this.runGitCommand(directory, [
       "diff",
       "--numstat",
@@ -362,6 +361,28 @@ export class GitService {
       throw new Error(`Failed to get diff: ${result.stderr}`);
     }
 
+    // Get name-status for all files at once (more efficient than per-file calls)
+    const statusResult = await this.runGitCommand(directory, [
+      "diff",
+      "--name-status",
+      baseBranch,
+    ]);
+    
+    // Build a map of file path -> status
+    const statusMap = new Map<string, string>();
+    if (statusResult.success) {
+      const statusLines = statusResult.stdout.trim().split("\n").filter(Boolean);
+      for (const line of statusLines) {
+        // Format: "A\tfilename" or "R100\told\tnew" for renames
+        const parts = line.split("\t");
+        const statusChar = parts[0]?.charAt(0) ?? "M";
+        const filePath = parts[parts.length - 1] ?? ""; // Last part is the current filename
+        if (filePath) {
+          statusMap.set(filePath, statusChar);
+        }
+      }
+    }
+
     const lines = result.stdout.trim().split("\n").filter(Boolean);
     const diffs: FileDiff[] = [];
 
@@ -369,27 +390,12 @@ export class GitService {
       const [additions, deletions, path] = line.split("\t");
       if (!path) continue;
 
-      // Determine status
+      // Get status from the pre-fetched map
+      const statusChar = statusMap.get(path) ?? "M";
       let status: FileDiff["status"] = "modified";
-      if (additions === "-" && deletions === "-") {
-        // Binary file
-        status = "modified";
-      } else if (parseInt(deletions ?? "0", 10) === 0 && parseInt(additions ?? "0", 10) > 0) {
-        // Could be added or modified, need more info
-        const statusResult = await this.runGitCommand(directory, [
-          "diff",
-          "--name-status",
-          baseBranch,
-          "--",
-          path,
-        ]);
-        if (statusResult.success) {
-          const statusLine = statusResult.stdout.trim();
-          if (statusLine.startsWith("A")) status = "added";
-          else if (statusLine.startsWith("D")) status = "deleted";
-          else if (statusLine.startsWith("R")) status = "renamed";
-        }
-      }
+      if (statusChar === "A") status = "added";
+      else if (statusChar === "D") status = "deleted";
+      else if (statusChar === "R") status = "renamed";
 
       diffs.push({
         path,
@@ -539,7 +545,5 @@ export class GitService {
   }
 }
 
-/**
- * Singleton instance of GitService.
- */
-export const gitService = new GitService();
+// Note: No singleton instance - GitService must be created with an executor
+// Use backendManager.getCommandExecutorAsync() to get an executor

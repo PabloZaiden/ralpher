@@ -26,9 +26,8 @@ export interface CommandOptions {
 
 /**
  * CommandExecutor interface for running shell commands and file operations.
- * Implementations:
- * - LocalCommandExecutor: Uses Bun.$ for local execution (spawn mode)
- * - RemoteCommandExecutor: Uses PTY via opencode SDK for remote execution (connect mode)
+ * Implementation: CommandExecutorImpl uses PTY via opencode SDK for execution.
+ * Commands are queued to ensure only one runs at a time.
  */
 export interface CommandExecutor {
   /**

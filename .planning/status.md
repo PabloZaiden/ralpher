@@ -4,11 +4,28 @@
 
 ## Overview
 
-The Command Execution Layer provides an abstraction for running shell commands and file operations that works in both spawn mode (local) and connect mode (remote via PTY+WebSocket).
+The Command Execution Layer provides an abstraction for running shell commands and file operations. All commands go through a PTY+WebSocket connection to the opencode server, regardless of whether it's local (spawn mode) or remote (connect mode).
 
-## Current Status: ✅ COMPLETE
+## Current Status: ✅ COMPLETE (Unified Architecture)
 
-All planned features have been implemented.
+All commands now go through a single `CommandExecutorImpl` that uses PTY+WebSocket. Commands are queued to ensure only one runs at a time, preventing server overload.
+
+---
+
+## Architecture Changes (Latest)
+
+### Unified Command Execution
+- **Removed `LocalCommandExecutor`** - No longer separate local vs remote execution
+- **Renamed `RemoteCommandExecutor` to `CommandExecutorImpl`** - Single implementation for all modes
+- **Added command queue** - Ensures only 1 command runs at a time
+- All git operations and file commands go through PTY+WebSocket
+
+### Key Components
+| Component | Purpose |
+|-----------|---------|
+| `CommandExecutorImpl` | Single executor using PTY+WebSocket for all commands |
+| `CommandExecutorConfig` | Configuration for the executor |
+| Command Queue | Ensures sequential execution (one at a time) |
 
 ---
 
@@ -17,11 +34,11 @@ All planned features have been implemented.
 | Task | Status | Notes |
 |------|--------|-------|
 | Create CommandExecutor interface | ✅ Done | `src/core/command-executor.ts` |
-| Implement LocalCommandExecutor | ✅ Done | Uses `Bun.$` and `Bun.file()` |
-| Implement RemoteCommandExecutor | ✅ Done | PTY + WebSocket for output capture |
-| Update GitService | ✅ Done | Accepts CommandExecutor via constructor |
+| Implement CommandExecutorImpl | ✅ Done | Uses PTY + WebSocket for all commands |
+| Add command queue | ✅ Done | Only 1 command runs at a time |
+| Update GitService | ✅ Done | Requires executor (no default) |
 | Update LoopManager | ✅ Done | Gets executor from BackendManager |
-| Update BackendManager | ✅ Done | Returns mode-appropriate executor |
+| Update BackendManager | ✅ Done | Always uses CommandExecutorImpl |
 | Update OpenCodeBackend | ✅ Done | Exposes SDK client and directory |
 
 ---
@@ -32,10 +49,9 @@ All planned features have been implemented.
 |------|--------|-------|
 | Research PTY WebSocket API | ✅ Done | `/pty/{id}/connect` endpoint |
 | Implement WebSocket connection | ✅ Done | Full output capture |
-| Handle authentication | ✅ Done | Basic auth via query param |
+| Handle authentication | ✅ Done | Basic auth via headers |
 | Implement timeout handling | ✅ Done | Default 30s timeout |
 | Implement error detection | ✅ Done | Heuristic pattern matching |
-| SDK API optimizations | ✅ Done | Direct API for common git queries |
 
 ---
 
@@ -44,7 +60,7 @@ All planned features have been implemented.
 | Task | Status | Notes |
 |------|--------|-------|
 | Update `/api/git/branches` | ✅ Done | Uses mode-appropriate executor |
-| Update `/api/loops/:id/diff` | ✅ Done | Uses mode-appropriate git service |
+| Update `/api/loops/:id/diff` | ✅ Done | Optimized to 2 git calls |
 | Update `/api/loops/:id/plan` | ✅ Done | Uses executor.readFile() |
 | Update `/api/loops/:id/status-file` | ✅ Done | Uses executor.readFile() |
 | Update `/api/check-planning-dir` | ✅ Done | Uses executor.directoryExists/listDirectory() |
@@ -57,7 +73,8 @@ All planned features have been implemented.
 |------|--------|-------|
 | Build passes | ✅ Done | No TypeScript errors |
 | Unit tests pass | ✅ Done | All 145 tests pass |
-| Update test fixtures | ✅ Done | Removed gitService injection |
+| TestCommandExecutor | ✅ Done | For tests only (uses Bun.$) |
+| BackendManager test hooks | ✅ Done | setExecutorFactoryForTesting() |
 
 ---
 
@@ -65,18 +82,23 @@ All planned features have been implemented.
 
 ### New Files
 - `src/core/command-executor.ts` - Interface definitions
-- `src/core/local-command-executor.ts` - Local implementation
-- `src/core/remote-command-executor.ts` - Remote implementation with WebSocket
+- `src/core/remote-command-executor.ts` - CommandExecutorImpl (renamed from RemoteCommandExecutor)
+- `tests/mocks/mock-executor.ts` - TestCommandExecutor for tests
+
+### Removed Files
+- `src/core/local-command-executor.ts` - No longer needed
 
 ### Modified Files
-- `src/core/git-service.ts` - Uses CommandExecutor
-- `src/core/loop-manager.ts` - Dynamic executor per operation
-- `src/core/backend-manager.ts` - Provides executor based on mode
+- `src/core/git-service.ts` - Requires executor (no default)
+- `src/core/loop-manager.ts` - Gets executor via BackendManager
+- `src/core/backend-manager.ts` - Always uses CommandExecutorImpl, test hooks
+- `src/core/loop-engine.ts` - Requires gitService parameter
 - `src/backends/opencode/index.ts` - Exposes SDK client
 - `src/api/git.ts` - Uses mode-appropriate git service
 - `src/api/loops.ts` - Uses mode-appropriate executor for file ops
-- `tests/setup.ts` - Test fixture updates
-- `tests/unit/loop-manager.test.ts` - Test fixture updates
+- `tests/setup.ts` - Uses TestCommandExecutor
+- `tests/unit/*.ts` - Updated for new architecture
+- `tests/api/*.ts` - Updated for new architecture
 
 ---
 
@@ -93,65 +115,51 @@ All planned features have been implemented.
 │                           ▼                                      │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │                   BackendManager                         │   │
-│  │              getCommandExecutor(directory)               │   │
+│  │              getCommandExecutorAsync(directory)          │   │
 │  └────────────────────────┬────────────────────────────────┘   │
 │                           │                                      │
-│         ┌─────────────────┼─────────────────┐                   │
-│         ▼                                   ▼                   │
-│  ┌──────────────────┐             ┌────────────────────┐        │
-│  │LocalCommandExec  │             │RemoteCommandExec   │        │
-│  │   (Bun.$)        │             │(PTY+WebSocket)     │        │
-│  └──────────────────┘             └────────────────────┘        │
-│         │                                   │                   │
-│         ▼                                   ▼                   │
-│    Local Files                       Remote Server              │
-│    Local Git                         (via opencode)             │
+│                           ▼                                      │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                 CommandExecutorImpl                      │   │
+│  │            (PTY + WebSocket + Command Queue)             │   │
+│  └────────────────────────┬────────────────────────────────┘   │
+│                           │                                      │
+│                           ▼                                      │
+│                   opencode Server                                │
+│              (local spawn or remote connect)                     │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## RemoteCommandExecutor Flow
+## Command Queue Flow
 
 ```
-Command Execution (ALL commands go through PTY):
-1. exec("git", ["checkout", "-b", "feature"])
-   │
-   └── Use PTY with WebSocket
-       ├── 1. POST /pty (create session)
-       ├── 2. Connect WebSocket to /pty/{id}/connect
-       ├── 3. Collect output from message events
-       ├── 4. Wait for close event
-       ├── 5. Check for error patterns in output
-       └── 6. DELETE /pty/{id} (cleanup)
+exec("git status")  ─┐
+                     │
+exec("git diff")  ───┼──► Queue ──► Execute one at a time
+                     │
+exec("git log")   ───┘
 
-File Operations:
-- fileExists(path) → client.file.read() and check for error
-- readFile(path) → client.file.read()
-- directoryExists(path) → client.file.list() and check for error
-- listDirectory(path) → client.file.list()
+1. Command added to queue
+2. If not already executing, start processing
+3. Execute command via PTY
+4. Wait for completion
+5. Process next in queue
 ```
-
-Note: We previously tried using SDK APIs (vcs.get, file.status) for common git queries,
-but this caused issues because the SDK APIs have different semantics and error handling
-than actual git commands. All git operations now go through PTY for consistency.
 
 ---
+
+## Reliability Improvements
+
+1. **PTY Ready Delay**: Added 50ms delay after PTY creation before WebSocket connection to ensure the PTY is ready
+2. **WebSocket Retry**: Added retry mechanism (up to 3 attempts with exponential backoff: 100ms, 200ms, 400ms) for transient WebSocket connection failures ("Expected 101 status code")
 
 ## Known Limitations
 
-1. **Exit Code Detection**: PTY combines stdout/stderr and we use heuristic error detection instead of actual exit codes
-2. **ANSI Escape Codes**: Output may contain terminal escape codes (not currently stripped)
-3. **No Streaming**: Output is collected and returned as a whole, not streamed
-
----
-
-## Future Improvements (Optional)
-
-- [ ] End-to-end testing in Docker with real remote server
-- [ ] PTY pooling for performance
-- [ ] ANSI escape code stripping option
-- [ ] Streaming output for long-running commands
+1. **Exit Code Detection**: PTY combines stdout/stderr and we use heuristic error detection
+2. **ANSI Escape Codes**: Output may contain terminal escape codes
+3. **No Streaming**: Output is collected and returned as a whole
 
 ---
 

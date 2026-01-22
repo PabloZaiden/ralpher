@@ -25,7 +25,7 @@ import type {
   PromptInput,
 } from "../backends/types";
 import { backendManager } from "./backend-manager";
-import { type GitService, gitService } from "./git-service";
+import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 
 /**
@@ -62,8 +62,8 @@ export interface LoopEngineOptions {
   loop: Loop;
   /** The agent backend to use */
   backend: AgentBackend;
-  /** Git service instance (optional, defaults to singleton) */
-  gitService?: GitService;
+  /** Git service instance (required) */
+  gitService: GitService;
   /** Event emitter instance (optional, defaults to global) */
   eventEmitter?: SimpleEventEmitter<LoopEvent>;
   /** Callback to persist state to disk (optional) */
@@ -124,7 +124,7 @@ export class LoopEngine {
   constructor(options: LoopEngineOptions) {
     this.loop = options.loop;
     this.backend = options.backend;
-    this.git = options.gitService ?? gitService;
+    this.git = options.gitService;
     this.emitter = options.eventEmitter ?? loopEventEmitter;
     this.stopDetector = new StopPatternDetector(options.loop.config.stopPattern);
     this.onPersistState = options.onPersistState;

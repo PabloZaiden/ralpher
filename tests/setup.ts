@@ -12,6 +12,7 @@ import { backendRegistry } from "../src/backends/registry";
 import { backendManager } from "../src/core/backend-manager";
 import { ensureDataDirectories } from "../src/persistence/paths";
 import { MockBackend } from "./mocks/mock-backend";
+import { TestCommandExecutor } from "./mocks/mock-executor";
 import type { LoopEvent } from "../src/types/events";
 
 /**
@@ -78,7 +79,8 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
   }
 
   // Initialize git if requested
-  const git = new GitService();
+  const executor = new TestCommandExecutor();
+  const git = new GitService(executor);
   if (initGit) {
     await Bun.$`git init`.cwd(workDir).quiet();
     await Bun.$`git config user.email "test@test.com"`.cwd(workDir).quiet();
@@ -101,6 +103,8 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
     backendRegistry.register("opencode", () => mockBackend!);
     // Also set the mock backend in the global backend manager
     backendManager.setBackendForTesting(mockBackend);
+    // Set the executor factory for testing (uses local Bun.$ execution)
+    backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
   }
 
   // Create manager
