@@ -39,7 +39,7 @@ export interface ToolCallData {
 
 /**
  * All possible loop events.
- * These are streamed via SSE to connected clients.
+ * These are streamed via WebSocket to connected clients.
  */
 export type LoopEvent =
   | LoopCreatedEvent

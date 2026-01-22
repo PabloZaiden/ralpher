@@ -237,7 +237,7 @@ class BackendManager {
    */
   private emitEvent(event: ServerEvent): void {
     // Cast to LoopEvent since the emitter accepts that type
-    // The SSE handler will pass through any event with a type property
+    // The WebSocket handler will pass through any event with a type property
     loopEventEmitter.emit(event as unknown as LoopEvent);
   }
 }
