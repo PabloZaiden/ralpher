@@ -86,7 +86,8 @@ export function useSSE<T = unknown>(options: UseSSEOptions<T>): UseSSEResult<T> 
 
     updateStatus("connecting");
 
-    const eventSource = new EventSource(url);
+    // Use withCredentials to ensure cookies are sent (needed for auth proxies)
+    const eventSource = new EventSource(url, { withCredentials: true });
     eventSourceRef.current = eventSource;
 
     eventSource.onopen = () => {
