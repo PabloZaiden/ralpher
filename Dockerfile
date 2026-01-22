@@ -21,7 +21,13 @@ FROM debian:bookworm-slim
 WORKDIR /app
 
 # Install ca-certificates for HTTPS requests
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
+
+# Install opencode
+RUN curl -fsSL https://opencode.ai/install | bash
+
+# Add opencode to PATH
+ENV PATH="/root/.opencode/bin:${PATH}"
 
 # Copy the standalone binary from builder
 COPY --from=builder /app/dist/ralpher /app/ralpher
