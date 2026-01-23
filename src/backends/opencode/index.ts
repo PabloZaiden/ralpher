@@ -361,7 +361,19 @@ export class OpenCodeBackend implements AgentBackend {
     const toolPartStatus = new Map<string, string>();
     // For reasoning: track last known reasoning text length per part ID
     const reasoningTextLength = new Map<string, number>();
-    // Track whether we've seen a message.start in this subscription
+    // Track whether we've seen a message.start in this subscription.
+    // 
+    // IMPORTANT: This guard prevents stale `session.idle` events from causing
+    // phantom iterations. When we subscribe before sending a prompt (which we
+    // always do to avoid missing early events), there may be a pre-existing
+    // `session.idle` event from the previous prompt. Without this guard, that
+    // stale idle would be translated to `message.complete` and incorrectly
+    // signal the end of an iteration before any work has started.
+    //
+    // This assumes subscriptions are always created BEFORE sending prompts.
+    // If a subscription were started mid-message, it would miss the
+    // `message.start` and incorrectly filter the subsequent `message.complete`.
+    // However, this is not a concern for our usage pattern in loop-engine.ts.
     let hasMessageStart = false;
 
     try {
