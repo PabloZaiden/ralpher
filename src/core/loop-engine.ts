@@ -179,17 +179,23 @@ export class LoopEngine {
       log.trace("[LoopEngine] setupSession completed successfully");
 
       // Emit started event
+      log.trace("[LoopEngine] About to emit loop.started event");
       this.emit({
         type: "loop.started",
         loopId: this.config.id,
         iteration: 0,
         timestamp: createTimestamp(),
       });
+      log.trace("[LoopEngine] loop.started event emitted");
 
+      log.trace("[LoopEngine] About to emit 'Loop started successfully' log");
       this.emitLog("info", "Loop started successfully, beginning iterations");
+      log.trace("[LoopEngine] 'Loop started successfully' log emitted");
 
       // Start the iteration loop
+      log.trace("[LoopEngine] About to call runLoop");
       await this.runLoop();
+      log.trace("[LoopEngine] runLoop completed");
     } catch (error) {
       this.emitLog("error", `Failed to start loop: ${String(error)}`);
       this.handleError(error);
@@ -325,16 +331,21 @@ export class LoopEngine {
    * Uses global backend settings from backendManager.
    */
   private async setupSession(): Promise<void> {
+    log.trace("[LoopEngine] setupSession: Entry point");
     // Get global server settings from backendManager
     const settings = backendManager.getSettings();
+    log.trace("[LoopEngine] setupSession: Got settings", { mode: settings.mode });
     
     // Connect to backend if not already connected
-    if (!this.backend.isConnected()) {
+    const isConnected = this.backend.isConnected();
+    log.trace("[LoopEngine] setupSession: Backend connected?", { isConnected });
+    if (!isConnected) {
       this.emitLog("info", "Backend not connected, establishing connection...", {
         mode: settings.mode,
         hostname: settings.hostname,
         port: settings.port,
       });
+      log.trace("[LoopEngine] setupSession: About to call backend.connect");
       await this.backend.connect({
         mode: settings.mode,
         hostname: settings.hostname,
@@ -342,17 +353,20 @@ export class LoopEngine {
         password: settings.password,
         directory: this.config.directory,
       });
+      log.trace("[LoopEngine] setupSession: backend.connect completed");
       this.emitLog("info", "Backend connection established");
     } else {
       this.emitLog("debug", "Backend already connected");
     }
 
     // Create a new session for this loop
+    log.trace("[LoopEngine] setupSession: About to create session");
     this.emitLog("info", "Creating new AI session...");
     const session = await this.backend.createSession({
       title: `Ralph Loop: ${this.config.name}`,
       directory: this.config.directory,
     });
+    log.trace("[LoopEngine] setupSession: Session created", { sessionId: session.id });
 
     this.sessionId = session.id;
     this.emitLog("info", `AI session created`, { sessionId: session.id });
@@ -362,12 +376,14 @@ export class LoopEngine {
       ? `http://${settings.hostname}:${settings.port ?? 4096}`
       : undefined;
 
+    log.trace("[LoopEngine] setupSession: About to update state");
     this.updateState({
       session: {
         id: session.id,
         serverUrl,
       },
     });
+    log.trace("[LoopEngine] setupSession: Exit point");
   }
 
   /**
