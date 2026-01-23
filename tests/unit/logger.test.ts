@@ -50,8 +50,10 @@ describe("Logger", () => {
     test("accepts lowercase level names", () => {
       // These are valid level names
       const validLevels = ["silly", "trace", "debug", "info", "warn", "error", "fatal"];
+      const levelKeys = Object.keys(LOG_LEVELS);
+      // instead of hardcoding, we can use the LOG_LEVELS keys
       for (const level of validLevels) {
-        expect(validLevels.includes(level)).toBe(true);
+        expect(levelKeys.includes(level)).toBe(true);
       }
     });
 
