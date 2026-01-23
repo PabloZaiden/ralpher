@@ -1,10 +1,12 @@
 import twPlugin from 'bun-plugin-tailwind'
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
 // workDir is the current file's directory + '/..'
 const workDir = import.meta.dir + '/..';
 
 // create a temp directory for output in the os temp directory
-const outDir = fs.mkdtempSync("ralpher-build-");
+const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "ralpher-build-"));
 const finalOutDir = `${workDir}/dist`;
 
 // Parse --target argument (e.g., --target=linux-x64)
