@@ -95,7 +95,7 @@ export class GitService {
       throw new Error(`Failed to get local branches: ${result.stderr}`);
     }
 
-    const lines = result.stdout.trim().split("\n").filter(Boolean);
+    const lines = result.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
     const branches = lines.map((line) => {
       const [name, head] = line.split("|");
       return {
@@ -139,7 +139,7 @@ export class GitService {
       throw new Error(`Failed to get changed files: ${result.stderr}`);
     }
 
-    const lines = result.stdout.trim().split("\n").filter(Boolean);
+    const lines = result.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
     return lines.map((line) => {
       // Format: "XY filename" or "XY original -> renamed"
       const match = line.match(/^..\s+(.+?)(?:\s+->\s+(.+))?$/);
@@ -237,7 +237,7 @@ export class GitService {
       "-r",
       sha,
     ]);
-    const filesChanged = filesResult.stdout.trim().split("\n").filter(Boolean).length;
+    const filesChanged = filesResult.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean).length;
 
     return {
       sha,
@@ -378,9 +378,10 @@ export class GitService {
     ]);
     
     // Build a map of file path -> status
+    // Normalize line endings from PTY (may have \r\n)
     const statusMap = new Map<string, string>();
     if (statusResult.success) {
-      const statusLines = statusResult.stdout.trim().split("\n").filter(Boolean);
+      const statusLines = statusResult.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
       for (const line of statusLines) {
         // Format: "A\tfilename" or "R100\told\tnew" for renames
         const parts = line.split("\t");
@@ -392,7 +393,8 @@ export class GitService {
       }
     }
 
-    const lines = result.stdout.trim().split("\n").filter(Boolean);
+    // Normalize line endings from PTY (may have \r\n)
+    const lines = result.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
     const diffs: FileDiff[] = [];
 
     for (const line of lines) {
@@ -491,7 +493,8 @@ export class GitService {
       return diffs;
     }
 
-    const fullDiff = result.stdout;
+    // Normalize line endings from PTY (may have \r\n) to \n
+    const fullDiff = result.stdout.replace(/\r\n/g, "\n");
     const diffsWithContent: FileDiffWithContent[] = [];
 
     // Parse the full diff to extract per-file patches
@@ -501,8 +504,8 @@ export class GitService {
     for (const diff of diffs) {
       // Find the section for this file
       const section = fileSections.find(s => {
-        // Match "a/path b/path" at the start
-        const headerMatch = s.match(/^a\/(.+?) b\/(.+?)\n/);
+        // Match "a/path b/path" at the start (handle both \n and \r\n)
+        const headerMatch = s.match(/^a\/(.+?) b\/(.+?)[\r\n]/);
         if (headerMatch) {
           return headerMatch[1] === diff.path || headerMatch[2] === diff.path;
         }

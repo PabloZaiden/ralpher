@@ -52,7 +52,8 @@ function formatDateTime(isoString: string | undefined): string {
  * Render diff patch with syntax highlighting for additions/deletions.
  */
 function DiffPatchViewer({ patch }: { patch: string }) {
-  const lines = patch.split("\n");
+  // Normalize line endings and split
+  const lines = patch.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
   
   return (
     <pre className="text-xs font-mono overflow-x-auto bg-gray-950 p-3 rounded-b">
