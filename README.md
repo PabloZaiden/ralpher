@@ -177,6 +177,19 @@ See [docs/API.md](docs/API.md) for complete API documentation.
 | AI Integration | @opencode-ai/sdk |
 | Real-time | WebSocket |
 
+## Architecture
+
+### Server Modes
+
+Ralpher supports two modes for connecting to the opencode backend:
+
+| Mode | Description |
+|------|-------------|
+| **Spawn** | Ralpher spawns a local opencode server process automatically |
+| **Connect** | Ralpher connects to a remote opencode server via URL |
+
+Both modes work identically from the user's perspective - the same UI and API endpoints work regardless of mode.
+
 ## Testing
 
 ```bash
