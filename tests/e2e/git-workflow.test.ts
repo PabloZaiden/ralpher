@@ -166,45 +166,6 @@ describe("Git Workflow", () => {
       }
     });
 
-    test("commits uncommitted changes when handleUncommitted is 'commit'", async () => {
-      // Create uncommitted changes
-      await writeFile(join(ctx.workDir, "uncommitted.txt"), "uncommitted content");
-      await Bun.$`git add .`.cwd(ctx.workDir).quiet();
-
-      const loop = await ctx.manager.createLoop({
-        name: "Handle Uncommitted Loop",
-        directory: ctx.workDir,
-        prompt: "Make changes",
-      });
-
-      // Start with handleUncommitted option
-      await ctx.manager.startLoop(loop.config.id, { handleUncommitted: "commit" });
-      await waitForEvent(ctx.events, "loop.completed");
-
-      // Verify the uncommitted changes were committed
-      const hasChanges = await ctx.git.hasUncommittedChanges(ctx.workDir);
-      expect(hasChanges).toBe(false);
-    });
-
-    test("stashes uncommitted changes when handleUncommitted is 'stash'", async () => {
-      // Create uncommitted changes
-      await writeFile(join(ctx.workDir, "uncommitted.txt"), "uncommitted content");
-      await Bun.$`git add .`.cwd(ctx.workDir).quiet();
-
-      const loop = await ctx.manager.createLoop({
-        name: "Stash Uncommitted Loop",
-        directory: ctx.workDir,
-        prompt: "Make changes",
-      });
-
-      // Start with handleUncommitted option
-      await ctx.manager.startLoop(loop.config.id, { handleUncommitted: "stash" });
-      await waitForEvent(ctx.events, "loop.completed");
-
-      // Verify changes were stashed (no uncommitted changes)
-      const hasChanges = await ctx.git.hasUncommittedChanges(ctx.workDir);
-      expect(hasChanges).toBe(false);
-    });
   });
 
   describe("Accept Loop (Merge Branch)", () => {

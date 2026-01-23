@@ -110,74 +110,36 @@ export interface UncommittedChangesModalProps {
   onClose: () => void;
   /** The error containing uncommitted changes info */
   error: UncommittedChangesError | null;
-  /** Callback when user chooses to commit changes */
-  onCommit: () => Promise<void>;
-  /** Callback when user chooses to stash changes */
-  onStash: () => Promise<void>;
 }
 
 /**
- * Modal for handling uncommitted changes when starting a loop.
+ * Modal for showing uncommitted changes error when starting a loop.
+ * This modal only displays the error - user must manually clean their working directory.
  */
 export function UncommittedChangesModal({
   isOpen,
   onClose,
   error,
-  onCommit,
-  onStash,
 }: UncommittedChangesModalProps) {
-  const [loading, setLoading] = useState(false);
-
-  async function handleCommit() {
-    setLoading(true);
-    try {
-      await onCommit();
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleStash() {
-    setLoading(true);
-    try {
-      await onStash();
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Uncommitted Changes Detected"
+      title="Cannot Start Loop"
       size="md"
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={handleStash}
-            loading={loading}
-          >
-            Stash Changes
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleCommit}
-            loading={loading}
-          >
-            Commit Changes
-          </Button>
-        </>
+        <Button variant="primary" onClick={onClose}>
+          Close
+        </Button>
       }
     >
       {error && (
         <div>
           <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">
             {error.message}
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+            Please commit or stash your changes before starting a loop.
           </p>
           {error.changedFiles.length > 0 && (
             <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-3">

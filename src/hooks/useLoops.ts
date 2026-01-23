@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest, StartLoopRequest } from "../types";
+import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest } from "../types";
 import { useGlobalEvents } from "./useWebSocket";
 import {
   startLoopApi,
@@ -37,7 +37,7 @@ export interface UseLoopsResult {
   /** Delete a loop */
   deleteLoop: (id: string) => Promise<boolean>;
   /** Start a loop */
-  startLoop: (id: string, request?: StartLoopRequest) => Promise<StartLoopResult>;
+  startLoop: (id: string) => Promise<StartLoopResult>;
   /** Stop a loop */
   stopLoop: (id: string) => Promise<boolean>;
   /** Accept (merge) a loop's changes */
@@ -195,9 +195,9 @@ export function useLoops(): UseLoopsResult {
 
   // Start a loop
   const startLoop = useCallback(
-    async (id: string, request?: StartLoopRequest): Promise<StartLoopResult> => {
+    async (id: string): Promise<StartLoopResult> => {
       try {
-        const result = await startLoopApi(id, request);
+        const result = await startLoopApi(id);
         if (result.success) {
           await refreshLoop(id);
         }

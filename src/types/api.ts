@@ -69,10 +69,11 @@ export interface UpdateLoopRequest {
 
 /**
  * Request to start a loop.
+ * Note: Previously supported handleUncommitted option has been removed.
+ * Loops now fail to start if there are uncommitted changes.
  */
 export interface StartLoopRequest {
-  /** How to handle uncommitted changes */
-  handleUncommitted?: "commit" | "stash";
+  // Reserved for future options
 }
 
 /**
@@ -100,11 +101,12 @@ export interface PushResponse {
 
 /**
  * Error response for uncommitted changes.
+ * This error indicates the loop cannot start because the directory has uncommitted changes.
+ * User must commit or stash changes manually before starting the loop.
  */
 export interface UncommittedChangesError {
   error: "uncommitted_changes";
   message: string;
-  options: ("commit" | "stash" | "cancel")[];
   changedFiles: string[];
 }
 
