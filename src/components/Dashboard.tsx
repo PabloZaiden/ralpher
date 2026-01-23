@@ -475,6 +475,10 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               if (request.model) {
                 setLastModel(request.model);
               }
+              // Start the loop immediately if requested (default: true)
+              if (request.startImmediately !== false) {
+                await startLoop(loop.config.id);
+              }
             }
           }}
           onCancel={handleCloseCreateModal}
