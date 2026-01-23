@@ -391,19 +391,26 @@ export class LoopEngine {
    * Now continues on errors unless max consecutive identical errors is reached.
    */
   private async runLoop(): Promise<void> {
+    log.trace("[LoopEngine] runLoop: Entry point");
     this.emitLog("debug", "Entering runLoop", {
       aborted: this.aborted,
       status: this.loop.state.status,
       shouldContinue: this.shouldContinue(),
     });
+    log.trace("[LoopEngine] runLoop: Emitted debug log, checking while condition", {
+      aborted: this.aborted,
+      shouldContinue: this.shouldContinue(),
+    });
 
     while (!this.aborted && this.shouldContinue()) {
+      log.trace("[LoopEngine] runLoop: Entered while loop, about to call runIteration");
       this.emitLog("debug", "Loop iteration check passed", {
         aborted: this.aborted,
         status: this.loop.state.status,
       });
 
       const iterationResult = await this.runIteration();
+      log.trace("[LoopEngine] runLoop: runIteration completed", { outcome: iterationResult.outcome });
 
       if (iterationResult.outcome === "complete") {
         this.emitLog("info", "Stop pattern detected - loop completed successfully", {
@@ -576,6 +583,7 @@ export class LoopEngine {
    * Run a single iteration with real-time event streaming.
    */
   private async runIteration(): Promise<IterationResult> {
+    log.trace("[LoopEngine] runIteration: Entry point");
     const iteration = this.loop.state.currentIteration + 1;
     const startedAt = createTimestamp();
 
@@ -613,6 +621,7 @@ export class LoopEngine {
 
     try {
       // Build the prompt
+      log.trace("[LoopEngine] runIteration: Building prompt");
       this.emitLog("debug", "Building prompt for AI agent");
       const prompt = this.buildPrompt(iteration);
 
@@ -622,16 +631,22 @@ export class LoopEngine {
       }
 
       // Subscribe to events and process them
+      log.trace("[LoopEngine] runIteration: About to subscribe to events");
       this.emitLog("debug", "Subscribing to AI response stream");
       const eventIterator = this.backend.subscribeToEvents(this.sessionId)[Symbol.asyncIterator]();
+      log.trace("[LoopEngine] runIteration: Got event iterator");
 
       // Send prompt asynchronously (after subscription starts to avoid missing fast responses)
+      log.trace("[LoopEngine] runIteration: About to send prompt async");
       this.emitLog("info", "Sending prompt to AI agent...");
       await this.backend.sendPromptAsync(this.sessionId, prompt);
+      log.trace("[LoopEngine] runIteration: sendPromptAsync completed");
 
       try {
+        log.trace("[LoopEngine] runIteration: About to start event iteration loop");
         for (let result = await eventIterator.next(); !result.done; result = await eventIterator.next()) {
           const event = result.value;
+          log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
         // Check if aborted
         if (this.aborted) {
           this.emitLog("info", "Iteration aborted by user");
