@@ -13,19 +13,6 @@
     @apply w-full min-h-screen;
   }
 }
-/* 
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.05;
-  background: url("./logo.svg");
-  background-size: 256px;
-  transform: rotate(-12deg) scale(1.35);
-  animation: slide 30s linear infinite;
-  pointer-events: none;
-} */
 
 @keyframes slide {
   from {
