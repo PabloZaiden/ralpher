@@ -55,10 +55,11 @@ export interface CreateLoopOptions {
 
 /**
  * Options for starting a loop.
+ * Note: Previously supported handleUncommitted option has been removed.
+ * Loops now fail to start if there are uncommitted changes.
  */
 export interface StartLoopOptions {
-  /** How to handle uncommitted changes */
-  handleUncommitted?: "commit" | "stash";
+  // Reserved for future options
 }
 
 /**
@@ -241,8 +242,9 @@ export class LoopManager {
 
   /**
    * Start a loop.
+   * Fails with UNCOMMITTED_CHANGES error if the directory has uncommitted changes.
    */
-  async startLoop(loopId: string, options?: StartLoopOptions): Promise<void> {
+  async startLoop(loopId: string, _options?: StartLoopOptions): Promise<void> {
     const loop = await loadLoop(loopId);
     if (!loop) {
       throw new Error(`Loop not found: ${loopId}`);
@@ -259,30 +261,18 @@ export class LoopManager {
     const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
     const git = GitService.withExecutor(executor);
 
-    // Check for uncommitted changes
+    // Check for uncommitted changes - fail immediately if found
     const hasChanges = await git.hasUncommittedChanges(loop.config.directory);
 
     if (hasChanges) {
-      if (!options?.handleUncommitted) {
-        const changedFiles = await git.getChangedFiles(loop.config.directory);
-        const error = new Error("Directory has uncommitted changes") as Error & {
-          code: string;
-          changedFiles: string[];
-        };
-        error.code = "UNCOMMITTED_CHANGES";
-        error.changedFiles = changedFiles;
-        throw error;
-      }
-
-      // Handle uncommitted changes
-      if (options.handleUncommitted === "commit") {
-        await git.commit(
-          loop.config.directory,
-          "[Pre-Ralph] Uncommitted changes"
-        );
-      } else if (options.handleUncommitted === "stash") {
-        await git.stash(loop.config.directory);
-      }
+      const changedFiles = await git.getChangedFiles(loop.config.directory);
+      const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
+        code: string;
+        changedFiles: string[];
+      };
+      error.code = "UNCOMMITTED_CHANGES";
+      error.changedFiles = changedFiles;
+      throw error;
     }
 
     // Get backend from global manager

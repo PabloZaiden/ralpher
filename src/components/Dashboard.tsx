@@ -219,19 +219,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     }
   }
 
-  // Handle uncommitted changes decision
-  async function handleUncommittedCommit() {
-    if (!uncommittedModal.loopId) return;
-    await startLoop(uncommittedModal.loopId, { handleUncommitted: "commit" });
-    setUncommittedModal({ open: false, loopId: null, error: null });
-  }
-
-  async function handleUncommittedStash() {
-    if (!uncommittedModal.loopId) return;
-    await startLoop(uncommittedModal.loopId, { handleUncommitted: "stash" });
-    setUncommittedModal({ open: false, loopId: null, error: null });
-  }
-
   // Handle delete
   async function handleDelete() {
     if (!deleteModal.loopId) return;
@@ -477,7 +464,15 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               }
               // Start the loop immediately if requested (default: true)
               if (request.startImmediately !== false) {
-                await startLoop(loop.config.id);
+                const result = await startLoop(loop.config.id);
+                // If there are uncommitted changes, show error modal
+                if (result.uncommittedError) {
+                  setUncommittedModal({
+                    open: true,
+                    loopId: loop.config.id,
+                    error: result.uncommittedError,
+                  });
+                }
               }
             }
           }}
@@ -520,8 +515,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         isOpen={uncommittedModal.open}
         onClose={() => setUncommittedModal({ open: false, loopId: null, error: null })}
         error={uncommittedModal.error}
-        onCommit={handleUncommittedCommit}
-        onStash={handleUncommittedStash}
       />
 
       {/* Server Settings modal */}

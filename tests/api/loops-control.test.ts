@@ -111,10 +111,12 @@ describe("Loops Control API Integration", () => {
     await Bun.$`git -C ${testWorkDir} add .`.quiet();
     await Bun.$`git -C ${testWorkDir} commit -m "Initial commit"`.quiet();
 
-    // Create .planning directory
+    // Create .planning directory and commit it
     await mkdir(join(testWorkDir, ".planning"), { recursive: true });
     await writeFile(join(testWorkDir, ".planning/plan.md"), "# Test Plan\n\nThis is a test plan.");
     await writeFile(join(testWorkDir, ".planning/status.md"), "# Status\n\nIn progress.");
+    await Bun.$`git -C ${testWorkDir} add .`.quiet();
+    await Bun.$`git -C ${testWorkDir} commit -m "Add planning files"`.quiet();
 
     // Register mock backend
     backendRegistry.register("mock", createMockBackend);
@@ -164,11 +166,11 @@ describe("Loops Control API Integration", () => {
       const createBody = await createResponse.json();
       const loopId = createBody.config.id;
 
-      // Start it (use commit to handle any leftover uncommitted changes from other tests)
+      // Start it (directory should be clean)
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ handleUncommitted: "commit" }),
+        body: JSON.stringify({}),
       });
 
       expect(response.status).toBe(200);
@@ -214,38 +216,8 @@ describe("Loops Control API Integration", () => {
       expect(response.status).toBe(409);
       const body = await response.json();
       expect(body.error).toBe("uncommitted_changes");
-      expect(body.options).toContain("commit");
-      expect(body.options).toContain("stash");
-      expect(body.options).toContain("cancel");
+      // No longer offers options - just fails with changed files list
       expect(Array.isArray(body.changedFiles)).toBe(true);
-    });
-
-    test("starts with handleUncommitted=commit", async () => {
-      // Create a loop with git enabled
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Commit Test Loop",
-          directory: testWorkDir,
-          prompt: "Test prompt",
-          backend: { type: "mock" },
-          git: { branchPrefix: "ralph/" },
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
-
-      // Start with commit option
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ handleUncommitted: "commit" }),
-      });
-
-      expect(response.status).toBe(200);
-      const body = await response.json();
-      expect(body.success).toBe(true);
     });
   });
 

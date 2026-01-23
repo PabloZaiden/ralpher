@@ -15,6 +15,7 @@ import type {
   AssistantMessage,
 } from "@opencode-ai/sdk/v2";
 import { isRemoteOnlyMode } from "../../core/config";
+import { log } from "../../core/logger";
 
 /**
  * Model information returned by getModels().
@@ -307,9 +308,11 @@ export class OpenCodeBackend implements AgentBackend {
    * Use subscribeToEvents to get the response.
    */
   async sendPromptAsync(sessionId: string, prompt: PromptInput): Promise<void> {
+    log.trace("[OpenCodeBackend] sendPromptAsync: Entry", { sessionId });
     const client = this.getClient();
 
     // v2 SDK uses flattened parameters
+    log.trace("[OpenCodeBackend] sendPromptAsync: About to call client.session.promptAsync");
     const result = await client.session.promptAsync({
       sessionID: sessionId,
       directory: this.directory,
@@ -319,10 +322,12 @@ export class OpenCodeBackend implements AgentBackend {
       })),
       model: prompt.model,
     });
+    log.trace("[OpenCodeBackend] sendPromptAsync: client.session.promptAsync returned", { hasError: !!result.error });
 
     if (result.error) {
       throw new Error(`Failed to send async prompt: ${JSON.stringify(result.error)}`);
     }
+    log.trace("[OpenCodeBackend] sendPromptAsync: Exit");
   }
 
   /**
@@ -350,17 +355,20 @@ export class OpenCodeBackend implements AgentBackend {
    * are being built. We track what we've already emitted to avoid duplicates.
    */
   async *subscribeToEvents(sessionId: string): AsyncIterable<AgentEvent> {
+    log.trace("[OpenCodeBackend] subscribeToEvents: Entry", { sessionId });
     const client = this.getClient();
 
     // Create AbortController to allow cancellation when consumer breaks
     const abortController = new AbortController();
 
     // v2 SDK uses flattened parameters
+    log.trace("[OpenCodeBackend] subscribeToEvents: About to call client.event.subscribe");
     const subscription = await client.event.subscribe({
       directory: this.directory,
     }, {
       signal: abortController.signal,
     });
+    log.trace("[OpenCodeBackend] subscribeToEvents: Subscription created");
 
     // Track emitted events to avoid duplicates
     // For message.start: track message IDs we've seen
@@ -385,7 +393,9 @@ export class OpenCodeBackend implements AgentBackend {
     let hasMessageStart = false;
 
     try {
+      log.trace("[OpenCodeBackend] subscribeToEvents: About to iterate over subscription.stream");
       for await (const event of subscription.stream) {
+        log.trace("[OpenCodeBackend] subscribeToEvents: Received raw event", { type: (event as OpenCodeEvent).type });
         // Filter events for our session and translate them
         const translated = this.translateEvent(
           event as OpenCodeEvent,

@@ -4,7 +4,6 @@
  */
 
 import type {
-  StartLoopRequest,
   UncommittedChangesError,
 } from "../types";
 
@@ -34,15 +33,15 @@ export interface PushLoopResult {
 
 /**
  * Start a loop via the API.
+ * Returns uncommittedError if there are uncommitted changes (409 status).
  */
 export async function startLoopApi(
-  loopId: string,
-  request?: StartLoopRequest
+  loopId: string
 ): Promise<StartLoopResult> {
   const response = await fetch(`/api/loops/${loopId}/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(request || {}),
+    body: JSON.stringify({}),
   });
 
   if (response.status === 409) {

@@ -240,18 +240,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     }
   }
 
-  // Handle uncommitted decision - commit
-  async function handleUncommittedCommit() {
-    await start({ handleUncommitted: "commit" });
-    setUncommittedModal({ open: false, error: null });
-  }
-
-  // Handle uncommitted decision - stash
-  async function handleUncommittedStash() {
-    await start({ handleUncommitted: "stash" });
-    setUncommittedModal({ open: false, error: null });
-  }
-
   // Handle delete
   async function handleDelete() {
     const success = await remove();
@@ -785,8 +773,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         isOpen={uncommittedModal.open}
         onClose={() => setUncommittedModal({ open: false, error: null })}
         error={uncommittedModal.error}
-        onCommit={handleUncommittedCommit}
-        onStash={handleUncommittedStash}
       />
     </div>
   );

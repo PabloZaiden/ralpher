@@ -179,17 +179,23 @@ export class LoopEngine {
       log.trace("[LoopEngine] setupSession completed successfully");
 
       // Emit started event
+      log.trace("[LoopEngine] About to emit loop.started event");
       this.emit({
         type: "loop.started",
         loopId: this.config.id,
         iteration: 0,
         timestamp: createTimestamp(),
       });
+      log.trace("[LoopEngine] loop.started event emitted");
 
+      log.trace("[LoopEngine] About to emit 'Loop started successfully' log");
       this.emitLog("info", "Loop started successfully, beginning iterations");
+      log.trace("[LoopEngine] 'Loop started successfully' log emitted");
 
       // Start the iteration loop
+      log.trace("[LoopEngine] About to call runLoop");
       await this.runLoop();
+      log.trace("[LoopEngine] runLoop completed");
     } catch (error) {
       this.emitLog("error", `Failed to start loop: ${String(error)}`);
       this.handleError(error);
@@ -325,16 +331,21 @@ export class LoopEngine {
    * Uses global backend settings from backendManager.
    */
   private async setupSession(): Promise<void> {
+    log.trace("[LoopEngine] setupSession: Entry point");
     // Get global server settings from backendManager
     const settings = backendManager.getSettings();
+    log.trace("[LoopEngine] setupSession: Got settings", { mode: settings.mode });
     
     // Connect to backend if not already connected
-    if (!this.backend.isConnected()) {
+    const isConnected = this.backend.isConnected();
+    log.trace("[LoopEngine] setupSession: Backend connected?", { isConnected });
+    if (!isConnected) {
       this.emitLog("info", "Backend not connected, establishing connection...", {
         mode: settings.mode,
         hostname: settings.hostname,
         port: settings.port,
       });
+      log.trace("[LoopEngine] setupSession: About to call backend.connect");
       await this.backend.connect({
         mode: settings.mode,
         hostname: settings.hostname,
@@ -342,17 +353,20 @@ export class LoopEngine {
         password: settings.password,
         directory: this.config.directory,
       });
+      log.trace("[LoopEngine] setupSession: backend.connect completed");
       this.emitLog("info", "Backend connection established");
     } else {
       this.emitLog("debug", "Backend already connected");
     }
 
     // Create a new session for this loop
+    log.trace("[LoopEngine] setupSession: About to create session");
     this.emitLog("info", "Creating new AI session...");
     const session = await this.backend.createSession({
       title: `Ralph Loop: ${this.config.name}`,
       directory: this.config.directory,
     });
+    log.trace("[LoopEngine] setupSession: Session created", { sessionId: session.id });
 
     this.sessionId = session.id;
     this.emitLog("info", `AI session created`, { sessionId: session.id });
@@ -362,12 +376,14 @@ export class LoopEngine {
       ? `http://${settings.hostname}:${settings.port ?? 4096}`
       : undefined;
 
+    log.trace("[LoopEngine] setupSession: About to update state");
     this.updateState({
       session: {
         id: session.id,
         serverUrl,
       },
     });
+    log.trace("[LoopEngine] setupSession: Exit point");
   }
 
   /**
@@ -375,19 +391,26 @@ export class LoopEngine {
    * Now continues on errors unless max consecutive identical errors is reached.
    */
   private async runLoop(): Promise<void> {
+    log.trace("[LoopEngine] runLoop: Entry point");
     this.emitLog("debug", "Entering runLoop", {
       aborted: this.aborted,
       status: this.loop.state.status,
       shouldContinue: this.shouldContinue(),
     });
+    log.trace("[LoopEngine] runLoop: Emitted debug log, checking while condition", {
+      aborted: this.aborted,
+      shouldContinue: this.shouldContinue(),
+    });
 
     while (!this.aborted && this.shouldContinue()) {
+      log.trace("[LoopEngine] runLoop: Entered while loop, about to call runIteration");
       this.emitLog("debug", "Loop iteration check passed", {
         aborted: this.aborted,
         status: this.loop.state.status,
       });
 
       const iterationResult = await this.runIteration();
+      log.trace("[LoopEngine] runLoop: runIteration completed", { outcome: iterationResult.outcome });
 
       if (iterationResult.outcome === "complete") {
         this.emitLog("info", "Stop pattern detected - loop completed successfully", {
@@ -560,6 +583,7 @@ export class LoopEngine {
    * Run a single iteration with real-time event streaming.
    */
   private async runIteration(): Promise<IterationResult> {
+    log.trace("[LoopEngine] runIteration: Entry point");
     const iteration = this.loop.state.currentIteration + 1;
     const startedAt = createTimestamp();
 
@@ -597,6 +621,7 @@ export class LoopEngine {
 
     try {
       // Build the prompt
+      log.trace("[LoopEngine] runIteration: Building prompt");
       this.emitLog("debug", "Building prompt for AI agent");
       const prompt = this.buildPrompt(iteration);
 
@@ -606,16 +631,22 @@ export class LoopEngine {
       }
 
       // Subscribe to events and process them
+      log.trace("[LoopEngine] runIteration: About to subscribe to events");
       this.emitLog("debug", "Subscribing to AI response stream");
       const eventIterator = this.backend.subscribeToEvents(this.sessionId)[Symbol.asyncIterator]();
+      log.trace("[LoopEngine] runIteration: Got event iterator");
 
       // Send prompt asynchronously (after subscription starts to avoid missing fast responses)
+      log.trace("[LoopEngine] runIteration: About to send prompt async");
       this.emitLog("info", "Sending prompt to AI agent...");
       await this.backend.sendPromptAsync(this.sessionId, prompt);
+      log.trace("[LoopEngine] runIteration: sendPromptAsync completed");
 
       try {
+        log.trace("[LoopEngine] runIteration: About to start event iteration loop");
         for (let result = await eventIterator.next(); !result.done; result = await eventIterator.next()) {
           const event = result.value;
+          log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
         // Check if aborted
         if (this.aborted) {
           this.emitLog("info", "Iteration aborted by user");

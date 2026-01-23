@@ -14,7 +14,6 @@ import { setLastModel } from "../persistence/preferences";
 import type {
   CreateLoopRequest,
   UpdateLoopRequest,
-  StartLoopRequest,
   AcceptResponse,
   PushResponse,
   ErrorResponse,
@@ -174,14 +173,11 @@ export const loopsControlRoutes = {
   "/api/loops/:id/start": {
     /**
      * POST /api/loops/:id/start - Start a loop
+     * Returns 409 with UncommittedChangesError if there are uncommitted changes.
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      const body = await parseBody<StartLoopRequest>(req);
-
       try {
-        await loopManager.startLoop(req.params.id, {
-          handleUncommitted: body?.handleUncommitted,
-        });
+        await loopManager.startLoop(req.params.id);
         return successResponse();
       } catch (error) {
         // Check for uncommitted changes error
@@ -190,7 +186,6 @@ export const loopsControlRoutes = {
           const response: UncommittedChangesError = {
             error: "uncommitted_changes",
             message: err.message,
-            options: ["commit", "stash", "cancel"],
             changedFiles: err.changedFiles ?? [],
           };
           return Response.json(response, { status: 409 });

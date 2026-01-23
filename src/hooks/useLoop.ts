@@ -8,7 +8,6 @@ import type {
   Loop,
   LoopEvent,
   UpdateLoopRequest,
-  StartLoopRequest,
   FileDiff,
   FileContentResponse,
   MessageData,
@@ -75,7 +74,7 @@ export interface UseLoopResult {
   /** Delete the loop */
   remove: () => Promise<boolean>;
   /** Start the loop */
-  start: (request?: StartLoopRequest) => Promise<StartLoopResult>;
+  start: () => Promise<StartLoopResult>;
   /** Stop the loop */
   stop: () => Promise<boolean>;
   /** Accept (merge) the loop's changes */
@@ -306,9 +305,9 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Start the loop
   const start = useCallback(
-    async (request?: StartLoopRequest): Promise<StartLoopResult> => {
+    async (): Promise<StartLoopResult> => {
       try {
-        const result = await startLoopApi(loopId, request);
+        const result = await startLoopApi(loopId);
         if (result.success) {
           await refresh();
         }

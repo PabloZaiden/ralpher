@@ -109,11 +109,14 @@ describe("GitService", () => {
 
   describe("getLocalBranches", () => {
     test("returns all local branches with current marked", async () => {
+      // Get the default branch name (could be main or master depending on git config)
+      const defaultBranch = await git.getCurrentBranch(testDir);
+      
       // Create additional branches
       await git.createBranch(testDir, "feature-a");
-      await git.checkoutBranch(testDir, "master");
+      await git.checkoutBranch(testDir, defaultBranch);
       await git.createBranch(testDir, "feature-b");
-      await git.checkoutBranch(testDir, "master");
+      await git.checkoutBranch(testDir, defaultBranch);
 
       const branches = await git.getLocalBranches(testDir);
       
@@ -122,7 +125,7 @@ describe("GitService", () => {
       // Check that current branch is marked
       const currentBranch = branches.find(b => b.current);
       expect(currentBranch).toBeDefined();
-      expect(currentBranch?.name).toBe("master");
+      expect(currentBranch?.name).toBe(defaultBranch);
       
       // Check that feature branches exist
       const featureA = branches.find(b => b.name === "feature-a");
