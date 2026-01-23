@@ -275,7 +275,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                Ralph Loops
+                Ralpher
               </h1>
               {/* Server Settings */}
               <ConnectionStatusBar
