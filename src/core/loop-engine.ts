@@ -890,7 +890,7 @@ export class LoopEngine {
 
 - Add tasks to the plan to achieve the goal.
 
-- Never ask for input from the user or any questions. This will always run unnatended
+- Never ask for input from the user or any questions. This will always run unattended
 
 - When you have completed all tasks, end your response with:
 
