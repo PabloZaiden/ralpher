@@ -604,14 +604,18 @@ export class LoopEngine {
         throw new Error("No session ID");
       }
 
-      // Send prompt asynchronously
+      // Subscribe to events and process them
+      this.emitLog("debug", "Subscribing to AI response stream");
+      const eventIterator = this.backend.subscribeToEvents(this.sessionId)[Symbol.asyncIterator]();
+      const firstEventPromise = eventIterator.next();
+
+      // Send prompt asynchronously (after subscription starts to avoid missing fast responses)
       this.emitLog("info", "Sending prompt to AI agent...");
       await this.backend.sendPromptAsync(this.sessionId, prompt);
 
-      // Subscribe to events and process them
-      this.emitLog("debug", "Subscribing to AI response stream");
-
-      for await (const event of this.backend.subscribeToEvents(this.sessionId)) {
+      try {
+        for (let result = await firstEventPromise; !result.done; result = await eventIterator.next()) {
+          const event = result.value;
         // Check if aborted
         if (this.aborted) {
           this.emitLog("info", "Iteration aborted by user");
@@ -777,10 +781,15 @@ export class LoopEngine {
             break;
         }
 
-        // If message is complete or error occurred, stop listening
-        if (event.type === "message.complete" || event.type === "error") {
-          this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
-          break;
+          // If message is complete or error occurred, stop listening
+          if (event.type === "message.complete" || event.type === "error") {
+            this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
+            break;
+          }
+        }
+      } finally {
+        if (eventIterator.return) {
+          await eventIterator.return();
         }
       }
 
