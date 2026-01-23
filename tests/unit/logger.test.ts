@@ -3,6 +3,7 @@
  */
 
 import { describe, test, expect, afterEach } from "bun:test";
+import { LOG_LEVELS } from "../../src/core/logger";
 
 describe("Logger", () => {
   const originalLogLevel = process.env["RALPHER_LOG_LEVEL"];
@@ -55,16 +56,7 @@ describe("Logger", () => {
     });
 
     test("level name mapping is correct", () => {
-      const LOG_LEVELS: Record<string, number> = {
-        silly: 0,
-        trace: 1,
-        debug: 2,
-        info: 3,
-        warn: 4,
-        error: 5,
-        fatal: 6,
-      };
-
+      
       expect(LOG_LEVELS["silly"]).toBe(0);
       expect(LOG_LEVELS["trace"]).toBe(1);
       expect(LOG_LEVELS["debug"]).toBe(2);

@@ -19,7 +19,7 @@ import { Logger, type ILogObj } from "tslog";
 /**
  * Map of log level names to their numeric values.
  */
-const LOG_LEVELS: Record<string, number> = {
+export const LOG_LEVELS: Record<string, number> = {
   silly: 0,
   trace: 1,
   debug: 2,
