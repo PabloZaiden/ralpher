@@ -4,6 +4,8 @@
  * OpenCode is the first implementation, but this allows for future backends.
  */
 
+import type { EventStream } from "../utils/event-stream";
+
 /**
  * Configuration for connecting to an agent backend.
  */
@@ -169,8 +171,11 @@ export interface AgentBackend {
 
   /**
    * Subscribe to events from a session.
+   * Returns a promise that resolves when the subscription is established.
+   * This ensures the caller can await the subscription before sending prompts,
+   * avoiding race conditions where events are emitted before the listener is ready.
    */
-  subscribeToEvents(sessionId: string): AsyncIterable<AgentEvent>;
+  subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>>;
 }
 
 /**

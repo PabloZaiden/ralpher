@@ -4,7 +4,8 @@
 
 import { test, expect, describe, beforeEach } from "bun:test";
 import { backendRegistry, registerBackend, getBackend } from "../../src/backends/registry";
-import type { AgentBackend, BackendConnectionConfig, CreateSessionOptions, PromptInput } from "../../src/backends/types";
+import type { AgentBackend, AgentEvent, BackendConnectionConfig, CreateSessionOptions, PromptInput } from "../../src/backends/types";
+import { createEventStream, type EventStream } from "../../src/utils/event-stream";
 
 // Mock backend for testing
 class MockBackend implements AgentBackend {
@@ -41,8 +42,11 @@ class MockBackend implements AgentBackend {
 
   async abortSession(_sessionId: string): Promise<void> {}
 
-  async *subscribeToEvents(_sessionId: string) {
-    yield { type: "message.complete" as const, content: "done" };
+  async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
+    const { stream, push, end } = createEventStream<AgentEvent>();
+    push({ type: "message.complete" as const, content: "done" });
+    end();
+    return stream;
   }
 }
 

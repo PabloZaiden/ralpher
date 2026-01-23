@@ -12,6 +12,7 @@ import type {
   CreateSessionOptions,
   PromptInput,
 } from "../../src/backends/types";
+import { createEventStream, type EventStream } from "../../src/utils/event-stream";
 
 /**
  * Configuration for the mock backend.
@@ -39,7 +40,7 @@ export class MockBackend implements AgentBackend {
   private sessions = new Map<string, AgentSession>();
   private responseIndex = 0;
   private config: MockBackendConfig;
-  private pendingPrompt: { resolve: () => void; content: string } | null = null;
+  private pendingPrompt: { content: string } | null = null;
 
   // Track calls for assertions
   public connectCalls: BackendConnectionConfig[] = [];
@@ -123,47 +124,61 @@ export class MockBackend implements AgentBackend {
     this.responseIndex++;
 
     // Store pending prompt for event generation
-    this.pendingPrompt = {
-      resolve: () => {},
-      content,
-    };
+    this.pendingPrompt = { content };
   }
 
   async abortSession(sessionId: string): Promise<void> {
     this.abortCalls.push(sessionId);
   }
 
-  async *subscribeToEvents(_sessionId: string): AsyncIterable<AgentEvent> {
-    // If there are explicit events configured, use those
-    if (this.config.events && this.config.events.length > 0) {
-      for (const event of this.config.events) {
-        yield event;
+  async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
+    const config = this.config;
+    const self = this;
+
+    const { stream, push, end } = createEventStream<AgentEvent>();
+
+    // Generate events asynchronously
+    (async () => {
+      // If there are explicit events configured, use those
+      if (config.events && config.events.length > 0) {
+        for (const event of config.events) {
+          push(event);
+        }
+        end();
+        return;
       }
-      return;
-    }
 
-    // Otherwise, generate events based on the pending prompt
-    if (this.pendingPrompt) {
-      const content = this.pendingPrompt.content;
-      
-      // Add delay if configured
-      if (this.config.responseDelay && this.config.responseDelay > 0) {
-        await new Promise((resolve) => setTimeout(resolve, this.config.responseDelay));
+      // Wait for sendPromptAsync to set pendingPrompt
+      // Poll with small delay to allow sendPromptAsync to be called
+      let attempts = 0;
+      while (self.pendingPrompt === null && attempts < 100) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        attempts++;
       }
 
-      // Emit message start
-      yield { type: "message.start", messageId: `mock-msg-${Date.now()}` };
+      // Generate events based on the pending prompt
+      if (self.pendingPrompt) {
+        const content = self.pendingPrompt.content;
 
-      // Emit content as delta
-      yield { type: "message.delta", content };
+        // Add delay if configured
+        if (config.responseDelay && config.responseDelay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, config.responseDelay));
+        }
 
-      // Emit message complete
-      yield { type: "message.complete", content };
+        push({ type: "message.start", messageId: `mock-msg-${Date.now()}` });
+        push({ type: "message.delta", content });
+        push({ type: "message.complete", content });
+        self.pendingPrompt = null;
+        end();
+      } else if (config.throwOnPrompt) {
+        push({ type: "error", message: config.errorMessage ?? "Mock backend error" });
+        end();
+      } else {
+        end();
+      }
+    })();
 
-      this.pendingPrompt = null;
-    } else if (this.config.throwOnPrompt) {
-      yield { type: "error", message: this.config.errorMessage ?? "Mock backend error" };
-    }
+    return stream;
   }
 
   /**

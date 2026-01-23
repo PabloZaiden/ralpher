@@ -19,6 +19,7 @@ import type {
   CreateSessionOptions,
   PromptInput,
 } from "../../src/backends/types";
+import { createEventStream, type EventStream } from "../../src/utils/event-stream";
 
 describe("LoopManager", () => {
   let testDataDir: string;
@@ -81,8 +82,11 @@ describe("LoopManager", () => {
         // Not used in tests
       },
 
-      async *subscribeToEvents(_sessionId: string): AsyncIterable<AgentEvent> {
-        // Not used in tests
+      async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
+        // Return an empty stream - not used in tests
+        const { stream, end } = createEventStream<AgentEvent>();
+        end();
+        return stream;
       },
     };
   }
