@@ -39,8 +39,7 @@ export interface CreateLoopFormProps {
   branchesLoading?: boolean;
   /** Current branch name */
   currentBranch?: string;
-  /** Whether using a remote server (connect mode) */
-  isRemoteServer?: boolean;
+
 }
 
 export function CreateLoopForm({
@@ -55,7 +54,6 @@ export function CreateLoopForm({
   branches = [],
   branchesLoading = false,
   currentBranch = "",
-  isRemoteServer = false,
 }: CreateLoopFormProps) {
   const [name, setName] = useState("Continue working on the plan");
   const [directory, setDirectory] = useState("");
@@ -266,67 +264,49 @@ export function CreateLoopForm({
         >
           Base Branch
         </label>
-        {isRemoteServer ? (
-          <>
-            <input
-              type="text"
-              id="branch"
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-              placeholder="Enter branch name (optional)"
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-mono text-sm"
-            />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Branch on the remote server (leave empty for current branch)
-            </p>
-          </>
-        ) : (
-          <>
-            <select
-              id="branch"
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-              disabled={branchesLoading || branches.length === 0}
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 font-mono text-sm"
-            >
-              {branchesLoading && (
-                <option value="">Loading branches...</option>
+        <select
+          id="branch"
+          value={selectedBranch}
+          onChange={(e) => setSelectedBranch(e.target.value)}
+          disabled={branchesLoading || branches.length === 0}
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 font-mono text-sm"
+        >
+          {branchesLoading && (
+            <option value="">Loading branches...</option>
+          )}
+          {!branchesLoading && branches.length === 0 && (
+            <option value="">Enter directory to load branches</option>
+          )}
+          {!branchesLoading && branches.length > 0 && (
+            <>
+              {/* Current branch first */}
+              {currentBranch && (
+                <option value={currentBranch}>
+                  {currentBranch} (current)
+                </option>
               )}
-              {!branchesLoading && branches.length === 0 && (
-                <option value="">Enter directory to load branches</option>
+              {/* Main branch if not current */}
+              {branches.some((b) => b.name === "main" && !b.current) && (
+                <option value="main">main</option>
               )}
-              {!branchesLoading && branches.length > 0 && (
-                <>
-                  {/* Current branch first */}
-                  {currentBranch && (
-                    <option value={currentBranch}>
-                      {currentBranch} (current)
-                    </option>
-                  )}
-                  {/* Main branch if not current */}
-                  {branches.some((b) => b.name === "main" && !b.current) && (
-                    <option value="main">main</option>
-                  )}
-                  {/* Separator if we have special branches */}
-                  {(currentBranch || branches.some((b) => b.name === "main")) && branches.length > 1 && (
-                    <option disabled>──────────</option>
-                  )}
-                  {/* Other branches sorted by name */}
-                  {branches
-                    .filter((b) => !b.current && b.name !== "main")
-                    .map((branch) => (
-                      <option key={branch.name} value={branch.name}>
-                        {branch.name}
-                      </option>
-                    ))}
-                </>
+              {/* Separator if we have special branches */}
+              {(currentBranch || branches.some((b) => b.name === "main")) && branches.length > 1 && (
+                <option disabled>──────────</option>
               )}
-            </select>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Branch to base the loop on (default: current branch)
-            </p>
-          </>
-        )}
+              {/* Other branches sorted by name */}
+              {branches
+                .filter((b) => !b.current && b.name !== "main")
+                .map((branch) => (
+                  <option key={branch.name} value={branch.name}>
+                    {branch.name}
+                  </option>
+                ))}
+            </>
+          )}
+        </select>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Branch to base the loop on (default: current branch)
+        </p>
       </div>
 
       {/* Model Selection */}

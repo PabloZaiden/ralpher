@@ -389,78 +389,44 @@ export class CommandExecutorImpl implements CommandExecutor {
 
   /**
    * Check if a file exists on the server.
+   * Uses `test -f` via PTY for reliable cross-mode operation.
    */
   async fileExists(path: string): Promise<boolean> {
-    try {
-      const result = await this.client.file.read({
-        directory: this.directory,
-        path,
-      });
-      return !result.error;
-    } catch {
-      return false;
-    }
+    const result = await this.exec("test", ["-f", path]);
+    return result.success;
   }
 
   /**
    * Check if a directory exists on the server.
+   * Uses `test -d` via PTY for reliable cross-mode operation.
    */
   async directoryExists(path: string): Promise<boolean> {
-    try {
-      const result = await this.client.file.list({
-        directory: this.directory,
-        path,
-      });
-      return !result.error;
-    } catch {
-      return false;
-    }
+    const result = await this.exec("test", ["-d", path]);
+    return result.success;
   }
 
   /**
    * Read a file's contents from the server.
+   * Uses `cat` via PTY for reliable cross-mode operation.
    */
   async readFile(path: string): Promise<string | null> {
-    try {
-      const result = await this.client.file.read({
-        directory: this.directory,
-        path,
-      });
-
-      if (result.error) {
-        return null;
-      }
-
-      const data = result.data as { type: string; content: string };
-      if (data?.type === "text") {
-        return data.content;
-      }
-
-      return null;
-    } catch {
-      return null;
+    const result = await this.exec("cat", [path]);
+    if (result.success) {
+      return result.stdout;
     }
+    return null;
   }
 
   /**
    * List files in a directory on the server.
+   * Uses `ls -1` via PTY for reliable cross-mode operation.
    */
   async listDirectory(path: string): Promise<string[]> {
-    try {
-      const result = await this.client.file.list({
-        directory: this.directory,
-        path,
-      });
-
-      if (result.error) {
-        return [];
-      }
-
-      const data = result.data as Array<{ name: string }>;
-      return data?.map((f) => f.name) ?? [];
-    } catch {
-      return [];
+    const result = await this.exec("ls", ["-1", path]);
+    if (result.success && result.stdout.trim()) {
+      return result.stdout.trim().split("\n").filter(Boolean);
     }
+    return [];
   }
 }
 
