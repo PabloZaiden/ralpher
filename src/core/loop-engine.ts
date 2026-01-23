@@ -25,7 +25,7 @@ import type {
   PromptInput,
 } from "../backends/types";
 import { backendManager } from "./backend-manager";
-import { type GitService, gitService } from "./git-service";
+import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 
 /**
@@ -62,8 +62,8 @@ export interface LoopEngineOptions {
   loop: Loop;
   /** The agent backend to use */
   backend: AgentBackend;
-  /** Git service instance (optional, defaults to singleton) */
-  gitService?: GitService;
+  /** Git service instance (required) */
+  gitService: GitService;
   /** Event emitter instance (optional, defaults to global) */
   eventEmitter?: SimpleEventEmitter<LoopEvent>;
   /** Callback to persist state to disk (optional) */
@@ -124,7 +124,7 @@ export class LoopEngine {
   constructor(options: LoopEngineOptions) {
     this.loop = options.loop;
     this.backend = options.backend;
-    this.git = options.gitService ?? gitService;
+    this.git = options.gitService;
     this.emitter = options.eventEmitter ?? loopEventEmitter;
     this.stopDetector = new StopPatternDetector(options.loop.config.stopPattern);
     this.onPersistState = options.onPersistState;
@@ -167,11 +167,15 @@ export class LoopEngine {
     try {
       // Set up git branch
       this.emitLog("info", "Setting up git branch...");
+      console.log("[LoopEngine] Starting setupGitBranch...");
       await this.setupGitBranch();
+      console.log("[LoopEngine] setupGitBranch completed successfully");
 
       // Create backend session
       this.emitLog("info", "Connecting to AI backend...");
+      console.log("[LoopEngine] Starting setupSession...");
       await this.setupSession();
+      console.log("[LoopEngine] setupSession completed successfully");
 
       // Emit started event
       this.emit({
@@ -307,10 +311,12 @@ export class LoopEngine {
       },
     });
 
+    console.log("[LoopEngine] About to emit 'Git branch setup complete' log");
     this.emitLog("info", `Git branch setup complete`, { 
       originalBranch, 
       workingBranch: branchName 
     });
+    console.log("[LoopEngine] Exiting setupGitBranch");
   }
 
   /**
@@ -598,14 +604,17 @@ export class LoopEngine {
         throw new Error("No session ID");
       }
 
-      // Send prompt asynchronously
+      // Subscribe to events and process them
+      this.emitLog("debug", "Subscribing to AI response stream");
+      const eventIterator = this.backend.subscribeToEvents(this.sessionId)[Symbol.asyncIterator]();
+
+      // Send prompt asynchronously (after subscription starts to avoid missing fast responses)
       this.emitLog("info", "Sending prompt to AI agent...");
       await this.backend.sendPromptAsync(this.sessionId, prompt);
 
-      // Subscribe to events and process them
-      this.emitLog("debug", "Subscribing to AI response stream");
-
-      for await (const event of this.backend.subscribeToEvents(this.sessionId)) {
+      try {
+        for (let result = await eventIterator.next(); !result.done; result = await eventIterator.next()) {
+          const event = result.value;
         // Check if aborted
         if (this.aborted) {
           this.emitLog("info", "Iteration aborted by user");
@@ -771,10 +780,15 @@ export class LoopEngine {
             break;
         }
 
-        // If message is complete or error occurred, stop listening
-        if (event.type === "message.complete" || event.type === "error") {
-          this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
-          break;
+          // If message is complete or error occurred, stop listening
+          if (event.type === "message.complete" || event.type === "error") {
+            this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
+            break;
+          }
+        }
+      } finally {
+        if (eventIterator.return) {
+          await eventIterator.return();
         }
       }
 
@@ -866,13 +880,17 @@ export class LoopEngine {
       });
     }
 
-    const text = `- Read AGENTS.md, read the document in the \`./.planning\` folder, pick up the most important set of tasks to continue with, and make sure you make a plan with coding tasks that includes updating the docs with your progress and what the next steps to work on are, at the end. Don't ask for confirmation and start working on it right away.
+    const text = `- Goal: ${goalPrompt}
+    
+- Read AGENTS.md, read the document in the \`./.planning\` folder, pick up the most important set of tasks to continue with, and make sure you make a plan with coding tasks that includes updating the docs with your progress and what the next steps to work on are, at the end. Don't ask for confirmation and start working on it right away.
+
+- If the \`./.planning\` folder does not exist or is empty, create it and add a file called \`plan.md\` where you outline your plan to achieve the goal, and a \`status.md\` file to track progress.
 
 - Make sure that the implementations and fixes you make don't contradict the core design principles outlined in AGENTS.md and the planning document.
 
-- Goal: ${goalPrompt}
-
 - Add tasks to the plan to achieve the goal.
+
+- Never ask for input from the user or any questions. This will always run unattended
 
 - When you have completed all tasks, end your response with:
 

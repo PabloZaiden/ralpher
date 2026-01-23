@@ -1,0 +1,69 @@
+/**
+ * Command execution abstraction for Ralph Loops Management System.
+ * Provides a unified interface for running shell commands and file operations
+ * that works both locally (spawn mode) and remotely (connect mode).
+ */
+
+/**
+ * Result of a command execution.
+ */
+export interface CommandResult {
+  success: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
+/**
+ * Options for command execution.
+ */
+export interface CommandOptions {
+  /** Working directory for the command */
+  cwd?: string;
+  /** Timeout in milliseconds */
+  timeout?: number;
+}
+
+/**
+ * CommandExecutor interface for running shell commands and file operations.
+ * Implementation: CommandExecutorImpl uses PTY via opencode SDK for execution.
+ * Commands are queued to ensure only one runs at a time.
+ */
+export interface CommandExecutor {
+  /**
+   * Execute a shell command.
+   * @param command - The command to execute (e.g., "git status")
+   * @param args - Arguments to pass to the command
+   * @param options - Execution options (cwd, timeout)
+   * @returns The command result with stdout, stderr, and exit code
+   */
+  exec(command: string, args: string[], options?: CommandOptions): Promise<CommandResult>;
+
+  /**
+   * Check if a file exists.
+   * @param path - Absolute path to the file
+   * @returns true if the file exists
+   */
+  fileExists(path: string): Promise<boolean>;
+
+  /**
+   * Check if a directory exists.
+   * @param path - Absolute path to the directory
+   * @returns true if the directory exists
+   */
+  directoryExists(path: string): Promise<boolean>;
+
+  /**
+   * Read a file's contents.
+   * @param path - Absolute path to the file
+   * @returns The file contents, or null if the file doesn't exist
+   */
+  readFile(path: string): Promise<string | null>;
+
+  /**
+   * List files in a directory.
+   * @param path - Absolute path to the directory
+   * @returns Array of file/directory names in the directory
+   */
+  listDirectory(path: string): Promise<string[]>;
+}

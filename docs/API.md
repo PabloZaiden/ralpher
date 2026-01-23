@@ -25,6 +25,22 @@ All responses are JSON. Successful responses return the requested data directly.
 }
 ```
 
+## Command Execution Architecture
+
+All API endpoints that perform server-side operations (git commands, file operations, etc.) use a unified PTY (pseudo-terminal) execution model:
+
+1. **PTY Session Creation**: A temporary PTY shell session is created on the opencode server
+2. **WebSocket Connection**: Commands are sent via WebSocket with unique markers
+3. **Output Capture**: Command output is captured between markers for clean results
+4. **Cleanup**: The PTY session is removed after command completion
+
+This architecture works identically in both spawn mode (local opencode server) and connect mode (remote opencode server). The following operations use PTY execution:
+
+- Git operations (`/api/git/branches`, loop git operations)
+- File existence checks (`/api/check-planning-dir`)
+- File reads (`/api/loops/:id/plan`, `/api/loops/:id/status-file`)
+- Directory listings
+
 ## Endpoints
 
 ### Health Check
@@ -553,6 +569,8 @@ Check if a directory has a `.planning` folder with files.
 ---
 
 ### Server Settings
+
+Ralpher supports two modes for connecting to the opencode backend. Both modes provide identical functionality - all commands (git, file operations, etc.) are executed via PTY over WebSocket regardless of mode.
 
 #### GET /api/settings/server
 

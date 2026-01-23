@@ -174,26 +174,15 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   }, []);
 
   // Handle directory change from form
-  // Skip local filesystem checks (planning dir, branches) when using remote server
+  // Fetch branches, models, and check planning dir for both spawn and connect modes (unified via PTY+WebSocket)
   const handleDirectoryChange = useCallback((directory: string) => {
     if (directory !== modelsDirectory) {
       setModelsDirectory(directory);
       fetchModels(directory);
-      
-      // Only check local filesystem when in spawn mode (local server)
-      // Default to spawn if settings not loaded yet
-      const isRemote = serverSettings?.mode === "connect";
-      if (!isRemote) {
-        checkPlanningDir(directory);
-        fetchBranches(directory);
-      } else {
-        // Clear local-only state when using remote server
-        setPlanningWarning(null);
-        setBranches([]);
-        setCurrentBranch("");
-      }
+      fetchBranches(directory);
+      checkPlanningDir(directory);
     }
-  }, [modelsDirectory, fetchModels, checkPlanningDir, fetchBranches, serverSettings?.mode]);
+  }, [modelsDirectory, fetchModels, checkPlanningDir, fetchBranches]);
 
   // Reset model state when modal closes
   const handleCloseCreateModal = useCallback(() => {
@@ -316,9 +305,11 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                 </span>
               </div>
             </div>
-            <Button onClick={() => setShowCreateModal(true)}>
-              New Loop
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button onClick={() => setShowCreateModal(true)}>
+                New Loop
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -482,7 +473,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           branches={branches}
           branchesLoading={branchesLoading}
           currentBranch={currentBranch}
-          isRemoteServer={serverSettings?.mode === "connect"}
         />
       </Modal>
 

@@ -7,6 +7,7 @@ import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { GitService } from "../../src/core/git-service";
+import { TestCommandExecutor } from "../mocks/mock-executor";
 
 describe("GitService", () => {
   let testDir: string;
@@ -15,7 +16,8 @@ describe("GitService", () => {
   beforeEach(async () => {
     // Create a temp directory for each test
     testDir = await mkdtemp(join(tmpdir(), "ralpher-git-test-"));
-    git = new GitService();
+    const executor = new TestCommandExecutor();
+    git = new GitService(executor);
 
     // Initialize a git repo
     await Bun.$`git init ${testDir}`.quiet();
@@ -105,6 +107,52 @@ describe("GitService", () => {
     });
   });
 
+  describe("getLocalBranches", () => {
+    test("returns all local branches with current marked", async () => {
+      // Create additional branches
+      await git.createBranch(testDir, "feature-a");
+      await git.checkoutBranch(testDir, "master");
+      await git.createBranch(testDir, "feature-b");
+      await git.checkoutBranch(testDir, "master");
+
+      const branches = await git.getLocalBranches(testDir);
+      
+      expect(branches.length).toBeGreaterThanOrEqual(3);
+      
+      // Check that current branch is marked
+      const currentBranch = branches.find(b => b.current);
+      expect(currentBranch).toBeDefined();
+      expect(currentBranch?.name).toBe("master");
+      
+      // Check that feature branches exist
+      const featureA = branches.find(b => b.name === "feature-a");
+      const featureB = branches.find(b => b.name === "feature-b");
+      expect(featureA).toBeDefined();
+      expect(featureB).toBeDefined();
+      expect(featureA?.current).toBe(false);
+      expect(featureB?.current).toBe(false);
+    });
+
+    test("returns current branch for repo with no commits (empty repo)", async () => {
+      // Create a new empty repo (no commits)
+      const emptyRepoDir = await mkdtemp(join(tmpdir(), "ralpher-empty-repo-"));
+      try {
+        await Bun.$`git init ${emptyRepoDir}`.quiet();
+        
+        const branches = await git.getLocalBranches(emptyRepoDir);
+        
+        // Should return the current branch even though there are no commits
+        expect(branches.length).toBe(1);
+        expect(branches[0]?.current).toBe(true);
+        // Branch name is typically "main" or "master" depending on git config
+        const branchName = branches[0]?.name ?? "";
+        expect(["main", "master"]).toContain(branchName);
+      } finally {
+        await rm(emptyRepoDir, { recursive: true });
+      }
+    });
+  });
+
   describe("branchExists", () => {
     test("returns true for existing branch", async () => {
       const currentBranch = await git.getCurrentBranch(testDir);
@@ -180,6 +228,202 @@ describe("GitService", () => {
 
       expect(mergeCommit).toHaveLength(40);
       expect(await git.getCurrentBranch(testDir)).toBe(originalBranch);
+    });
+  });
+
+  describe("getDiff", () => {
+    test("returns empty array when no changes between branches", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-no-changes");
+      
+      const diffs = await git.getDiff(testDir, originalBranch);
+      expect(diffs).toEqual([]);
+    });
+
+    test("returns file diffs for added files", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-add");
+      
+      await writeFile(join(testDir, "new-file.txt"), "Hello World\n");
+      await git.commit(testDir, "Add new file");
+      
+      const diffs = await git.getDiff(testDir, originalBranch);
+      expect(diffs.length).toBe(1);
+      expect(diffs[0]?.path).toBe("new-file.txt");
+      expect(diffs[0]?.status).toBe("added");
+      expect(diffs[0]?.additions).toBeGreaterThan(0);
+    });
+
+    test("returns file diffs for modified files", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-modify");
+      
+      // Modify existing README.md
+      await writeFile(join(testDir, "README.md"), "# Test\n\nModified content\n");
+      await git.commit(testDir, "Modify README");
+      
+      const diffs = await git.getDiff(testDir, originalBranch);
+      expect(diffs.length).toBe(1);
+      expect(diffs[0]?.path).toBe("README.md");
+      expect(diffs[0]?.status).toBe("modified");
+    });
+
+    test("returns file diffs for deleted files", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-delete");
+      
+      // Delete README.md
+      await Bun.$`rm ${join(testDir, "README.md")}`.quiet();
+      await git.commit(testDir, "Delete README");
+      
+      const diffs = await git.getDiff(testDir, originalBranch);
+      expect(diffs.length).toBe(1);
+      expect(diffs[0]?.path).toBe("README.md");
+      expect(diffs[0]?.status).toBe("deleted");
+      expect(diffs[0]?.deletions).toBeGreaterThan(0);
+    });
+
+    test("returns multiple file diffs", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-multiple");
+      
+      await writeFile(join(testDir, "file1.txt"), "Content 1\n");
+      await writeFile(join(testDir, "file2.txt"), "Content 2\n");
+      await writeFile(join(testDir, "README.md"), "# Updated\n");
+      await git.commit(testDir, "Multiple changes");
+      
+      const diffs = await git.getDiff(testDir, originalBranch);
+      expect(diffs.length).toBe(3);
+      
+      const paths = diffs.map(d => d.path).sort();
+      expect(paths).toEqual(["README.md", "file1.txt", "file2.txt"]);
+    });
+  });
+
+  describe("getDiffWithContent", () => {
+    test("returns diffs with patch content for added files", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-patch-add");
+      
+      await writeFile(join(testDir, "new-file.txt"), "Hello World\nLine 2\n");
+      await git.commit(testDir, "Add new file");
+      
+      const diffs = await git.getDiffWithContent(testDir, originalBranch);
+      expect(diffs.length).toBe(1);
+      expect(diffs[0]?.path).toBe("new-file.txt");
+      expect(diffs[0]?.patch).toBeDefined();
+      expect(diffs[0]?.patch).toContain("diff --git");
+      expect(diffs[0]?.patch).toContain("+Hello World");
+      expect(diffs[0]?.patch).toContain("+Line 2");
+    });
+
+    test("returns diffs with patch content for modified files", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-patch-modify");
+      
+      await writeFile(join(testDir, "README.md"), "# Updated Title\n\nNew content here\n");
+      await git.commit(testDir, "Update README");
+      
+      const diffs = await git.getDiffWithContent(testDir, originalBranch);
+      expect(diffs.length).toBe(1);
+      expect(diffs[0]?.path).toBe("README.md");
+      expect(diffs[0]?.patch).toBeDefined();
+      expect(diffs[0]?.patch).toContain("diff --git");
+      expect(diffs[0]?.patch).toContain("-# Test");
+      expect(diffs[0]?.patch).toContain("+# Updated Title");
+    });
+
+    test("returns diffs with patch content for multiple files", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-patch-multi");
+      
+      await writeFile(join(testDir, "file1.txt"), "File 1 content\n");
+      await writeFile(join(testDir, "file2.txt"), "File 2 content\n");
+      await git.commit(testDir, "Add two files");
+      
+      const diffs = await git.getDiffWithContent(testDir, originalBranch);
+      expect(diffs.length).toBe(2);
+      
+      // Both files should have patches
+      for (const diff of diffs) {
+        expect(diff.patch).toBeDefined();
+        expect(diff.patch).toContain("diff --git");
+      }
+      
+      // Check specific content
+      const file1Diff = diffs.find(d => d.path === "file1.txt");
+      const file2Diff = diffs.find(d => d.path === "file2.txt");
+      
+      expect(file1Diff?.patch).toContain("+File 1 content");
+      expect(file2Diff?.patch).toContain("+File 2 content");
+    });
+
+    test("returns empty patch for files with no diff content available", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      
+      // No changes on the branch
+      await git.createBranch(testDir, "feature-no-patch");
+      
+      const diffs = await git.getDiffWithContent(testDir, originalBranch);
+      expect(diffs).toEqual([]);
+    });
+
+    test("handles files with special characters in path", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-special-path");
+      
+      // Create a file in a subdirectory
+      await Bun.$`mkdir -p ${join(testDir, "src/components")}`.quiet();
+      await writeFile(join(testDir, "src/components/Button.tsx"), "export const Button = () => <button />;\n");
+      await git.commit(testDir, "Add component");
+      
+      const diffs = await git.getDiffWithContent(testDir, originalBranch);
+      expect(diffs.length).toBe(1);
+      expect(diffs[0]?.path).toBe("src/components/Button.tsx");
+      expect(diffs[0]?.patch).toBeDefined();
+      expect(diffs[0]?.patch).toContain("diff --git");
+    });
+  });
+
+  describe("getFileDiffContent", () => {
+    test("returns patch content for a specific file", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-file-diff");
+      
+      await writeFile(join(testDir, "specific-file.txt"), "Specific content\n");
+      await writeFile(join(testDir, "other-file.txt"), "Other content\n");
+      await git.commit(testDir, "Add files");
+      
+      const patch = await git.getFileDiffContent(testDir, originalBranch, "specific-file.txt");
+      expect(patch).toContain("diff --git");
+      expect(patch).toContain("+Specific content");
+      expect(patch).not.toContain("Other content");
+    });
+  });
+
+  describe("getDiffSummary", () => {
+    test("returns summary of changes", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-summary");
+      
+      await writeFile(join(testDir, "file1.txt"), "Line 1\nLine 2\nLine 3\n");
+      await writeFile(join(testDir, "file2.txt"), "Content\n");
+      await git.commit(testDir, "Add files");
+      
+      const summary = await git.getDiffSummary(testDir, originalBranch);
+      expect(summary.files).toBe(2);
+      expect(summary.insertions).toBe(4); // 3 lines in file1 + 1 line in file2
+      expect(summary.deletions).toBe(0);
+    });
+
+    test("returns zero summary when no changes", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "feature-no-summary");
+      
+      const summary = await git.getDiffSummary(testDir, originalBranch);
+      expect(summary.files).toBe(0);
+      expect(summary.insertions).toBe(0);
+      expect(summary.deletions).toBe(0);
     });
   });
 });

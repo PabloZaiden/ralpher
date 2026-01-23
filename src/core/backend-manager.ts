@@ -13,6 +13,13 @@ import {
 } from "../types/settings";
 import { loopEventEmitter } from "./event-emitter";
 import type { LoopEvent } from "../types/events";
+import type { CommandExecutor } from "./command-executor";
+import { CommandExecutorImpl } from "./remote-command-executor";
+
+/**
+ * Factory function type for creating command executors.
+ */
+export type CommandExecutorFactory = (directory: string) => CommandExecutor;
 
 /**
  * Server status events.
@@ -55,6 +62,8 @@ class BackendManager {
   private settings: ServerSettings = DEFAULT_SERVER_SETTINGS;
   private connectionError: string | null = null;
   private initialized = false;
+  /** Custom executor factory for testing */
+  private testExecutorFactory: CommandExecutorFactory | null = null;
 
   /**
    * Initialize the backend manager.
@@ -213,12 +222,91 @@ class BackendManager {
   }
 
   /**
+   * Get a CommandExecutor for running commands on the opencode server.
+   * All commands go through the PTY+WebSocket connection, regardless of mode.
+   * Commands are queued to ensure only one runs at a time.
+   * 
+   * Note: This method is synchronous and cannot establish connections.
+   * Ensure connect() has been called first.
+   * 
+   * @param directory - The directory to run commands in
+   * @returns A CommandExecutor instance
+   */
+  getCommandExecutor(directory?: string): CommandExecutor {
+    // Use test factory if set (for testing)
+    if (this.testExecutorFactory) {
+      return this.testExecutorFactory(directory ?? ".");
+    }
+
+    // Check if we have a connected backend
+    if (!this.backend?.isConnected()) {
+      throw new Error("[BackendManager] Backend not connected! Call connect() first.");
+    }
+
+    // Get the SDK client
+    const client = this.backend.getSdkClient();
+    if (!client) {
+      throw new Error("[BackendManager] No SDK client available");
+    }
+
+    // Get connection info (baseUrl and auth headers)
+    const connectionInfo = this.backend.getConnectionInfo();
+    if (!connectionInfo) {
+      throw new Error("[BackendManager] No connection info available");
+    }
+
+    // Use the provided directory or the backend's current directory
+    const dir = directory ?? this.backend.getDirectory();
+
+    console.log(`[BackendManager] Creating CommandExecutor (baseUrl: ${connectionInfo.baseUrl}, directory: ${dir})`);
+    return new CommandExecutorImpl({
+      client,
+      directory: dir,
+      baseUrl: connectionInfo.baseUrl,
+      authHeaders: connectionInfo.authHeaders,
+    });
+  }
+
+  /**
+   * Get a CommandExecutor for running commands on the opencode server.
+   * This async version will establish a connection if needed.
+   * All commands go through the PTY+WebSocket connection, regardless of mode.
+   * Commands are queued to ensure only one runs at a time.
+   * 
+   * @param directory - The directory to run commands in (required)
+   * @returns A CommandExecutor instance
+   */
+  async getCommandExecutorAsync(directory: string): Promise<CommandExecutor> {
+    // Use test factory if set (for testing)
+    if (this.testExecutorFactory) {
+      return this.testExecutorFactory(directory);
+    }
+
+    // Ensure we're connected
+    if (!this.backend?.isConnected()) {
+      console.log(`[BackendManager] Establishing connection to server...`);
+      await this.connect(directory);
+    }
+
+    // Now get the executor (should be connected)
+    return this.getCommandExecutor(directory);
+  }
+
+  /**
    * Set a custom backend instance (for testing).
    * This bypasses the normal OpenCodeBackend creation.
    */
   setBackendForTesting(backend: AgentBackend): void {
     this.backend = backend as OpenCodeBackend;
     this.initialized = true;
+  }
+
+  /**
+   * Set a custom command executor factory (for testing).
+   * This bypasses the normal PTY-based executor creation.
+   */
+  setExecutorFactoryForTesting(factory: CommandExecutorFactory): void {
+    this.testExecutorFactory = factory;
   }
 
   /**
@@ -230,6 +318,7 @@ class BackendManager {
     this.settings = DEFAULT_SERVER_SETTINGS;
     this.connectionError = null;
     this.initialized = false;
+    this.testExecutorFactory = null;
   }
 
   /**

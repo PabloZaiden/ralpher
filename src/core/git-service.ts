@@ -1,8 +1,10 @@
 /**
  * Git service for Ralph Loops Management System.
- * Provides git operations using Bun.$ shell commands.
+ * Provides git operations using a CommandExecutor abstraction.
  * All operations are isolated to a specific directory.
  */
+
+import type { CommandExecutor } from "./command-executor";
 
 /**
  * Result of a git command execution.
@@ -44,9 +46,26 @@ export interface CommitInfo {
 
 /**
  * GitService provides git operations for Ralph Loops.
- * Uses Bun.$ for all shell commands.
+ * Uses a CommandExecutor for running git commands, allowing for both
+ * local execution (spawn mode) and remote execution (connect mode).
  */
 export class GitService {
+  private executor: CommandExecutor;
+
+  /**
+   * Create a new GitService.
+   * @param executor - The command executor to use (required)
+   */
+  constructor(executor: CommandExecutor) {
+    this.executor = executor;
+  }
+
+  /**
+   * Create a new GitService with the specified executor.
+   */
+  static withExecutor(executor: CommandExecutor): GitService {
+    return new GitService(executor);
+  }
   /**
    * Check if a directory is a git repository.
    */
@@ -69,6 +88,9 @@ export class GitService {
   /**
    * Get all local branch names.
    * Returns branches sorted by name, with the current branch marked.
+   * 
+   * Handles the edge case of a newly initialized repo with no commits,
+   * where `git branch` returns nothing but the repo still has a current branch.
    */
   async getLocalBranches(directory: string): Promise<{ name: string; current: boolean }[]> {
     const result = await this.runGitCommand(directory, ["branch", "--format=%(refname:short)|%(HEAD)"]);
@@ -76,7 +98,7 @@ export class GitService {
       throw new Error(`Failed to get local branches: ${result.stderr}`);
     }
 
-    const lines = result.stdout.trim().split("\n").filter(Boolean);
+    const lines = result.stdout.replace(/\r\n?/g, "\n").trim().split("\n").filter(Boolean);
     const branches = lines.map((line) => {
       const [name, head] = line.split("|");
       return {
@@ -84,6 +106,20 @@ export class GitService {
         current: head?.trim() === "*",
       };
     }).filter((b) => b.name.length > 0);
+
+    // Handle newly initialized repos with no commits.
+    // In this case, `git branch` returns nothing, but the repo still has
+    // a current branch (e.g., "main" or "master") that we can get via symbolic-ref.
+    if (branches.length === 0) {
+      const symbolicResult = await this.runGitCommand(directory, ["symbolic-ref", "--short", "HEAD"]);
+      if (symbolicResult.success && symbolicResult.stdout.trim()) {
+        const currentBranchName = symbolicResult.stdout.trim();
+        branches.push({
+          name: currentBranchName,
+          current: true,
+        });
+      }
+    }
 
     // Sort by name
     branches.sort((a, b) => a.name.localeCompare(b.name));
@@ -99,7 +135,16 @@ export class GitService {
     if (!result.success) {
       throw new Error(`Failed to check git status: ${result.stderr}`);
     }
-    return result.stdout.trim().length > 0;
+    const hasChanges = result.stdout.trim().length > 0;
+    // Debug logging for troubleshooting PTY output parsing
+    console.log(`[GitService] hasUncommittedChanges: ${hasChanges}`);
+    console.log(`[GitService]   stdout length: ${result.stdout.length}`);
+    console.log(`[GitService]   stdout trimmed length: ${result.stdout.trim().length}`);
+    if (hasChanges) {
+      console.log(`[GitService]   stdout (raw): ${JSON.stringify(result.stdout)}`);
+      console.log(`[GitService]   stdout (visible): "${result.stdout.trim()}"`);
+    }
+    return hasChanges;
   }
 
   /**
@@ -111,7 +156,7 @@ export class GitService {
       throw new Error(`Failed to get changed files: ${result.stderr}`);
     }
 
-    const lines = result.stdout.trim().split("\n").filter(Boolean);
+    const lines = result.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
     return lines.map((line) => {
       // Format: "XY filename" or "XY original -> renamed"
       const match = line.match(/^..\s+(.+?)(?:\s+->\s+(.+))?$/);
@@ -209,7 +254,7 @@ export class GitService {
       "-r",
       sha,
     ]);
-    const filesChanged = filesResult.stdout.trim().split("\n").filter(Boolean).length;
+    const filesChanged = filesResult.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean).length;
 
     return {
       sha,
@@ -332,6 +377,7 @@ export class GitService {
    * Get the diff between the current branch and a base branch.
    */
   async getDiff(directory: string, baseBranch: string): Promise<FileDiff[]> {
+    // Get numstat for additions/deletions counts
     const result = await this.runGitCommand(directory, [
       "diff",
       "--numstat",
@@ -341,34 +387,43 @@ export class GitService {
       throw new Error(`Failed to get diff: ${result.stderr}`);
     }
 
-    const lines = result.stdout.trim().split("\n").filter(Boolean);
+    // Get name-status for all files at once (more efficient than per-file calls)
+    const statusResult = await this.runGitCommand(directory, [
+      "diff",
+      "--name-status",
+      baseBranch,
+    ]);
+    
+    // Build a map of file path -> status
+    // Normalize line endings from PTY (may have \r\n)
+    const statusMap = new Map<string, string>();
+    if (statusResult.success) {
+      const statusLines = statusResult.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
+      for (const line of statusLines) {
+        // Format: "A\tfilename" or "R100\told\tnew" for renames
+        const parts = line.split("\t");
+        const statusChar = parts[0]?.charAt(0) ?? "M";
+        const filePath = parts[parts.length - 1] ?? ""; // Last part is the current filename
+        if (filePath) {
+          statusMap.set(filePath, statusChar);
+        }
+      }
+    }
+
+    // Normalize line endings from PTY (may have \r\n)
+    const lines = result.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
     const diffs: FileDiff[] = [];
 
     for (const line of lines) {
       const [additions, deletions, path] = line.split("\t");
       if (!path) continue;
 
-      // Determine status
+      // Get status from the pre-fetched map
+      const statusChar = statusMap.get(path) ?? "M";
       let status: FileDiff["status"] = "modified";
-      if (additions === "-" && deletions === "-") {
-        // Binary file
-        status = "modified";
-      } else if (parseInt(deletions ?? "0", 10) === 0 && parseInt(additions ?? "0", 10) > 0) {
-        // Could be added or modified, need more info
-        const statusResult = await this.runGitCommand(directory, [
-          "diff",
-          "--name-status",
-          baseBranch,
-          "--",
-          path,
-        ]);
-        if (statusResult.success) {
-          const statusLine = statusResult.stdout.trim();
-          if (statusLine.startsWith("A")) status = "added";
-          else if (statusLine.startsWith("D")) status = "deleted";
-          else if (statusLine.startsWith("R")) status = "renamed";
-        }
-      }
+      if (statusChar === "A") status = "added";
+      else if (statusChar === "D") status = "deleted";
+      else if (statusChar === "R") status = "renamed";
 
       diffs.push({
         path,
@@ -455,7 +510,8 @@ export class GitService {
       return diffs;
     }
 
-    const fullDiff = result.stdout;
+    // Normalize line endings from PTY (may have \r\n) to \n
+    const fullDiff = result.stdout.replace(/\r\n/g, "\n");
     const diffsWithContent: FileDiffWithContent[] = [];
 
     // Parse the full diff to extract per-file patches
@@ -465,8 +521,8 @@ export class GitService {
     for (const diff of diffs) {
       // Find the section for this file
       const section = fileSections.find(s => {
-        // Match "a/path b/path" at the start
-        const headerMatch = s.match(/^a\/(.+?) b\/(.+?)\n/);
+        // Match "a/path b/path" at the start (handle both \n and \r\n)
+        const headerMatch = s.match(/^a\/(.+?) b\/(.+?)[\r\n]/);
         if (headerMatch) {
           return headerMatch[1] === diff.path || headerMatch[2] === diff.path;
         }
@@ -484,38 +540,39 @@ export class GitService {
 
   /**
    * Run a git command in the specified directory.
-   * Uses Bun.$ for shell execution.
+   * Uses the CommandExecutor for shell execution.
    */
   private async runGitCommand(
     directory: string,
     args: string[]
   ): Promise<GitCommandResult> {
-    try {
-      const result = await Bun.$`git -C ${directory} ${args}`.quiet();
-      return {
-        success: true,
-        stdout: result.stdout.toString(),
-        stderr: result.stderr.toString(),
-        exitCode: result.exitCode,
-      };
-    } catch (error) {
-      // Bun.$ throws on non-zero exit codes by default
-      const bunError = error as {
-        stdout?: Buffer;
-        stderr?: Buffer;
-        exitCode?: number;
-      };
-      return {
-        success: false,
-        stdout: bunError.stdout?.toString() ?? "",
-        stderr: bunError.stderr?.toString() ?? String(error),
-        exitCode: bunError.exitCode ?? 1,
-      };
+    const cmdStr = `git ${args.join(" ")}`;
+    console.log(`[GitService] Running: ${cmdStr} in ${directory}`);
+    
+    // Use git with -C flag to run in the specified directory
+    const result = await this.executor.exec("git", ["-C", directory, ...args], {
+      cwd: directory,
+    });
+    
+    if (!result.success) {
+      console.error(`[GitService] Command failed: ${cmdStr}`);
+      console.error(`[GitService]   exitCode: ${result.exitCode}`);
+      console.error(`[GitService]   stderr: ${result.stderr || "(empty)"}`);
+      if (result.stdout) {
+        console.error(`[GitService]   stdout: ${result.stdout.slice(0, 300)}${result.stdout.length > 300 ? "..." : ""}`);
+      }
+    } else {
+      console.log(`[GitService] Command succeeded: ${cmdStr}`);
     }
+    
+    return {
+      success: result.success,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+    };
   }
 }
 
-/**
- * Singleton instance of GitService.
- */
-export const gitService = new GitService();
+// Note: No singleton instance - GitService must be created with an executor
+// Use backendManager.getCommandExecutorAsync() to get an executor

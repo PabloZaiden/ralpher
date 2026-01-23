@@ -46,3 +46,7 @@ data/loops/*
 !data/loops/.gitkeep
 data/sessions/*
 !data/sessions/.gitkeep
+
+# Ralpher planning directory
+.planning/*
+!.planning/.gitkeep

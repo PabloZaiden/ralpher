@@ -20,7 +20,7 @@ import {
   updateLoopState,
 } from "../persistence/loops";
 import { backendManager } from "./backend-manager";
-import { GitService, gitService } from "./git-service";
+import { GitService } from "./git-service";
 import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
 
@@ -83,14 +83,11 @@ export interface PushLoopResult {
  */
 export class LoopManager {
   private engines = new Map<string, LoopEngine>();
-  private git: GitService;
   private emitter: SimpleEventEmitter<LoopEvent>;
 
   constructor(options?: {
-    gitService?: GitService;
     eventEmitter?: SimpleEventEmitter<LoopEvent>;
   }) {
-    this.git = options?.gitService ?? gitService;
     this.emitter = options?.eventEmitter ?? loopEventEmitter;
   }
 
@@ -255,12 +252,18 @@ export class LoopManager {
       throw new Error("Loop is already running");
     }
 
+    // Get the appropriate command executor for the current mode
+    // (local for spawn mode, remote for connect mode)
+    // Use async version to ensure connection is established in connect mode
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+    const git = GitService.withExecutor(executor);
+
     // Check for uncommitted changes
-    const hasChanges = await this.git.hasUncommittedChanges(loop.config.directory);
+    const hasChanges = await git.hasUncommittedChanges(loop.config.directory);
 
     if (hasChanges) {
       if (!options?.handleUncommitted) {
-        const changedFiles = await this.git.getChangedFiles(loop.config.directory);
+        const changedFiles = await git.getChangedFiles(loop.config.directory);
         const error = new Error("Directory has uncommitted changes") as Error & {
           code: string;
           changedFiles: string[];
@@ -272,12 +275,12 @@ export class LoopManager {
 
       // Handle uncommitted changes
       if (options.handleUncommitted === "commit") {
-        await this.git.commit(
+        await git.commit(
           loop.config.directory,
           "[Pre-Ralph] Uncommitted changes"
         );
       } else if (options.handleUncommitted === "stash") {
-        await this.git.stash(loop.config.directory);
+        await git.stash(loop.config.directory);
       }
     }
 
@@ -285,10 +288,11 @@ export class LoopManager {
     const backend = backendManager.getBackend();
 
     // Create engine with persistence callback
+    // Pass the git service with the appropriate executor
     const engine = new LoopEngine({
       loop,
       backend,
-      gitService: this.git,
+      gitService: git,
       eventEmitter: this.emitter,
       onPersistState: async (state) => {
         await updateLoopState(loopId, state);
@@ -344,15 +348,19 @@ export class LoopManager {
     }
 
     try {
+      // Get the appropriate command executor for the current mode
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const git = GitService.withExecutor(executor);
+
       // Merge working branch into original branch
-      const mergeCommit = await this.git.mergeBranch(
+      const mergeCommit = await git.mergeBranch(
         loop.config.directory,
         loop.state.git.workingBranch,
         loop.state.git.originalBranch
       );
 
       // Delete the working branch
-      await this.git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
+      await git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
 
       // Update status to 'merged' (final state)
       const updatedState = {
@@ -398,14 +406,18 @@ export class LoopManager {
     }
 
     try {
+      // Get the appropriate command executor for the current mode
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const git = GitService.withExecutor(executor);
+
       // Push the working branch to remote
-      const remoteBranch = await this.git.pushBranch(
+      const remoteBranch = await git.pushBranch(
         loop.config.directory,
         loop.state.git.workingBranch
       );
 
       // Switch back to the original branch
-      await this.git.checkoutBranch(
+      await git.checkoutBranch(
         loop.config.directory,
         loop.state.git.originalBranch
       );
@@ -448,20 +460,24 @@ export class LoopManager {
     }
 
     try {
+      // Get the appropriate command executor for the current mode
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const git = GitService.withExecutor(executor);
+
       // First, reset any uncommitted changes on the working branch
-      await this.git.resetHard(loop.config.directory);
+      await git.resetHard(loop.config.directory);
 
       // Checkout original branch
-      await this.git.checkoutBranch(
+      await git.checkoutBranch(
         loop.config.directory,
         loop.state.git.originalBranch
       );
 
       // Reset original branch to clean state too (in case of any issues)
-      await this.git.resetHard(loop.config.directory);
+      await git.resetHard(loop.config.directory);
 
       // Delete the working branch
-      await this.git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
+      await git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
 
       // Emit event
       this.emitter.emit({

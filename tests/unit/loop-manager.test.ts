@@ -8,7 +8,6 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { LoopManager } from "../../src/core/loop-manager";
 import { SimpleEventEmitter } from "../../src/core/event-emitter";
-import { GitService } from "../../src/core/git-service";
 import { backendRegistry } from "../../src/backends/registry";
 import type { LoopEvent } from "../../src/types/events";
 import type {
@@ -27,7 +26,6 @@ describe("LoopManager", () => {
   let manager: LoopManager;
   let emitter: SimpleEventEmitter<LoopEvent>;
   let emittedEvents: LoopEvent[];
-  let git: GitService;
 
   // Create a mock backend that completes immediately
   function createMockBackend(): AgentBackend {
@@ -106,14 +104,11 @@ describe("LoopManager", () => {
     emitter = new SimpleEventEmitter<LoopEvent>();
     emitter.subscribe((event) => emittedEvents.push(event));
 
-    git = new GitService();
-
     // Register mock backend
     backendRegistry.register("opencode", createMockBackend);
 
     // Create manager
     manager = new LoopManager({
-      gitService: git,
       eventEmitter: emitter,
     });
   });

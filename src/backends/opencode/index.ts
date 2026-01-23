@@ -1,19 +1,19 @@
 /**
  * OpenCode backend implementation for Ralph Loops Management System.
- * Uses the @opencode-ai/sdk to connect to opencode servers.
+ * Uses the @opencode-ai/sdk/v2 to connect to opencode servers.
  */
 
 import {
   createOpencode,
   createOpencodeClient,
   type OpencodeClient,
-} from "@opencode-ai/sdk";
+} from "@opencode-ai/sdk/v2";
 import type {
   Session as OpenCodeSession,
   Event as OpenCodeEvent,
   Part,
   AssistantMessage,
-} from "@opencode-ai/sdk";
+} from "@opencode-ai/sdk/v2";
 
 /**
  * Model information returned by getModels().
@@ -30,6 +30,17 @@ export interface ModelInfo {
   /** Whether the provider is connected (has valid API key) */
   connected: boolean;
 }
+
+/**
+ * Connection info needed for WebSocket and other direct connections.
+ */
+export interface ConnectionInfo {
+  /** Base URL for the opencode server */
+  baseUrl: string;
+  /** Auth headers to use for connections */
+  authHeaders: Record<string, string>;
+}
+
 import type {
   AgentBackend,
   BackendConnectionConfig,
@@ -52,6 +63,7 @@ export class OpenCodeBackend implements AgentBackend {
   private server: { url: string; close(): void } | null = null;
   private connected = false;
   private directory = "";
+  private connectionInfo: ConnectionInfo | null = null;
 
   /**
    * Connect to the backend.
@@ -87,6 +99,12 @@ export class OpenCodeBackend implements AgentBackend {
     const result = await createOpencode(options);
     this.client = result.client;
     this.server = result.server;
+    
+    // Store connection info for spawn mode
+    this.connectionInfo = {
+      baseUrl: result.server.url,
+      authHeaders: {}, // Spawn mode doesn't need auth
+    };
   }
 
   /**
@@ -99,32 +117,37 @@ export class OpenCodeBackend implements AgentBackend {
     const port = config.port ?? 4096;
     const baseUrl = `http://${hostname}:${port}`;
 
+    // Build auth headers if password provided
+    const authHeaders: Record<string, string> = {};
+    if (config.password) {
+      const credentials = Buffer.from(`opencode:${config.password}`).toString("base64");
+      authHeaders["Authorization"] = `Basic ${credentials}`;
+    }
+
     // Build client config with optional Basic auth
     const clientConfig: Parameters<typeof createOpencodeClient>[0] = {
       baseUrl,
       directory: config.directory,
+      headers: authHeaders,
     };
-
-    // If password provided, use Basic auth with fixed username "opencode"
-    if (config.password) {
-      const credentials = Buffer.from(`opencode:${config.password}`).toString("base64");
-      clientConfig.headers = {
-        Authorization: `Basic ${credentials}`,
-      };
-    }
 
     this.client = createOpencodeClient(clientConfig);
 
-    // Verify connection by checking health
-    // The SDK doesn't throw on auth failure - it returns { error } instead
+    // Verify connection by checking health (v2 uses flattened params)
     const result = await this.client.session.list({
-      query: { directory: config.directory },
+      directory: config.directory,
     });
 
     if (result.error) {
       this.client = null;
       throw new Error(`Failed to connect to opencode at ${baseUrl}: ${JSON.stringify(result.error)}`);
     }
+
+    // Store connection info
+    this.connectionInfo = {
+      baseUrl,
+      authHeaders,
+    };
   }
 
   /**
@@ -144,6 +167,7 @@ export class OpenCodeBackend implements AgentBackend {
     this.client = null;
     this.connected = false;
     this.directory = "";
+    this.connectionInfo = null;
   }
 
   /**
@@ -151,6 +175,29 @@ export class OpenCodeBackend implements AgentBackend {
    */
   isConnected(): boolean {
     return this.connected && this.client !== null;
+  }
+
+  /**
+   * Get the SDK client for advanced operations.
+   * Returns null if not connected.
+   */
+  getSdkClient(): OpencodeClient | null {
+    return this.client;
+  }
+
+  /**
+   * Get the current directory.
+   */
+  getDirectory(): string {
+    return this.directory;
+  }
+
+  /**
+   * Get connection info for WebSocket and other direct connections.
+   * Returns null if not connected.
+   */
+  getConnectionInfo(): ConnectionInfo | null {
+    return this.connectionInfo;
   }
 
   /**
@@ -169,11 +216,10 @@ export class OpenCodeBackend implements AgentBackend {
   async createSession(options: CreateSessionOptions): Promise<AgentSession> {
     const client = this.getClient();
 
+    // v2 SDK uses flattened parameters
     const result = await client.session.create({
-      body: {
-        title: options.title,
-      },
-      query: { directory: options.directory },
+      title: options.title,
+      directory: options.directory,
     });
 
     if (result.error) {
@@ -190,9 +236,10 @@ export class OpenCodeBackend implements AgentBackend {
   async getSession(id: string): Promise<AgentSession | null> {
     const client = this.getClient();
 
+    // v2 SDK uses sessionID instead of path.id
     const result = await client.session.get({
-      path: { id },
-      query: { directory: this.directory },
+      sessionID: id,
+      directory: this.directory,
     });
 
     if (result.error) {
@@ -210,9 +257,10 @@ export class OpenCodeBackend implements AgentBackend {
   async deleteSession(id: string): Promise<void> {
     const client = this.getClient();
 
+    // v2 SDK uses sessionID instead of path.id
     const result = await client.session.delete({
-      path: { id },
-      query: { directory: this.directory },
+      sessionID: id,
+      directory: this.directory,
     });
 
     if (result.error) {
@@ -226,16 +274,15 @@ export class OpenCodeBackend implements AgentBackend {
   async sendPrompt(sessionId: string, prompt: PromptInput): Promise<AgentResponse> {
     const client = this.getClient();
 
+    // v2 SDK uses flattened parameters
     const result = await client.session.prompt({
-      path: { id: sessionId },
-      body: {
-        parts: prompt.parts.map((p) => ({
-          type: p.type as "text",
-          text: p.text,
-        })),
-        model: prompt.model,
-      },
-      query: { directory: this.directory },
+      sessionID: sessionId,
+      directory: this.directory,
+      parts: prompt.parts.map((p) => ({
+        type: p.type as "text",
+        text: p.text,
+      })),
+      model: prompt.model,
     });
 
     if (result.error) {
@@ -254,16 +301,15 @@ export class OpenCodeBackend implements AgentBackend {
   async sendPromptAsync(sessionId: string, prompt: PromptInput): Promise<void> {
     const client = this.getClient();
 
+    // v2 SDK uses flattened parameters
     const result = await client.session.promptAsync({
-      path: { id: sessionId },
-      body: {
-        parts: prompt.parts.map((p) => ({
-          type: p.type as "text",
-          text: p.text,
-        })),
-        model: prompt.model,
-      },
-      query: { directory: this.directory },
+      sessionID: sessionId,
+      directory: this.directory,
+      parts: prompt.parts.map((p) => ({
+        type: p.type as "text",
+        text: p.text,
+      })),
+      model: prompt.model,
     });
 
     if (result.error) {
@@ -277,9 +323,10 @@ export class OpenCodeBackend implements AgentBackend {
   async abortSession(sessionId: string): Promise<void> {
     const client = this.getClient();
 
+    // v2 SDK uses sessionID instead of path.id
     const result = await client.session.abort({
-      path: { id: sessionId },
-      query: { directory: this.directory },
+      sessionID: sessionId,
+      directory: this.directory,
     });
 
     if (result.error) {
@@ -300,8 +347,10 @@ export class OpenCodeBackend implements AgentBackend {
     // Create AbortController to allow cancellation when consumer breaks
     const abortController = new AbortController();
 
+    // v2 SDK uses flattened parameters
     const subscription = await client.event.subscribe({
-      query: { directory: this.directory },
+      directory: this.directory,
+    }, {
       signal: abortController.signal,
     });
 
@@ -312,6 +361,20 @@ export class OpenCodeBackend implements AgentBackend {
     const toolPartStatus = new Map<string, string>();
     // For reasoning: track last known reasoning text length per part ID
     const reasoningTextLength = new Map<string, number>();
+    // Track whether we've seen a message.start in this subscription.
+    // 
+    // IMPORTANT: This guard prevents stale `session.idle` events from causing
+    // phantom iterations. When we subscribe before sending a prompt (which we
+    // always do to avoid missing early events), there may be a pre-existing
+    // `session.idle` event from the previous prompt. Without this guard, that
+    // stale idle would be translated to `message.complete` and incorrectly
+    // signal the end of an iteration before any work has started.
+    //
+    // This assumes subscriptions are always created BEFORE sending prompts.
+    // If a subscription were started mid-message, it would miss the
+    // `message.start` and incorrectly filter the subsequent `message.complete`.
+    // However, this is not a concern for our usage pattern in loop-engine.ts.
+    let hasMessageStart = false;
 
     try {
       for await (const event of subscription.stream) {
@@ -324,6 +387,12 @@ export class OpenCodeBackend implements AgentBackend {
           reasoningTextLength
         );
         if (translated) {
+          if (translated.type === "message.start") {
+            hasMessageStart = true;
+          }
+          if (translated.type === "message.complete" && !hasMessageStart) {
+            continue;
+          }
           yield translated;
         }
       }
@@ -544,8 +613,9 @@ export class OpenCodeBackend implements AgentBackend {
   async getModels(directory: string): Promise<ModelInfo[]> {
     const client = this.getClient();
 
+    // v2 SDK uses flattened parameters
     const result = await client.provider.list({
-      query: { directory },
+      directory,
     });
 
     if (result.error) {

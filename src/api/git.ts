@@ -1,9 +1,14 @@
 /**
  * Git API endpoints for Ralph Loops Management System.
  * Provides git information for directories.
+ * 
+ * Uses the CommandExecutor abstraction which works identically for both:
+ * - Spawn mode: Commands run on locally-spawned opencode server via PTY+WebSocket
+ * - Connect mode: Commands run on remote opencode server via PTY+WebSocket
  */
 
-import { gitService } from "../core/git-service";
+import { backendManager } from "../core/backend-manager";
+import { GitService } from "../core/git-service";
 
 /**
  * Branch information returned by the API.
@@ -25,6 +30,15 @@ export interface BranchesResponse {
   branches: BranchInfo[];
 }
 
+/**
+ * Get a GitService configured for the current backend mode.
+ * Uses PTY+WebSocket for command execution in both spawn and connect modes.
+ */
+async function getGitService(directory: string): Promise<GitService> {
+  const executor = await backendManager.getCommandExecutorAsync(directory);
+  return GitService.withExecutor(executor);
+}
+
 export const gitRoutes = {
   /**
    * GET /api/git/branches
@@ -44,8 +58,11 @@ export const gitRoutes = {
       }
 
       try {
+        // Get mode-appropriate git service
+        const git = await getGitService(directory);
+
         // Check if it's a git repo
-        const isGitRepo = await gitService.isGitRepo(directory);
+        const isGitRepo = await git.isGitRepo(directory);
         if (!isGitRepo) {
           return Response.json(
             { error: "not_git_repo", message: "Directory is not a git repository" },
@@ -53,7 +70,7 @@ export const gitRoutes = {
           );
         }
 
-        const branches = await gitService.getLocalBranches(directory);
+        const branches = await git.getLocalBranches(directory);
         const currentBranch = branches.find((b) => b.current)?.name ?? "";
 
         const response: BranchesResponse = {

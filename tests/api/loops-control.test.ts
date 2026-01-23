@@ -11,6 +11,8 @@ import { serve, type Server } from "bun";
 import { apiRoutes } from "../../src/api";
 import { ensureDataDirectories } from "../../src/persistence/paths";
 import { backendRegistry } from "../../src/backends/registry";
+import { backendManager } from "../../src/core/backend-manager";
+import { TestCommandExecutor } from "../mocks/mock-executor";
 import type {
   AgentBackend,
   AgentSession,
@@ -117,6 +119,10 @@ describe("Loops Control API Integration", () => {
     // Register mock backend
     backendRegistry.register("mock", createMockBackend);
 
+    // Set up backend manager with test executor factory
+    backendManager.setBackendForTesting(createMockBackend());
+    backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
+
     // Start test server on random port
     server = serve({
       port: 0, // Random available port
@@ -130,6 +136,9 @@ describe("Loops Control API Integration", () => {
   afterAll(async () => {
     // Stop server
     server.stop();
+
+    // Reset backend manager
+    backendManager.resetForTesting();
 
     // Cleanup temp directories
     await rm(testDataDir, { recursive: true, force: true });

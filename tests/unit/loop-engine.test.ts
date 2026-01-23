@@ -23,9 +23,7 @@ import type {
   PromptInput,
 } from "../../src/backends/types";
 import { GitService } from "../../src/core/git-service";
-
-// GitService is used in tests (referenced as type)
-void GitService;
+import { TestCommandExecutor } from "../mocks/mock-executor";
 
 describe("StopPatternDetector", () => {
   test("matches default stop pattern at end of string", () => {
@@ -59,6 +57,7 @@ describe("LoopEngine", () => {
   let mockBackend: AgentBackend;
   let emitter: SimpleEventEmitter<LoopEvent>;
   let emittedEvents: LoopEvent[];
+  let gitService: GitService;
 
   // Create a mock backend that supports async streaming
   function createMockBackend(responses: string[]): AgentBackend {
@@ -165,6 +164,10 @@ describe("LoopEngine", () => {
     emitter = new SimpleEventEmitter<LoopEvent>();
     emitter.subscribe((event) => emittedEvents.push(event));
     
+    // Create git service with test executor
+    const executor = new TestCommandExecutor();
+    gitService = new GitService(executor);
+    
     // Initialize git in the test directory (git is always required)
     await Bun.$`git init`.cwd(testDir).quiet();
     await Bun.$`git config user.email "test@test.com"`.cwd(testDir).quiet();
@@ -185,6 +188,7 @@ describe("LoopEngine", () => {
     const engine = new LoopEngine({
       loop,
       backend: mockBackend,
+      gitService,
       eventEmitter: emitter,
     });
 
@@ -203,6 +207,7 @@ describe("LoopEngine", () => {
     const engine = new LoopEngine({
       loop,
       backend: mockBackend,
+      gitService,
       eventEmitter: emitter,
     });
 
@@ -232,6 +237,7 @@ describe("LoopEngine", () => {
     const engine = new LoopEngine({
       loop,
       backend: mockBackend,
+      gitService,
       eventEmitter: emitter,
     });
 
@@ -269,6 +275,7 @@ describe("LoopEngine", () => {
     const engine = new LoopEngine({
       loop,
       backend: mockBackend,
+      gitService,
       eventEmitter: emitter,
     });
 
@@ -317,6 +324,7 @@ describe("LoopEngine", () => {
     const engine = new LoopEngine({
       loop,
       backend: mockBackend,
+      gitService,
       eventEmitter: emitter,
     });
 
@@ -343,6 +351,7 @@ describe("LoopEngine", () => {
     const engine = new LoopEngine({
       loop,
       backend: mockBackend,
+      gitService,
       eventEmitter: emitter,
     });
 
@@ -392,6 +401,7 @@ describe("LoopEngine", () => {
     const engine = new LoopEngine({
       loop,
       backend: mockBackend,
+      gitService,
       eventEmitter: emitter,
     });
 
@@ -453,6 +463,7 @@ describe("LoopEngine", () => {
     const engine = new LoopEngine({
       loop,
       backend: mockBackend,
+      gitService,
       eventEmitter: emitter,
     });
 
@@ -489,6 +500,7 @@ describe("LoopEngine", () => {
     const engine = new LoopEngine({
       loop,
       backend: mockBackend,
+      gitService,
       eventEmitter: emitter,
     });
 
@@ -506,6 +518,7 @@ describe("LoopEngine", () => {
     const engine = new LoopEngine({
       loop,
       backend: mockBackend,
+      gitService,
       eventEmitter: emitter,
     });
 
@@ -528,6 +541,7 @@ describe("LoopEngine", () => {
     const engine = new LoopEngine({
       loop,
       backend: mockBackend,
+      gitService,
       eventEmitter: emitter,
     });
 
