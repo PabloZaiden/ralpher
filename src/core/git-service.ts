@@ -88,6 +88,9 @@ export class GitService {
   /**
    * Get all local branch names.
    * Returns branches sorted by name, with the current branch marked.
+   * 
+   * Handles the edge case of a newly initialized repo with no commits,
+   * where `git branch` returns nothing but the repo still has a current branch.
    */
   async getLocalBranches(directory: string): Promise<{ name: string; current: boolean }[]> {
     const result = await this.runGitCommand(directory, ["branch", "--format=%(refname:short)|%(HEAD)"]);
@@ -103,6 +106,20 @@ export class GitService {
         current: head?.trim() === "*",
       };
     }).filter((b) => b.name.length > 0);
+
+    // Handle newly initialized repos with no commits.
+    // In this case, `git branch` returns nothing, but the repo still has
+    // a current branch (e.g., "main" or "master") that we can get via symbolic-ref.
+    if (branches.length === 0) {
+      const symbolicResult = await this.runGitCommand(directory, ["symbolic-ref", "--short", "HEAD"]);
+      if (symbolicResult.success && symbolicResult.stdout.trim()) {
+        const currentBranchName = symbolicResult.stdout.trim();
+        branches.push({
+          name: currentBranchName,
+          current: true,
+        });
+      }
+    }
 
     // Sort by name
     branches.sort((a, b) => a.name.localeCompare(b.name));

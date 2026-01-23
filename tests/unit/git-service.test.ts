@@ -107,6 +107,52 @@ describe("GitService", () => {
     });
   });
 
+  describe("getLocalBranches", () => {
+    test("returns all local branches with current marked", async () => {
+      // Create additional branches
+      await git.createBranch(testDir, "feature-a");
+      await git.checkoutBranch(testDir, "master");
+      await git.createBranch(testDir, "feature-b");
+      await git.checkoutBranch(testDir, "master");
+
+      const branches = await git.getLocalBranches(testDir);
+      
+      expect(branches.length).toBeGreaterThanOrEqual(3);
+      
+      // Check that current branch is marked
+      const currentBranch = branches.find(b => b.current);
+      expect(currentBranch).toBeDefined();
+      expect(currentBranch?.name).toBe("master");
+      
+      // Check that feature branches exist
+      const featureA = branches.find(b => b.name === "feature-a");
+      const featureB = branches.find(b => b.name === "feature-b");
+      expect(featureA).toBeDefined();
+      expect(featureB).toBeDefined();
+      expect(featureA?.current).toBe(false);
+      expect(featureB?.current).toBe(false);
+    });
+
+    test("returns current branch for repo with no commits (empty repo)", async () => {
+      // Create a new empty repo (no commits)
+      const emptyRepoDir = await mkdtemp(join(tmpdir(), "ralpher-empty-repo-"));
+      try {
+        await Bun.$`git init ${emptyRepoDir}`.quiet();
+        
+        const branches = await git.getLocalBranches(emptyRepoDir);
+        
+        // Should return the current branch even though there are no commits
+        expect(branches.length).toBe(1);
+        expect(branches[0]?.current).toBe(true);
+        // Branch name is typically "main" or "master" depending on git config
+        const branchName = branches[0]?.name ?? "";
+        expect(["main", "master"]).toContain(branchName);
+      } finally {
+        await rm(emptyRepoDir, { recursive: true });
+      }
+    });
+  });
+
   describe("branchExists", () => {
     test("returns true for existing branch", async () => {
       const currentBranch = await git.getCurrentBranch(testDir);
