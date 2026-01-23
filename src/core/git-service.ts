@@ -98,7 +98,7 @@ export class GitService {
       throw new Error(`Failed to get local branches: ${result.stderr}`);
     }
 
-    const lines = result.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
+    const lines = result.stdout.replace(/\r\n?/g, "\n").trim().split("\n").filter(Boolean);
     const branches = lines.map((line) => {
       const [name, head] = line.split("|");
       return {
