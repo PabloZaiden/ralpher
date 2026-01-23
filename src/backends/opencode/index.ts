@@ -53,6 +53,7 @@ import type {
   AgentPart,
   AgentEvent,
 } from "../types";
+import { createEventStream, type EventStream } from "../../utils/event-stream";
 
 /**
  * OpenCode backend implementation.
@@ -349,16 +350,21 @@ export class OpenCodeBackend implements AgentBackend {
 
   /**
    * Subscribe to events from a session.
-   * Yields AgentEvents translated from OpenCode SDK events.
+   * Returns a promise that resolves when the subscription is established,
+   * providing an EventStream of AgentEvents translated from OpenCode SDK events.
+   * 
+   * IMPORTANT: The caller MUST await this method before sending prompts to ensure
+   * the SSE subscription is established and ready to receive events. This prevents
+   * race conditions where events are emitted before the listener is ready.
    * 
    * Deduplication: The SDK emits update events repeatedly as messages/parts
    * are being built. We track what we've already emitted to avoid duplicates.
    */
-  async *subscribeToEvents(sessionId: string): AsyncIterable<AgentEvent> {
+  async subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>> {
     log.trace("[OpenCodeBackend] subscribeToEvents: Entry", { sessionId });
     const client = this.getClient();
 
-    // Create AbortController to allow cancellation when consumer breaks
+    // Create AbortController to allow cancellation when consumer calls close()
     const abortController = new AbortController();
 
     // v2 SDK uses flattened parameters
@@ -371,53 +377,62 @@ export class OpenCodeBackend implements AgentBackend {
     log.trace("[OpenCodeBackend] subscribeToEvents: Subscription created");
 
     // Track emitted events to avoid duplicates
-    // For message.start: track message IDs we've seen
     const emittedMessageStarts = new Set<string>();
-    // For tool events: track tool part IDs and their last known status
     const toolPartStatus = new Map<string, string>();
-    // For reasoning: track last known reasoning text length per part ID
     const reasoningTextLength = new Map<string, number>();
     // Track whether we've seen a message.start in this subscription.
-    // 
-    // IMPORTANT: This guard prevents stale `session.idle` events from causing
-    // phantom iterations. When we subscribe before sending a prompt (which we
-    // always do to avoid missing early events), there may be a pre-existing
-    // `session.idle` event from the previous prompt. Without this guard, that
-    // stale idle would be translated to `message.complete` and incorrectly
-    // signal the end of an iteration before any work has started.
-    //
-    // This assumes subscriptions are always created BEFORE sending prompts.
-    // If a subscription were started mid-message, it would miss the
-    // `message.start` and incorrectly filter the subsequent `message.complete`.
-    // However, this is not a concern for our usage pattern in loop-engine.ts.
+    // This guard prevents stale `session.idle` events from causing phantom iterations.
     let hasMessageStart = false;
 
-    try {
-      log.trace("[OpenCodeBackend] subscribeToEvents: About to iterate over subscription.stream");
-      for await (const event of subscription.stream) {
-        log.trace("[OpenCodeBackend] subscribeToEvents: Received raw event", { type: (event as OpenCodeEvent).type });
-        // Filter events for our session and translate them
-        const translated = this.translateEvent(
-          event as OpenCodeEvent,
-          sessionId,
-          emittedMessageStarts,
-          toolPartStatus,
-          reasoningTextLength
-        );
-        if (translated) {
-          if (translated.type === "message.start") {
-            hasMessageStart = true;
+    // Create the event stream
+    const { stream, push, end } = createEventStream<AgentEvent>();
+
+    // Start consuming SDK events in the background and pushing to our stream
+    const self = this;
+    (async () => {
+      try {
+        log.trace("[OpenCodeBackend] subscribeToEvents: Starting background event loop");
+        for await (const event of subscription.stream) {
+          log.trace("[OpenCodeBackend] subscribeToEvents: Received raw event", { type: (event as OpenCodeEvent).type });
+          
+          // Filter events for our session and translate them
+          const translated = self.translateEvent(
+            event as OpenCodeEvent,
+            sessionId,
+            emittedMessageStarts,
+            toolPartStatus,
+            reasoningTextLength
+          );
+          
+          if (translated) {
+            if (translated.type === "message.start") {
+              hasMessageStart = true;
+            }
+            // Skip stale message.complete before we've seen a message.start
+            if (translated.type === "message.complete" && !hasMessageStart) {
+              continue;
+            }
+            push(translated);
           }
-          if (translated.type === "message.complete" && !hasMessageStart) {
-            continue;
-          }
-          yield translated;
         }
+        log.trace("[OpenCodeBackend] subscribeToEvents: SDK stream ended");
+        end();
+      } catch (err) {
+        log.error("[OpenCodeBackend] subscribeToEvents: Error in event loop", { error: String(err) });
+        end();
       }
-    } finally {
-      // Abort the subscription when the consumer breaks out of the loop
-      abortController.abort();
-    }
+    })();
+
+    // Wrap the stream to abort subscription when closed
+    const wrappedStream: EventStream<AgentEvent> = {
+      next: () => stream.next(),
+      close: () => {
+        stream.close();
+        abortController.abort();
+      },
+    };
+
+    return wrappedStream;
   }
 
   /**

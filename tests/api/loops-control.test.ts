@@ -22,6 +22,7 @@ import type {
   CreateSessionOptions,
   PromptInput,
 } from "../../src/backends/types";
+import { createEventStream, type EventStream } from "../../src/utils/event-stream";
 
 describe("Loops Control API Integration", () => {
   let testDataDir: string;
@@ -32,6 +33,7 @@ describe("Loops Control API Integration", () => {
   // Create a mock backend that completes immediately
   function createMockBackend(): AgentBackend {
     let connected = false;
+    let pendingPrompt = false;
     const sessions = new Map<string, AgentSession>();
 
     return {
@@ -77,17 +79,34 @@ describe("Loops Control API Integration", () => {
 
       async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
         // Signal that we're ready for events
+        pendingPrompt = true;
       },
 
       async abortSession(_sessionId: string): Promise<void> {
         // Not used in tests
       },
 
-      async *subscribeToEvents(_sessionId: string): AsyncIterable<AgentEvent> {
-        // Yield complete message with stop pattern
-        yield { type: "message.start", messageId: `msg-${Date.now()}` };
-        yield { type: "message.delta", content: "<promise>COMPLETE</promise>" };
-        yield { type: "message.complete", content: "<promise>COMPLETE</promise>" };
+      async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
+        // Return a stream that yields complete message with stop pattern
+        const { stream, push, end } = createEventStream<AgentEvent>();
+
+        // Push events asynchronously AFTER sendPromptAsync sets pendingPrompt
+        (async () => {
+          // Wait for sendPromptAsync to set pendingPrompt
+          let attempts = 0;
+          while (!pendingPrompt && attempts < 100) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            attempts++;
+          }
+          pendingPrompt = false;
+
+          push({ type: "message.start", messageId: `msg-${Date.now()}` });
+          push({ type: "message.delta", content: "<promise>COMPLETE</promise>" });
+          push({ type: "message.complete", content: "<promise>COMPLETE</promise>" });
+          end();
+        })();
+
+        return stream;
       },
     };
   }

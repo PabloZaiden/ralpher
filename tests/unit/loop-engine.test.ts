@@ -22,6 +22,7 @@ import type {
   CreateSessionOptions,
   PromptInput,
 } from "../../src/backends/types";
+import { createEventStream, type EventStream } from "../../src/utils/event-stream";
 import { GitService } from "../../src/core/git-service";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 
@@ -120,16 +121,31 @@ describe("LoopEngine", () => {
         // Mark as aborted
       },
 
-      async *subscribeToEvents(_sessionId: string): AsyncIterable<AgentEvent> {
-        // Yield events based on pendingResponse
-        if (pendingResponse !== null) {
+      async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
+        const { stream, push, end } = createEventStream<AgentEvent>();
+
+        // Push events asynchronously AFTER sendPromptAsync sets pendingResponse
+        (async () => {
+          // Wait for sendPromptAsync to set pendingResponse
+          // Poll with small delay to allow sendPromptAsync to be called
+          let attempts = 0;
+          while (pendingResponse === null && attempts < 100) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            attempts++;
+          }
+
           const content = pendingResponse;
           pendingResponse = null;
 
-          yield { type: "message.start", messageId: `msg-${Date.now()}` };
-          yield { type: "message.delta", content };
-          yield { type: "message.complete", content };
-        }
+          if (content !== null) {
+            push({ type: "message.start", messageId: `msg-${Date.now()}` });
+            push({ type: "message.delta", content });
+            push({ type: "message.complete", content });
+          }
+          end();
+        })();
+
+        return stream;
       },
     };
   }
@@ -261,14 +277,22 @@ describe("LoopEngine", () => {
         sendPromptAsyncCalled = true;
         // This just signals we're ready for events
       },
-      async *subscribeToEvents(): AsyncIterable<AgentEvent> {
-        // Wait for external signal before yielding events
-        await new Promise<void>((resolve) => {
-          resolveEvents = resolve;
-        });
-        yield { type: "message.start", messageId: `msg-${Date.now()}` };
-        yield { type: "message.delta", content: "Still working..." };
-        yield { type: "message.complete", content: "Still working..." };
+      async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+        // Return an EventStream that waits for external signal before yielding events
+        const { stream, push, end } = createEventStream<AgentEvent>();
+
+        // Wait for external signal, then push events
+        (async () => {
+          await new Promise<void>((resolve) => {
+            resolveEvents = resolve;
+          });
+          push({ type: "message.start", messageId: `msg-${Date.now()}` });
+          push({ type: "message.delta", content: "Still working..." });
+          push({ type: "message.complete", content: "Still working..." });
+          end();
+        })();
+
+        return stream;
       },
     };
 
@@ -305,19 +329,38 @@ describe("LoopEngine", () => {
 
     // Create a backend that completes on 2nd iteration using async streaming
     let responseCount = 0;
+    let promptSent = false;
 
     const baseMock = createMockBackend([]);
     mockBackend = {
       ...baseMock,
       async sendPromptAsync(): Promise<void> {
         responseCount++;
+        promptSent = true;
       },
-      async *subscribeToEvents(): AsyncIterable<AgentEvent> {
-        // Complete on second iteration
-        const content = responseCount >= 2 ? "<promise>COMPLETE</promise>" : "Working...";
-        yield { type: "message.start", messageId: `msg-${Date.now()}` };
-        yield { type: "message.delta", content };
-        yield { type: "message.complete", content };
+      async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+        const { stream, push, end } = createEventStream<AgentEvent>();
+
+        // Push events asynchronously after sendPromptAsync
+        (async () => {
+          // Wait for sendPromptAsync to be called
+          let attempts = 0;
+          while (!promptSent && attempts < 100) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            attempts++;
+          }
+          promptSent = false;
+
+          // Complete on second iteration
+          const content = responseCount >= 2 ? "<promise>COMPLETE</promise>" : "Working...";
+
+          push({ type: "message.start", messageId: `msg-${Date.now()}` });
+          push({ type: "message.delta", content });
+          push({ type: "message.complete", content });
+          end();
+        })();
+
+        return stream;
       },
     };
 
@@ -372,6 +415,7 @@ describe("LoopEngine", () => {
     const loop = createTestLoop({ maxIterations: 3, maxConsecutiveErrors: 3 });
 
     let iterationCount = 0;
+    let promptSent = false;
 
     // Create a mock backend that:
     // - Iteration 1: starts responding, then emits an error
@@ -381,20 +425,39 @@ describe("LoopEngine", () => {
       ...baseMock,
       async sendPromptAsync(): Promise<void> {
         iterationCount++;
+        promptSent = true;
       },
-      async *subscribeToEvents(): AsyncIterable<AgentEvent> {
-        if (iterationCount === 1) {
-          // First iteration: start responding, then error
-          yield { type: "message.start", messageId: `msg-${Date.now()}` };
-          yield { type: "message.delta", content: "Starting to work..." };
-          // Now emit an error (simulating backend error like file not found)
-          yield { type: "error", message: "Error: File not found: /some/file.ts" };
-        } else if (iterationCount === 2) {
-          // Second iteration: complete successfully
-          yield { type: "message.start", messageId: `msg-${Date.now()}` };
-          yield { type: "message.delta", content: "Fixed it! <promise>COMPLETE</promise>" };
-          yield { type: "message.complete", content: "Fixed it! <promise>COMPLETE</promise>" };
-        }
+      async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+        const { stream, push, end } = createEventStream<AgentEvent>();
+
+        // Push events asynchronously after sendPromptAsync
+        (async () => {
+          // Wait for sendPromptAsync to be called
+          let attempts = 0;
+          while (!promptSent && attempts < 100) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            attempts++;
+          }
+          promptSent = false;
+
+          // Now iterationCount is accurate
+          const currentIteration = iterationCount;
+
+          if (currentIteration === 1) {
+            // First iteration: start responding, then error
+            push({ type: "message.start", messageId: `msg-${Date.now()}` });
+            push({ type: "message.delta", content: "Starting to work..." });
+            push({ type: "error", message: "Error: File not found: /some/file.ts" });
+          } else if (currentIteration === 2) {
+            // Second iteration: complete successfully
+            push({ type: "message.start", messageId: `msg-${Date.now()}` });
+            push({ type: "message.delta", content: "Fixed it! <promise>COMPLETE</promise>" });
+            push({ type: "message.complete", content: "Fixed it! <promise>COMPLETE</promise>" });
+          }
+          end();
+        })();
+
+        return stream;
       },
     };
 
@@ -439,24 +502,45 @@ describe("LoopEngine", () => {
     const loop = createTestLoop({ maxIterations: 2, maxConsecutiveErrors: 10 });
 
     let attemptCount = 0;
+    let promptSent = false;
 
     const baseMock = createMockBackend([]);
     mockBackend = {
       ...baseMock,
       async sendPromptAsync(): Promise<void> {
         attemptCount++;
+        promptSent = true;
       },
-      async *subscribeToEvents(): AsyncIterable<AgentEvent> {
-        if (attemptCount <= 3) {
-          // First 3 attempts: emit errors
-          yield { type: "message.start", messageId: `msg-${Date.now()}` };
-          yield { type: "error", message: `Error attempt ${attemptCount}` };
-        } else {
-          // After that: success (no COMPLETE pattern, so it continues)
-          yield { type: "message.start", messageId: `msg-${Date.now()}` };
-          yield { type: "message.delta", content: "Success!" };
-          yield { type: "message.complete", content: "Success!" };
-        }
+      async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+        const { stream, push, end } = createEventStream<AgentEvent>();
+
+        // Push events asynchronously after sendPromptAsync
+        (async () => {
+          // Wait for sendPromptAsync to be called
+          let attempts = 0;
+          while (!promptSent && attempts < 100) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            attempts++;
+          }
+          promptSent = false;
+
+          // Now attemptCount is accurate
+          const currentAttempt = attemptCount;
+
+          if (currentAttempt <= 3) {
+            // First 3 attempts: emit errors
+            push({ type: "message.start", messageId: `msg-${Date.now()}` });
+            push({ type: "error", message: `Error attempt ${currentAttempt}` });
+          } else {
+            // After that: success (no COMPLETE pattern, so it continues)
+            push({ type: "message.start", messageId: `msg-${Date.now()}` });
+            push({ type: "message.delta", content: "Success!" });
+            push({ type: "message.complete", content: "Success!" });
+          }
+          end();
+        })();
+
+        return stream;
       },
     };
 

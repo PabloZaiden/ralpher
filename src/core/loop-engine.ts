@@ -630,13 +630,16 @@ export class LoopEngine {
         throw new Error("No session ID");
       }
 
-      // Subscribe to events and process them
+      // Subscribe to events BEFORE sending the prompt.
+      // IMPORTANT: We must await the subscription to ensure the SSE connection is established
+      // before sending the prompt. This prevents a race condition where events are emitted
+      // by the server before we're ready to receive them.
       log.trace("[LoopEngine] runIteration: About to subscribe to events");
       this.emitLog("debug", "Subscribing to AI response stream");
-      const eventIterator = this.backend.subscribeToEvents(this.sessionId)[Symbol.asyncIterator]();
-      log.trace("[LoopEngine] runIteration: Got event iterator");
+      const eventStream = await this.backend.subscribeToEvents(this.sessionId);
+      log.trace("[LoopEngine] runIteration: Subscription established, got event stream");
 
-      // Send prompt asynchronously (after subscription starts to avoid missing fast responses)
+      // Now send prompt asynchronously (subscription is definitely active)
       log.trace("[LoopEngine] runIteration: About to send prompt async");
       this.emitLog("info", "Sending prompt to AI agent...");
       await this.backend.sendPromptAsync(this.sessionId, prompt);
@@ -644,184 +647,186 @@ export class LoopEngine {
 
       try {
         log.trace("[LoopEngine] runIteration: About to start event iteration loop");
-        for (let result = await eventIterator.next(); !result.done; result = await eventIterator.next()) {
-          const event = result.value;
+        let event = await eventStream.next();
+        while (event !== null) {
           log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
-        // Check if aborted
-        if (this.aborted) {
-          this.emitLog("info", "Iteration aborted by user");
-          break;
-        }
-
-        // Update last activity timestamp
-        this.updateState({ lastActivityAt: createTimestamp() });
-
-        switch (event.type) {
-          case "message.start":
-            currentMessageId = event.messageId;
-            messageCount++;
-            // Reset response log tracking
-            currentResponseLogId = null;
-            currentResponseLogContent = "";
-            // Log that AI started generating
-            this.emitLog("agent", "AI started generating response");
-            break;
-
-          case "message.delta":
-            responseContent += event.content;
-            // Combine consecutive deltas into the same log entry
-            if (event.content.trim()) {
-              currentResponseLogContent += event.content;
-              if (currentResponseLogId) {
-                // Update existing log entry
-                this.emitLog("agent", "AI generating response...", {
-                  responseContent: currentResponseLogContent,
-                }, currentResponseLogId);
-              } else {
-                // Create new log entry
-                currentResponseLogId = this.emitLog("agent", "AI generating response...", {
-                  responseContent: currentResponseLogContent,
-                });
-              }
-            }
-            // Emit progress event for streaming text
-            this.emit({
-              type: "loop.progress",
-              loopId: this.config.id,
-              iteration,
-              content: event.content,
-              timestamp: createTimestamp(),
-            });
-            break;
-
-          case "reasoning.delta":
-            // AI reasoning/thinking content (chain of thought)
-            reasoningContent += event.content;
-            // Combine consecutive reasoning deltas into the same log entry
-            if (event.content.trim()) {
-              currentReasoningLogContent += event.content;
-              if (currentReasoningLogId) {
-                // Update existing log entry
-                this.emitLog("agent", "AI reasoning...", {
-                  responseContent: currentReasoningLogContent,
-                }, currentReasoningLogId);
-              } else {
-                // Create new log entry
-                currentReasoningLogId = this.emitLog("agent", "AI reasoning...", {
-                  responseContent: currentReasoningLogContent,
-                });
-              }
-            }
-            break;
-
-          case "message.complete":
-            // Reset log tracking
-            currentResponseLogId = null;
-            currentResponseLogContent = "";
-            currentReasoningLogId = null;
-            currentReasoningLogContent = "";
-            // Log that AI finished (no need to include full content here,
-            // the final ASSISTANT message will show it)
-            this.emitLog("agent", "AI finished generating response", {
-              responseLength: responseContent.length,
-            });
-            // Create the message data
-            const messageData: MessageData = {
-              id: currentMessageId || `msg-${Date.now()}`,
-              role: "assistant",
-              content: responseContent,
-              timestamp: createTimestamp(),
-            };
-            // Persist message for page refresh recovery
-            this.persistMessage(messageData);
-            // Emit the complete message
-            this.emit({
-              type: "loop.message",
-              loopId: this.config.id,
-              iteration,
-              message: messageData,
-              timestamp: createTimestamp(),
-            });
-            // Message complete means iteration is done
-            break;
-
-          case "tool.start": {
-            // Reset response/reasoning log tracking when a tool starts
-            currentResponseLogId = null;
-            currentResponseLogContent = "";
-            currentReasoningLogId = null;
-            currentReasoningLogContent = "";
-            // Use tool name as the base ID so we can match start/complete events
-            const toolId = `tool-${iteration}-${event.toolName}-${toolCallCount}`;
-            toolCalls.set(event.toolName, { id: toolId, name: event.toolName, input: event.input });
-            toolCallCount++;
-            this.emitLog("agent", `AI calling tool: ${event.toolName}`);
-            const timestamp = createTimestamp();
-            // Create tool call data
-            const toolCallData: ToolCallData = {
-              id: toolId,
-              name: event.toolName,
-              input: event.input,
-              status: "running",
-              timestamp,
-            };
-            // Persist tool call for page refresh recovery
-            this.persistToolCall(toolCallData);
-            // Emit tool call event
-            this.emit({
-              type: "loop.tool_call",
-              loopId: this.config.id,
-              iteration,
-              tool: toolCallData,
-              timestamp,
-            });
+          // Check if aborted
+          if (this.aborted) {
+            this.emitLog("info", "Iteration aborted by user");
             break;
           }
 
-          case "tool.complete": {
-            const toolInfo = toolCalls.get(event.toolName);
-            const timestamp = createTimestamp();
-            // Create tool complete data - use the same ID from tool.start
-            const toolCompleteData: ToolCallData = {
-              id: toolInfo?.id ?? `tool-${iteration}-${event.toolName}`,
-              name: event.toolName,
-              input: toolInfo?.input,
-              output: event.output,
-              status: "completed",
-              timestamp,
-            };
-            // Persist tool call update for page refresh recovery
-            this.persistToolCall(toolCompleteData);
-            // Emit tool complete event
-            this.emit({
-              type: "loop.tool_call",
-              loopId: this.config.id,
-              iteration,
-              tool: toolCompleteData,
-              timestamp,
-            });
-            // Persist to disk after each tool completion (tool calls can take a while)
-            await this.triggerPersistence();
-            break;
-          }
+          // Update last activity timestamp
+          this.updateState({ lastActivityAt: createTimestamp() });
 
-          case "error":
-            outcome = "error";
-            error = event.message;
-            this.emitLog("error", `AI backend error: ${event.message}`);
-            break;
-        }
+          switch (event.type) {
+            case "message.start":
+              currentMessageId = event.messageId;
+              messageCount++;
+              // Reset response log tracking
+              currentResponseLogId = null;
+              currentResponseLogContent = "";
+              // Log that AI started generating
+              this.emitLog("agent", "AI started generating response");
+              break;
+
+            case "message.delta":
+              responseContent += event.content;
+              // Combine consecutive deltas into the same log entry
+              if (event.content.trim()) {
+                currentResponseLogContent += event.content;
+                if (currentResponseLogId) {
+                  // Update existing log entry
+                  this.emitLog("agent", "AI generating response...", {
+                    responseContent: currentResponseLogContent,
+                  }, currentResponseLogId);
+                } else {
+                  // Create new log entry
+                  currentResponseLogId = this.emitLog("agent", "AI generating response...", {
+                    responseContent: currentResponseLogContent,
+                  });
+                }
+              }
+              // Emit progress event for streaming text
+              this.emit({
+                type: "loop.progress",
+                loopId: this.config.id,
+                iteration,
+                content: event.content,
+                timestamp: createTimestamp(),
+              });
+              break;
+
+            case "reasoning.delta":
+              // AI reasoning/thinking content (chain of thought)
+              reasoningContent += event.content;
+              // Combine consecutive reasoning deltas into the same log entry
+              if (event.content.trim()) {
+                currentReasoningLogContent += event.content;
+                if (currentReasoningLogId) {
+                  // Update existing log entry
+                  this.emitLog("agent", "AI reasoning...", {
+                    responseContent: currentReasoningLogContent,
+                  }, currentReasoningLogId);
+                } else {
+                  // Create new log entry
+                  currentReasoningLogId = this.emitLog("agent", "AI reasoning...", {
+                    responseContent: currentReasoningLogContent,
+                  });
+                }
+              }
+              break;
+
+            case "message.complete":
+              // Reset log tracking
+              currentResponseLogId = null;
+              currentResponseLogContent = "";
+              currentReasoningLogId = null;
+              currentReasoningLogContent = "";
+              // Log that AI finished (no need to include full content here,
+              // the final ASSISTANT message will show it)
+              this.emitLog("agent", "AI finished generating response", {
+                responseLength: responseContent.length,
+              });
+              // Create the message data
+              const messageData: MessageData = {
+                id: currentMessageId || `msg-${Date.now()}`,
+                role: "assistant",
+                content: responseContent,
+                timestamp: createTimestamp(),
+              };
+              // Persist message for page refresh recovery
+              this.persistMessage(messageData);
+              // Emit the complete message
+              this.emit({
+                type: "loop.message",
+                loopId: this.config.id,
+                iteration,
+                message: messageData,
+                timestamp: createTimestamp(),
+              });
+              // Message complete means iteration is done
+              break;
+
+            case "tool.start": {
+              // Reset response/reasoning log tracking when a tool starts
+              currentResponseLogId = null;
+              currentResponseLogContent = "";
+              currentReasoningLogId = null;
+              currentReasoningLogContent = "";
+              // Use tool name as the base ID so we can match start/complete events
+              const toolId = `tool-${iteration}-${event.toolName}-${toolCallCount}`;
+              toolCalls.set(event.toolName, { id: toolId, name: event.toolName, input: event.input });
+              toolCallCount++;
+              this.emitLog("agent", `AI calling tool: ${event.toolName}`);
+              const timestamp = createTimestamp();
+              // Create tool call data
+              const toolCallData: ToolCallData = {
+                id: toolId,
+                name: event.toolName,
+                input: event.input,
+                status: "running",
+                timestamp,
+              };
+              // Persist tool call for page refresh recovery
+              this.persistToolCall(toolCallData);
+              // Emit tool call event
+              this.emit({
+                type: "loop.tool_call",
+                loopId: this.config.id,
+                iteration,
+                tool: toolCallData,
+                timestamp,
+              });
+              break;
+            }
+
+            case "tool.complete": {
+              const toolInfo = toolCalls.get(event.toolName);
+              const timestamp = createTimestamp();
+              // Create tool complete data - use the same ID from tool.start
+              const toolCompleteData: ToolCallData = {
+                id: toolInfo?.id ?? `tool-${iteration}-${event.toolName}`,
+                name: event.toolName,
+                input: toolInfo?.input,
+                output: event.output,
+                status: "completed",
+                timestamp,
+              };
+              // Persist tool call update for page refresh recovery
+              this.persistToolCall(toolCompleteData);
+              // Emit tool complete event
+              this.emit({
+                type: "loop.tool_call",
+                loopId: this.config.id,
+                iteration,
+                tool: toolCompleteData,
+                timestamp,
+              });
+              // Persist to disk after each tool completion (tool calls can take a while)
+              await this.triggerPersistence();
+              break;
+            }
+
+            case "error":
+              outcome = "error";
+              error = event.message;
+              this.emitLog("error", `AI backend error: ${event.message}`);
+              break;
+          }
 
           // If message is complete or error occurred, stop listening
           if (event.type === "message.complete" || event.type === "error") {
             this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
             break;
           }
+
+          // Get next event
+          event = await eventStream.next();
         }
       } finally {
-        if (eventIterator.return) {
-          await eventIterator.return();
-        }
+        // Close the stream to abort the subscription
+        eventStream.close();
       }
 
       this.emitLog("debug", "Exited event stream loop", { outcome, error });
