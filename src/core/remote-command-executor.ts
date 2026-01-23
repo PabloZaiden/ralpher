@@ -266,12 +266,23 @@ export class CommandExecutorImpl implements CommandExecutor {
           const data = typeof event.data === "string" ? event.data : event.data.toString();
           output += data;
           
-          // Check for end marker
-          const endMarkerMatch = output.match(new RegExp(`^${endMarker}:(\\d+)`, "m"));
-          if (endMarkerMatch && endMarkerMatch[1] && commandSent) {
+          // Check for end marker without regex to avoid injection issues
+          const lines = output.split("\n");
+          let exitCode: number | null = null;
+          const endMarkerPrefix = `${endMarker}:`;
+          for (const line of lines) {
+            if (line.startsWith(endMarkerPrefix)) {
+              const codeStr = line.slice(endMarkerPrefix.length).trim();
+              const parsed = parseInt(codeStr, 10);
+              if (!Number.isNaN(parsed)) {
+                exitCode = parsed;
+              }
+              break;
+            }
+          }
+          if (exitCode !== null && commandSent) {
             clearTimeout(timeoutId);
             
-            const exitCode = parseInt(endMarkerMatch[1], 10);
             const cleanOutput = this.extractOutputBetweenMarkers(output, startMarker, endMarker);
             
             resolveOnce({

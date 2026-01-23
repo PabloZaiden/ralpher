@@ -607,14 +607,13 @@ export class LoopEngine {
       // Subscribe to events and process them
       this.emitLog("debug", "Subscribing to AI response stream");
       const eventIterator = this.backend.subscribeToEvents(this.sessionId)[Symbol.asyncIterator]();
-      const firstEventPromise = eventIterator.next();
 
       // Send prompt asynchronously (after subscription starts to avoid missing fast responses)
       this.emitLog("info", "Sending prompt to AI agent...");
       await this.backend.sendPromptAsync(this.sessionId, prompt);
 
       try {
-        for (let result = await firstEventPromise; !result.done; result = await eventIterator.next()) {
+        for (let result = await eventIterator.next(); !result.done; result = await eventIterator.next()) {
           const event = result.value;
         // Check if aborted
         if (this.aborted) {

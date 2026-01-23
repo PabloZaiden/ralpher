@@ -361,6 +361,8 @@ export class OpenCodeBackend implements AgentBackend {
     const toolPartStatus = new Map<string, string>();
     // For reasoning: track last known reasoning text length per part ID
     const reasoningTextLength = new Map<string, number>();
+    // Track whether we've seen a message.start in this subscription
+    let hasMessageStart = false;
 
     try {
       for await (const event of subscription.stream) {
@@ -373,6 +375,12 @@ export class OpenCodeBackend implements AgentBackend {
           reasoningTextLength
         );
         if (translated) {
+          if (translated.type === "message.start") {
+            hasMessageStart = true;
+          }
+          if (translated.type === "message.complete" && !hasMessageStart) {
+            continue;
+          }
           yield translated;
         }
       }
