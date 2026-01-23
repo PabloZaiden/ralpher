@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "start": "NODE_ENV=production bun src/index.ts",
-    "build": "bun run tsc && bun src/build.ts",
+    "build": "bun run tsc; export workspace_dir=$(pwd); (cd /tmp; bun $workspace_dir/src/build.ts)",
     "test": "bun test --timeout 15000",
     "tsc": "bunx tsc --noEmit"
   },
