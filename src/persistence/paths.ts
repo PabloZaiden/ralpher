@@ -5,6 +5,7 @@
  */
 
 import { join } from "path";
+import { mkdir, access } from "fs/promises";
 
 /**
  * Get the root data directory path.
@@ -49,8 +50,6 @@ export function getSessionsFilePath(backendName: string): string {
  * Creates them if they don't exist.
  */
 export async function ensureDataDirectories(): Promise<void> {
-  const { mkdir } = await import("fs/promises");
-
   const dirs = [getDataDir(), getLoopsDir(), getSessionsDir()];
 
   for (const dir of dirs) {
@@ -62,8 +61,6 @@ export async function ensureDataDirectories(): Promise<void> {
  * Check if the data directory is properly configured.
  */
 export async function isDataDirectoryReady(): Promise<boolean> {
-  const { access } = await import("fs/promises");
-
   try {
     await access(getLoopsDir());
     await access(getSessionsDir());

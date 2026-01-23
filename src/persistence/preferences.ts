@@ -5,7 +5,7 @@
 
 import { join } from "path";
 import { getDataDir } from "./paths";
-import { DEFAULT_SERVER_SETTINGS, type ServerSettings } from "../types/settings";
+import { getDefaultServerSettings, type ServerSettings } from "../types/settings";
 
 /**
  * User preferences structure.
@@ -82,7 +82,7 @@ export async function setLastModel(model: {
  */
 export async function getServerSettings(): Promise<ServerSettings> {
   const prefs = await loadPreferences();
-  return prefs.serverSettings ?? DEFAULT_SERVER_SETTINGS;
+  return prefs.serverSettings ?? getDefaultServerSettings();
 }
 
 /**

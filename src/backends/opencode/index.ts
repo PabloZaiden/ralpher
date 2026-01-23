@@ -14,6 +14,7 @@ import type {
   Part,
   AssistantMessage,
 } from "@opencode-ai/sdk/v2";
+import { isRemoteOnlyMode } from "../../core/config";
 
 /**
  * Model information returned by getModels().
@@ -66,8 +67,8 @@ export class OpenCodeBackend implements AgentBackend {
   private connectionInfo: ConnectionInfo | null = null;
 
   /**
-   * Connect to the backend.
-   * For spawn mode, this starts a new opencode server.
+   * Connect to an opencode server.
+   * For spawn mode, this spawns a new local server.
    * For connect mode, this verifies the connection.
    */
   async connect(config: BackendConnectionConfig): Promise<void> {
@@ -78,6 +79,13 @@ export class OpenCodeBackend implements AgentBackend {
     this.directory = config.directory;
 
     if (config.mode === "spawn") {
+      // Block spawn mode when RALPHER_REMOTE_ONLY is set
+      if (isRemoteOnlyMode()) {
+        throw new Error(
+          "Spawn mode is disabled. RALPHER_REMOTE_ONLY environment variable is set. " +
+          "Only connecting to remote servers is allowed."
+        );
+      }
       await this.connectSpawn(config);
     } else {
       await this.connectToExisting(config);

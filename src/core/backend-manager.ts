@@ -7,7 +7,7 @@ import { OpenCodeBackend } from "../backends/opencode";
 import type { AgentBackend, BackendConnectionConfig } from "../backends/types";
 import { getServerSettings, setServerSettings } from "../persistence/preferences";
 import {
-  DEFAULT_SERVER_SETTINGS,
+  getDefaultServerSettings,
   type ConnectionStatus,
   type ServerSettings,
 } from "../types/settings";
@@ -15,6 +15,7 @@ import { loopEventEmitter } from "./event-emitter";
 import type { LoopEvent } from "../types/events";
 import type { CommandExecutor } from "./command-executor";
 import { CommandExecutorImpl } from "./remote-command-executor";
+import { log } from "./logger";
 
 /**
  * Factory function type for creating command executors.
@@ -59,7 +60,7 @@ export type AppEvent = LoopEvent | ServerEvent;
  */
 class BackendManager {
   private backend: OpenCodeBackend | null = null;
-  private settings: ServerSettings = DEFAULT_SERVER_SETTINGS;
+  private settings: ServerSettings = getDefaultServerSettings();
   private connectionError: string | null = null;
   private initialized = false;
   /** Custom executor factory for testing */
@@ -258,7 +259,7 @@ class BackendManager {
     // Use the provided directory or the backend's current directory
     const dir = directory ?? this.backend.getDirectory();
 
-    console.log(`[BackendManager] Creating CommandExecutor (baseUrl: ${connectionInfo.baseUrl}, directory: ${dir})`);
+    log.debug(`[BackendManager] Creating CommandExecutor (baseUrl: ${connectionInfo.baseUrl}, directory: ${dir})`);
     return new CommandExecutorImpl({
       client,
       directory: dir,
@@ -284,7 +285,7 @@ class BackendManager {
 
     // Ensure we're connected
     if (!this.backend?.isConnected()) {
-      console.log(`[BackendManager] Establishing connection to server...`);
+      log.debug(`[BackendManager] Establishing connection to server...`);
       await this.connect(directory);
     }
 
@@ -315,7 +316,7 @@ class BackendManager {
    */
   resetForTesting(): void {
     this.backend = null;
-    this.settings = DEFAULT_SERVER_SETTINGS;
+    this.settings = getDefaultServerSettings();
     this.connectionError = null;
     this.initialized = false;
     this.testExecutorFactory = null;

@@ -43,6 +43,8 @@ export interface CreateLoopRequest {
   git?: Partial<GitConfig>;
   /** Base branch to create the loop from (default: current branch) */
   baseBranch?: string;
+  /** Start the loop immediately after creation (default: true) */
+  startImmediately?: boolean;
 }
 
 /**

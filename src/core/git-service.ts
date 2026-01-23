@@ -5,6 +5,7 @@
  */
 
 import type { CommandExecutor } from "./command-executor";
+import { log } from "./logger";
 
 /**
  * Result of a git command execution.
@@ -137,12 +138,12 @@ export class GitService {
     }
     const hasChanges = result.stdout.trim().length > 0;
     // Debug logging for troubleshooting PTY output parsing
-    console.log(`[GitService] hasUncommittedChanges: ${hasChanges}`);
-    console.log(`[GitService]   stdout length: ${result.stdout.length}`);
-    console.log(`[GitService]   stdout trimmed length: ${result.stdout.trim().length}`);
+    log.trace(`[GitService] hasUncommittedChanges: ${hasChanges}`);
+    log.trace(`[GitService]   stdout length: ${result.stdout.length}`);
+    log.trace(`[GitService]   stdout trimmed length: ${result.stdout.trim().length}`);
     if (hasChanges) {
-      console.log(`[GitService]   stdout (raw): ${JSON.stringify(result.stdout)}`);
-      console.log(`[GitService]   stdout (visible): "${result.stdout.trim()}"`);
+      log.trace(`[GitService]   stdout (raw): ${JSON.stringify(result.stdout)}`);
+      log.trace(`[GitService]   stdout (visible): "${result.stdout.trim()}"`);
     }
     return hasChanges;
   }
@@ -547,7 +548,7 @@ export class GitService {
     args: string[]
   ): Promise<GitCommandResult> {
     const cmdStr = `git ${args.join(" ")}`;
-    console.log(`[GitService] Running: ${cmdStr} in ${directory}`);
+    log.trace(`[GitService] Running: ${cmdStr} in ${directory}`);
     
     // Use git with -C flag to run in the specified directory
     const result = await this.executor.exec("git", ["-C", directory, ...args], {
@@ -555,14 +556,14 @@ export class GitService {
     });
     
     if (!result.success) {
-      console.error(`[GitService] Command failed: ${cmdStr}`);
-      console.error(`[GitService]   exitCode: ${result.exitCode}`);
-      console.error(`[GitService]   stderr: ${result.stderr || "(empty)"}`);
+      log.error(`[GitService] Command failed: ${cmdStr}`);
+      log.error(`[GitService]   exitCode: ${result.exitCode}`);
+      log.error(`[GitService]   stderr: ${result.stderr || "(empty)"}`);
       if (result.stdout) {
-        console.error(`[GitService]   stdout: ${result.stdout.slice(0, 300)}${result.stdout.length > 300 ? "..." : ""}`);
+        log.error(`[GitService]   stdout: ${result.stdout.slice(0, 300)}${result.stdout.length > 300 ? "..." : ""}`);
       }
     } else {
-      console.log(`[GitService] Command succeeded: ${cmdStr}`);
+      log.trace(`[GitService] Command succeeded: ${cmdStr}`);
     }
     
     return {

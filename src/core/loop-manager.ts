@@ -23,6 +23,7 @@ import { backendManager } from "./backend-manager";
 import { GitService } from "./git-service";
 import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
+import { log } from "./logger";
 
 /**
  * Options for creating a new loop.
@@ -218,7 +219,7 @@ export class LoopManager {
       const discardResult = await this.discardLoop(loopId);
       if (!discardResult.success) {
         // Log but don't fail the delete - user explicitly wants to delete
-        console.warn(`Failed to discard git branch during delete: ${discardResult.error}`);
+        log.warn(`Failed to discard git branch during delete: ${discardResult.error}`);
       }
     }
 
@@ -303,7 +304,7 @@ export class LoopManager {
 
     // Start in background
     engine.start().catch((error) => {
-      console.error(`Loop ${loopId} failed:`, String(error));
+      log.error(`Loop ${loopId} failed:`, String(error));
     });
 
     // Persist state changes periodically
@@ -586,7 +587,7 @@ export class LoopManager {
       try {
         await updateLoopState(loopId, engine.state);
       } catch (error) {
-        console.error(`Failed to persist loop state: ${String(error)}`);
+        log.error(`Failed to persist loop state: ${String(error)}`);
       }
 
       // Stop if loop has finished

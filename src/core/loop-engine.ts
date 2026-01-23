@@ -27,6 +27,7 @@ import type {
 import { backendManager } from "./backend-manager";
 import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
+import { log } from "./logger";
 
 /**
  * Generate a git-safe branch name from a loop name and timestamp.
@@ -167,15 +168,15 @@ export class LoopEngine {
     try {
       // Set up git branch
       this.emitLog("info", "Setting up git branch...");
-      console.log("[LoopEngine] Starting setupGitBranch...");
+      log.trace("[LoopEngine] Starting setupGitBranch...");
       await this.setupGitBranch();
-      console.log("[LoopEngine] setupGitBranch completed successfully");
+      log.trace("[LoopEngine] setupGitBranch completed successfully");
 
       // Create backend session
       this.emitLog("info", "Connecting to AI backend...");
-      console.log("[LoopEngine] Starting setupSession...");
+      log.trace("[LoopEngine] Starting setupSession...");
       await this.setupSession();
-      console.log("[LoopEngine] setupSession completed successfully");
+      log.trace("[LoopEngine] setupSession completed successfully");
 
       // Emit started event
       this.emit({
@@ -311,12 +312,12 @@ export class LoopEngine {
       },
     });
 
-    console.log("[LoopEngine] About to emit 'Git branch setup complete' log");
+    log.trace("[LoopEngine] About to emit 'Git branch setup complete' log");
     this.emitLog("info", `Git branch setup complete`, { 
       originalBranch, 
       workingBranch: branchName 
     });
-    console.log("[LoopEngine] Exiting setupGitBranch");
+    log.trace("[LoopEngine] Exiting setupGitBranch");
   }
 
   /**
@@ -963,7 +964,7 @@ export class LoopEngine {
     } catch (err) {
       // Log but don't fail the iteration
       this.emitLog("warn", `Failed to commit: ${String(err)}`);
-      console.error(`Failed to commit iteration ${iteration}: ${String(err)}`);
+      log.error(`Failed to commit iteration ${iteration}: ${String(err)}`);
     }
   }
 
@@ -1020,7 +1021,7 @@ Output ONLY the commit message, nothing else.`
         return `${this.config.git.commitPrefix} ${firstLine}`;
       }
     } catch (err) {
-      console.warn(`Failed to generate commit message via AI: ${String(err)}`);
+      log.warn(`Failed to generate commit message via AI: ${String(err)}`);
     }
 
     // Fallback: generate a simple message based on changed files
@@ -1078,7 +1079,7 @@ Output ONLY the commit message, nothing else.`
       try {
         await this.onPersistState(this.loop.state);
       } catch (error) {
-        console.error(`Failed to persist loop state: ${String(error)}`);
+        log.error(`Failed to persist loop state: ${String(error)}`);
       }
     }
   }

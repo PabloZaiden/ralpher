@@ -9,6 +9,7 @@ import { apiRoutes } from "./api";
 import { ensureDataDirectories } from "./persistence/paths";
 import { backendManager } from "./core/backend-manager";
 import { websocketHandlers, type WebSocketData } from "./api/websocket";
+import { log } from "./core/logger";
 import "./backends/register"; // Auto-register backends
 
 // Ensure data directories exist on startup
@@ -60,4 +61,4 @@ const server = serve<WebSocketData>({
   },
 });
 
-console.log(`🚀 Ralpher server running at ${server.url}`);
+log.info(`Ralpher server running at ${server.url}`);

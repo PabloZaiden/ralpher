@@ -4,6 +4,7 @@
  * Uses Bun.file API as per project guidelines.
  */
 
+import { unlink, readdir } from "fs/promises";
 import type { Loop, LoopConfig, LoopState } from "../types";
 import { getLoopFilePath, getLoopsDir } from "./paths";
 
@@ -64,7 +65,6 @@ export async function deleteLoop(loopId: string): Promise<boolean> {
     return false;
   }
 
-  const { unlink } = await import("fs/promises");
   await unlink(filePath);
   return true;
 }
@@ -73,7 +73,6 @@ export async function deleteLoop(loopId: string): Promise<boolean> {
  * List all loops from disk.
  */
 export async function listLoops(): Promise<Loop[]> {
-  const { readdir } = await import("fs/promises");
   const loopsDir = getLoopsDir();
 
   try {

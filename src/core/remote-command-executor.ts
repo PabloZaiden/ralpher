@@ -14,6 +14,7 @@
 
 import type { OpencodeClient } from "@opencode-ai/sdk/v2";
 import type { CommandExecutor, CommandResult, CommandOptions } from "./command-executor";
+import { log } from "./logger";
 
 /** Log prefix for executor messages */
 const LOG_PREFIX = "[CommandExecutor]";
@@ -74,10 +75,10 @@ export class CommandExecutorImpl implements CommandExecutor {
       const executeCommand = async (): Promise<CommandResult> => {
         const result = await this.execViaPty(command, args, options);
         if (!result.success) {
-          console.error(`${LOG_PREFIX} Command failed: ${cmdStr}`);
-          console.error(`${LOG_PREFIX}   exitCode: ${result.exitCode}`);
+          log.error(`${LOG_PREFIX} Command failed: ${cmdStr}`);
+          log.error(`${LOG_PREFIX}   exitCode: ${result.exitCode}`);
           if (result.stderr) {
-            console.error(`${LOG_PREFIX}   stderr: ${result.stderr}`);
+            log.error(`${LOG_PREFIX}   stderr: ${result.stderr}`);
           }
         }
         return result;

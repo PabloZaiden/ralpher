@@ -24,6 +24,8 @@ export interface ServerSettingsModalProps {
   saving?: boolean;
   /** Whether testing is in progress */
   testing?: boolean;
+  /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
+  remoteOnly?: boolean;
 }
 
 /**
@@ -38,6 +40,7 @@ export function ServerSettingsModal({
   onTest,
   saving = false,
   testing = false,
+  remoteOnly = false,
 }: ServerSettingsModalProps) {
   // Form state
   const [mode, setMode] = useState<"spawn" | "connect">("spawn");
@@ -50,14 +53,17 @@ export function ServerSettingsModal({
   // Initialize form from settings when modal opens
   useEffect(() => {
     if (isOpen && settings) {
-      setMode(settings.mode);
+      // If remote-only mode is enabled, force connect mode
+      const initialMode = remoteOnly ? "connect" : settings.mode;
+      setMode(initialMode);
       setHostname(settings.hostname ?? "localhost");
       setPort(String(settings.port ?? 4096));
       setPassword(settings.password ?? "");
       setTestResult(null);
-      setIsDirty(false);
+      // Mark as dirty if we had to switch from spawn to connect due to remote-only
+      setIsDirty(remoteOnly && settings.mode === "spawn");
     }
-  }, [isOpen, settings]);
+  }, [isOpen, settings, remoteOnly]);
 
   // Handle form submission
   async function handleSubmit(e: FormEvent) {
@@ -172,10 +178,12 @@ export function ServerSettingsModal({
           <div className="space-y-3">
             {/* Spawn Mode */}
             <label
-              className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition-colors ${
-                mode === "spawn"
-                  ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-                  : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
+              className={`flex items-start gap-3 p-4 rounded-lg border transition-colors ${
+                remoteOnly
+                  ? "cursor-not-allowed opacity-60 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
+                  : mode === "spawn"
+                    ? "cursor-pointer border-blue-500 bg-blue-50 dark:bg-blue-900/20"
+                    : "cursor-pointer border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600"
               }`}
             >
               <input
@@ -184,16 +192,22 @@ export function ServerSettingsModal({
                 value="spawn"
                 checked={mode === "spawn"}
                 onChange={() => handleModeChange("spawn")}
-                className="mt-1 h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500"
+                disabled={remoteOnly}
+                className="mt-1 h-4 w-4 border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
               />
               <div>
-                <div className="font-medium text-gray-900 dark:text-gray-100">
+                <div className={`font-medium ${remoteOnly ? "text-gray-500 dark:text-gray-500" : "text-gray-900 dark:text-gray-100"}`}>
                   Spawn Local Server
                 </div>
                 <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                   Automatically start a local OpenCode server on demand.
                   Best for local development.
                 </div>
+                {remoteOnly && (
+                  <div className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                    Disabled by RALPHER_REMOTE_ONLY environment variable
+                  </div>
+                )}
               </div>
             </label>
 
