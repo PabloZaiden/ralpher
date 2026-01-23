@@ -4,6 +4,7 @@
  */
 
 import { backendManager } from "../core/backend-manager";
+import { getAppConfig, isRemoteOnlyMode } from "../core/config";
 import type { ServerSettings } from "../types/settings";
 import type { ErrorResponse } from "../types/api";
 
@@ -19,6 +20,16 @@ function errorResponse(error: string, message: string, status = 400): Response {
  * Settings API routes.
  */
 export const settingsRoutes = {
+  "/api/config": {
+    /**
+     * GET /api/config - Get application configuration
+     * Returns settings that affect app behavior based on environment.
+     */
+    async GET(): Promise<Response> {
+      return Response.json(getAppConfig());
+    },
+  },
+
   "/api/settings/server": {
     /**
      * GET /api/settings/server - Get current server settings
@@ -39,6 +50,14 @@ export const settingsRoutes = {
           return errorResponse(
             "invalid_mode",
             'mode must be "spawn" or "connect"'
+          );
+        }
+
+        // Block spawn mode when RALPHER_REMOTE_ONLY is set
+        if (body.mode === "spawn" && isRemoteOnlyMode()) {
+          return errorResponse(
+            "spawn_disabled",
+            "Spawn mode is disabled. RALPHER_REMOTE_ONLY environment variable is set."
           );
         }
 
@@ -95,6 +114,14 @@ export const settingsRoutes = {
           return errorResponse(
             "invalid_mode",
             'mode must be "spawn" or "connect"'
+          );
+        }
+
+        // Block spawn mode when RALPHER_REMOTE_ONLY is set
+        if (body.mode === "spawn" && isRemoteOnlyMode()) {
+          return errorResponse(
+            "spawn_disabled",
+            "Spawn mode is disabled. RALPHER_REMOTE_ONLY environment variable is set."
           );
         }
 

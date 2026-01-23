@@ -49,6 +49,19 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     testConnection: testServerConnection,
   } = useServerSettings();
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
+  const [remoteOnly, setRemoteOnly] = useState(false);
+
+  // Fetch app config on mount to get remote-only status
+  useEffect(() => {
+    fetch("/api/config")
+      .then((res) => res.json())
+      .then((config: { remoteOnly: boolean }) => {
+        setRemoteOnly(config.remoteOnly);
+      })
+      .catch(() => {
+        // Ignore errors, default to false
+      });
+  }, []);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; loopId: string | null }>({
@@ -517,6 +530,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         onTest={testServerConnection}
         saving={serverSaving}
         testing={serverTesting}
+        remoteOnly={remoteOnly}
       />
     </div>
   );

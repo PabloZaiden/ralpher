@@ -7,7 +7,7 @@ import { OpenCodeBackend } from "../backends/opencode";
 import type { AgentBackend, BackendConnectionConfig } from "../backends/types";
 import { getServerSettings, setServerSettings } from "../persistence/preferences";
 import {
-  DEFAULT_SERVER_SETTINGS,
+  getDefaultServerSettings,
   type ConnectionStatus,
   type ServerSettings,
 } from "../types/settings";
@@ -59,7 +59,7 @@ export type AppEvent = LoopEvent | ServerEvent;
  */
 class BackendManager {
   private backend: OpenCodeBackend | null = null;
-  private settings: ServerSettings = DEFAULT_SERVER_SETTINGS;
+  private settings: ServerSettings = getDefaultServerSettings();
   private connectionError: string | null = null;
   private initialized = false;
   /** Custom executor factory for testing */
@@ -315,7 +315,7 @@ class BackendManager {
    */
   resetForTesting(): void {
     this.backend = null;
-    this.settings = DEFAULT_SERVER_SETTINGS;
+    this.settings = getDefaultServerSettings();
     this.connectionError = null;
     this.initialized = false;
     this.testExecutorFactory = null;
