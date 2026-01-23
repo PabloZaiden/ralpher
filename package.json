@@ -15,7 +15,8 @@
     "bun-plugin-tailwind": "^0.1.2",
     "react": "^19",
     "react-dom": "^19",
-    "tailwindcss": "^4.1.11"
+    "tailwindcss": "^4.1.11",
+    "tslog": "^4.10.2"
   },
   "devDependencies": {
     "@types/bun": "latest",

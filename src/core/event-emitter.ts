@@ -5,6 +5,7 @@
  */
 
 import type { LoopEvent } from "../types";
+import { log } from "./logger";
 
 type EventHandler<T> = (event: T) => void;
 type Unsubscribe = () => void;
@@ -36,7 +37,7 @@ export class SimpleEventEmitter<T = LoopEvent> {
         handler(event);
       } catch (error) {
         // Don't let one handler's error break others
-        console.error("Event handler error:", String(error));
+        log.error("Event handler error:", String(error));
       }
     }
   }

@@ -15,6 +15,7 @@ import { loopEventEmitter } from "./event-emitter";
 import type { LoopEvent } from "../types/events";
 import type { CommandExecutor } from "./command-executor";
 import { CommandExecutorImpl } from "./remote-command-executor";
+import { log } from "./logger";
 
 /**
  * Factory function type for creating command executors.
@@ -258,7 +259,7 @@ class BackendManager {
     // Use the provided directory or the backend's current directory
     const dir = directory ?? this.backend.getDirectory();
 
-    console.log(`[BackendManager] Creating CommandExecutor (baseUrl: ${connectionInfo.baseUrl}, directory: ${dir})`);
+    log.debug(`[BackendManager] Creating CommandExecutor (baseUrl: ${connectionInfo.baseUrl}, directory: ${dir})`);
     return new CommandExecutorImpl({
       client,
       directory: dir,
@@ -284,7 +285,7 @@ class BackendManager {
 
     // Ensure we're connected
     if (!this.backend?.isConnected()) {
-      console.log(`[BackendManager] Establishing connection to server...`);
+      log.debug(`[BackendManager] Establishing connection to server...`);
       await this.connect(directory);
     }
 

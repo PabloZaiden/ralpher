@@ -4,6 +4,7 @@
  */
 
 import type { AgentBackend, BackendFactory } from "./types";
+import { log } from "../core/logger";
 
 /**
  * Registry for agent backends.
@@ -79,7 +80,7 @@ class BackendRegistry {
         try {
           await instance.disconnect();
         } catch (error) {
-          console.error(`Error disconnecting backend ${name}:`, String(error));
+          log.error(`Error disconnecting backend ${name}:`, String(error));
         }
       }
     }

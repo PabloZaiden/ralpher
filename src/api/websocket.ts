@@ -5,6 +5,7 @@
 
 import type { ServerWebSocket } from "bun";
 import { loopEventEmitter } from "../core/event-emitter";
+import { log } from "../core/logger";
 import type { LoopEvent } from "../types";
 
 /**
@@ -105,7 +106,7 @@ export const websocketHandlers = {
    * Called when an error occurs.
    */
   error(ws: ServerWebSocket<WebSocketData>, error: Error) {
-    console.error("WebSocket error:", error);
+    log.error("WebSocket error:", error);
     // Cleanup
     if (ws.data.unsubscribe) {
       ws.data.unsubscribe();

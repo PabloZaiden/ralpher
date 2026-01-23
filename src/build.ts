@@ -2,6 +2,8 @@ import twPlugin from 'bun-plugin-tailwind'
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { log } from './core/logger';
+
 // workDir is the current file's directory + '/..'
 const workDir = import.meta.dir + '/..';
 
@@ -20,9 +22,9 @@ const target = targetArg?.split('=')[1] as
   | undefined;
 
 const outfile = target?.startsWith('bun-windows') ? `${outDir}/ralpher.exe` : `${outDir}/ralpher`;
-console.log('📦 Building server binary...');
+log.info('Building server binary...');
 if (target) {
-  console.log(`🎯 Target: ${target}`);
+  log.info(`Target: ${target}`);
 }
 
 const result = await Bun.build({
@@ -39,21 +41,21 @@ const result = await Bun.build({
 });
 
 if (!result.success) {
-  console.error('❌ Build failed:');
-  for (const log of result.logs) {
-    console.error(log);
+  log.error('Build failed:');
+  for (const _log of result.logs) {
+    log.error(_log);
   }
   process.exit(1);
 }
 
 
-console.log('Ensuring dist directory exists...');
+log.info('Ensuring dist directory exists...');
 fs.mkdirSync(finalOutDir, { recursive: true });
 
-console.log('🚚 Copying built file to dist directory...');
+log.info('Copying built file to dist directory...');
 fs.copyFileSync(outfile, `${finalOutDir}/${target ? `ralpher-${target.replace('bun-', '')}` : 'ralpher'}`);
 
-console.log('🧹 Cleaning up temporary files...');
+log.info('Cleaning up temporary files...');
 fs.rmSync(outDir, { recursive: true, force: true });
 
-console.log('✅ Build completed:', outfile);
+log.info('Build completed:', outfile);
