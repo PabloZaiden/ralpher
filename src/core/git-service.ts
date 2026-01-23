@@ -118,7 +118,16 @@ export class GitService {
     if (!result.success) {
       throw new Error(`Failed to check git status: ${result.stderr}`);
     }
-    return result.stdout.trim().length > 0;
+    const hasChanges = result.stdout.trim().length > 0;
+    // Debug logging for troubleshooting PTY output parsing
+    console.log(`[GitService] hasUncommittedChanges: ${hasChanges}`);
+    console.log(`[GitService]   stdout length: ${result.stdout.length}`);
+    console.log(`[GitService]   stdout trimmed length: ${result.stdout.trim().length}`);
+    if (hasChanges) {
+      console.log(`[GitService]   stdout (raw): ${JSON.stringify(result.stdout)}`);
+      console.log(`[GitService]   stdout (visible): "${result.stdout.trim()}"`);
+    }
+    return hasChanges;
   }
 
   /**

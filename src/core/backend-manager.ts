@@ -249,20 +249,21 @@ class BackendManager {
       throw new Error("[BackendManager] No SDK client available");
     }
 
+    // Get connection info (baseUrl and auth headers)
+    const connectionInfo = this.backend.getConnectionInfo();
+    if (!connectionInfo) {
+      throw new Error("[BackendManager] No connection info available");
+    }
+
     // Use the provided directory or the backend's current directory
     const dir = directory ?? this.backend.getDirectory();
-    
-    // Build base URL from settings
-    const hostname = this.settings.hostname ?? "127.0.0.1";
-    const port = this.settings.port ?? 4096;
-    const baseUrl = `http://${hostname}:${port}`;
 
-    console.log(`[BackendManager] Creating CommandExecutor (baseUrl: ${baseUrl}, directory: ${dir})`);
+    console.log(`[BackendManager] Creating CommandExecutor (baseUrl: ${connectionInfo.baseUrl}, directory: ${dir})`);
     return new CommandExecutorImpl({
       client,
       directory: dir,
-      baseUrl,
-      password: this.settings.password,
+      baseUrl: connectionInfo.baseUrl,
+      authHeaders: connectionInfo.authHeaders,
     });
   }
 

@@ -11,7 +11,7 @@
     "tsc": "bunx tsc --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/sdk": "^1.1.27",
+    "@opencode-ai/sdk": "^1.1.32",
     "bun-plugin-tailwind": "^0.1.2",
     "react": "^19",
     "react-dom": "^19",

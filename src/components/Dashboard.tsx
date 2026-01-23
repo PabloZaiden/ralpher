@@ -258,6 +258,33 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     setPurgeModal({ open: false, loopId: null });
   }
 
+  // Test PTY state
+  const [testPtyLoading, setTestPtyLoading] = useState(false);
+  const [testPtyResult, setTestPtyResult] = useState<{
+    success: boolean;
+    results: Array<{ step: string; success: boolean; output?: string; error?: string; duration?: number }>;
+    error?: string;
+  } | null>(null);
+
+  // Test PTY function
+  const handleTestPty = useCallback(async () => {
+    setTestPtyLoading(true);
+    setTestPtyResult(null);
+    try {
+      const response = await fetch("/api/test-pty", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ directory: "/tmp" }),
+      });
+      const data = await response.json();
+      setTestPtyResult(data);
+    } catch (err) {
+      setTestPtyResult({ success: false, results: [], error: String(err) });
+    } finally {
+      setTestPtyLoading(false);
+    }
+  }, []);
+
   // Group loops by status
   const activeLoops = loops.filter(
     (loop) =>
@@ -316,9 +343,18 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                 </span>
               </div>
             </div>
-            <Button onClick={() => setShowCreateModal(true)}>
-              New Loop
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                onClick={handleTestPty}
+                disabled={testPtyLoading}
+              >
+                {testPtyLoading ? "Testing PTY..." : "Test PTY"}
+              </Button>
+              <Button onClick={() => setShowCreateModal(true)}>
+                New Loop
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -329,6 +365,54 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         {error && (
           <div className="mb-6 rounded-md bg-red-50 dark:bg-red-900/20 p-4">
             <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
+          </div>
+        )}
+
+        {/* Test PTY Results */}
+        {testPtyResult && (
+          <div className={`mb-6 rounded-md p-4 ${testPtyResult.success ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"}`}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className={`font-semibold ${testPtyResult.success ? "text-green-800 dark:text-green-300" : "text-red-800 dark:text-red-300"}`}>
+                PTY Test: {testPtyResult.success ? "PASSED" : "FAILED"}
+              </h3>
+              <button
+                onClick={() => setTestPtyResult(null)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                Dismiss
+              </button>
+            </div>
+            {testPtyResult.error && (
+              <p className="text-sm text-red-700 dark:text-red-300 mb-2">Error: {testPtyResult.error}</p>
+            )}
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {testPtyResult.results.map((r, idx) => (
+                <div
+                  key={idx}
+                  className={`text-sm p-2 rounded ${r.success ? "bg-green-100 dark:bg-green-900/30" : "bg-red-100 dark:bg-red-900/30"}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={r.success ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                      {r.success ? "✓" : "✗"}
+                    </span>
+                    <span className="font-mono text-gray-800 dark:text-gray-200">{r.step}</span>
+                    {r.duration !== undefined && (
+                      <span className="text-gray-500 dark:text-gray-400 text-xs">({r.duration}ms)</span>
+                    )}
+                  </div>
+                  {r.output && (
+                    <pre className="mt-1 text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap overflow-x-auto max-h-32 overflow-y-auto bg-gray-50 dark:bg-gray-800 p-1 rounded">
+                      {r.output.slice(0, 500)}{r.output.length > 500 ? "..." : ""}
+                    </pre>
+                  )}
+                  {r.error && (
+                    <pre className="mt-1 text-xs text-red-600 dark:text-red-400 whitespace-pre-wrap">
+                      {r.error}
+                    </pre>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

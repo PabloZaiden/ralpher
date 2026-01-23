@@ -167,11 +167,15 @@ export class LoopEngine {
     try {
       // Set up git branch
       this.emitLog("info", "Setting up git branch...");
+      console.log("[LoopEngine] Starting setupGitBranch...");
       await this.setupGitBranch();
+      console.log("[LoopEngine] setupGitBranch completed successfully");
 
       // Create backend session
       this.emitLog("info", "Connecting to AI backend...");
+      console.log("[LoopEngine] Starting setupSession...");
       await this.setupSession();
+      console.log("[LoopEngine] setupSession completed successfully");
 
       // Emit started event
       this.emit({
@@ -307,10 +311,12 @@ export class LoopEngine {
       },
     });
 
+    console.log("[LoopEngine] About to emit 'Git branch setup complete' log");
     this.emitLog("info", `Git branch setup complete`, { 
       originalBranch, 
       workingBranch: branchName 
     });
+    console.log("[LoopEngine] Exiting setupGitBranch");
   }
 
   /**

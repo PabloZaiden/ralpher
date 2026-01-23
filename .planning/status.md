@@ -6,13 +6,46 @@
 
 The Command Execution Layer provides an abstraction for running shell commands and file operations. All commands go through a PTY+WebSocket connection to the opencode server, regardless of whether it's local (spawn mode) or remote (connect mode).
 
-## Current Status: ✅ COMPLETE (Unified Architecture)
+## Current Status: ✅ COMPLETE (Unified Architecture + SDK v2 Migration)
 
 All commands now go through a single `CommandExecutorImpl` that uses PTY+WebSocket. Commands are queued to ensure only one runs at a time, preventing server overload.
 
 ---
 
-## Architecture Changes (Latest)
+## SDK v2 Migration (2026-01-22) ✅
+
+All opencode SDK imports have been migrated from `@opencode-ai/sdk` to `@opencode-ai/sdk/v2`.
+
+### Key Changes
+
+**v1 API style** (old):
+```typescript
+client.pty.get({ path: { id: ptyId }, query: { directory } })
+client.file.read({ query: { directory, path } })
+```
+
+**v2 API style** (new):
+```typescript
+client.pty.get({ ptyID: ptyId, directory })
+client.file.read({ directory, path })
+```
+
+### Files Updated for v2
+
+| File | Changes |
+|------|---------|
+| `src/backends/opencode/index.ts` | All session, event, provider calls use v2 flattened params |
+| `src/core/remote-command-executor.ts` | All pty and file calls use v2 (`ptyID`, flattened params) |
+| `src/api/test-pty.ts` | `project.current()` call uses v2 style |
+
+### Verification
+
+- Build passes with no TypeScript errors
+- All 145 tests pass
+
+---
+
+## Architecture Changes (Previous)
 
 ### Unified Command Execution
 - **Removed `LocalCommandExecutor`** - No longer separate local vs remote execution
@@ -152,14 +185,105 @@ exec("git log")   ───┘
 
 ## Reliability Improvements
 
-1. **PTY Ready Delay**: Added 50ms delay after PTY creation before WebSocket connection to ensure the PTY is ready
-2. **WebSocket Retry**: Added retry mechanism (up to 3 attempts with exponential backoff: 100ms, 200ms, 400ms) for transient WebSocket connection failures ("Expected 101 status code")
+1. **Non-interactive execution**: Commands are prefixed with environment variables to disable pagers and prompts:
+   - `GIT_PAGER=cat` - Disable git's pager (less)
+   - `GIT_TERMINAL_PROMPT=0` - Disable git credential prompts
+   - `PAGER=cat` - Disable general pager
+   - `TERM=dumb` - Tell programs we're not on an interactive terminal
+
+2. **Directory parameter in WebSocket URL**: The `directory` query parameter is now included in WebSocket URLs to ensure the server uses the correct Instance context.
 
 ## Known Limitations
 
-1. **Exit Code Detection**: PTY combines stdout/stderr and we use heuristic error detection
+1. **Exit Code Detection**: PTY combines stdout/stderr; we use an exit marker to capture actual exit code
 2. **ANSI Escape Codes**: Output may contain terminal escape codes
 3. **No Streaming**: Output is collected and returned as a whole
+
+---
+
+## PTY WebSocket "Session not found" Error - RESOLVED
+
+**Issue**: When running in Docker (connect mode), PTY WebSocket connections fail with "Session not found" error.
+
+**Root Causes Found (2026-01-22)**:
+
+1. **PTY closing before WebSocket connect**: The PTY was being created with the command directly, causing it to run and exit immediately before the WebSocket connection could be established.
+
+2. **Missing `directory` parameter in PTY API calls**: The `pty.create()` and `pty.remove()` calls were missing the `directory` parameter, which is required for the opencode server to scope the PTY to the correct Instance context.
+
+### The Fix
+
+**Issue 1 Fix - Create shell without command:**
+```typescript
+// Old (broken): Command runs immediately and PTY closes
+await client.pty.create({ command, args, cwd, title });
+
+// New (correct): Create persistent shell, send command via WebSocket
+await client.pty.create({ directory, cwd, title });
+ws.onopen = () => ws.send(`${command}; echo "${marker}:$?"\n`);
+```
+
+**Issue 2 Fix - Add directory parameter:**
+```typescript
+// pty.create() - needs directory for Instance scoping
+await client.pty.create({
+  directory: this.directory,  // Required!
+  cwd,
+  title: `ralpher-cmd-${Date.now()}`,
+});
+
+// pty.remove() - also needs directory
+await client.pty.remove({
+  ptyID: ptyId,
+  directory: this.directory,  // Required!
+});
+```
+
+### How It Works Now
+
+1. **Create PTY shell** - Pass `directory`, `cwd`, and `title`. The `directory` scopes to the Instance, `cwd` is where the shell runs.
+2. **Connect via WebSocket** - URL includes `?directory=...` query param for Instance scoping.
+3. **Set clean environment** - Disable shell prompts (`PS1=""`, `PS2=""`) and pagers.
+4. **Use start/end markers** - Echo unique START marker, run command, capture exit code, echo END marker with exit code.
+5. **Extract clean output** - Parse only the content between START and END markers, ignoring all shell noise.
+6. **Cleanup** - Close WebSocket and remove PTY session (with `directory` param).
+
+### Command Execution Pattern
+
+```typescript
+// The full command sent via WebSocket:
+const fullCommand = [
+  'PS1=""',           // Disable primary prompt
+  'PS2=""',           // Disable secondary prompt
+  "GIT_PAGER=cat",    // Disable git pager
+  "GIT_TERMINAL_PROMPT=0",  // Disable git credential prompts
+  "PAGER=cat",        // Disable general pager
+  "TERM=dumb",        // Non-interactive terminal
+  `echo "${startMarker}"`,  // Unique start marker
+  `${command} ${args}`,     // The actual command
+  `__ec=$?; echo "${endMarker}:$__ec"`,  // End marker with exit code
+].join("; ");
+```
+
+This ensures:
+- No shell prompts pollute the output
+- No pagers wait for input
+- Output is cleanly delimited between markers
+- Exit code is reliably captured
+
+### Files Changed
+
+- `src/core/remote-command-executor.ts`:
+  - Added `directory: this.directory` to `pty.create()` call (line ~196)
+  - Added `directory: this.directory` to `pty.remove()` call (line ~245)
+  - Removed `command` and `args` from `pty.create()` call
+  - Renamed `connectAndCollectOutput` to `connectSendCommandAndCollectOutput`
+  - **Added clean shell environment** (`PS1=""`, `PS2=""`, etc.)
+  - **Added start/end marker pattern** for clean output parsing
+  - Added `shellEscape()` helper for proper argument quoting
+  - Added exit code parsing from end marker output
+  - Added `directory` query parameter to WebSocket URL
+  - Added environment variables prefix to disable pagers/prompts
 
 ---
 
@@ -171,6 +295,13 @@ bun run build
 
 # Run tests
 bun run test
+
+# Test in Docker
+docker build -t ralpher .
+docker run --rm -p 8080:80 \
+  -e OPENCODE_URL=http://host:4096 \
+  -e OPENCODE_AUTH_TOKEN=your-token \
+  ralpher
 ```
 
 ---
