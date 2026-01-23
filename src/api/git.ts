@@ -2,9 +2,9 @@
  * Git API endpoints for Ralph Loops Management System.
  * Provides git information for directories.
  * 
- * Uses the CommandExecutor abstraction to support both:
- * - Spawn mode: Git commands run locally via Bun.$
- * - Connect mode: Git commands run remotely via PTY+WebSocket
+ * Uses the CommandExecutor abstraction which works identically for both:
+ * - Spawn mode: Commands run on locally-spawned opencode server via PTY+WebSocket
+ * - Connect mode: Commands run on remote opencode server via PTY+WebSocket
  */
 
 import { backendManager } from "../core/backend-manager";
@@ -32,8 +32,7 @@ export interface BranchesResponse {
 
 /**
  * Get a GitService configured for the current backend mode.
- * In spawn mode, uses local execution.
- * In connect mode, uses remote execution via PTY+WebSocket.
+ * Uses PTY+WebSocket for command execution in both spawn and connect modes.
  */
 async function getGitService(directory: string): Promise<GitService> {
   const executor = await backendManager.getCommandExecutorAsync(directory);

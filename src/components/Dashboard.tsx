@@ -174,23 +174,20 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   }, []);
 
   // Handle directory change from form
-  // Skip local filesystem checks (planning dir, branches) when using remote server
+  // Fetch branches and models for both spawn and connect modes (unified via PTY+WebSocket)
   const handleDirectoryChange = useCallback((directory: string) => {
     if (directory !== modelsDirectory) {
       setModelsDirectory(directory);
       fetchModels(directory);
+      fetchBranches(directory);
       
-      // Only check local filesystem when in spawn mode (local server)
-      // Default to spawn if settings not loaded yet
+      // Only check local filesystem for planning dir warning in spawn mode
       const isRemote = serverSettings?.mode === "connect";
       if (!isRemote) {
         checkPlanningDir(directory);
-        fetchBranches(directory);
       } else {
         // Clear local-only state when using remote server
         setPlanningWarning(null);
-        setBranches([]);
-        setCurrentBranch("");
       }
     }
   }, [modelsDirectory, fetchModels, checkPlanningDir, fetchBranches, serverSettings?.mode]);

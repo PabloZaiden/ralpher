@@ -2,9 +2,9 @@
  * Loops API endpoints for Ralph Loops Management System.
  * Handles CRUD operations and loop control (start, stop, accept, discard).
  * 
- * Uses the CommandExecutor abstraction to support both:
- * - Spawn mode: Commands run locally via Bun.$
- * - Connect mode: Commands run remotely via PTY+WebSocket
+ * Uses the CommandExecutor abstraction which works identically for both:
+ * - Spawn mode: Commands run on locally-spawned opencode server via PTY+WebSocket
+ * - Connect mode: Commands run on remote opencode server via PTY+WebSocket
  */
 
 import { loopManager } from "../core/loop-manager";

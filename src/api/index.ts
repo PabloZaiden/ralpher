@@ -8,7 +8,6 @@ import { loopsRoutes } from "./loops";
 import { modelsAndPreferencesRoutes } from "./models";
 import { settingsRoutes } from "./settings";
 import { gitRoutes } from "./git";
-import { testPtyRoutes } from "./test-pty";
 
 /**
  * All API routes combined.
@@ -21,7 +20,6 @@ export const apiRoutes = {
   ...modelsAndPreferencesRoutes,
   ...settingsRoutes,
   ...gitRoutes,
-  ...testPtyRoutes,
 };
 
 // Re-export individual route modules
