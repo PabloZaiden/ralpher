@@ -238,16 +238,19 @@ export class CommandExecutorImpl implements CommandExecutor {
 
         ws.onopen = () => {
           // Build command with clean environment and markers
+          // IMPORTANT: Use 'export' for env vars so child processes (like git) inherit them.
+          // Without export, git running in a PTY would use its default pager (like 'less'),
+          // which waits for keyboard input and causes commands to timeout.
           const escapedArgs = args.map(a => this.shellEscape(a)).join(" ");
           const fullCommand = [
             "stty -echo 2>/dev/null",
-            'PS1=""',
-            'PS2=""',
-            'PROMPT_COMMAND=""',
-            "GIT_PAGER=cat",
-            "GIT_TERMINAL_PROMPT=0",
-            "PAGER=cat",
-            "TERM=dumb",
+            'export PS1=""',
+            'export PS2=""',
+            'export PROMPT_COMMAND=""',
+            "export GIT_PAGER=cat",
+            "export GIT_TERMINAL_PROMPT=0",
+            "export PAGER=cat",
+            "export TERM=dumb",
             `echo "${startMarker}"`,
             `${command} ${escapedArgs}`,
             `__ec=$?; echo ""; echo "${endMarker}:$__ec"`,

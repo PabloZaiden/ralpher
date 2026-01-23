@@ -49,6 +49,4 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
 
 # install opencode
-bun install -g opencode-ai
-
-
+curl -fsSL https://opencode.ai/install | bash
