@@ -241,7 +241,9 @@ export class CommandExecutorImpl implements CommandExecutor {
           // IMPORTANT: Use 'export' for env vars so child processes (like git) inherit them.
           // Without export, git running in a PTY would use its default pager (like 'less'),
           // which waits for keyboard input and causes commands to timeout.
+          const escapedCommand = this.shellEscape(command);
           const escapedArgs = args.map(a => this.shellEscape(a)).join(" ");
+          const commandLine = escapedArgs.length > 0 ? `${escapedCommand} ${escapedArgs}` : escapedCommand;
           const fullCommand = [
             "stty -echo 2>/dev/null",
             'export PS1=""',
@@ -252,7 +254,7 @@ export class CommandExecutorImpl implements CommandExecutor {
             "export PAGER=cat",
             "export TERM=dumb",
             `echo "${startMarker}"`,
-            `${command} ${escapedArgs}`,
+            commandLine,
             `__ec=$?; echo ""; echo "${endMarker}:$__ec"`,
           ].join("; ");
           
