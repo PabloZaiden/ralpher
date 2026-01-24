@@ -58,22 +58,6 @@ export async function startLoopApi(
 }
 
 /**
- * Stop a loop via the API.
- */
-export async function stopLoopApi(loopId: string): Promise<boolean> {
-  const response = await fetch(`/api/loops/${loopId}/stop`, {
-    method: "POST",
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.message || "Failed to stop loop");
-  }
-
-  return true;
-}
-
-/**
  * Accept (merge) a loop's changes via the API.
  */
 export async function acceptLoopApi(loopId: string): Promise<AcceptLoopResult> {

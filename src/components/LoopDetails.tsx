@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { FileDiff, FileContentResponse, UncommittedChangesError } from "../types";
+import type { FileDiff, FileContentResponse } from "../types";
 import { useLoop } from "../hooks";
 import { Badge, Button, Card, getStatusBadgeVariant } from "./common";
 import { LogViewer } from "./LogViewer";
@@ -11,12 +11,9 @@ import {
   AcceptLoopModal,
   DeleteLoopModal,
   PurgeLoopModal,
-  UncommittedChangesModal,
 } from "./LoopModals";
 import {
   getStatusLabel,
-  canStart,
-  canStop,
   canAccept,
   isFinalState,
   isLoopActive,
@@ -88,8 +85,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     toolCalls,
     logs,
     gitChangeCounter,
-    start,
-    stop,
     accept,
     push,
     remove,
@@ -122,10 +117,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [deleteModal, setDeleteModal] = useState(false);
   const [acceptModal, setAcceptModal] = useState(false);
   const [purgeModal, setPurgeModal] = useState(false);
-  const [uncommittedModal, setUncommittedModal] = useState<{
-    open: boolean;
-    error: UncommittedChangesError | null;
-  }>({ open: false, error: null });
 
   // Pending prompt editing state
   const [pendingPromptText, setPendingPromptText] = useState("");
@@ -231,14 +222,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       loadContent();
     }
   }, [activeTab, getPlan, getStatusFile, getDiff]);
-
-  // Handle start
-  async function handleStart() {
-    const result = await start();
-    if (result.uncommittedError) {
-      setUncommittedModal({ open: true, error: result.uncommittedError });
-    }
-  }
 
   // Handle delete
   async function handleDelete() {
@@ -458,23 +441,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   </Button>
                 ) : (
                   <>
-                    {canStart(state.status) && (
-                      <Button
-                        className="w-full"
-                        onClick={handleStart}
-                      >
-                        Start Loop
-                      </Button>
-                    )}
-                    {canStop(state.status) && (
-                      <Button
-                        className="w-full"
-                        variant="danger"
-                        onClick={() => stop()}
-                      >
-                        Stop Loop
-                      </Button>
-                    )}
                     {canAccept(state.status) && state.git && (
                       <Button
                         className="w-full"
@@ -768,13 +734,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         isOpen={purgeModal}
         onClose={() => setPurgeModal(false)}
         onPurge={handlePurge}
-      />
-
-      {/* Uncommitted changes modal */}
-      <UncommittedChangesModal
-        isOpen={uncommittedModal.open}
-        onClose={() => setUncommittedModal({ open: false, error: null })}
-        error={uncommittedModal.error}
       />
     </div>
   );

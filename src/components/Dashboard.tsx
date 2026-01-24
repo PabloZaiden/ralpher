@@ -31,7 +31,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     connectionStatus,
     createLoop,
     startLoop,
-    stopLoop,
     deleteLoop,
     acceptLoop,
     pushLoop,
@@ -207,18 +206,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     setCurrentBranch("");
   }, []);
 
-  // Handle start with uncommitted changes handling
-  async function handleStart(loopId: string) {
-    const result = await startLoop(loopId);
-    if (result.uncommittedError) {
-      setUncommittedModal({
-        open: true,
-        loopId,
-        error: result.uncommittedError,
-      });
-    }
-  }
-
   // Handle delete
   async function handleDelete() {
     if (!deleteModal.loopId) return;
@@ -369,7 +356,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   key={loop.config.id}
                   loop={loop}
                   onClick={() => onSelectLoop?.(loop.config.id)}
-                  onStop={() => stopLoop(loop.config.id)}
                   onDelete={() =>
                     setDeleteModal({ open: true, loopId: loop.config.id })
                   }
@@ -413,8 +399,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   key={loop.config.id}
                   loop={loop}
                   onClick={() => onSelectLoop?.(loop.config.id)}
-                  onStart={() => handleStart(loop.config.id)}
-                  onStop={() => stopLoop(loop.config.id)}
                   onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
                   onDelete={() =>
                     setDeleteModal({ open: true, loopId: loop.config.id })

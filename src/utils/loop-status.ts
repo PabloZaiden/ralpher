@@ -39,32 +39,15 @@ export function getStatusLabel(status: LoopStatus): string {
 }
 
 /**
- * Check if a loop can be started.
- * Only show start for idle or stopped loops (not yet run or manually stopped).
- * Completed/failed/max_iterations loops should use "Accept" or be reviewed first.
- */
-export function canStart(status: LoopStatus): boolean {
-  return status === "idle" || status === "stopped";
-}
-
-/**
- * Check if a loop can be stopped.
- * Only running, waiting, or starting loops can be stopped.
- */
-export function canStop(status: LoopStatus): boolean {
-  return status === "running" || status === "waiting" || status === "starting";
-}
-
-/**
  * Check if a loop can be accepted (merged or pushed).
- * Loops that have completed, stopped, failed, or hit max iterations
+ * Loops that have completed, failed, or hit max iterations
  * can have their changes accepted.
+ * Note: "stopped" is now an internal-only state for graceful shutdown.
  */
 export function canAccept(status: LoopStatus): boolean {
   return (
     status === "completed" ||
     status === "max_iterations" ||
-    status === "stopped" ||
     status === "failed"
   );
 }

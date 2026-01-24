@@ -173,6 +173,7 @@ export const loopsControlRoutes = {
   "/api/loops/:id/start": {
     /**
      * POST /api/loops/:id/start - Start a loop
+     * Used internally for startImmediately functionality when creating loops.
      * Returns 409 with UncommittedChangesError if there are uncommitted changes.
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
@@ -200,24 +201,6 @@ export const loopsControlRoutes = {
         }
 
         return errorResponse("start_failed", String(error), 500);
-      }
-    },
-  },
-
-  "/api/loops/:id/stop": {
-    /**
-     * POST /api/loops/:id/stop - Stop a loop
-     */
-    async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      try {
-        await loopManager.stopLoop(req.params.id);
-        return successResponse();
-      } catch (error) {
-        const message = String(error);
-        if (message.includes("not running")) {
-          return errorResponse("not_running", "Loop is not running", 409);
-        }
-        return errorResponse("stop_failed", message, 500);
       }
     },
   },

@@ -8,7 +8,6 @@ import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest } from "../t
 import { useGlobalEvents } from "./useWebSocket";
 import {
   startLoopApi,
-  stopLoopApi,
   acceptLoopApi,
   pushLoopApi,
   discardLoopApi,
@@ -36,10 +35,8 @@ export interface UseLoopsResult {
   updateLoop: (id: string, request: UpdateLoopRequest) => Promise<Loop | null>;
   /** Delete a loop */
   deleteLoop: (id: string) => Promise<boolean>;
-  /** Start a loop */
+  /** Start a loop (used for startImmediately on creation) */
   startLoop: (id: string) => Promise<StartLoopResult>;
-  /** Stop a loop */
-  stopLoop: (id: string) => Promise<boolean>;
   /** Accept (merge) a loop's changes */
   acceptLoop: (id: string) => Promise<AcceptLoopResult>;
   /** Push a loop's branch to remote */
@@ -210,18 +207,6 @@ export function useLoops(): UseLoopsResult {
     [refreshLoop]
   );
 
-  // Stop a loop
-  const stopLoop = useCallback(async (id: string): Promise<boolean> => {
-    try {
-      await stopLoopApi(id);
-      await refreshLoop(id);
-      return true;
-    } catch (err) {
-      setError(String(err));
-      return false;
-    }
-  }, [refreshLoop]);
-
   // Accept a loop's changes
   const acceptLoop = useCallback(async (id: string): Promise<AcceptLoopResult> => {
     try {
@@ -293,7 +278,6 @@ export function useLoops(): UseLoopsResult {
     updateLoop,
     deleteLoop,
     startLoop,
-    stopLoop,
     acceptLoop,
     pushLoop,
     discardLoop,

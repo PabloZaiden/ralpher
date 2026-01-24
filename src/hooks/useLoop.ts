@@ -16,8 +16,6 @@ import type {
 } from "../types";
 import { useLoopEvents } from "./useWebSocket";
 import {
-  startLoopApi,
-  stopLoopApi,
   acceptLoopApi,
   pushLoopApi,
   discardLoopApi,
@@ -25,7 +23,6 @@ import {
   purgeLoopApi,
   setPendingPromptApi,
   clearPendingPromptApi,
-  type StartLoopResult,
   type AcceptLoopResult,
   type PushLoopResult,
 } from "./loopActions";
@@ -73,10 +70,6 @@ export interface UseLoopResult {
   update: (request: UpdateLoopRequest) => Promise<boolean>;
   /** Delete the loop */
   remove: () => Promise<boolean>;
-  /** Start the loop */
-  start: () => Promise<StartLoopResult>;
-  /** Stop the loop */
-  stop: () => Promise<boolean>;
   /** Accept (merge) the loop's changes */
   accept: () => Promise<AcceptLoopResult>;
   /** Push the loop's branch to remote */
@@ -303,35 +296,6 @@ export function useLoop(loopId: string): UseLoopResult {
     }
   }, [loopId]);
 
-  // Start the loop
-  const start = useCallback(
-    async (): Promise<StartLoopResult> => {
-      try {
-        const result = await startLoopApi(loopId);
-        if (result.success) {
-          await refresh();
-        }
-        return result;
-      } catch (err) {
-        setError(String(err));
-        return { success: false };
-      }
-    },
-    [loopId, refresh]
-  );
-
-  // Stop the loop
-  const stop = useCallback(async (): Promise<boolean> => {
-    try {
-      await stopLoopApi(loopId);
-      await refresh();
-      return true;
-    } catch (err) {
-      setError(String(err));
-      return false;
-    }
-  }, [loopId, refresh]);
-
   // Accept the loop's changes
   const accept = useCallback(async (): Promise<AcceptLoopResult> => {
     try {
@@ -468,8 +432,6 @@ export function useLoop(loopId: string): UseLoopResult {
     refresh,
     update,
     remove,
-    start,
-    stop,
     accept,
     push,
     discard,

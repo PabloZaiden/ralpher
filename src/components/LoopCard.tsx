@@ -6,8 +6,6 @@ import type { Loop } from "../types";
 import { Badge, getStatusBadgeVariant, Button, Card } from "./common";
 import {
   getStatusLabel,
-  canStart,
-  canStop,
   canAccept,
   isFinalState,
   isLoopActive,
@@ -18,10 +16,6 @@ export interface LoopCardProps {
   loop: Loop;
   /** Callback when card is clicked */
   onClick?: () => void;
-  /** Callback when start button is clicked */
-  onStart?: () => void;
-  /** Callback when stop button is clicked */
-  onStop?: () => void;
   /** Callback when accept button is clicked (merge) */
   onAccept?: () => void;
   /** Callback when delete button is clicked */
@@ -53,8 +47,6 @@ function formatRelativeTime(isoString: string | undefined): string {
 export function LoopCard({
   loop,
   onClick,
-  onStart,
-  onStop,
   onAccept,
   onDelete,
   onPurge,
@@ -143,30 +135,6 @@ export function LoopCard({
           )
         ) : (
           <>
-            {canStart(state.status) && onStart && (
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStart();
-                }}
-              >
-                Start
-              </Button>
-            )}
-            {canStop(state.status) && onStop && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStop();
-                }}
-              >
-                Stop
-              </Button>
-            )}
             {canAccept(state.status) && state.git && onAccept && (
               <Button
                 size="sm"

@@ -234,33 +234,6 @@ describe("Loops Control API Integration", () => {
     });
   });
 
-  describe("POST /api/loops/:id/stop", () => {
-    test("returns 409 for non-running loop", async () => {
-      // Create a loop but don't start it
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Stop Test Loop",
-          directory: testWorkDir,
-          prompt: "Test prompt",
-          backend: { type: "mock" },
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
-
-      // Try to stop
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/stop`, {
-        method: "POST",
-      });
-
-      expect(response.status).toBe(409);
-      const body = await response.json();
-      expect(body.error).toBe("not_running");
-    });
-  });
-
   describe("POST /api/loops/:id/accept", () => {
     test("returns error for loop that was never started (idle status)", async () => {
       // Create a loop but don't start it - it will be in idle status
