@@ -37,6 +37,8 @@ export interface CreateLoopRequest {
   maxIterations?: number;
   /** Maximum consecutive identical errors before failsafe exit (default: 10) */
   maxConsecutiveErrors?: number;
+  /** Activity timeout in seconds - time without events before treating as error (default: 180 = 3 minutes) */
+  activityTimeoutSeconds?: number;
   /** Regex for completion detection (optional, uses default) */
   stopPattern?: string;
   /** Git configuration (optional, uses defaults) */
@@ -61,6 +63,8 @@ export interface UpdateLoopRequest {
   maxIterations?: number;
   /** Update max consecutive errors */
   maxConsecutiveErrors?: number;
+  /** Update activity timeout in seconds */
+  activityTimeoutSeconds?: number;
   /** Update stop pattern */
   stopPattern?: string;
   /** Update git config */
@@ -205,6 +209,15 @@ export function validateCreateLoopRequest(req: unknown): string | undefined {
 
   if (body["maxConsecutiveErrors"] !== undefined && typeof body["maxConsecutiveErrors"] !== "number") {
     return "maxConsecutiveErrors must be a number";
+  }
+
+  if (body["activityTimeoutSeconds"] !== undefined) {
+    if (typeof body["activityTimeoutSeconds"] !== "number") {
+      return "activityTimeoutSeconds must be a number";
+    }
+    if (body["activityTimeoutSeconds"] < 60) {
+      return "activityTimeoutSeconds must be at least 60 seconds";
+    }
   }
 
   if (body["stopPattern"] !== undefined && typeof body["stopPattern"] !== "string") {

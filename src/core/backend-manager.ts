@@ -44,10 +44,16 @@ export interface ServerErrorEvent {
   timestamp: string;
 }
 
+export interface ServerResetEvent {
+  type: "server.reset";
+  timestamp: string;
+}
+
 export type ServerEvent =
   | ServerConnectedEvent
   | ServerDisconnectedEvent
-  | ServerErrorEvent;
+  | ServerErrorEvent
+  | ServerResetEvent;
 
 /**
  * Combined event type for the event emitter.
@@ -140,6 +146,31 @@ class BackendManager {
       });
     }
     this.connectionError = null;
+  }
+
+  /**
+   * Reset the backend connection.
+   * Aborts all active subscriptions, disconnects, and clears state.
+   * Useful for recovering from stale connections.
+   */
+  async reset(): Promise<void> {
+    if (this.backend) {
+      // Abort all active subscriptions first
+      this.backend.abortAllSubscriptions();
+      
+      // Then disconnect cleanly
+      if (this.backend.isConnected()) {
+        await this.backend.disconnect();
+      }
+    }
+    
+    this.backend = null;
+    this.connectionError = null;
+    
+    this.emitEvent({
+      type: "server.reset",
+      timestamp: new Date().toISOString(),
+    });
   }
 
   /**

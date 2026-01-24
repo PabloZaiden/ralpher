@@ -60,6 +60,7 @@ export function CreateLoopForm({
   const [prompt, setPrompt] = useState("Do everything that's pending in the plan");
   const [maxIterations, setMaxIterations] = useState<string>("");
   const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>("10");
+  const [activityTimeoutSeconds, setActivityTimeoutSeconds] = useState<string>("180");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("");
@@ -145,6 +146,13 @@ export function CreateLoopForm({
       if (!isNaN(num) && num >= 0) {
         // 0 means unlimited, positive number is the limit
         request.maxConsecutiveErrors = num === 0 ? 0 : num;
+      }
+    }
+
+    if (activityTimeoutSeconds.trim()) {
+      const num = parseInt(activityTimeoutSeconds, 10);
+      if (!isNaN(num) && num >= 60) {
+        request.activityTimeoutSeconds = num;
       }
     }
 
@@ -453,6 +461,28 @@ export function CreateLoopForm({
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Failsafe exit after this many identical consecutive errors. 0 = unlimited. (default: 10)
+            </p>
+          </div>
+
+          {/* Activity timeout */}
+          <div>
+            <label
+              htmlFor="activityTimeoutSeconds"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Activity Timeout (seconds)
+            </label>
+            <input
+              type="number"
+              id="activityTimeoutSeconds"
+              value={activityTimeoutSeconds}
+              onChange={(e) => setActivityTimeoutSeconds(e.target.value)}
+              min="60"
+              placeholder="180"
+              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            />
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Time without AI activity before treating as error and retrying. Minimum: 60 seconds. (default: 180)
             </p>
           </div>
         </div>
