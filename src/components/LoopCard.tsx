@@ -80,31 +80,31 @@ export function LoopCard({
 
       {/* Header */}
       <div className="mb-3">
-        <div className="flex items-start justify-between">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 truncate flex-1 min-w-0">
             {config.name}
           </h3>
-          <Badge variant={getStatusBadgeVariant(state.status)}>
+          <Badge variant={getStatusBadgeVariant(state.status)} className="flex-shrink-0">
             {getStatusLabel(state.status)}
           </Badge>
         </div>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 truncate">
+        <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
           {config.directory}
         </p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-        <div>
-          <span className="text-gray-500 dark:text-gray-400">Iterations:</span>
-          <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+      <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4 text-xs sm:text-sm">
+        <div className="min-w-0">
+          <span className="text-gray-500 dark:text-gray-400 block sm:inline">Iterations:</span>
+          <span className="ml-0 sm:ml-2 font-medium text-gray-900 dark:text-gray-100 block sm:inline">
             {state.currentIteration}
             {config.maxIterations ? `/${config.maxIterations}` : ""}
           </span>
         </div>
-        <div>
-          <span className="text-gray-500 dark:text-gray-400">Last activity:</span>
-          <span className="ml-2 font-medium text-gray-900 dark:text-gray-100">
+        <div className="min-w-0">
+          <span className="text-gray-500 dark:text-gray-400 block sm:inline">Last activity:</span>
+          <span className="ml-0 sm:ml-2 font-medium text-gray-900 dark:text-gray-100 block sm:inline">
             {formatRelativeTime(state.lastActivityAt)}
           </span>
         </div>
@@ -112,9 +112,9 @@ export function LoopCard({
 
       {/* Git info */}
       {state.git && (
-        <div className="mb-4 text-sm">
+        <div className="mb-3 sm:mb-4 text-xs sm:text-sm">
           <span className="text-gray-500 dark:text-gray-400">Branch:</span>
-          <span className="ml-2 font-mono text-gray-900 dark:text-gray-100">
+          <span className="ml-2 font-mono text-gray-900 dark:text-gray-100 break-all">
             {state.git.workingBranch}
           </span>
           {state.git.commits.length > 0 && (
@@ -126,7 +126,7 @@ export function LoopCard({
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
+      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
         {/* Final state - only show Purge */}
         {isFinalState(state.status) ? (
           onPurge && (

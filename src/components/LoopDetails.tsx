@@ -329,34 +329,36 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={onBack}>
+        <div className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+            <Button variant="ghost" size="sm" onClick={onBack} className="self-start">
               ← Back
             </Button>
-            <div className="flex-1">
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
                   {config.name}
                 </h1>
-                <Badge variant={getStatusBadgeVariant(state.status)} size="md">
-                  {getStatusLabel(state.status)}
-                </Badge>
-                {isActive && (
-                  <span className="relative flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
-                  </span>
-                )}
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Badge variant={getStatusBadgeVariant(state.status)} size="md">
+                    {getStatusLabel(state.status)}
+                  </Badge>
+                  {isActive && (
+                    <span className="relative flex h-3 w-3">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
+                    </span>
+                  )}
+                </div>
               </div>
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400 font-mono">
+              <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-mono truncate">
                 {config.directory}
               </p>
             </div>
             {/* WebSocket Status */}
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-xs sm:text-sm self-start sm:self-auto">
               <span
-                className={`h-2 w-2 rounded-full ${
+                className={`h-2 w-2 rounded-full flex-shrink-0 ${
                   connectionStatus === "open"
                     ? "bg-green-500"
                     : connectionStatus === "connecting"
@@ -372,7 +374,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         </div>
       </header>
 
-      <main className="px-4 sm:px-6 lg:px-8 py-6">
+      <main className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
         {/* Error display */}
         {error && (
           <div className="mb-6 rounded-md bg-red-50 dark:bg-red-900/20 p-4">
@@ -380,12 +382,12 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
           {/* Left column - Stats and actions */}
-          <div className="lg:col-span-1 space-y-6">
+          <div className="lg:col-span-1 space-y-4 sm:space-y-6">
             {/* Stats card */}
             <Card title="Statistics">
-              <dl className="space-y-3 text-sm">
+              <dl className="space-y-2 sm:space-y-3 text-xs sm:text-sm">
                 <div className="flex justify-between">
                   <dt className="text-gray-500 dark:text-gray-400">Iteration</dt>
                   <dd className="font-medium text-gray-900 dark:text-gray-100">
@@ -395,20 +397,20 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-gray-500 dark:text-gray-400">Started</dt>
-                  <dd className="font-medium text-gray-900 dark:text-gray-100">
+                  <dd className="font-medium text-gray-900 dark:text-gray-100 text-right">
                     {formatDateTime(state.startedAt)}
                   </dd>
                 </div>
                 <div className="flex justify-between">
                   <dt className="text-gray-500 dark:text-gray-400">Last activity</dt>
-                  <dd className="font-medium text-gray-900 dark:text-gray-100">
+                  <dd className="font-medium text-gray-900 dark:text-gray-100 text-right">
                     {formatDateTime(state.lastActivityAt)}
                   </dd>
                 </div>
                 {state.completedAt && (
                   <div className="flex justify-between">
                     <dt className="text-gray-500 dark:text-gray-400">Completed</dt>
-                    <dd className="font-medium text-gray-900 dark:text-gray-100">
+                    <dd className="font-medium text-gray-900 dark:text-gray-100 text-right">
                       {formatDateTime(state.completedAt)}
                     </dd>
                   </div>
@@ -419,16 +421,16 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
             {/* Git info card */}
             {state.git && (
               <Card title="Git">
-                <dl className="space-y-3 text-sm">
+                <dl className="space-y-2 sm:space-y-3 text-xs sm:text-sm">
                   <div>
                     <dt className="text-gray-500 dark:text-gray-400">Original branch</dt>
-                    <dd className="font-mono text-gray-900 dark:text-gray-100">
+                    <dd className="font-mono text-gray-900 dark:text-gray-100 break-all">
                       {state.git.originalBranch}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-gray-500 dark:text-gray-400">Working branch</dt>
-                    <dd className="font-mono text-gray-900 dark:text-gray-100">
+                    <dd className="font-mono text-gray-900 dark:text-gray-100 break-all">
                       {state.git.workingBranch}
                     </dd>
                   </div>
@@ -499,14 +501,14 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
           {/* Right column - Tabs content */}
           <div className="lg:col-span-4 xl:col-span-5">
             {/* Tab navigation */}
-            <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
+            <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4 overflow-x-auto">
               {tabs.map((tab) => {
                 const hasUpdate = tabsWithUpdates.has(tab.id);
                 return (
                   <button
                     key={tab.id}
                     onClick={() => handleTabChange(tab.id)}
-                    className={`relative px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    className={`relative px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                       activeTab === tab.id
                         ? "border-blue-500 text-blue-600 dark:text-blue-400"
                         : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
@@ -676,7 +678,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                         return (
                           <div
                             key={file.path}
-                            className="bg-gray-50 dark:bg-gray-900 rounded text-sm overflow-hidden"
+                            className="bg-gray-50 dark:bg-gray-900 rounded text-xs sm:text-sm overflow-hidden"
                           >
                             <button
                               type="button"
@@ -693,12 +695,12 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                                   });
                                 }
                               }}
-                              className={`w-full flex items-center gap-3 p-2 text-left ${
+                              className={`w-full flex items-center gap-2 sm:gap-3 p-2 text-left ${
                                 hasPatch ? "cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" : "cursor-default"
                               }`}
                             >
                               {hasPatch && (
-                                <span className="text-gray-400 flex-shrink-0">
+                                <span className="text-gray-400 flex-shrink-0 text-sm">
                                   {isExpanded ? "▼" : "▶"}
                                 </span>
                               )}
@@ -718,10 +720,10 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                                 {file.status === "renamed" && "→"}
                                 {file.status === "modified" && "~"}
                               </span>
-                              <span className="font-mono text-gray-900 dark:text-gray-100 flex-1 truncate">
+                              <span className="font-mono text-gray-900 dark:text-gray-100 flex-1 truncate min-w-0">
                                 {file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
                               </span>
-                              <span className="text-gray-500 dark:text-gray-400 flex-shrink-0">
+                              <span className="text-gray-500 dark:text-gray-400 flex-shrink-0 whitespace-nowrap">
                                 <span className="text-green-600 dark:text-green-400">+{file.additions}</span>
                                 {" "}
                                 <span className="text-red-600 dark:text-red-400">-{file.deletions}</span>

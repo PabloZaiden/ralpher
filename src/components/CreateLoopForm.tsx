@@ -459,7 +459,7 @@ export function CreateLoopForm({
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
         <label className="flex items-center gap-2 cursor-pointer">
           <input
             type="checkbox"
@@ -471,7 +471,7 @@ export function CreateLoopForm({
             Start immediately
           </span>
         </label>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
           <Button
             type="button"
             variant="ghost"

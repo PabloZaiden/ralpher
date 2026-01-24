@@ -32,10 +32,10 @@ export function ConnectionStatusBar({
       <button
         type="button"
         onClick={onClick}
-        className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+        className="flex items-center gap-2 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
       >
-        <span className="font-medium">OpenCode:</span>
-        <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse" />
+        <span className="font-medium hidden sm:inline">OpenCode:</span>
+        <span className="w-2 h-2 rounded-full bg-gray-400 animate-pulse flex-shrink-0" />
         <span>Loading...</span>
         <GearIcon />
       </button>
@@ -71,20 +71,20 @@ export function ConnectionStatusBar({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+      className="flex items-center gap-2 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
       title={hasError ? `Error: ${status?.error}` : `Server: ${modeLabel}`}
     >
       {/* OpenCode label */}
-      <span className="text-gray-500 dark:text-gray-400 font-medium">OpenCode:</span>
+      <span className="text-gray-500 dark:text-gray-400 font-medium hidden sm:inline">OpenCode:</span>
       
       {/* Status indicator */}
-      <span className={`w-2 h-2 rounded-full ${indicatorColor}`} />
+      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${indicatorColor}`} />
       
       {/* Status text */}
-      <span>{statusText}</span>
+      <span className="truncate">{statusText}</span>
       
       {/* Mode/Server info */}
-      <span className="text-gray-500 dark:text-gray-400 hidden sm:inline">
+      <span className="text-gray-500 dark:text-gray-400 hidden sm:inline truncate">
         ({modeLabel})
       </span>
       
