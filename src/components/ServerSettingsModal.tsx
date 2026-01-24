@@ -243,7 +243,7 @@ export function ServerSettingsModal({
         {/* Connection Settings (only shown in connect mode) */}
         {mode === "connect" && (
           <div className="space-y-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
                 <label
                   htmlFor="hostname"
@@ -258,10 +258,10 @@ export function ServerSettingsModal({
                   onChange={(e) => handleHostnameChange(e.target.value)}
                   placeholder="localhost or remote-server.example.com"
                   required
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
                 />
               </div>
-              <div className="w-28">
+              <div className="w-full sm:w-28">
                 <label
                   htmlFor="port"
                   className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
@@ -275,7 +275,7 @@ export function ServerSettingsModal({
                   onChange={(e) => handlePortChange(e.target.value)}
                   min="1"
                   max="65535"
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                 />
               </div>
             </div>
@@ -294,7 +294,7 @@ export function ServerSettingsModal({
                 value={password}
                 onChange={(e) => handlePasswordChange(e.target.value)}
                 placeholder="Leave empty if no authentication required"
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Authentication token for the OpenCode server
@@ -302,7 +302,7 @@ export function ServerSettingsModal({
             </div>
 
             {/* Test Connection Button */}
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
               <Button
                 type="button"
                 variant="secondary"
@@ -319,15 +319,15 @@ export function ServerSettingsModal({
                 <div className="flex items-center gap-2">
                   {testResult.success ? (
                     <>
-                      <CheckIcon className="w-5 h-5 text-green-500" />
+                      <CheckIcon className="w-5 h-5 text-green-500 flex-shrink-0" />
                       <span className="text-sm text-green-600 dark:text-green-400">
                         Connection successful
                       </span>
                     </>
                   ) : (
                     <>
-                      <XIcon className="w-5 h-5 text-red-500" />
-                      <span className="text-sm text-red-600 dark:text-red-400">
+                      <XIcon className="w-5 h-5 text-red-500 flex-shrink-0" />
+                      <span className="text-sm text-red-600 dark:text-red-400 break-words">
                         {testResult.error ?? "Connection failed"}
                       </span>
                     </>

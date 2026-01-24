@@ -149,22 +149,22 @@ export function LogViewer({
   return (
     <div
       ref={containerRef}
-      className="bg-gray-900 text-gray-100 rounded-lg overflow-auto font-mono text-sm"
+      className="bg-gray-900 text-gray-100 rounded-lg overflow-auto font-mono text-xs sm:text-sm"
       style={{ maxHeight }}
     >
       {isEmpty ? (
-        <div className="flex items-center justify-center h-32 text-gray-500">
+        <div className="flex items-center justify-center h-32 text-gray-500 text-xs sm:text-sm">
           No logs yet. Start the loop to see activity.
         </div>
       ) : (
-        <div className="p-4 space-y-3">
+        <div className="p-2 sm:p-4 space-y-2 sm:space-y-3">
           {entries.map((entry, index) => {
             if (entry.type === "message") {
               const msg = entry.data;
               return (
                 <div key={`msg-${msg.id}-${index}`} className="group">
-                  <div className="flex items-start gap-3">
-                    <span className="text-gray-500 flex-shrink-0">
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <span className="text-gray-500 flex-shrink-0 text-xs hidden sm:inline">
                       {formatTime(msg.timestamp)}
                     </span>
                     <Badge
@@ -173,7 +173,7 @@ export function LogViewer({
                     >
                       {msg.role}
                     </Badge>
-                    <div className="flex-1 whitespace-pre-wrap break-words">
+                    <div className="flex-1 whitespace-pre-wrap break-words min-w-0">
                       {msg.content}
                     </div>
                   </div>
@@ -183,8 +183,8 @@ export function LogViewer({
               const tool = entry.data;
               return (
                 <div key={`tool-${tool.id}-${index}`} className="group">
-                  <div className="flex items-start gap-3">
-                    <span className="text-gray-500 flex-shrink-0">
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <span className="text-gray-500 flex-shrink-0 text-xs hidden sm:inline">
                       {formatTime(entry.timestamp)}
                     </span>
                     <span className={`flex-shrink-0 ${getToolStatusColor(tool.status)}`}>
@@ -197,8 +197,8 @@ export function LogViewer({
                       {tool.status === "failed" && "✗ "}
                       {tool.status === "pending" && "○ "}
                     </span>
-                    <div className="flex-1">
-                      <span className="text-yellow-400">{tool.name}</span>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-yellow-400 break-all">{tool.name}</span>
                       {tool.input != null && (
                         <details className="mt-1">
                           <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
@@ -241,8 +241,8 @@ export function LogViewer({
 
               return (
                 <div key={`log-${log.id}-${index}`} className="group">
-                  <div className="flex items-start gap-3">
-                    <span className="text-gray-500 flex-shrink-0">
+                  <div className="flex items-start gap-2 sm:gap-3">
+                    <span className="text-gray-500 flex-shrink-0 text-xs hidden sm:inline">
                       {formatTime(log.timestamp)}
                     </span>
                     <Badge
@@ -251,11 +251,11 @@ export function LogViewer({
                     >
                       {log.level.toUpperCase()}
                     </Badge>
-                    <div className={`flex-1 ${getLogLevelColor(log.level)}`}>
-                      <span>{log.message}</span>
+                    <div className={`flex-1 min-w-0 ${getLogLevelColor(log.level)}`}>
+                      <span className="break-words">{log.message}</span>
                       {/* Show responseContent as proper text */}
                       {hasResponseContent && (
-                        <div className="mt-2 p-3 bg-gray-800 rounded whitespace-pre-wrap break-words text-gray-200 text-xs leading-relaxed">
+                        <div className="mt-2 p-2 sm:p-3 bg-gray-800 rounded whitespace-pre-wrap break-words text-gray-200 text-xs leading-relaxed">
                           {responseContent}
                         </div>
                       )}

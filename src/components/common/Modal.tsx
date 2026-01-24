@@ -73,7 +73,7 @@ export function Modal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
       {/* Overlay */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -83,22 +83,22 @@ export function Modal({
 
       {/* Modal */}
       <div
-        className={`relative w-full ${sizeClasses[size]} rounded-lg bg-white shadow-xl dark:bg-gray-800 max-h-[calc(100vh-2rem)] flex flex-col`}
+        className={`relative w-full ${sizeClasses[size]} rounded-lg bg-white shadow-xl dark:bg-gray-800 max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] flex flex-col`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
       >
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700 flex-shrink-0">
-          <div>
+        <div className="flex items-start justify-between border-b border-gray-200 px-4 sm:px-6 py-3 sm:py-4 dark:border-gray-700 flex-shrink-0">
+          <div className="flex-1 min-w-0 pr-2">
             <h2
               id="modal-title"
-              className="text-lg font-semibold text-gray-900 dark:text-gray-100"
+              className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100"
             >
               {title}
             </h2>
             {description && (
-              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400">
                 {description}
               </p>
             )}
@@ -106,7 +106,7 @@ export function Modal({
           {showCloseButton && (
             <button
               onClick={onClose}
-              className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+              className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-300"
               aria-label="Close"
             >
               <svg
@@ -127,11 +127,11 @@ export function Modal({
         </div>
 
         {/* Content - scrollable */}
-        <div className="px-6 py-4 overflow-y-auto flex-1">{children}</div>
+        <div className="px-4 sm:px-6 py-3 sm:py-4 overflow-y-auto flex-1">{children}</div>
 
         {/* Footer */}
         {footer && (
-          <div className="flex items-center justify-end gap-3 border-t border-gray-200 px-6 py-4 dark:border-gray-700 flex-shrink-0">
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 border-t border-gray-200 px-4 sm:px-6 py-3 sm:py-4 dark:border-gray-700 flex-shrink-0">
             {footer}
           </div>
         )}
