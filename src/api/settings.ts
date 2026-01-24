@@ -151,4 +151,23 @@ export const settingsRoutes = {
       }
     },
   },
+
+  "/api/backend/reset": {
+    /**
+     * POST /api/backend/reset - Force reset the backend connection
+     * Aborts all active subscriptions and clears connection state.
+     * Useful for recovering from stale/hung connections.
+     */
+    async POST(): Promise<Response> {
+      try {
+        await backendManager.reset();
+        return Response.json({ 
+          success: true, 
+          message: "Backend connection reset successfully" 
+        });
+      } catch (error) {
+        return errorResponse("reset_failed", String(error), 500);
+      }
+    },
+  },
 };

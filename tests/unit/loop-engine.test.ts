@@ -645,4 +645,318 @@ describe("LoopEngine", () => {
     );
     expect(pendingPromptLogs.length).toBeGreaterThan(0);
   });
+
+  test("timeout triggers when no events are received within activity timeout", async () => {
+    // Use a very short timeout to make the test fast
+    const loop = createTestLoop({ 
+      maxIterations: 2, 
+      maxConsecutiveErrors: 2,
+      activityTimeoutSeconds: 0.1, // 100ms timeout
+    });
+
+    let promptSent = false;
+
+    // Create a backend that never sends events after message.start
+    const baseMock = createMockBackend([]);
+    mockBackend = {
+      ...baseMock,
+      async sendPromptAsync(): Promise<void> {
+        promptSent = true;
+      },
+      async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+        const { stream, push } = createEventStream<AgentEvent>();
+
+        // Push events asynchronously after sendPromptAsync
+        (async () => {
+          // Wait for sendPromptAsync to be called
+          let attempts = 0;
+          while (!promptSent && attempts < 100) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            attempts++;
+          }
+          promptSent = false;
+
+          // Only send message.start, then never send any more events
+          // This should trigger the timeout
+          push({ type: "message.start", messageId: `msg-${Date.now()}` });
+          // Intentionally NOT calling end() to simulate a hanging connection
+        })();
+
+        return stream;
+      },
+    };
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    // Add timeout to detect if the test hangs
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Test timed out - timeout did not trigger")), 5000);
+    });
+
+    await Promise.race([engine.start(), timeoutPromise]);
+
+    // Engine should have failed due to max consecutive errors (timeout is treated as error)
+    expect(engine.state.status).toBe("failed");
+    
+    // Check that error includes the timeout message
+    expect(engine.state.error?.message).toContain("No activity for");
+
+    // Check error events were emitted
+    const errorEvents = emittedEvents.filter((e) => e.type === "loop.error");
+    expect(errorEvents.length).toBeGreaterThan(0);
+  }, 10000);
+
+  test("permission.asked events trigger auto-approval", async () => {
+    const loop = createTestLoop({ maxIterations: 2 });
+
+    let promptSent = false;
+    let permissionReplyReceived = false;
+    let permissionReplyValue = "";
+
+    const baseMock = createMockBackend([]);
+    mockBackend = {
+      ...baseMock,
+      async sendPromptAsync(): Promise<void> {
+        promptSent = true;
+      },
+      async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+        const { stream, push, end } = createEventStream<AgentEvent>();
+
+        (async () => {
+          let attempts = 0;
+          while (!promptSent && attempts < 100) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            attempts++;
+          }
+          promptSent = false;
+
+          // Emit a permission.asked event
+          push({ type: "message.start", messageId: `msg-${Date.now()}` });
+          push({ 
+            type: "permission.asked", 
+            requestId: "perm-123", 
+            sessionId: "session-1",
+            permission: "write_file",
+            patterns: ["/some/path/*"],
+          });
+          
+          // Give time for the permission to be handled
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          
+          // Then complete the message
+          push({ type: "message.delta", content: "<promise>COMPLETE</promise>" });
+          push({ type: "message.complete", content: "<promise>COMPLETE</promise>" });
+          end();
+        })();
+
+        return stream;
+      },
+    };
+    
+    // Add the replyToPermission method that OpenCodeBackend provides
+    // Use type assertion since this is a mock that extends base AgentBackend
+    (mockBackend as AgentBackend & { replyToPermission: (requestId: string, reply: string) => Promise<void> }).replyToPermission = async (requestId: string, reply: string): Promise<void> => {
+      permissionReplyReceived = true;
+      permissionReplyValue = reply;
+      expect(requestId).toBe("perm-123");
+    };
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Test timed out")), 5000);
+    });
+
+    await Promise.race([engine.start(), timeoutPromise]);
+
+    expect(engine.state.status).toBe("completed");
+    
+    // Verify permission was auto-approved with "always"
+    expect(permissionReplyReceived).toBe(true);
+    expect(permissionReplyValue).toBe("always");
+
+    // Check that log events mention permission approval
+    const permissionLogs = emittedEvents.filter(
+      (e) => e.type === "loop.log" && e.message.includes("permission")
+    );
+    expect(permissionLogs.length).toBeGreaterThan(0);
+  }, 10000);
+
+  test("question.asked events trigger auto-answer", async () => {
+    const loop = createTestLoop({ maxIterations: 2 });
+
+    let promptSent = false;
+    let questionReplyReceived = false;
+    let questionReplyAnswers: string[][] = [];
+
+    const baseMock = createMockBackend([]);
+    mockBackend = {
+      ...baseMock,
+      async sendPromptAsync(): Promise<void> {
+        promptSent = true;
+      },
+      async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+        const { stream, push, end } = createEventStream<AgentEvent>();
+
+        (async () => {
+          let attempts = 0;
+          while (!promptSent && attempts < 100) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            attempts++;
+          }
+          promptSent = false;
+
+          // Emit a question.asked event
+          push({ type: "message.start", messageId: `msg-${Date.now()}` });
+          push({ 
+            type: "question.asked", 
+            requestId: "question-456", 
+            sessionId: "session-1",
+            questions: [
+              { 
+                question: "Which framework should I use?",
+                header: "Framework Choice",
+                options: [
+                  { label: "React", description: "Popular UI library" },
+                  { label: "Vue", description: "Progressive framework" },
+                ],
+              },
+            ],
+          });
+          
+          // Give time for the question to be handled
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          
+          // Then complete the message
+          push({ type: "message.delta", content: "<promise>COMPLETE</promise>" });
+          push({ type: "message.complete", content: "<promise>COMPLETE</promise>" });
+          end();
+        })();
+
+        return stream;
+      },
+    };
+    
+    // Add the replyToQuestion method that OpenCodeBackend provides
+    // Use type assertion since this is a mock that extends base AgentBackend
+    (mockBackend as AgentBackend & { replyToQuestion: (requestId: string, answers: string[][]) => Promise<void> }).replyToQuestion = async (requestId: string, answers: string[][]): Promise<void> => {
+      questionReplyReceived = true;
+      questionReplyAnswers = answers;
+      expect(requestId).toBe("question-456");
+    };
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Test timed out")), 5000);
+    });
+
+    await Promise.race([engine.start(), timeoutPromise]);
+
+    expect(engine.state.status).toBe("completed");
+    
+    // Verify question was auto-answered
+    expect(questionReplyReceived).toBe(true);
+    expect(questionReplyAnswers).toEqual([
+      ["take the best course of action you recommend"],
+    ]);
+
+    // Check that log events mention question handling
+    const questionLogs = emittedEvents.filter(
+      (e) => e.type === "loop.log" && e.message.includes("question")
+    );
+    expect(questionLogs.length).toBeGreaterThan(0);
+  }, 10000);
+
+  test("session.status events are logged for debugging", async () => {
+    const loop = createTestLoop({ maxIterations: 2 });
+
+    let promptSent = false;
+
+    const baseMock = createMockBackend([]);
+    mockBackend = {
+      ...baseMock,
+      async sendPromptAsync(): Promise<void> {
+        promptSent = true;
+      },
+      async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+        const { stream, push, end } = createEventStream<AgentEvent>();
+
+        (async () => {
+          let attempts = 0;
+          while (!promptSent && attempts < 100) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            attempts++;
+          }
+          promptSent = false;
+
+          // Emit session.status events
+          push({ type: "message.start", messageId: `msg-${Date.now()}` });
+          push({ 
+            type: "session.status", 
+            sessionId: "session-1",
+            status: "busy",
+            attempt: 1,
+            message: "Processing request",
+          });
+          push({ 
+            type: "session.status", 
+            sessionId: "session-1",
+            status: "idle",
+          });
+          
+          // Then complete the message
+          push({ type: "message.delta", content: "<promise>COMPLETE</promise>" });
+          push({ type: "message.complete", content: "<promise>COMPLETE</promise>" });
+          end();
+        })();
+
+        return stream;
+      },
+    };
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Test timed out")), 5000);
+    });
+
+    await Promise.race([engine.start(), timeoutPromise]);
+
+    expect(engine.state.status).toBe("completed");
+    
+    // Check that session status was logged
+    const statusLogs = emittedEvents.filter(
+      (e) => e.type === "loop.log" && e.message.includes("Session status")
+    );
+    
+    // Should have at least 2 status log entries (busy and idle)
+    expect(statusLogs.length).toBeGreaterThanOrEqual(2);
+    
+    // Verify the log content includes the status
+    const busyLog = statusLogs.find((e) => e.type === "loop.log" && e.message.includes("busy"));
+    const idleLog = statusLogs.find((e) => e.type === "loop.log" && e.message.includes("idle"));
+    expect(busyLog).toBeDefined();
+    expect(idleLog).toBeDefined();
+  }, 10000);
 });

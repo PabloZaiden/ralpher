@@ -27,8 +27,11 @@ export interface LoopConfig {
   /** Optional iteration limit (default: unlimited) */
   maxIterations?: number;
 
-  /** Maximum consecutive identical errors before failsafe exit (default: 5) */
+  /** Maximum consecutive identical errors before failsafe exit (default: 10) */
   maxConsecutiveErrors?: number;
+
+  /** Activity timeout in seconds - time without events before treating as error and retrying (default: 180 = 3 minutes) */
+  activityTimeoutSeconds?: number;
 
   /** Regex for completion detection. Default: "<promise>COMPLETE</promise>$" */
   stopPattern: string;
@@ -265,6 +268,7 @@ export interface Loop {
 export const DEFAULT_LOOP_CONFIG = {
   stopPattern: "<promise>COMPLETE</promise>$",
   maxConsecutiveErrors: 10,
+  activityTimeoutSeconds: 180, // 3 minutes
   git: {
     branchPrefix: "ralph/",
     commitPrefix: "[Ralph]",
