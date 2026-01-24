@@ -125,7 +125,6 @@ function createMockBackend(responses: string[]): Backend {
 
     async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
       const { stream, push, end } = createEventStream<AgentEvent>();
-      const response = responses[responseIndex % responses.length] ?? "<promise>COMPLETE</promise>";
 
       (async () => {
         let attempts = 0;
@@ -134,6 +133,10 @@ function createMockBackend(responses: string[]): Backend {
           attempts++;
         }
         pendingPrompt = false;
+
+        // Get and increment the response index
+        const response = responses[responseIndex % responses.length] ?? "<promise>COMPLETE</promise>";
+        responseIndex++;
 
         // Check if this is an error response
         if (response.startsWith("ERROR:")) {
