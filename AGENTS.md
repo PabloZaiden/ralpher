@@ -6,8 +6,8 @@ This document provides guidelines for AI coding agents working on the Ralpher pr
 
 When working on tasks, follow this general workflow to ensure clarity and goal alignment:
 
-- Always make sure you have all your goals written down in a document and agreed upon before starting to code.
-- Always use the `Todo` functionality to keep track of the work you're doing, and the last `Todo` should always be "verify that all goals are met according to the document, and update the `Todo` again".
+- Always make sure you have all your goals written down in a document in `./.planning/plan.md` and agreed upon before starting to code.
+- Always use the `Todo` functionality to keep track of the work you're doing, and the last `Todo` should always be "verify that all goals are met according to the document, and update the `Todo` again". Use `./.planning/status.md` to track the plan status.
 - Track the status of the work in that document.
 - After checking the document, update what the next steps to work on are, and what's important to know about it to be able to continue working on it later.
 - Make sure that the goals you are trying to achieve are written down, in a way that you can properly verify them later.
