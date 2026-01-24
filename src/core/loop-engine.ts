@@ -21,7 +21,6 @@ import type {
 } from "../types/events";
 import { createTimestamp } from "../types/events";
 import type {
-  AgentBackend,
   PromptInput,
   AgentEvent,
 } from "../backends/types";
@@ -58,13 +57,33 @@ function generateBranchName(prefix: string, name: string, timestamp: string): st
 }
 
 /**
+ * Backend interface for LoopEngine.
+ * This is a structural type that defines the methods LoopEngine needs.
+ * Both OpenCodeBackend and MockOpenCodeBackend satisfy this interface.
+ * Using a structural type (interface) instead of a union allows for
+ * easy mocking in tests without requiring all internal class fields.
+ */
+export interface LoopBackend {
+  connect: OpenCodeBackend["connect"];
+  disconnect: OpenCodeBackend["disconnect"];
+  isConnected: OpenCodeBackend["isConnected"];
+  createSession: OpenCodeBackend["createSession"];
+  sendPrompt: OpenCodeBackend["sendPrompt"];
+  sendPromptAsync: OpenCodeBackend["sendPromptAsync"];
+  abortSession: OpenCodeBackend["abortSession"];
+  subscribeToEvents: OpenCodeBackend["subscribeToEvents"];
+  replyToPermission: OpenCodeBackend["replyToPermission"];
+  replyToQuestion: OpenCodeBackend["replyToQuestion"];
+}
+
+/**
  * Options for creating a LoopEngine.
  */
 export interface LoopEngineOptions {
   /** The loop configuration and state */
   loop: Loop;
   /** The agent backend to use */
-  backend: AgentBackend;
+  backend: LoopBackend;
   /** Git service instance (required) */
   gitService: GitService;
   /** Event emitter instance (optional, defaults to global) */
@@ -142,7 +161,7 @@ async function nextWithTimeout<T>(
  */
 export class LoopEngine {
   private loop: Loop;
-  private backend: AgentBackend;
+  private backend: LoopBackend;
   private git: GitService;
   private emitter: SimpleEventEmitter<LoopEvent>;
   private stopDetector: StopPatternDetector;
@@ -321,9 +340,18 @@ export class LoopEngine {
       }
     }
 
-    // Get the current branch (original branch)
+    // Get the current branch (original branch / base branch)
     const originalBranch = await this.git.getCurrentBranch(directory);
     this.emitLog("info", `Current branch: ${originalBranch}`);
+
+    // Pull latest changes from the base branch to minimize merge conflicts
+    this.emitLog("info", `Pulling latest changes from remote for branch: ${originalBranch}`);
+    const pullSucceeded = await this.git.pull(directory, originalBranch);
+    if (pullSucceeded) {
+      this.emitLog("info", `Successfully pulled latest changes for ${originalBranch}`);
+    } else {
+      this.emitLog("debug", `Skipped pull for ${originalBranch} (no remote or upstream configured)`);
+    }
 
     // Check if the working branch already exists
     const branchExists = await this.git.branchExists(directory, branchName);
@@ -853,8 +881,7 @@ export class LoopEngine {
                 patterns: event.patterns,
               });
               try {
-                const backend = this.backend as OpenCodeBackend;
-                await backend.replyToPermission(event.requestId, "always");
+                await this.backend.replyToPermission(event.requestId, "always");
                 this.emitLog("info", "Permission approved successfully");
               } catch (permErr) {
                 this.emitLog("warn", `Failed to approve permission: ${String(permErr)}`);
@@ -869,12 +896,11 @@ export class LoopEngine {
                 questionCount: event.questions.length,
               });
               try {
-                const backend = this.backend as OpenCodeBackend;
                 // Reply with a custom answer for each question telling the AI to proceed autonomously
                 const answers = event.questions.map(() => 
                   ["take the best course of action you recommend"]
                 );
-                await backend.replyToQuestion(event.requestId, answers);
+                await this.backend.replyToQuestion(event.requestId, answers);
                 this.emitLog("info", "Question answered successfully");
               } catch (questionErr) {
                 this.emitLog("warn", `Failed to answer question: ${String(questionErr)}`);

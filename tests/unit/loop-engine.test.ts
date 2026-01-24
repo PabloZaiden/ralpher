@@ -9,12 +9,12 @@ import { join } from "path";
 import {
   LoopEngine,
   StopPatternDetector,
+  type LoopBackend,
 } from "../../src/core/loop-engine";
 import { SimpleEventEmitter } from "../../src/core/event-emitter";
 import type { Loop, LoopConfig, LoopState } from "../../src/types/loop";
 import type { LoopEvent } from "../../src/types/events";
 import type {
-  AgentBackend,
   AgentSession,
   AgentResponse,
   AgentEvent,
@@ -55,21 +55,20 @@ describe("StopPatternDetector", () => {
 
 describe("LoopEngine", () => {
   let testDir: string;
-  let mockBackend: AgentBackend;
+  let mockBackend: LoopBackend;
   let emitter: SimpleEventEmitter<LoopEvent>;
   let emittedEvents: LoopEvent[];
   let gitService: GitService;
 
   // Create a mock backend that supports async streaming
-  function createMockBackend(responses: string[]): AgentBackend {
+  // Returns LoopBackend (structural type) to allow easy spreading and overriding
+  function createMockBackend(responses: string[]): LoopBackend {
     let responseIndex = 0;
     let connected = false;
     const sessions = new Map<string, AgentSession>();
     let pendingResponse: string | null = null;
 
     return {
-      name: "mock",
-
       async connect(_config: BackendConnectionConfig): Promise<void> {
         connected = true;
       },
@@ -90,14 +89,6 @@ describe("LoopEngine", () => {
         };
         sessions.set(session.id, session);
         return session;
-      },
-
-      async getSession(id: string): Promise<AgentSession | null> {
-        return sessions.get(id) ?? null;
-      },
-
-      async deleteSession(id: string): Promise<void> {
-        sessions.delete(id);
       },
 
       async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
@@ -146,6 +137,14 @@ describe("LoopEngine", () => {
         })();
 
         return stream;
+      },
+
+      async replyToPermission(_requestId: string, _response: string): Promise<void> {
+        // No-op for basic mock
+      },
+
+      async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
+        // No-op for basic mock
       },
     };
   }
@@ -758,9 +757,8 @@ describe("LoopEngine", () => {
       },
     };
     
-    // Add the replyToPermission method that OpenCodeBackend provides
-    // Use type assertion since this is a mock that extends base AgentBackend
-    (mockBackend as AgentBackend & { replyToPermission: (requestId: string, reply: string) => Promise<void> }).replyToPermission = async (requestId: string, reply: string): Promise<void> => {
+    // Override the replyToPermission method for this test
+    mockBackend.replyToPermission = async (requestId: string, reply: string): Promise<void> => {
       permissionReplyReceived = true;
       permissionReplyValue = reply;
       expect(requestId).toBe("perm-123");
@@ -847,9 +845,8 @@ describe("LoopEngine", () => {
       },
     };
     
-    // Add the replyToQuestion method that OpenCodeBackend provides
-    // Use type assertion since this is a mock that extends base AgentBackend
-    (mockBackend as AgentBackend & { replyToQuestion: (requestId: string, answers: string[][]) => Promise<void> }).replyToQuestion = async (requestId: string, answers: string[][]): Promise<void> => {
+    // Override the replyToQuestion method for this test
+    mockBackend.replyToQuestion = async (requestId: string, answers: string[][]): Promise<void> => {
       questionReplyReceived = true;
       questionReplyAnswers = answers;
       expect(requestId).toBe("question-456");

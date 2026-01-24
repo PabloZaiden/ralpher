@@ -8,18 +8,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { LoopManager } from "../../src/core/loop-manager";
 import { SimpleEventEmitter } from "../../src/core/event-emitter";
-import { backendRegistry } from "../../src/backends/registry";
 import type { LoopEvent } from "../../src/types/events";
-import type {
-  AgentBackend,
-  AgentSession,
-  AgentResponse,
-  AgentEvent,
-  BackendConnectionConfig,
-  CreateSessionOptions,
-  PromptInput,
-} from "../../src/backends/types";
-import { createEventStream, type EventStream } from "../../src/utils/event-stream";
 
 describe("LoopManager", () => {
   let testDataDir: string;
@@ -27,69 +16,6 @@ describe("LoopManager", () => {
   let manager: LoopManager;
   let emitter: SimpleEventEmitter<LoopEvent>;
   let emittedEvents: LoopEvent[];
-
-  // Create a mock backend that completes immediately
-  function createMockBackend(): AgentBackend {
-    let connected = false;
-    const sessions = new Map<string, AgentSession>();
-
-    return {
-      name: "mock",
-
-      async connect(_config: BackendConnectionConfig): Promise<void> {
-        connected = true;
-      },
-
-      async disconnect(): Promise<void> {
-        connected = false;
-      },
-
-      isConnected(): boolean {
-        return connected;
-      },
-
-      async createSession(options: CreateSessionOptions): Promise<AgentSession> {
-        const session: AgentSession = {
-          id: `session-${Date.now()}`,
-          title: options.title,
-          createdAt: new Date().toISOString(),
-        };
-        sessions.set(session.id, session);
-        return session;
-      },
-
-      async getSession(id: string): Promise<AgentSession | null> {
-        return sessions.get(id) ?? null;
-      },
-
-      async deleteSession(id: string): Promise<void> {
-        sessions.delete(id);
-      },
-
-      async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
-        return {
-          id: `msg-${Date.now()}`,
-          content: "<promise>COMPLETE</promise>",
-          parts: [{ type: "text", text: "<promise>COMPLETE</promise>" }],
-        };
-      },
-
-      async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
-        // Not used in tests
-      },
-
-      async abortSession(_sessionId: string): Promise<void> {
-        // Not used in tests
-      },
-
-      async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
-        // Return an empty stream - not used in tests
-        const { stream, end } = createEventStream<AgentEvent>();
-        end();
-        return stream;
-      },
-    };
-  }
 
   beforeEach(async () => {
     // Create temp directories
@@ -108,9 +34,6 @@ describe("LoopManager", () => {
     emitter = new SimpleEventEmitter<LoopEvent>();
     emitter.subscribe((event) => emittedEvents.push(event));
 
-    // Register mock backend
-    backendRegistry.register("opencode", createMockBackend);
-
     // Create manager
     manager = new LoopManager({
       eventEmitter: emitter,
@@ -125,9 +48,6 @@ describe("LoopManager", () => {
     delete process.env["RALPHER_DATA_DIR"];
     await rm(testDataDir, { recursive: true });
     await rm(testWorkDir, { recursive: true });
-
-    // Clear registry
-    await backendRegistry.clear();
   });
 
   describe("createLoop", () => {

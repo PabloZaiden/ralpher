@@ -10,11 +10,10 @@ import { join } from "path";
 import { serve, type Server } from "bun";
 import { apiRoutes } from "../../src/api";
 import { ensureDataDirectories } from "../../src/persistence/paths";
-import { backendRegistry } from "../../src/backends/registry";
 import { backendManager } from "../../src/core/backend-manager";
 import { TestCommandExecutor } from "../mocks/mock-executor";
+import type { LoopBackend } from "../../src/core/loop-engine";
 import type {
-  AgentBackend,
   AgentSession,
   AgentResponse,
   AgentEvent,
@@ -31,14 +30,12 @@ describe("Loops Control API Integration", () => {
   let baseUrl: string;
 
   // Create a mock backend that completes immediately
-  function createMockBackend(): AgentBackend {
+  function createMockBackend(): LoopBackend {
     let connected = false;
     let pendingPrompt = false;
     const sessions = new Map<string, AgentSession>();
 
     return {
-      name: "mock",
-
       async connect(_config: BackendConnectionConfig): Promise<void> {
         connected = true;
       },
@@ -59,14 +56,6 @@ describe("Loops Control API Integration", () => {
         };
         sessions.set(session.id, session);
         return session;
-      },
-
-      async getSession(id: string): Promise<AgentSession | null> {
-        return sessions.get(id) ?? null;
-      },
-
-      async deleteSession(id: string): Promise<void> {
-        sessions.delete(id);
       },
 
       async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
@@ -108,6 +97,14 @@ describe("Loops Control API Integration", () => {
 
         return stream;
       },
+
+      async replyToPermission(_requestId: string, _response: string): Promise<void> {
+        // Not used in tests
+      },
+
+      async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
+        // Not used in tests
+      },
     };
   }
 
@@ -136,9 +133,6 @@ describe("Loops Control API Integration", () => {
     await writeFile(join(testWorkDir, ".planning/status.md"), "# Status\n\nIn progress.");
     await Bun.$`git -C ${testWorkDir} add .`.quiet();
     await Bun.$`git -C ${testWorkDir} commit -m "Add planning files"`.quiet();
-
-    // Register mock backend
-    backendRegistry.register("mock", createMockBackend);
 
     // Set up backend manager with test executor factory
     backendManager.setBackendForTesting(createMockBackend());

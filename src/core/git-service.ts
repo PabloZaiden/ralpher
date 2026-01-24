@@ -375,6 +375,70 @@ export class GitService {
   }
 
   /**
+   * Pull latest changes from a remote branch using fetch + fast-forward merge.
+   * 
+   * Uses `git fetch` + `git merge --ff-only` instead of `git pull` to ensure
+   * the operation is truly a no-op when it fails. Regular `git pull` can leave
+   * the repository in a conflicted/partial-merge state on failure.
+   * 
+   * With --ff-only:
+   * - If the merge is a fast-forward, it succeeds and returns true
+   * - If fast-forward isn't possible (diverged branches), it fails cleanly
+   *   without modifying the working tree, and returns false
+   * 
+   * @param directory - The git repository directory
+   * @param branchName - The branch to pull (optional, uses current branch if not specified)
+   * @param remote - The remote name (default: "origin")
+   * @returns true if pull succeeded, false if skipped (no remote, no upstream, or not fast-forwardable)
+   */
+  async pull(
+    directory: string,
+    branchName?: string,
+    remote = "origin"
+  ): Promise<boolean> {
+    // First check if the remote exists
+    const remoteResult = await this.runGitCommand(directory, ["remote", "get-url", remote]);
+    if (!remoteResult.success) {
+      log.trace(`[GitService] No remote '${remote}' configured, skipping pull`);
+      return false;
+    }
+
+    // Determine the branch to pull
+    const branch = branchName ?? await this.getCurrentBranch(directory);
+
+    // Fetch the remote branch
+    const fetchResult = await this.runGitCommand(directory, ["fetch", remote, branch]);
+    if (!fetchResult.success) {
+      // Check if the failure is because the remote branch doesn't exist
+      if (fetchResult.stderr.includes("couldn't find remote ref") || 
+          fetchResult.stderr.includes("fatal: couldn't find remote ref")) {
+        log.trace(`[GitService] Remote branch '${branch}' does not exist, skipping pull`);
+        return false;
+      }
+      // For other fetch errors (network issues, etc.), log and return false
+      log.trace(`[GitService] Fetch failed: ${fetchResult.stderr}`);
+      return false;
+    }
+
+    // Try to fast-forward merge
+    // --ff-only ensures we only merge if it's a fast-forward (no conflicts possible)
+    const mergeResult = await this.runGitCommand(directory, [
+      "merge",
+      "--ff-only",
+      `${remote}/${branch}`,
+    ]);
+
+    if (!mergeResult.success) {
+      // --ff-only failed means branches have diverged, not a fast-forward
+      // This is safe - working tree is unchanged
+      log.trace(`[GitService] Fast-forward merge not possible for '${branch}': ${mergeResult.stderr}`);
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Get the diff between the current branch and a base branch.
    */
   async getDiff(directory: string, baseBranch: string): Promise<FileDiff[]> {

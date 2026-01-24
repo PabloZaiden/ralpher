@@ -1,13 +1,10 @@
 /**
- * Agent backend type definitions for Ralph Loops Management System.
- * Defines the abstraction layer for AI agent backends.
- * OpenCode is the first implementation, but this allows for future backends.
+ * Type definitions for the OpenCode backend.
+ * These types define the data structures used by OpenCodeBackend.
  */
 
-import type { EventStream } from "../utils/event-stream";
-
 /**
- * Configuration for connecting to an agent backend.
+ * Configuration for connecting to the OpenCode backend.
  */
 export interface BackendConnectionConfig {
   /** Spawn new server or connect to existing */
@@ -120,7 +117,7 @@ export interface QuestionInfo {
 }
 
 /**
- * Events emitted by the agent backend.
+ * Events emitted by the OpenCode backend.
  */
 export type AgentEvent =
   | { type: "message.start"; messageId: string }
@@ -133,74 +130,3 @@ export type AgentEvent =
   | { type: "permission.asked"; requestId: string; sessionId: string; permission: string; patterns: string[] }
   | { type: "question.asked"; requestId: string; sessionId: string; questions: QuestionInfo[] }
   | { type: "session.status"; sessionId: string; status: "idle" | "busy" | "retry"; attempt?: number; message?: string };
-
-/**
- * Abstract interface for agent backends.
- * Implementations must provide all methods.
- */
-export interface AgentBackend {
-  /** Backend name (e.g., "opencode") */
-  readonly name: string;
-
-  /**
-   * Connect to the backend.
-   * For spawn mode, this starts a new server.
-   * For connect mode, this verifies the connection.
-   */
-  connect(config: BackendConnectionConfig): Promise<void>;
-
-  /**
-   * Disconnect from the backend.
-   * For spawn mode, this stops the server.
-   */
-  disconnect(): Promise<void>;
-
-  /**
-   * Check if connected to the backend.
-   */
-  isConnected(): boolean;
-
-  /**
-   * Create a new session.
-   */
-  createSession(options: CreateSessionOptions): Promise<AgentSession>;
-
-  /**
-   * Get an existing session by ID.
-   */
-  getSession(id: string): Promise<AgentSession | null>;
-
-  /**
-   * Delete a session.
-   */
-  deleteSession(id: string): Promise<void>;
-
-  /**
-   * Send a prompt and wait for the full response.
-   */
-  sendPrompt(sessionId: string, prompt: PromptInput): Promise<AgentResponse>;
-
-  /**
-   * Send a prompt without waiting for response.
-   * Use subscribeToEvents to get the response.
-   */
-  sendPromptAsync(sessionId: string, prompt: PromptInput): Promise<void>;
-
-  /**
-   * Abort a running session.
-   */
-  abortSession(sessionId: string): Promise<void>;
-
-  /**
-   * Subscribe to events from a session.
-   * Returns a promise that resolves when the subscription is established.
-   * This ensures the caller can await the subscription before sending prompts,
-   * avoiding race conditions where events are emitted before the listener is ready.
-   */
-  subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>>;
-}
-
-/**
- * Factory function type for creating backend instances.
- */
-export type BackendFactory = () => AgentBackend;

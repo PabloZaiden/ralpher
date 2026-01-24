@@ -8,11 +8,10 @@ import { join } from "path";
 import { SimpleEventEmitter } from "../src/core/event-emitter";
 import { GitService } from "../src/core/git-service";
 import { LoopManager } from "../src/core/loop-manager";
-import { backendRegistry } from "../src/backends/registry";
 import { backendManager } from "../src/core/backend-manager";
 import { ensureDataDirectories } from "../src/persistence/paths";
-import { MockBackend } from "./mocks/mock-backend";
 import { TestCommandExecutor } from "./mocks/mock-executor";
+import { MockOpenCodeBackend } from "./mocks/mock-backend";
 import type { LoopEvent } from "../src/types/events";
 
 /**
@@ -32,7 +31,7 @@ export interface TestContext {
   /** Loop manager instance */
   manager: LoopManager;
   /** Mock backend instance (if using mock) */
-  mockBackend?: MockBackend;
+  mockBackend?: MockOpenCodeBackend;
 }
 
 /**
@@ -97,11 +96,9 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
   emitter.subscribe((event) => events.push(event));
 
   // Register mock backend if requested
-  let mockBackend: MockBackend | undefined;
+  let mockBackend: MockOpenCodeBackend | undefined;
   if (useMockBackend) {
-    mockBackend = new MockBackend({ responses: mockResponses });
-    backendRegistry.register("opencode", () => mockBackend!);
-    // Also set the mock backend in the global backend manager
+    mockBackend = new MockOpenCodeBackend({ responses: mockResponses });
     backendManager.setBackendForTesting(mockBackend);
     // Set the executor factory for testing (uses local Bun.$ execution)
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
@@ -129,9 +126,6 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
 export async function teardownTestContext(ctx: TestContext): Promise<void> {
   // Shutdown manager
   await ctx.manager.shutdown();
-
-  // Clear registry
-  await backendRegistry.clear();
 
   // Reset global backend manager
   backendManager.resetForTesting();

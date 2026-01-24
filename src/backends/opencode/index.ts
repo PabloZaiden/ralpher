@@ -44,7 +44,6 @@ export interface ConnectionInfo {
 }
 
 import type {
-  AgentBackend,
   BackendConnectionConfig,
   CreateSessionOptions,
   AgentSession,
@@ -59,7 +58,7 @@ import { createEventStream, type EventStream } from "../../utils/event-stream";
  * OpenCode backend implementation.
  * Supports both spawn mode (creates a new server) and connect mode (connects to existing).
  */
-export class OpenCodeBackend implements AgentBackend {
+export class OpenCodeBackend {
   readonly name = "opencode";
 
   private client: OpencodeClient | null = null;

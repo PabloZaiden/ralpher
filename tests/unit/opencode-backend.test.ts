@@ -7,7 +7,6 @@
 
 import { test, expect, describe, beforeEach } from "bun:test";
 import { OpenCodeBackend } from "../../src/backends/opencode";
-import { backendRegistry, registerBackend, getBackend } from "../../src/backends/registry";
 
 describe("OpenCodeBackend", () => {
   let backend: OpenCodeBackend;
@@ -58,35 +57,6 @@ describe("OpenCodeBackend", () => {
 
   test("throws when abortSession called before connect", async () => {
     await expect(backend.abortSession("test-id")).rejects.toThrow("Not connected");
-  });
-});
-
-describe("OpenCodeBackend Registration", () => {
-  beforeEach(async () => {
-    await backendRegistry.clear();
-  });
-
-  test("can be registered in backend registry", () => {
-    registerBackend("opencode", () => new OpenCodeBackend());
-
-    expect(backendRegistry.has("opencode")).toBe(true);
-  });
-
-  test("can be retrieved from registry", () => {
-    registerBackend("opencode", () => new OpenCodeBackend());
-
-    const backend = getBackend("opencode");
-    expect(backend.name).toBe("opencode");
-    expect(backend.isConnected()).toBe(false);
-  });
-
-  test("registry returns same instance", () => {
-    registerBackend("opencode", () => new OpenCodeBackend());
-
-    const backend1 = getBackend("opencode");
-    const backend2 = getBackend("opencode");
-
-    expect(backend1).toBe(backend2);
   });
 });
 

@@ -224,12 +224,6 @@ See [AGENTS.md](AGENTS.md) for detailed coding guidelines.
 3. Export from `src/api/index.ts`
 4. Add tests in `tests/api/`
 
-### Adding a New Backend
-
-1. Implement the `AgentBackend` interface from `src/backends/types.ts`
-2. Create a new directory under `src/backends/`
-3. Register the backend in `src/backends/registry.ts`
-
 ## The Ralph Wiggum Technique
 
 The pattern works by:

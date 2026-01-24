@@ -4,7 +4,7 @@
  */
 
 import { OpenCodeBackend } from "../backends/opencode";
-import type { AgentBackend, BackendConnectionConfig } from "../backends/types";
+import type { BackendConnectionConfig } from "../backends/types";
 import { getServerSettings, setServerSettings } from "../persistence/preferences";
 import {
   getDefaultServerSettings,
@@ -16,6 +16,7 @@ import type { LoopEvent } from "../types/events";
 import type { CommandExecutor } from "./command-executor";
 import { CommandExecutorImpl } from "./remote-command-executor";
 import { log } from "./logger";
+import type { LoopBackend } from "./loop-engine";
 
 /**
  * Factory function type for creating command executors.
@@ -238,7 +239,7 @@ class BackendManager {
    * Get the backend instance.
    * Throws if not initialized.
    */
-  getBackend(): AgentBackend {
+  getBackend(): OpenCodeBackend {
     if (!this.backend) {
       // Create backend on demand
       this.backend = new OpenCodeBackend();
@@ -327,8 +328,11 @@ class BackendManager {
   /**
    * Set a custom backend instance (for testing).
    * This bypasses the normal OpenCodeBackend creation.
+   * Accepts OpenCodeBackend or MockOpenCodeBackend (both implement LoopBackend).
    */
-  setBackendForTesting(backend: AgentBackend): void {
+  setBackendForTesting(backend: LoopBackend): void {
+    // Store as OpenCodeBackend since that's what the private field type is.
+    // This works because LoopBackend is a structural type that matches OpenCodeBackend.
     this.backend = backend as OpenCodeBackend;
     this.initialized = true;
   }
