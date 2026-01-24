@@ -429,4 +429,84 @@ describe("GitService", () => {
       expect(summary.deletions).toBe(0);
     });
   });
+
+  describe("pull", () => {
+    test("returns false when no remote is configured", async () => {
+      // Our test repo has no remote configured
+      const result = await git.pull(testDir);
+      expect(result).toBe(false);
+    });
+
+    test("returns false when remote branch does not exist", async () => {
+      // Create a bare remote repo
+      const remoteDir = await mkdtemp(join(tmpdir(), "ralpher-remote-"));
+      try {
+        await Bun.$`git init --bare ${remoteDir}`.quiet();
+        await Bun.$`git -C ${testDir} remote add origin ${remoteDir}`.quiet();
+        
+        // Try to pull a branch that doesn't exist on remote
+        const result = await git.pull(testDir, "non-existent-branch");
+        expect(result).toBe(false);
+      } finally {
+        await rm(remoteDir, { recursive: true });
+      }
+    });
+
+    test("successfully pulls when remote has changes", async () => {
+      // Create a bare remote repo
+      const remoteDir = await mkdtemp(join(tmpdir(), "ralpher-remote-"));
+      try {
+        await Bun.$`git init --bare ${remoteDir}`.quiet();
+        await Bun.$`git -C ${testDir} remote add origin ${remoteDir}`.quiet();
+        
+        // Push current branch to remote
+        const currentBranch = await git.getCurrentBranch(testDir);
+        await Bun.$`git -C ${testDir} push -u origin ${currentBranch}`.quiet();
+        
+        // Clone the remote to a second working copy and make a change
+        const otherClone = await mkdtemp(join(tmpdir(), "ralpher-clone-"));
+        try {
+          await Bun.$`git clone ${remoteDir} ${otherClone}`.quiet();
+          await Bun.$`git -C ${otherClone} config user.email "other@test.com"`.quiet();
+          await Bun.$`git -C ${otherClone} config user.name "Other User"`.quiet();
+          await writeFile(join(otherClone, "new-from-remote.txt"), "Remote content\n");
+          await Bun.$`git -C ${otherClone} add -A`.quiet();
+          await Bun.$`git -C ${otherClone} commit -m "Add file from other clone"`.quiet();
+          await Bun.$`git -C ${otherClone} push`.quiet();
+        } finally {
+          await rm(otherClone, { recursive: true });
+        }
+        
+        // Now pull in original repo - should succeed
+        const result = await git.pull(testDir, currentBranch);
+        expect(result).toBe(true);
+        
+        // Verify the file now exists
+        const file = Bun.file(join(testDir, "new-from-remote.txt"));
+        const exists = await file.exists();
+        expect(exists).toBe(true);
+      } finally {
+        await rm(remoteDir, { recursive: true });
+      }
+    });
+
+    test("uses current branch when no branch name is specified", async () => {
+      // Create a bare remote repo
+      const remoteDir = await mkdtemp(join(tmpdir(), "ralpher-remote-"));
+      try {
+        await Bun.$`git init --bare ${remoteDir}`.quiet();
+        await Bun.$`git -C ${testDir} remote add origin ${remoteDir}`.quiet();
+        
+        // Push current branch to remote
+        const currentBranch = await git.getCurrentBranch(testDir);
+        await Bun.$`git -C ${testDir} push -u origin ${currentBranch}`.quiet();
+        
+        // Pull without specifying branch - should succeed and use current branch
+        const result = await git.pull(testDir);
+        expect(result).toBe(true);
+      } finally {
+        await rm(remoteDir, { recursive: true });
+      }
+    });
+  });
 });

@@ -99,12 +99,19 @@ describe("Git Workflow", () => {
 
   describe("Commits Per Iteration", () => {
     test("creates a commit after each iteration", async () => {
-      // Set up mock to run 3 iterations
-      ctx.mockBackend!.setResponses([
-        "Iteration 1...",
-        "Iteration 2...",
-        "<promise>COMPLETE</promise>",
-      ]);
+      // Teardown the default context
+      await teardownTestContext(ctx);
+
+      // Create new context with 3 iterations of responses
+      ctx = await setupTestContext({
+        useMockBackend: true,
+        initGit: true,
+        mockResponses: [
+          "Iteration 1...",
+          "Iteration 2...",
+          "<promise>COMPLETE</promise>",
+        ],
+      });
 
       const loop = await ctx.manager.createLoop({
         name: "Commit Loop",

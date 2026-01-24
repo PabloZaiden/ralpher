@@ -114,13 +114,20 @@ describe("Full Loop Workflow", () => {
     });
 
     test("respects maxIterations limit", async () => {
-      // Configure mock to never complete
-      ctx.mockBackend!.setResponses([
-        "Still working...",
-        "More work...",
-        "Even more...",
-        "Never ending...",
-      ]);
+      // Teardown the default context
+      await teardownTestContext(ctx);
+
+      // Create new context with never-ending responses
+      ctx = await setupTestContext({
+        useMockBackend: true,
+        initGit: true,
+        mockResponses: [
+          "Still working...",
+          "More work...",
+          "Even more...",
+          "Never ending...",
+        ],
+      });
 
       const loop = await ctx.manager.createLoop({
         name: "Limited Loop",
@@ -140,13 +147,20 @@ describe("Full Loop Workflow", () => {
     });
 
     test("can stop a running loop", async () => {
-      // Configure slow responses so we have time to stop
-      ctx.mockBackend!.setResponses([
-        "Working on iteration 1...",
-        "Working on iteration 2...",
-        "Working on iteration 3...",
-        "<promise>COMPLETE</promise>",
-      ]);
+      // Teardown the default context
+      await teardownTestContext(ctx);
+
+      // Create new context with more responses so we have time to stop
+      ctx = await setupTestContext({
+        useMockBackend: true,
+        initGit: true,
+        mockResponses: [
+          "Working on iteration 1...",
+          "Working on iteration 2...",
+          "Working on iteration 3...",
+          "<promise>COMPLETE</promise>",
+        ],
+      });
 
       const loop = await ctx.manager.createLoop({
         name: "Stoppable Loop",
@@ -171,8 +185,15 @@ describe("Full Loop Workflow", () => {
     });
 
     test("handles backend errors gracefully", async () => {
-      // Configure mock to throw error
-      ctx.mockBackend!.setThrowOnPrompt(true, "Backend crashed");
+      // Teardown the default context
+      await teardownTestContext(ctx);
+
+      // Create new context with error response
+      ctx = await setupTestContext({
+        useMockBackend: true,
+        initGit: true,
+        mockResponses: ["ERROR:Backend crashed"],
+      });
 
       const loop = await ctx.manager.createLoop({
         name: "Error Loop",

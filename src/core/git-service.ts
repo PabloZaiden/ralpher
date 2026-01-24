@@ -375,6 +375,49 @@ export class GitService {
   }
 
   /**
+   * Pull the latest changes from a remote branch.
+   * If the branch has no upstream or remote fails, returns false (no-op).
+   * @param directory - The git repository directory
+   * @param branchName - The branch to pull (optional, uses current branch if not specified)
+   * @param remote - The remote name (default: "origin")
+   * @returns true if pull succeeded, false if skipped (no remote/upstream)
+   */
+  async pull(
+    directory: string,
+    branchName?: string,
+    remote = "origin"
+  ): Promise<boolean> {
+    // First check if the remote exists
+    const remoteResult = await this.runGitCommand(directory, ["remote", "get-url", remote]);
+    if (!remoteResult.success) {
+      log.trace(`[GitService] No remote '${remote}' configured, skipping pull`);
+      return false;
+    }
+
+    // If a specific branch is given, try to pull that branch
+    // Otherwise, pull the current branch
+    const args = ["pull", remote];
+    if (branchName) {
+      args.push(branchName);
+    }
+
+    const result = await this.runGitCommand(directory, args);
+    if (!result.success) {
+      // Check if the failure is because the remote branch doesn't exist
+      if (result.stderr.includes("couldn't find remote ref") || 
+          result.stderr.includes("fatal: couldn't find remote ref")) {
+        log.trace(`[GitService] Remote branch does not exist, skipping pull`);
+        return false;
+      }
+      // For other errors, log but don't fail
+      log.trace(`[GitService] Pull failed: ${result.stderr}`);
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * Get the diff between the current branch and a base branch.
    */
   async getDiff(directory: string, baseBranch: string): Promise<FileDiff[]> {
