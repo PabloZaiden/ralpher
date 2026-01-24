@@ -1,0 +1,224 @@
+/**
+ * Mock OpenCodeBackend for testing.
+ * Provides the same interface as OpenCodeBackend but with mock implementations.
+ * This avoids the need for a separate Backend interface and ensures type safety.
+ */
+
+import type {
+  AgentSession,
+  AgentResponse,
+  AgentEvent,
+  BackendConnectionConfig,
+  CreateSessionOptions,
+  PromptInput,
+} from "../../src/backends/types";
+import type { ConnectionInfo } from "../../src/backends/opencode";
+import { createEventStream, type EventStream } from "../../src/utils/event-stream";
+
+/**
+ * Options for creating a MockOpenCodeBackend.
+ */
+export interface MockBackendOptions {
+  /** Responses to return for prompts (cycled through in order) */
+  responses?: string[];
+}
+
+/**
+ * MockOpenCodeBackend provides a mock implementation of OpenCodeBackend.
+ * It implements all methods that OpenCodeBackend has, ensuring no runtime errors
+ * when BackendManager calls OpenCode-specific methods like getSdkClient, getConnectionInfo, etc.
+ *
+ * Supports special response patterns:
+ * - "ERROR:message" - Throws an error with the given message
+ * - Any other string - Returns as normal response
+ */
+export class MockOpenCodeBackend {
+  readonly name = "opencode";
+
+  private connected = false;
+  private directory = "";
+  private responseIndex = 0;
+  private pendingPrompt = false;
+  private readonly responses: string[];
+  private readonly sessions = new Map<string, AgentSession>();
+
+  constructor(options: MockBackendOptions = {}) {
+    this.responses = options.responses ?? ["<promise>COMPLETE</promise>"];
+  }
+
+  /**
+   * Get the next response from the configured responses.
+   */
+  private getNextResponse(): string {
+    const response = this.responses[this.responseIndex % this.responses.length] ?? "<promise>COMPLETE</promise>";
+    this.responseIndex++;
+    return response;
+  }
+
+  /**
+   * Check if a response is an error and throw if so.
+   */
+  private checkForError(response: string): void {
+    if (response.startsWith("ERROR:")) {
+      throw new Error(response.slice(6));
+    }
+  }
+
+  // ============================================
+  // Core Backend methods (used by LoopEngine)
+  // ============================================
+
+  async connect(config: BackendConnectionConfig): Promise<void> {
+    this.connected = true;
+    this.directory = config.directory;
+  }
+
+  async disconnect(): Promise<void> {
+    this.connected = false;
+    this.directory = "";
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  async createSession(options: CreateSessionOptions): Promise<AgentSession> {
+    const session: AgentSession = {
+      id: `mock-session-${Date.now()}`,
+      title: options.title,
+      createdAt: new Date().toISOString(),
+    };
+    this.sessions.set(session.id, session);
+    return session;
+  }
+
+  async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
+    const response = this.getNextResponse();
+    this.checkForError(response);
+    return {
+      id: `msg-${Date.now()}`,
+      content: response,
+      parts: [{ type: "text", text: response }],
+    };
+  }
+
+  async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
+    this.pendingPrompt = true;
+  }
+
+  async abortSession(_sessionId: string): Promise<void> {
+    // Mock - no-op
+  }
+
+  async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
+    const { stream, push, end } = createEventStream<AgentEvent>();
+
+    (async () => {
+      // Wait for pendingPrompt to be set
+      let attempts = 0;
+      while (!this.pendingPrompt && attempts < 100) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        attempts++;
+      }
+      this.pendingPrompt = false;
+
+      // Get the next response
+      const response = this.responses[this.responseIndex % this.responses.length] ?? "<promise>COMPLETE</promise>";
+      this.responseIndex++;
+
+      // Check if this is an error response
+      if (response.startsWith("ERROR:")) {
+        push({ type: "error", message: response.slice(6) });
+        end();
+        return;
+      }
+
+      // Emit normal message events
+      push({ type: "message.start", messageId: `msg-${Date.now()}` });
+      push({ type: "message.delta", content: response });
+      push({ type: "message.complete", content: response });
+      end();
+    })();
+
+    return stream;
+  }
+
+  async replyToPermission(_requestId: string, _response: string): Promise<void> {
+    // Mock - no-op
+  }
+
+  async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
+    // Mock - no-op
+  }
+
+  // ============================================
+  // OpenCode-specific methods (used by BackendManager)
+  // ============================================
+
+  /**
+   * Get the SDK client.
+   * Returns null since mock doesn't have a real SDK client.
+   */
+  getSdkClient(): null {
+    return null;
+  }
+
+  /**
+   * Get the current directory.
+   */
+  getDirectory(): string {
+    return this.directory;
+  }
+
+  /**
+   * Get connection info for WebSocket and other direct connections.
+   * Returns mock connection info.
+   */
+  getConnectionInfo(): ConnectionInfo | null {
+    if (!this.connected) {
+      return null;
+    }
+    return {
+      baseUrl: "http://mock-server:4096",
+      authHeaders: {},
+    };
+  }
+
+  /**
+   * Abort all active event subscriptions.
+   * Mock implementation - no-op.
+   */
+  abortAllSubscriptions(): void {
+    // Mock - no-op
+  }
+
+  /**
+   * Get available models.
+   * Returns an empty array in mock.
+   */
+  async getModels(_directory: string): Promise<[]> {
+    return [];
+  }
+
+  /**
+   * Get an existing session by ID.
+   */
+  async getSession(id: string): Promise<AgentSession | null> {
+    return this.sessions.get(id) ?? null;
+  }
+
+  /**
+   * Delete a session.
+   */
+  async deleteSession(id: string): Promise<void> {
+    this.sessions.delete(id);
+  }
+}
+
+/**
+ * Create a mock backend with the given responses.
+ * Convenience function for tests.
+ */
+export function createMockBackend(responses: string[] = ["<promise>COMPLETE</promise>"]): MockOpenCodeBackend {
+  return new MockOpenCodeBackend({ responses });
+}

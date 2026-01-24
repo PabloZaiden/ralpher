@@ -9,7 +9,7 @@ import { join } from "path";
 import {
   LoopEngine,
   StopPatternDetector,
-  type Backend,
+  type LoopBackend,
 } from "../../src/core/loop-engine";
 import { SimpleEventEmitter } from "../../src/core/event-emitter";
 import type { Loop, LoopConfig, LoopState } from "../../src/types/loop";
@@ -55,13 +55,14 @@ describe("StopPatternDetector", () => {
 
 describe("LoopEngine", () => {
   let testDir: string;
-  let mockBackend: Backend;
+  let mockBackend: LoopBackend;
   let emitter: SimpleEventEmitter<LoopEvent>;
   let emittedEvents: LoopEvent[];
   let gitService: GitService;
 
   // Create a mock backend that supports async streaming
-  function createMockBackend(responses: string[]): Backend {
+  // Returns LoopBackend (structural type) to allow easy spreading and overriding
+  function createMockBackend(responses: string[]): LoopBackend {
     let responseIndex = 0;
     let connected = false;
     const sessions = new Map<string, AgentSession>();

@@ -11,17 +11,8 @@ import { LoopManager } from "../src/core/loop-manager";
 import { backendManager } from "../src/core/backend-manager";
 import { ensureDataDirectories } from "../src/persistence/paths";
 import { TestCommandExecutor } from "./mocks/mock-executor";
+import { MockOpenCodeBackend } from "./mocks/mock-backend";
 import type { LoopEvent } from "../src/types/events";
-import type { Backend } from "../src/core/loop-engine";
-import type {
-  AgentSession,
-  AgentResponse,
-  AgentEvent,
-  BackendConnectionConfig,
-  CreateSessionOptions,
-  PromptInput,
-} from "../src/backends/types";
-import { createEventStream, type EventStream } from "../src/utils/event-stream";
 
 /**
  * Test context containing all test dependencies.
@@ -40,7 +31,7 @@ export interface TestContext {
   /** Loop manager instance */
   manager: LoopManager;
   /** Mock backend instance (if using mock) */
-  mockBackend?: Backend;
+  mockBackend?: MockOpenCodeBackend;
 }
 
 /**
@@ -55,113 +46,6 @@ export interface SetupOptions {
   initGit?: boolean;
   /** Create initial files in work directory */
   initialFiles?: Record<string, string>;
-}
-
-/**
- * Create a mock backend that implements the Backend interface.
- * 
- * Supports special response patterns:
- * - "ERROR:message" - Throws an error with the given message
- * - Any other string - Returns as normal response
- */
-function createMockBackend(responses: string[]): Backend {
-  let connected = false;
-  let pendingPrompt = false;
-  let responseIndex = 0;
-  const sessions = new Map<string, AgentSession>();
-
-  function getNextResponse(): string {
-    const response = responses[responseIndex % responses.length] ?? "<promise>COMPLETE</promise>";
-    responseIndex++;
-    return response;
-  }
-
-  function checkForError(response: string): void {
-    if (response.startsWith("ERROR:")) {
-      throw new Error(response.slice(6));
-    }
-  }
-
-  return {
-    async connect(_config: BackendConnectionConfig): Promise<void> {
-      connected = true;
-    },
-
-    async disconnect(): Promise<void> {
-      connected = false;
-    },
-
-    isConnected(): boolean {
-      return connected;
-    },
-
-    async createSession(options: CreateSessionOptions): Promise<AgentSession> {
-      const session: AgentSession = {
-        id: `session-${Date.now()}`,
-        title: options.title,
-        createdAt: new Date().toISOString(),
-      };
-      sessions.set(session.id, session);
-      return session;
-    },
-
-    async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
-      const response = getNextResponse();
-      checkForError(response);
-      return {
-        id: `msg-${Date.now()}`,
-        content: response,
-        parts: [{ type: "text", text: response }],
-      };
-    },
-
-    async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
-      pendingPrompt = true;
-    },
-
-    async abortSession(_sessionId: string): Promise<void> {
-      // Not used in tests
-    },
-
-    async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
-      const { stream, push, end } = createEventStream<AgentEvent>();
-
-      (async () => {
-        let attempts = 0;
-        while (!pendingPrompt && attempts < 100) {
-          await new Promise((resolve) => setTimeout(resolve, 10));
-          attempts++;
-        }
-        pendingPrompt = false;
-
-        // Get and increment the response index
-        const response = responses[responseIndex % responses.length] ?? "<promise>COMPLETE</promise>";
-        responseIndex++;
-
-        // Check if this is an error response
-        if (response.startsWith("ERROR:")) {
-          push({ type: "error", message: response.slice(6) });
-          end();
-          return;
-        }
-
-        push({ type: "message.start", messageId: `msg-${Date.now()}` });
-        push({ type: "message.delta", content: response });
-        push({ type: "message.complete", content: response });
-        end();
-      })();
-
-      return stream;
-    },
-
-    async replyToPermission(_requestId: string, _response: string): Promise<void> {
-      // Not used in tests
-    },
-
-    async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
-      // Not used in tests
-    },
-  };
 }
 
 /**
@@ -212,9 +96,9 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
   emitter.subscribe((event) => events.push(event));
 
   // Register mock backend if requested
-  let mockBackend: Backend | undefined;
+  let mockBackend: MockOpenCodeBackend | undefined;
   if (useMockBackend) {
-    mockBackend = createMockBackend(mockResponses);
+    mockBackend = new MockOpenCodeBackend({ responses: mockResponses });
     backendManager.setBackendForTesting(mockBackend);
     // Set the executor factory for testing (uses local Bun.$ execution)
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());

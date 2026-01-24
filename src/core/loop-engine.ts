@@ -23,33 +23,12 @@ import { createTimestamp } from "../types/events";
 import type {
   PromptInput,
   AgentEvent,
-  BackendConnectionConfig,
-  CreateSessionOptions,
-  AgentSession,
-  AgentResponse,
 } from "../backends/types";
+import { OpenCodeBackend } from "../backends/opencode";
 import { backendManager } from "./backend-manager";
 import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 import { log } from "./logger";
-import type { EventStream } from "../utils/event-stream";
-
-/**
- * Backend interface that defines the methods used by LoopEngine.
- * This allows for both OpenCodeBackend and mock implementations in tests.
- */
-export interface Backend {
-  connect(config: BackendConnectionConfig): Promise<void>;
-  disconnect(): Promise<void>;
-  isConnected(): boolean;
-  createSession(options: CreateSessionOptions): Promise<AgentSession>;
-  sendPrompt(sessionId: string, prompt: PromptInput): Promise<AgentResponse>;
-  sendPromptAsync(sessionId: string, prompt: PromptInput): Promise<void>;
-  abortSession(sessionId: string): Promise<void>;
-  subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>>;
-  replyToPermission(requestId: string, response: string): Promise<void>;
-  replyToQuestion(requestId: string, answers: string[][]): Promise<void>;
-}
 
 /**
  * Generate a git-safe branch name from a loop name and timestamp.
@@ -78,13 +57,33 @@ function generateBranchName(prefix: string, name: string, timestamp: string): st
 }
 
 /**
+ * Backend interface for LoopEngine.
+ * This is a structural type that defines the methods LoopEngine needs.
+ * Both OpenCodeBackend and MockOpenCodeBackend satisfy this interface.
+ * Using a structural type (interface) instead of a union allows for
+ * easy mocking in tests without requiring all internal class fields.
+ */
+export interface LoopBackend {
+  connect: OpenCodeBackend["connect"];
+  disconnect: OpenCodeBackend["disconnect"];
+  isConnected: OpenCodeBackend["isConnected"];
+  createSession: OpenCodeBackend["createSession"];
+  sendPrompt: OpenCodeBackend["sendPrompt"];
+  sendPromptAsync: OpenCodeBackend["sendPromptAsync"];
+  abortSession: OpenCodeBackend["abortSession"];
+  subscribeToEvents: OpenCodeBackend["subscribeToEvents"];
+  replyToPermission: OpenCodeBackend["replyToPermission"];
+  replyToQuestion: OpenCodeBackend["replyToQuestion"];
+}
+
+/**
  * Options for creating a LoopEngine.
  */
 export interface LoopEngineOptions {
   /** The loop configuration and state */
   loop: Loop;
   /** The agent backend to use */
-  backend: Backend;
+  backend: LoopBackend;
   /** Git service instance (required) */
   gitService: GitService;
   /** Event emitter instance (optional, defaults to global) */
@@ -162,7 +161,7 @@ async function nextWithTimeout<T>(
  */
 export class LoopEngine {
   private loop: Loop;
-  private backend: Backend;
+  private backend: LoopBackend;
   private git: GitService;
   private emitter: SimpleEventEmitter<LoopEvent>;
   private stopDetector: StopPatternDetector;

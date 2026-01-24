@@ -16,7 +16,7 @@ import type { LoopEvent } from "../types/events";
 import type { CommandExecutor } from "./command-executor";
 import { CommandExecutorImpl } from "./remote-command-executor";
 import { log } from "./logger";
-import type { Backend } from "./loop-engine";
+import type { LoopBackend } from "./loop-engine";
 
 /**
  * Factory function type for creating command executors.
@@ -328,9 +328,11 @@ class BackendManager {
   /**
    * Set a custom backend instance (for testing).
    * This bypasses the normal OpenCodeBackend creation.
-   * Accepts either OpenCodeBackend or any object implementing the Backend interface.
+   * Accepts OpenCodeBackend or MockOpenCodeBackend (both implement LoopBackend).
    */
-  setBackendForTesting(backend: Backend): void {
+  setBackendForTesting(backend: LoopBackend): void {
+    // Store as OpenCodeBackend since that's what the private field type is.
+    // This works because LoopBackend is a structural type that matches OpenCodeBackend.
     this.backend = backend as OpenCodeBackend;
     this.initialized = true;
   }

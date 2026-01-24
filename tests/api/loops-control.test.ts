@@ -12,7 +12,7 @@ import { apiRoutes } from "../../src/api";
 import { ensureDataDirectories } from "../../src/persistence/paths";
 import { backendManager } from "../../src/core/backend-manager";
 import { TestCommandExecutor } from "../mocks/mock-executor";
-import type { Backend } from "../../src/core/loop-engine";
+import type { LoopBackend } from "../../src/core/loop-engine";
 import type {
   AgentSession,
   AgentResponse,
@@ -30,7 +30,7 @@ describe("Loops Control API Integration", () => {
   let baseUrl: string;
 
   // Create a mock backend that completes immediately
-  function createMockBackend(): Backend {
+  function createMockBackend(): LoopBackend {
     let connected = false;
     let pendingPrompt = false;
     const sessions = new Map<string, AgentSession>();
