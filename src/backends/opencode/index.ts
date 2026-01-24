@@ -67,6 +67,9 @@ export class OpenCodeBackend implements AgentBackend {
   private connected = false;
   private directory = "";
   private connectionInfo: ConnectionInfo | null = null;
+  
+  /** Track active subscriptions for reset functionality */
+  private activeSubscriptions = new Set<AbortController>();
 
   /**
    * Connect to an opencode server.
@@ -222,14 +225,22 @@ export class OpenCodeBackend implements AgentBackend {
 
   /**
    * Create a new session.
+   * By default, creates sessions with auto-allow permissions to avoid permission prompts.
    */
   async createSession(options: CreateSessionOptions): Promise<AgentSession> {
     const client = this.getClient();
+
+    // Auto-allow all permissions to prevent blocking on permission requests
+    // This is important for Ralph Loops which run unattended
+    const autoAllowPermissions = [
+      { permission: "*", pattern: "*", action: "allow" as const },
+    ];
 
     // v2 SDK uses flattened parameters
     const result = await client.session.create({
       title: options.title,
       directory: options.directory,
+      permission: autoAllowPermissions,
     });
 
     if (result.error) {
@@ -349,6 +360,62 @@ export class OpenCodeBackend implements AgentBackend {
   }
 
   /**
+   * Reply to a permission request.
+   * Called when the AI asks for permission to perform an action.
+   * @param requestId - The request ID from the permission.asked event
+   * @param response - "once" to allow once, "always" to always allow, "reject" to deny
+   */
+  async replyToPermission(requestId: string, response: "once" | "always" | "reject"): Promise<void> {
+    const client = this.getClient();
+
+    log.trace("[OpenCodeBackend] replyToPermission", { requestId, response });
+    const result = await client.permission.reply({
+      requestID: requestId,
+      directory: this.directory,
+      reply: response,
+    });
+
+    if (result.error) {
+      throw new Error(`Failed to reply to permission: ${JSON.stringify(result.error)}`);
+    }
+    log.trace("[OpenCodeBackend] replyToPermission: Success");
+  }
+
+  /**
+   * Reply to a question asked by the AI.
+   * Called when the AI asks for user input via the question.asked event.
+   * @param requestId - The request ID from the question.asked event
+   * @param answers - Array of answers, one per question. Each answer is an array of selected labels.
+   */
+  async replyToQuestion(requestId: string, answers: string[][]): Promise<void> {
+    const client = this.getClient();
+
+    log.trace("[OpenCodeBackend] replyToQuestion", { requestId, answersCount: answers.length });
+    const result = await client.question.reply({
+      requestID: requestId,
+      directory: this.directory,
+      answers: answers,
+    });
+
+    if (result.error) {
+      throw new Error(`Failed to reply to question: ${JSON.stringify(result.error)}`);
+    }
+    log.trace("[OpenCodeBackend] replyToQuestion: Success");
+  }
+
+  /**
+   * Abort all active event subscriptions.
+   * Useful for resetting stale connections.
+   */
+  abortAllSubscriptions(): void {
+    log.trace("[OpenCodeBackend] abortAllSubscriptions", { count: this.activeSubscriptions.size });
+    for (const controller of this.activeSubscriptions) {
+      controller.abort();
+    }
+    this.activeSubscriptions.clear();
+  }
+
+  /**
    * Subscribe to events from a session.
    * Returns a promise that resolves when the subscription is established,
    * providing an EventStream of AgentEvents translated from OpenCode SDK events.
@@ -366,6 +433,9 @@ export class OpenCodeBackend implements AgentBackend {
 
     // Create AbortController to allow cancellation when consumer calls close()
     const abortController = new AbortController();
+    
+    // Track this subscription for reset functionality
+    this.activeSubscriptions.add(abortController);
 
     // v2 SDK uses flattened parameters
     log.trace("[OpenCodeBackend] subscribeToEvents: About to call client.event.subscribe");
@@ -420,6 +490,9 @@ export class OpenCodeBackend implements AgentBackend {
       } catch (err) {
         log.error("[OpenCodeBackend] subscribeToEvents: Error in event loop", { error: String(err) });
         end();
+      } finally {
+        // Remove from tracking when done
+        self.activeSubscriptions.delete(abortController);
       }
     })();
 
@@ -429,6 +502,7 @@ export class OpenCodeBackend implements AgentBackend {
       close: () => {
         stream.close();
         abortController.abort();
+        self.activeSubscriptions.delete(abortController);
       },
     };
 
@@ -634,7 +708,59 @@ export class OpenCodeBackend implements AgentBackend {
         };
       }
 
+      case "permission.asked": {
+        // Permission request from the AI
+        const props = event.properties;
+        if (props.sessionID !== sessionId) return null;
+        return {
+          type: "permission.asked",
+          requestId: props.id,
+          sessionId: props.sessionID,
+          permission: props.permission ?? "unknown",
+          patterns: props.patterns ?? [],
+        };
+      }
+
+      case "question.asked": {
+        // Question from the AI requiring user input
+        const props = event.properties;
+        if (props.sessionID !== sessionId) return null;
+        return {
+          type: "question.asked",
+          requestId: props.id,
+          sessionId: props.sessionID,
+          questions: (props.questions ?? []).map((q) => ({
+            question: q.question ?? "",
+            header: q.header ?? "",
+            options: (q.options ?? []).map((o) => ({
+              label: o.label ?? "",
+              description: o.description ?? "",
+            })),
+            multiple: q.multiple ?? false,
+            custom: q.custom ?? true,
+          })),
+        };
+      }
+
+      case "session.status": {
+        // Session status update (idle, busy, retry)
+        const props = event.properties;
+        if (props.sessionID !== sessionId) return null;
+        // Extract status type and optional retry info
+        const statusInfo = props.status;
+        const statusType = statusInfo.type;
+        return {
+          type: "session.status",
+          sessionId: props.sessionID,
+          status: statusType,
+          attempt: statusType === "retry" ? statusInfo.attempt : undefined,
+          message: statusType === "retry" ? statusInfo.message : undefined,
+        };
+      }
+
       default:
+        // Log unhandled event types for debugging
+        log.debug("[OpenCodeBackend] translateEvent: Unhandled event type", { type: event.type });
         return null;
     }
   }

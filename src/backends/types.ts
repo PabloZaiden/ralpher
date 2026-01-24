@@ -101,6 +101,25 @@ export interface AgentResponse {
 }
 
 /**
+ * Question option for question.asked events.
+ */
+export interface QuestionOption {
+  label: string;
+  description: string;
+}
+
+/**
+ * Question in a question.asked event.
+ */
+export interface QuestionInfo {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiple?: boolean;
+  custom?: boolean;
+}
+
+/**
  * Events emitted by the agent backend.
  */
 export type AgentEvent =
@@ -110,7 +129,10 @@ export type AgentEvent =
   | { type: "reasoning.delta"; content: string }
   | { type: "tool.start"; toolName: string; input: unknown }
   | { type: "tool.complete"; toolName: string; output: unknown }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  | { type: "permission.asked"; requestId: string; sessionId: string; permission: string; patterns: string[] }
+  | { type: "question.asked"; requestId: string; sessionId: string; questions: QuestionInfo[] }
+  | { type: "session.status"; sessionId: string; status: "idle" | "busy" | "retry"; attempt?: number; message?: string };
 
 /**
  * Abstract interface for agent backends.

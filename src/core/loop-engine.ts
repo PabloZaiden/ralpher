@@ -23,7 +23,9 @@ import { createTimestamp } from "../types/events";
 import type {
   AgentBackend,
   PromptInput,
+  AgentEvent,
 } from "../backends/types";
+import { OpenCodeBackend } from "../backends/opencode";
 import { backendManager } from "./backend-manager";
 import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
@@ -105,6 +107,32 @@ export class StopPatternDetector {
    */
   matches(content: string): boolean {
     return this.pattern.test(content);
+  }
+}
+
+/**
+ * Wraps an event stream's next() call with a timeout.
+ * Throws an error if no event is received within the specified time.
+ */
+async function nextWithTimeout<T>(
+  stream: { next: () => Promise<T | null> },
+  timeoutMs: number
+): Promise<T | null> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`No activity for ${Math.round(timeoutMs / 1000)} seconds`));
+    }, timeoutMs);
+  });
+
+  try {
+    const result = await Promise.race([stream.next(), timeoutPromise]);
+    return result;
+  } finally {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
   }
 }
 
@@ -647,7 +675,11 @@ export class LoopEngine {
 
       try {
         log.trace("[LoopEngine] runIteration: About to start event iteration loop");
-        let event = await eventStream.next();
+        
+        // Calculate activity timeout
+        const activityTimeoutMs = (this.config.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds) * 1000;
+        
+        let event: AgentEvent | null = await nextWithTimeout(eventStream, activityTimeoutMs);
         while (event !== null) {
           log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
           // Check if aborted
@@ -813,6 +845,51 @@ export class LoopEngine {
               error = event.message;
               this.emitLog("error", `AI backend error: ${event.message}`);
               break;
+
+            case "permission.asked": {
+              // Auto-approve permission requests to keep the loop running unattended
+              this.emitLog("info", `Auto-approving permission request: ${event.permission}`, {
+                requestId: event.requestId,
+                patterns: event.patterns,
+              });
+              try {
+                const backend = this.backend as OpenCodeBackend;
+                await backend.replyToPermission(event.requestId, "always");
+                this.emitLog("info", "Permission approved successfully");
+              } catch (permErr) {
+                this.emitLog("warn", `Failed to approve permission: ${String(permErr)}`);
+              }
+              break;
+            }
+
+            case "question.asked": {
+              // Auto-respond to questions with a helpful default answer
+              this.emitLog("info", "Auto-responding to question from AI", {
+                requestId: event.requestId,
+                questionCount: event.questions.length,
+              });
+              try {
+                const backend = this.backend as OpenCodeBackend;
+                // Reply with a custom answer for each question telling the AI to proceed autonomously
+                const answers = event.questions.map(() => 
+                  ["take the best course of action you recommend"]
+                );
+                await backend.replyToQuestion(event.requestId, answers);
+                this.emitLog("info", "Question answered successfully");
+              } catch (questionErr) {
+                this.emitLog("warn", `Failed to answer question: ${String(questionErr)}`);
+              }
+              break;
+            }
+
+            case "session.status":
+              // Log session status changes for debugging
+              this.emitLog("debug", `Session status: ${event.status}`, {
+                sessionId: event.sessionId,
+                attempt: event.attempt,
+                message: event.message,
+              });
+              break;
           }
 
           // If message is complete or error occurred, stop listening
@@ -821,8 +898,8 @@ export class LoopEngine {
             break;
           }
 
-          // Get next event
-          event = await eventStream.next();
+          // Get next event with timeout
+          event = await nextWithTimeout(eventStream, activityTimeoutMs);
         }
       } finally {
         // Close the stream to abort the subscription
