@@ -65,6 +65,10 @@ export async function initializeDatabase(): Promise<void> {
   // Enable WAL mode for better concurrency
   db.run("PRAGMA journal_mode = WAL");
   
+  // Set busy timeout to wait up to 5 seconds for locks
+  // This prevents spurious failures under concurrent load
+  db.run("PRAGMA busy_timeout = 5000");
+  
   // Create tables
   createTables(db);
 }
