@@ -30,7 +30,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     error,
     connectionStatus,
     createLoop,
-    startLoop,
     deleteLoop,
     acceptLoop,
     pushLoop,
@@ -439,24 +438,20 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       >
         <CreateLoopForm
           onSubmit={async (request) => {
-            const loop = await createLoop(request);
-            if (loop) {
+            const result = await createLoop(request);
+            if (result.loop) {
               handleCloseCreateModal();
               // Refresh last model in case it changed
               if (request.model) {
                 setLastModel(request.model);
               }
-              // Start the loop immediately if requested (default: true)
-              if (request.startImmediately !== false) {
-                const result = await startLoop(loop.config.id);
-                // If there are uncommitted changes, show error modal
-                if (result.uncommittedError) {
-                  setUncommittedModal({
-                    open: true,
-                    loopId: loop.config.id,
-                    error: result.uncommittedError,
-                  });
-                }
+              // If there are uncommitted changes, show error modal
+              if (result.startError) {
+                setUncommittedModal({
+                  open: true,
+                  loopId: result.loop.config.id,
+                  error: result.startError,
+                });
               }
             }
           }}

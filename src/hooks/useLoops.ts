@@ -4,19 +4,24 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest } from "../types";
+import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest, CreateLoopResponse, UncommittedChangesError } from "../types";
 import { useGlobalEvents } from "./useWebSocket";
 import {
-  startLoopApi,
   acceptLoopApi,
   pushLoopApi,
   discardLoopApi,
   deleteLoopApi,
   purgeLoopApi,
-  type StartLoopResult,
   type AcceptLoopResult,
   type PushLoopResult,
 } from "./loopActions";
+
+export interface CreateLoopResult {
+  /** The created loop, or null if creation failed */
+  loop: Loop | null;
+  /** Error if the loop was created but failed to start (e.g., uncommitted changes) */
+  startError?: UncommittedChangesError;
+}
 
 export interface UseLoopsResult {
   /** Array of all loops */
@@ -29,14 +34,12 @@ export interface UseLoopsResult {
   connectionStatus: "connecting" | "open" | "closed" | "error";
   /** Refresh loops from the server */
   refresh: () => Promise<void>;
-  /** Create a new loop */
-  createLoop: (request: CreateLoopRequest) => Promise<Loop | null>;
+  /** Create a new loop (loops are always started immediately) */
+  createLoop: (request: CreateLoopRequest) => Promise<CreateLoopResult>;
   /** Update an existing loop */
   updateLoop: (id: string, request: UpdateLoopRequest) => Promise<Loop | null>;
   /** Delete a loop */
   deleteLoop: (id: string) => Promise<boolean>;
-  /** Start a loop (used for startImmediately on creation) */
-  startLoop: (id: string) => Promise<StartLoopResult>;
   /** Accept (merge) a loop's changes */
   acceptLoop: (id: string) => Promise<AcceptLoopResult>;
   /** Push a loop's branch to remote */
@@ -134,8 +137,8 @@ export function useLoops(): UseLoopsResult {
     }
   }, []);
 
-  // Create a new loop
-  const createLoop = useCallback(async (request: CreateLoopRequest): Promise<Loop | null> => {
+  // Create a new loop (loops are always started immediately by the API)
+  const createLoop = useCallback(async (request: CreateLoopRequest): Promise<CreateLoopResult> => {
     try {
       const response = await fetch("/api/loops", {
         method: "POST",
@@ -146,12 +149,19 @@ export function useLoops(): UseLoopsResult {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to create loop");
       }
-      const loop = (await response.json()) as Loop;
+      const data = (await response.json()) as CreateLoopResponse;
+      
+      // Extract the loop (without _startError) and the startError if present
+      const { _startError, ...loop } = data;
       setLoops((prev) => [...prev, loop]);
-      return loop;
+      
+      return {
+        loop,
+        startError: _startError,
+      };
     } catch (err) {
       setError(String(err));
-      return null;
+      return { loop: null };
     }
   }, []);
 
@@ -189,23 +199,6 @@ export function useLoops(): UseLoopsResult {
       return false;
     }
   }, []);
-
-  // Start a loop
-  const startLoop = useCallback(
-    async (id: string): Promise<StartLoopResult> => {
-      try {
-        const result = await startLoopApi(id);
-        if (result.success) {
-          await refreshLoop(id);
-        }
-        return result;
-      } catch (err) {
-        setError(String(err));
-        return { success: false };
-      }
-    },
-    [refreshLoop]
-  );
 
   // Accept a loop's changes
   const acceptLoop = useCallback(async (id: string): Promise<AcceptLoopResult> => {
@@ -277,7 +270,6 @@ export function useLoops(): UseLoopsResult {
     createLoop,
     updateLoop,
     deleteLoop,
-    startLoop,
     acceptLoop,
     pushLoop,
     discardLoop,

@@ -3,18 +3,6 @@
  * These are the actual API calls used by both useLoops and useLoop hooks.
  */
 
-import type {
-  UncommittedChangesError,
-} from "../types";
-
-/**
- * Result of a start loop action.
- */
-export interface StartLoopResult {
-  success: boolean;
-  uncommittedError?: UncommittedChangesError;
-}
-
 /**
  * Result of an accept loop action.
  */
@@ -29,32 +17,6 @@ export interface AcceptLoopResult {
 export interface PushLoopResult {
   success: boolean;
   remoteBranch?: string;
-}
-
-/**
- * Start a loop via the API.
- * Returns uncommittedError if there are uncommitted changes (409 status).
- */
-export async function startLoopApi(
-  loopId: string
-): Promise<StartLoopResult> {
-  const response = await fetch(`/api/loops/${loopId}/start`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
-  });
-
-  if (response.status === 409) {
-    const errorData = (await response.json()) as UncommittedChangesError;
-    return { success: false, uncommittedError: errorData };
-  }
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.message || "Failed to start loop");
-  }
-
-  return { success: true };
 }
 
 /**

@@ -108,6 +108,26 @@ describe("Loops Control API Integration", () => {
     };
   }
 
+  // Helper function to poll for loop completion
+  async function waitForLoopCompletion(loopId: string, timeoutMs = 5000): Promise<void> {
+    const startTime = Date.now();
+    let lastStatus = "";
+    while (Date.now() - startTime < timeoutMs) {
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      if (response.ok) {
+        const data = await response.json();
+        lastStatus = data.state?.status ?? "no state";
+        if (data.state?.status === "completed") {
+          return;
+        }
+      } else {
+        lastStatus = `HTTP ${response.status}`;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`Loop ${loopId} did not complete within ${timeoutMs}ms. Last status: ${lastStatus}`);
+  }
+
   beforeAll(async () => {
     // Create temp directories
     testDataDir = await mkdtemp(join(tmpdir(), "ralpher-api-control-test-data-"));
@@ -163,102 +183,9 @@ describe("Loops Control API Integration", () => {
     delete process.env["RALPHER_DATA_DIR"];
   });
 
-  describe("POST /api/loops/:id/start", () => {
-    test("starts a loop successfully", async () => {
-      // Create a loop
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Start Test Loop",
-          directory: testWorkDir,
-          prompt: "Test prompt",
-          backend: { type: "mock" },
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
-
-      // Start it (directory should be clean)
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-
-      expect(response.status).toBe(200);
-      const body = await response.json();
-      expect(body.success).toBe(true);
-    });
-
-    test("returns 404 for non-existent loop", async () => {
-      const response = await fetch(`${baseUrl}/api/loops/non-existent/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-
-      expect(response.status).toBe(404);
-    });
-
-    test("returns 409 for uncommitted changes", async () => {
-      // Create uncommitted changes
-      await writeFile(join(testWorkDir, "uncommitted.txt"), "uncommitted content");
-
-      // Create a loop
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Uncommitted Test Loop",
-          directory: testWorkDir,
-          prompt: "Test prompt",
-          backend: { type: "mock" },
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
-
-      // Try to start
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-
-      expect(response.status).toBe(409);
-      const body = await response.json();
-      expect(body.error).toBe("uncommitted_changes");
-      // No longer offers options - just fails with changed files list
-      expect(Array.isArray(body.changedFiles)).toBe(true);
-    });
-  });
-
   describe("POST /api/loops/:id/accept", () => {
-    test("returns error for loop that was never started (idle status)", async () => {
-      // Create a loop but don't start it - it will be in idle status
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Accept Idle Loop",
-          directory: testWorkDir,
-          prompt: "Test prompt",
-          backend: { type: "mock" },
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
-
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/accept`, {
-        method: "POST",
-      });
-
-      expect(response.status).toBe(400);
-      const body = await response.json();
-      expect(body.error).toBe("accept_failed");
-      expect(body.message).toContain("Cannot accept loop in status: idle");
-    });
+    // Note: With auto-start, loops are never in "idle" status anymore.
+    // Loops start immediately on creation and run until completion.
 
     test("returns 404 for non-existent loop", async () => {
       const response = await fetch(`${baseUrl}/api/loops/non-existent/accept`, {
@@ -419,12 +346,12 @@ describe("Loops Control API Integration", () => {
 
   describe("Pending Prompt API", () => {
     test("PUT /api/loops/:id/pending-prompt returns 409 when loop is not running", async () => {
-      // Create a loop but don't start it
+      // Create a loop - it will auto-start and complete immediately with mock backend
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Pending Prompt Test (Idle)",
+          name: "Pending Prompt Test (Completed)",
           directory: testWorkDir,
           prompt: "Test prompt",
           backend: { type: "mock" },
@@ -433,7 +360,10 @@ describe("Loops Control API Integration", () => {
       const createBody = await createResponse.json();
       const loopId = createBody.config.id;
 
-      // Try to set pending prompt on idle loop
+      // Wait for the loop to complete
+      await waitForLoopCompletion(loopId);
+
+      // Try to set pending prompt on completed loop
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -498,11 +428,12 @@ describe("Loops Control API Integration", () => {
     });
 
     test("DELETE /api/loops/:id/pending-prompt returns 409 when loop is not running", async () => {
+      // Create a loop - it will auto-start and complete immediately with mock backend
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Pending Prompt Delete Test",
+          name: "Pending Prompt Delete Test (Completed)",
           directory: testWorkDir,
           prompt: "Test prompt",
           backend: { type: "mock" },
@@ -510,6 +441,9 @@ describe("Loops Control API Integration", () => {
       });
       const createBody = await createResponse.json();
       const loopId = createBody.config.id;
+
+      // Wait for the loop to complete
+      await waitForLoopCompletion(loopId);
 
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
         method: "DELETE",

@@ -523,6 +523,12 @@ export class LoopManager {
       return { success: false, error: "Loop is not running. Pending prompts can only be set for running loops." };
     }
 
+    // Check if the loop is actually in a running state
+    const status = engine.state.status;
+    if (status !== "running" && status !== "starting") {
+      return { success: false, error: `Loop is not running (status: ${status}). Pending prompts can only be set for running loops.` };
+    }
+
     // Update the state with the pending prompt
     engine.setPendingPrompt(prompt);
 
@@ -541,6 +547,12 @@ export class LoopManager {
         return { success: false, error: "Loop not found" };
       }
       return { success: false, error: "Loop is not running. Pending prompts can only be cleared for running loops." };
+    }
+
+    // Check if the loop is actually in a running state
+    const status = engine.state.status;
+    if (status !== "running" && status !== "starting") {
+      return { success: false, error: `Loop is not running (status: ${status}). Pending prompts can only be cleared for running loops.` };
     }
 
     engine.clearPendingPrompt();

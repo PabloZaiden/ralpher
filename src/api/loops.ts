@@ -17,7 +17,6 @@ import type {
   AcceptResponse,
   PushResponse,
   ErrorResponse,
-  UncommittedChangesError,
   FileContentResponse,
 } from "../types/api";
 import { validateCreateLoopRequest } from "../types/api";
@@ -101,7 +100,31 @@ export const loopsCrudRoutes = {
           });
         }
 
-        return Response.json(loop, { status: 201 });
+        // Always start the loop immediately after creation
+        try {
+          await loopManager.startLoop(loop.config.id);
+          // Return the loop with updated state after starting
+          const updatedLoop = await loopManager.getLoop(loop.config.id);
+          return Response.json(updatedLoop ?? loop, { status: 201 });
+        } catch (startError) {
+          // Check for uncommitted changes error
+          const err = startError as Error & { code?: string; changedFiles?: string[] };
+          if (err.code === "UNCOMMITTED_CHANGES") {
+            // Return the loop but include the uncommitted changes error info
+            const response = {
+              ...loop,
+              _startError: {
+                error: "uncommitted_changes",
+                message: err.message,
+                changedFiles: err.changedFiles ?? [],
+              },
+            };
+            return Response.json(response, { status: 201 });
+          }
+          // For other start errors, still return the created loop but log the error
+          console.error("Failed to start loop after creation:", startError);
+          return Response.json(loop, { status: 201 });
+        }
       } catch (error) {
         return errorResponse("create_failed", String(error), 500);
       }
@@ -167,44 +190,10 @@ export const loopsCrudRoutes = {
 };
 
 /**
- * Loops control routes (start, stop, accept, discard).
+ * Loops control routes (accept, discard, push, etc.).
+ * Note: Start functionality is handled automatically during loop creation.
  */
 export const loopsControlRoutes = {
-  "/api/loops/:id/start": {
-    /**
-     * POST /api/loops/:id/start - Start a loop
-     * Used internally for startImmediately functionality when creating loops.
-     * Returns 409 with UncommittedChangesError if there are uncommitted changes.
-     */
-    async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      try {
-        await loopManager.startLoop(req.params.id);
-        return successResponse();
-      } catch (error) {
-        // Check for uncommitted changes error
-        const err = error as Error & { code?: string; changedFiles?: string[] };
-        if (err.code === "UNCOMMITTED_CHANGES") {
-          const response: UncommittedChangesError = {
-            error: "uncommitted_changes",
-            message: err.message,
-            changedFiles: err.changedFiles ?? [],
-          };
-          return Response.json(response, { status: 409 });
-        }
-
-        // Check for common errors
-        if (err.message?.includes("not found")) {
-          return errorResponse("not_found", "Loop not found", 404);
-        }
-        if (err.message?.includes("already running")) {
-          return errorResponse("already_running", err.message, 409);
-        }
-
-        return errorResponse("start_failed", String(error), 500);
-      }
-    },
-  },
-
   "/api/loops/:id/accept": {
     /**
      * POST /api/loops/:id/accept - Accept and merge a completed loop

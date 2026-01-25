@@ -1022,7 +1022,7 @@ export class LoopEngine {
 
     const text = `- Goal: ${goalPrompt}
     
-- Read AGENTS.md, read the document in the \`./.planning\` folder, pick up the most important set of tasks to continue with, and make sure you make a plan with coding tasks that includes updating the docs with your progress and what the next steps to work on are, at the end. Don't ask for confirmation and start working on it right away.
+- Read AGENTS.md, read the document in the \`./.planning\` folder, pick up the most important task to continue with, and make sure you make a plan with coding tasks that includes updating the docs with your progress and what the next steps to work on are, at the end. Don't ask for confirmation and start working on it right away.
 
 - If the \`./.planning\` folder does not exist or is empty, create it and add a file called \`plan.md\` where you outline your plan to achieve the goal, and a \`status.md\` file to track progress.
 
@@ -1032,7 +1032,7 @@ export class LoopEngine {
 
 - Never ask for input from the user or any questions. This will always run unattended
 
-- When you have completed all tasks, end your response with:
+- If you have completed all tasks in the plan, end your response with:
 
 <promise>COMPLETE</promise>`;
 
