@@ -285,6 +285,11 @@ export class LoopManager {
       round: engine.state.planMode?.feedbackRounds ?? 0,
       timestamp: createTimestamp(),
     });
+
+    // Run another plan iteration to process the feedback
+    engine.runPlanIteration().catch((error) => {
+      log.error(`Loop ${loopId} plan feedback iteration failed:`, String(error));
+    });
   }
 
   /**

@@ -99,7 +99,7 @@ export interface IterationResult {
   /** Whether the loop should continue */
   continue: boolean;
   /** The outcome of this iteration */
-  outcome: "continue" | "complete" | "error";
+  outcome: "continue" | "complete" | "error" | "plan_ready";
   /** The full response content from the AI */
   responseContent: string;
   /** Error message if outcome is "error" */
@@ -322,6 +322,20 @@ export class LoopEngine {
   }
 
   /**
+   * Run a single plan mode iteration.
+   * Used to process feedback or continue plan refinement.
+   * The engine must already be in planning status.
+   */
+  async runPlanIteration(): Promise<void> {
+    if (this.loop.state.status !== "planning") {
+      throw new Error(`Cannot run plan iteration in status: ${this.loop.state.status}`);
+    }
+    
+    // Run the loop (will run one iteration and return on plan_ready or error)
+    await this.runLoop();
+  }
+
+  /**
    * Clear the .planning folder contents (except .gitkeep).
    * If any tracked files were deleted, commits the changes.
    */
@@ -426,7 +440,10 @@ export class LoopEngine {
       // If allowing .planning folder changes (plan mode acceptance), check if only .planning has changes
       if (allowPlanningFolderChanges) {
         const changedFiles = await this.git.getChangedFiles(directory);
-        const onlyPlanningChanges = changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
+        // Also check for ".planning/" (with trailing slash) which is how git reports untracked directories
+        const onlyPlanningChanges = changedFiles.every(
+          (file) => file.startsWith(".planning/") || file === ".planning" || file === ".planning/"
+        );
         if (!onlyPlanningChanges) {
           throw new Error("Directory has uncommitted changes. Please commit or stash them first.");
         }
@@ -594,6 +611,45 @@ export class LoopEngine {
         return;
       }
 
+      if (iterationResult.outcome === "plan_ready") {
+        this.emitLog("info", "Plan ready - waiting for user feedback or acceptance", {
+          iteration: this.loop.state.currentIteration,
+        });
+        
+        // Read plan content from .planning/plan.md if possible
+        let planContent: string | undefined;
+        try {
+          const planFile = Bun.file(`${this.config.directory}/.planning/plan.md`);
+          if (await planFile.exists()) {
+            planContent = await planFile.text();
+          }
+        } catch {
+          // Ignore errors reading plan file
+        }
+
+        // Update plan mode state with the plan content
+        if (this.loop.state.planMode) {
+          this.updateState({
+            planMode: {
+              ...this.loop.state.planMode,
+              planContent,
+            },
+          });
+        }
+
+        // Emit plan ready event
+        this.emit({
+          type: "loop.plan.ready",
+          loopId: this.config.id,
+          planContent: planContent ?? iterationResult.responseContent,
+          timestamp: createTimestamp(),
+        });
+        
+        // Exit the loop but stay in "planning" status
+        // The loop will be resumed when user sends feedback or accepts the plan
+        return;
+      }
+
       if (iterationResult.outcome === "error") {
         const errorMessage = iterationResult.error ?? "Unknown error";
         this.emitLog("error", `Iteration failed with error: ${errorMessage}`);
@@ -748,13 +804,17 @@ export class LoopEngine {
     log.trace("[LoopEngine] runIteration: Entry point");
     const iteration = this.loop.state.currentIteration + 1;
     const startedAt = createTimestamp();
+    
+    // Check if we're in plan mode - need to check before updating status
+    const isInPlanMode = this.loop.state.status === "planning" && this.loop.state.planMode?.active;
 
     this.emitLog("info", `Starting iteration ${iteration}`, {
       maxIterations: this.config.maxIterations,
     });
 
+    // In plan mode, keep status as "planning"; otherwise set to "running"
     this.updateState({
-      status: "running",
+      status: isInPlanMode ? "planning" : "running",
       currentIteration: iteration,
       lastActivityAt: startedAt,
     });
@@ -1042,11 +1102,21 @@ export class LoopEngine {
 
       // Check for stop pattern
       this.emitLog("info", "Evaluating stop pattern...");
-      if (outcome !== "error" && this.stopDetector.matches(responseContent)) {
-        this.emitLog("info", "Stop pattern matched - task is complete");
-        outcome = "complete";
-      } else if (outcome !== "error") {
-        this.emitLog("info", "Stop pattern not matched - will continue to next iteration");
+      
+      // In plan mode, check for PLAN_READY marker instead of the normal stop pattern
+      const isInPlanMode = this.loop.state.status === "planning" && this.loop.state.planMode?.active;
+      const planReadyPattern = /<promise>PLAN_READY<\/promise>/;
+      
+      if (outcome !== "error") {
+        if (isInPlanMode && planReadyPattern.test(responseContent)) {
+          this.emitLog("info", "PLAN_READY marker detected - plan is ready for review");
+          outcome = "plan_ready";
+        } else if (this.stopDetector.matches(responseContent)) {
+          this.emitLog("info", "Stop pattern matched - task is complete");
+          outcome = "complete";
+        } else {
+          this.emitLog("info", "Stop pattern not matched - will continue to next iteration");
+        }
       }
 
       // Commit changes after iteration
@@ -1338,7 +1408,7 @@ Output ONLY the commit message, nothing else.`
    */
   private shouldContinue(): boolean {
     const status = this.loop.state.status;
-    return status === "running" || status === "starting";
+    return status === "running" || status === "starting" || status === "planning";
   }
 
   /**

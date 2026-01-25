@@ -88,7 +88,7 @@ export interface LoopIterationEndEvent {
   type: "loop.iteration.end";
   loopId: string;
   iteration: number;
-  outcome: "continue" | "complete" | "error";
+  outcome: "continue" | "complete" | "error" | "plan_ready";
   timestamp: string;
 }
 

@@ -157,7 +157,9 @@ export class GitService {
       throw new Error(`Failed to get changed files: ${result.stderr}`);
     }
 
-    const lines = result.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
+    // Use trimEnd() instead of trim() to preserve leading spaces (important for git status format)
+    // Git status format is "XY filename" where X and Y are status chars - X can be a space
+    const lines = result.stdout.replace(/\r\n/g, "\n").trimEnd().split("\n").filter(Boolean);
     return lines.map((line) => {
       // Format: "XY filename" or "XY original -> renamed"
       const match = line.match(/^..\s+(.+?)(?:\s+->\s+(.+))?$/);

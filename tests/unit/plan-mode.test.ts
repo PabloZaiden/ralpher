@@ -18,7 +18,10 @@ describe("Plan Mode - Clear Planning Folder", () => {
   let ctx: TestContext;
 
   beforeEach(async () => {
-    ctx = await setupTestContext({ initGit: true });
+    ctx = await setupTestContext({ 
+      initGit: true,
+      mockResponses: ["<promise>PLAN_READY</promise>"],
+    });
   });
 
   afterEach(async () => {
@@ -186,7 +189,17 @@ describe("Plan Mode - State Transitions", () => {
   let ctx: TestContext;
 
   beforeEach(async () => {
-    ctx = await setupTestContext({ initGit: true });
+    ctx = await setupTestContext({ 
+      initGit: true,
+      // Need multiple PLAN_READY responses for feedback tests, followed by COMPLETE for acceptance
+      mockResponses: [
+        "<promise>PLAN_READY</promise>",  // Initial plan creation
+        "<promise>PLAN_READY</promise>",  // After first feedback
+        "<promise>PLAN_READY</promise>",  // After second feedback
+        "<promise>PLAN_READY</promise>",  // After third feedback
+        "<promise>COMPLETE</promise>",    // After acceptance (execution complete)
+      ],
+    });
   });
 
   afterEach(async () => {

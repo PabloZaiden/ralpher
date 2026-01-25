@@ -270,7 +270,7 @@ export interface IterationSummary {
   /** Number of tool calls in this iteration */
   toolCallCount: number;
   /** Outcome of the iteration */
-  outcome: "continue" | "complete" | "error";
+  outcome: "continue" | "complete" | "error" | "plan_ready";
 }
 
 /**
