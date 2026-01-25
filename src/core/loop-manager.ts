@@ -266,8 +266,19 @@ export class LoopManager {
       engine.state.planMode.feedbackRounds += 1;
     }
 
+    // Persist state update
+    await updateLoopState(loopId, engine.state);
+
     // Set the feedback as a pending prompt
     engine.setPendingPrompt(feedback);
+
+    // Emit feedback event
+    this.emitter.emit({
+      type: "loop.plan.feedback",
+      loopId,
+      round: engine.state.planMode?.feedbackRounds ?? 0,
+      timestamp: createTimestamp(),
+    });
   }
 
   /**
@@ -318,7 +329,14 @@ Follow the standard loop execution flow:
 
     engine.setPendingPrompt(executionPrompt);
 
-    // Emit event
+    // Emit plan accepted event
+    this.emitter.emit({
+      type: "loop.plan.accepted",
+      loopId,
+      timestamp: createTimestamp(),
+    });
+
+    // Emit loop started event
     this.emitter.emit({
       type: "loop.started",
       loopId,
@@ -335,6 +353,13 @@ Follow the standard loop execution flow:
     if (this.engines.has(loopId)) {
       await this.stopLoop(loopId, "Plan discarded");
     }
+
+    // Emit plan discarded event
+    this.emitter.emit({
+      type: "loop.plan.discarded",
+      loopId,
+      timestamp: createTimestamp(),
+    });
 
     // Delete the loop
     return this.deleteLoop(loopId);

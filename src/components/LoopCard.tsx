@@ -53,19 +53,28 @@ export function LoopCard({
 }: LoopCardProps) {
   const { config, state } = loop;
   const isActive = isLoopActive(state.status);
+  const isPlanning = state.status === "planning";
 
   return (
     <Card
       clickable={!!onClick}
       onClick={onClick}
-      className={`relative ${isActive ? "ring-2 ring-blue-500" : ""}`}
+      className={`relative ${isActive ? "ring-2 ring-blue-500" : ""} ${isPlanning ? "ring-2 ring-cyan-500" : ""}`}
     >
       {/* Status indicator */}
-      {isActive && (
+      {isActive && !isPlanning && (
         <div className="absolute -top-1 -right-1">
           <span className="relative flex h-3 w-3">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
+          </span>
+        </div>
+      )}
+      {isPlanning && (
+        <div className="absolute -top-1 -right-1">
+          <span className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500" />
           </span>
         </div>
       )}
@@ -119,8 +128,21 @@ export function LoopCard({
 
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
-        {/* Final state - only show Purge */}
-        {isFinalState(state.status) ? (
+        {/* Planning state - show Review Plan button */}
+        {isPlanning ? (
+          <Button
+            size="sm"
+            variant="primary"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClick?.();
+            }}
+            className="bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-700"
+          >
+            Review Plan
+          </Button>
+        ) : isFinalState(state.status) ? (
+          /* Final state - only show Purge */
           onPurge && (
             <Button
               size="sm"
