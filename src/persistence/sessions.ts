@@ -55,6 +55,7 @@ export async function loadSessionMappings(backendName: string): Promise<SessionM
 /**
  * Save session mappings for a backend.
  * Replaces all existing mappings for the backend.
+ * Uses a transaction to ensure atomicity of DELETE + INSERTs.
  */
 export async function saveSessionMappings(
   backendName: string,
@@ -62,25 +63,28 @@ export async function saveSessionMappings(
 ): Promise<void> {
   const db = getDatabase();
   
-  // Delete existing mappings for this backend
   const deleteStmt = db.prepare("DELETE FROM sessions WHERE backend_name = ?");
-  deleteStmt.run(backendName);
-  
-  // Insert new mappings
   const insertStmt = db.prepare(`
     INSERT INTO sessions (backend_name, loop_id, session_id, server_url, created_at)
     VALUES (?, ?, ?, ?, ?)
   `);
   
-  for (const [loopId, mapping] of Object.entries(mappings)) {
-    insertStmt.run(
-      backendName,
-      loopId,
-      mapping.sessionId,
-      mapping.serverUrl ?? null,
-      mapping.createdAt
-    );
-  }
+  // Wrap DELETE + INSERTs in a transaction to ensure atomicity
+  const saveAll = db.transaction(() => {
+    deleteStmt.run(backendName);
+    
+    for (const [loopId, mapping] of Object.entries(mappings)) {
+      insertStmt.run(
+        backendName,
+        loopId,
+        mapping.sessionId,
+        mapping.serverUrl ?? null,
+        mapping.createdAt
+      );
+    }
+  });
+  
+  saveAll();
 }
 
 /**

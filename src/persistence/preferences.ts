@@ -41,15 +41,6 @@ function setPreference(key: string, value: string): void {
 }
 
 /**
- * Delete a preference by key.
- */
-function deletePreference(key: string): void {
-  const db = getDatabase();
-  const stmt = db.prepare("DELETE FROM preferences WHERE key = ?");
-  stmt.run(key);
-}
-
-/**
  * Load user preferences from database.
  * Returns default preferences if no preferences are stored.
  */
@@ -84,25 +75,36 @@ export async function loadPreferences(): Promise<UserPreferences> {
 
 /**
  * Save user preferences to database.
+ * Uses a transaction to ensure atomicity of multiple preference updates.
  */
 export async function savePreferences(prefs: UserPreferences): Promise<void> {
-  if (prefs.lastModel) {
-    setPreference("lastModel", JSON.stringify(prefs.lastModel));
-  } else {
-    deletePreference("lastModel");
-  }
+  const db = getDatabase();
   
-  if (prefs.lastDirectory) {
-    setPreference("lastDirectory", prefs.lastDirectory);
-  } else {
-    deletePreference("lastDirectory");
-  }
+  const insertStmt = db.prepare("INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)");
+  const deleteStmt = db.prepare("DELETE FROM preferences WHERE key = ?");
   
-  if (prefs.serverSettings) {
-    setPreference("serverSettings", JSON.stringify(prefs.serverSettings));
-  } else {
-    deletePreference("serverSettings");
-  }
+  // Wrap all preference updates in a transaction
+  const saveAll = db.transaction(() => {
+    if (prefs.lastModel) {
+      insertStmt.run("lastModel", JSON.stringify(prefs.lastModel));
+    } else {
+      deleteStmt.run("lastModel");
+    }
+    
+    if (prefs.lastDirectory) {
+      insertStmt.run("lastDirectory", prefs.lastDirectory);
+    } else {
+      deleteStmt.run("lastDirectory");
+    }
+    
+    if (prefs.serverSettings) {
+      insertStmt.run("serverSettings", JSON.stringify(prefs.serverSettings));
+    } else {
+      deleteStmt.run("serverSettings");
+    }
+  });
+  
+  saveAll();
 }
 
 /**

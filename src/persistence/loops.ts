@@ -224,29 +224,74 @@ export async function loopExists(loopId: string): Promise<boolean> {
 
 /**
  * Update only the state portion of a loop.
- * More efficient than saving the entire loop when only state changes.
+ * Uses a transaction to ensure atomicity of SELECT + UPDATE.
  */
 export async function updateLoopState(loopId: string, state: LoopState): Promise<boolean> {
-  const loop = await loadLoop(loopId);
-  if (!loop) {
-    return false;
-  }
-
-  loop.state = state;
-  await saveLoop(loop);
-  return true;
+  const db = getDatabase();
+  
+  // Prepare statements outside transaction
+  const selectStmt = db.prepare("SELECT * FROM loops WHERE id = ?");
+  
+  // Use transaction to ensure atomic read-modify-write
+  const updateInTransaction = db.transaction(() => {
+    const row = selectStmt.get(loopId) as Record<string, unknown> | null;
+    if (!row) {
+      return false;
+    }
+    
+    const loop = rowToLoop(row);
+    loop.state = state;
+    
+    const newRow = loopToRow(loop);
+    const columns = Object.keys(newRow);
+    const placeholders = columns.map(() => "?").join(", ");
+    const values = Object.values(newRow) as (string | number | null | Uint8Array)[];
+    
+    const insertStmt = db.prepare(`
+      INSERT OR REPLACE INTO loops (${columns.join(", ")})
+      VALUES (${placeholders})
+    `);
+    insertStmt.run(...values);
+    
+    return true;
+  });
+  
+  return updateInTransaction();
 }
 
 /**
  * Update only the config portion of a loop.
+ * Uses a transaction to ensure atomicity of SELECT + UPDATE.
  */
 export async function updateLoopConfig(loopId: string, config: LoopConfig): Promise<boolean> {
-  const loop = await loadLoop(loopId);
-  if (!loop) {
-    return false;
-  }
-
-  loop.config = config;
-  await saveLoop(loop);
-  return true;
+  const db = getDatabase();
+  
+  // Prepare statements outside transaction
+  const selectStmt = db.prepare("SELECT * FROM loops WHERE id = ?");
+  
+  // Use transaction to ensure atomic read-modify-write
+  const updateInTransaction = db.transaction(() => {
+    const row = selectStmt.get(loopId) as Record<string, unknown> | null;
+    if (!row) {
+      return false;
+    }
+    
+    const loop = rowToLoop(row);
+    loop.config = config;
+    
+    const newRow = loopToRow(loop);
+    const columns = Object.keys(newRow);
+    const placeholders = columns.map(() => "?").join(", ");
+    const values = Object.values(newRow) as (string | number | null | Uint8Array)[];
+    
+    const insertStmt = db.prepare(`
+      INSERT OR REPLACE INTO loops (${columns.join(", ")})
+      VALUES (${placeholders})
+    `);
+    insertStmt.run(...values);
+    
+    return true;
+  });
+  
+  return updateInTransaction();
 }
