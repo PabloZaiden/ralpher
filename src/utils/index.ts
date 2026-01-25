@@ -4,8 +4,6 @@
 
 export {
   getStatusLabel,
-  canStart,
-  canStop,
   canAccept,
   isFinalState,
   isLoopActive,

@@ -17,7 +17,6 @@ import type {
   AcceptResponse,
   PushResponse,
   ErrorResponse,
-  UncommittedChangesError,
   FileContentResponse,
 } from "../types/api";
 import { validateCreateLoopRequest } from "../types/api";
@@ -75,6 +74,28 @@ export const loopsCrudRoutes = {
         return errorResponse("validation_error", validationError);
       }
 
+      // Preflight check: verify no uncommitted changes before creating the loop
+      // This prevents creating loops that can never be started
+      try {
+        const executor = await backendManager.getCommandExecutorAsync(body.directory);
+        const git = GitService.withExecutor(executor);
+        const hasChanges = await git.hasUncommittedChanges(body.directory);
+
+        if (hasChanges) {
+          const changedFiles = await git.getChangedFiles(body.directory);
+          return Response.json(
+            {
+              error: "uncommitted_changes",
+              message: "Directory has uncommitted changes. Please commit or stash your changes before creating a loop.",
+              changedFiles,
+            },
+            { status: 409 }
+          );
+        }
+      } catch (preflightError) {
+        return errorResponse("preflight_failed", `Failed to check for uncommitted changes: ${String(preflightError)}`, 500);
+      }
+
       try {
         const loop = await loopManager.createLoop({
           name: body.name,
@@ -101,7 +122,22 @@ export const loopsCrudRoutes = {
           });
         }
 
-        return Response.json(loop, { status: 201 });
+        // Always start the loop immediately after creation
+        // Since we pre-checked for uncommitted changes, this should succeed
+        try {
+          await loopManager.startLoop(loop.config.id);
+          // Return the loop with updated state after starting
+          const updatedLoop = await loopManager.getLoop(loop.config.id);
+          return Response.json(updatedLoop ?? loop, { status: 201 });
+        } catch (startError) {
+          // If start fails for any reason, delete the loop to avoid orphaned idle loops
+          try {
+            await loopManager.deleteLoop(loop.config.id);
+          } catch {
+            // Ignore delete errors
+          }
+          return errorResponse("start_failed", `Loop created but failed to start: ${String(startError)}`, 500);
+        }
       } catch (error) {
         return errorResponse("create_failed", String(error), 500);
       }
@@ -167,61 +203,10 @@ export const loopsCrudRoutes = {
 };
 
 /**
- * Loops control routes (start, stop, accept, discard).
+ * Loops control routes (accept, discard, push, etc.).
+ * Note: Start functionality is handled automatically during loop creation.
  */
 export const loopsControlRoutes = {
-  "/api/loops/:id/start": {
-    /**
-     * POST /api/loops/:id/start - Start a loop
-     * Returns 409 with UncommittedChangesError if there are uncommitted changes.
-     */
-    async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      try {
-        await loopManager.startLoop(req.params.id);
-        return successResponse();
-      } catch (error) {
-        // Check for uncommitted changes error
-        const err = error as Error & { code?: string; changedFiles?: string[] };
-        if (err.code === "UNCOMMITTED_CHANGES") {
-          const response: UncommittedChangesError = {
-            error: "uncommitted_changes",
-            message: err.message,
-            changedFiles: err.changedFiles ?? [],
-          };
-          return Response.json(response, { status: 409 });
-        }
-
-        // Check for common errors
-        if (err.message?.includes("not found")) {
-          return errorResponse("not_found", "Loop not found", 404);
-        }
-        if (err.message?.includes("already running")) {
-          return errorResponse("already_running", err.message, 409);
-        }
-
-        return errorResponse("start_failed", String(error), 500);
-      }
-    },
-  },
-
-  "/api/loops/:id/stop": {
-    /**
-     * POST /api/loops/:id/stop - Stop a loop
-     */
-    async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      try {
-        await loopManager.stopLoop(req.params.id);
-        return successResponse();
-      } catch (error) {
-        const message = String(error);
-        if (message.includes("not running")) {
-          return errorResponse("not_running", "Loop is not running", 409);
-        }
-        return errorResponse("stop_failed", message, 500);
-      }
-    },
-  },
-
   "/api/loops/:id/accept": {
     /**
      * POST /api/loops/:id/accept - Accept and merge a completed loop

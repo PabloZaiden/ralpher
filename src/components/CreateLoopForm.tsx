@@ -65,7 +65,6 @@ export function CreateLoopForm({
   const [submitting, setSubmitting] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedBranch, setSelectedBranch] = useState<string>("");
-  const [startImmediately, setStartImmediately] = useState(true);
 
   // Reset selected branch when current branch changes (directory changed)
   useEffect(() => {
@@ -121,7 +120,6 @@ export function CreateLoopForm({
       name: name.trim(),
       directory: directory.trim(),
       prompt: prompt.trim(),
-      startImmediately,
       // Backend settings are now global (not per-loop)
       // Git is always enabled - no toggle exposed to users
     };
@@ -489,18 +487,7 @@ export function CreateLoopForm({
       )}
 
       {/* Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={startImmediately}
-            onChange={(e) => setStartImmediately(e.target.checked)}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
-          />
-          <span className="text-sm text-gray-700 dark:text-gray-300">
-            Start immediately
-          </span>
-        </label>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
         <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
           <Button
             type="button"

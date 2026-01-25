@@ -10,12 +10,115 @@ import { join } from "path";
 import { serve, type Server } from "bun";
 import { apiRoutes } from "../../src/api";
 import { ensureDataDirectories } from "../../src/persistence/paths";
+import { backendManager } from "../../src/core/backend-manager";
+import { TestCommandExecutor } from "../mocks/mock-executor";
+import type { LoopBackend } from "../../src/core/loop-engine";
+import type {
+  AgentSession,
+  AgentResponse,
+  AgentEvent,
+  BackendConnectionConfig,
+  CreateSessionOptions,
+  PromptInput,
+} from "../../src/backends/types";
+import { createEventStream, type EventStream } from "../../src/utils/event-stream";
 
 describe("Loops CRUD API Integration", () => {
   let testDataDir: string;
   let testWorkDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
+
+  // Create a mock backend that completes immediately
+  function createMockBackend(): LoopBackend {
+    let connected = false;
+    let pendingPrompt = false;
+    const sessions = new Map<string, AgentSession>();
+
+    return {
+      async connect(_config: BackendConnectionConfig): Promise<void> {
+        connected = true;
+      },
+
+      async disconnect(): Promise<void> {
+        connected = false;
+      },
+
+      isConnected(): boolean {
+        return connected;
+      },
+
+      async createSession(options: CreateSessionOptions): Promise<AgentSession> {
+        const session: AgentSession = {
+          id: `session-${Date.now()}`,
+          title: options.title,
+          createdAt: new Date().toISOString(),
+        };
+        sessions.set(session.id, session);
+        return session;
+      },
+
+      async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
+        return {
+          id: `msg-${Date.now()}`,
+          content: "<promise>COMPLETE</promise>",
+          parts: [{ type: "text", text: "<promise>COMPLETE</promise>" }],
+        };
+      },
+
+      async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
+        pendingPrompt = true;
+      },
+
+      async abortSession(_sessionId: string): Promise<void> {
+        // Not used in tests
+      },
+
+      async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
+        const { stream, push, end } = createEventStream<AgentEvent>();
+
+        (async () => {
+          let attempts = 0;
+          while (!pendingPrompt && attempts < 100) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            attempts++;
+          }
+          pendingPrompt = false;
+
+          push({ type: "message.start", messageId: `msg-${Date.now()}` });
+          push({ type: "message.delta", content: "<promise>COMPLETE</promise>" });
+          push({ type: "message.complete", content: "<promise>COMPLETE</promise>" });
+          end();
+        })();
+
+        return stream;
+      },
+
+      async replyToPermission(_requestId: string, _response: string): Promise<void> {
+        // Not used in tests
+      },
+
+      async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
+        // Not used in tests
+      },
+    };
+  }
+
+  // Helper function to poll for loop completion
+  async function waitForLoopCompletion(loopId: string, timeoutMs = 5000): Promise<void> {
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.state?.status === "completed") {
+          return;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`Loop ${loopId} did not complete within ${timeoutMs}ms`);
+  }
 
   beforeAll(async () => {
     // Create temp directories
@@ -27,6 +130,18 @@ describe("Loops CRUD API Integration", () => {
 
     // Ensure directories exist
     await ensureDataDirectories();
+
+    // Initialize git repo in test work directory
+    await Bun.$`git init ${testWorkDir}`.quiet();
+    await Bun.$`git -C ${testWorkDir} config user.email "test@test.com"`.quiet();
+    await Bun.$`git -C ${testWorkDir} config user.name "Test User"`.quiet();
+    await Bun.$`touch ${testWorkDir}/README.md`.quiet();
+    await Bun.$`git -C ${testWorkDir} add .`.quiet();
+    await Bun.$`git -C ${testWorkDir} commit -m "Initial commit"`.quiet();
+
+    // Set up backend manager with test executor factory
+    backendManager.setBackendForTesting(createMockBackend());
+    backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
 
     // Start test server on random port
     server = serve({
@@ -41,6 +156,9 @@ describe("Loops CRUD API Integration", () => {
   afterAll(async () => {
     // Stop server
     server.stop();
+
+    // Reset backend manager
+    backendManager.resetForTesting();
 
     // Cleanup temp directories
     await rm(testDataDir, { recursive: true, force: true });
@@ -79,7 +197,8 @@ describe("Loops CRUD API Integration", () => {
       expect(body.config.directory).toBe(testWorkDir);
       expect(body.config.prompt).toBe("Build something");
       expect(body.config.id).toBeDefined();
-      expect(body.state.status).toBe("idle");
+      // Loops are auto-started on creation, so status should not be idle
+      expect(["starting", "running", "completed"]).toContain(body.state.status);
     });
 
     test("creates a loop with optional fields", async () => {
@@ -204,6 +323,9 @@ describe("Loops CRUD API Integration", () => {
       });
       const createBody = await createResponse.json();
       const loopId = createBody.config.id;
+
+      // Wait for the loop to complete (loops auto-start now)
+      await waitForLoopCompletion(loopId);
 
       // Then update it
       const response = await fetch(`${baseUrl}/api/loops/${loopId}`, {

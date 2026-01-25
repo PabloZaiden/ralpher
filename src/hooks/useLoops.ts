@@ -4,20 +4,24 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest } from "../types";
+import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest, UncommittedChangesError } from "../types";
 import { useGlobalEvents } from "./useWebSocket";
 import {
-  startLoopApi,
-  stopLoopApi,
   acceptLoopApi,
   pushLoopApi,
   discardLoopApi,
   deleteLoopApi,
   purgeLoopApi,
-  type StartLoopResult,
   type AcceptLoopResult,
   type PushLoopResult,
 } from "./loopActions";
+
+export interface CreateLoopResult {
+  /** The created loop, or null if creation failed */
+  loop: Loop | null;
+  /** Error if the loop was created but failed to start (e.g., uncommitted changes) */
+  startError?: UncommittedChangesError;
+}
 
 export interface UseLoopsResult {
   /** Array of all loops */
@@ -30,16 +34,12 @@ export interface UseLoopsResult {
   connectionStatus: "connecting" | "open" | "closed" | "error";
   /** Refresh loops from the server */
   refresh: () => Promise<void>;
-  /** Create a new loop */
-  createLoop: (request: CreateLoopRequest) => Promise<Loop | null>;
+  /** Create a new loop (loops are always started immediately) */
+  createLoop: (request: CreateLoopRequest) => Promise<CreateLoopResult>;
   /** Update an existing loop */
   updateLoop: (id: string, request: UpdateLoopRequest) => Promise<Loop | null>;
   /** Delete a loop */
   deleteLoop: (id: string) => Promise<boolean>;
-  /** Start a loop */
-  startLoop: (id: string) => Promise<StartLoopResult>;
-  /** Stop a loop */
-  stopLoop: (id: string) => Promise<boolean>;
   /** Accept (merge) a loop's changes */
   acceptLoop: (id: string) => Promise<AcceptLoopResult>;
   /** Push a loop's branch to remote */
@@ -137,24 +137,36 @@ export function useLoops(): UseLoopsResult {
     }
   }, []);
 
-  // Create a new loop
-  const createLoop = useCallback(async (request: CreateLoopRequest): Promise<Loop | null> => {
+  // Create a new loop (loops are always started immediately by the API)
+  const createLoop = useCallback(async (request: CreateLoopRequest): Promise<CreateLoopResult> => {
     try {
       const response = await fetch("/api/loops", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
       });
+      
+      // Handle uncommitted changes error (409)
+      if (response.status === 409) {
+        const errorData = await response.json() as UncommittedChangesError;
+        return {
+          loop: null,
+          startError: errorData,
+        };
+      }
+      
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to create loop");
       }
+      
       const loop = (await response.json()) as Loop;
       setLoops((prev) => [...prev, loop]);
-      return loop;
+      
+      return { loop };
     } catch (err) {
       setError(String(err));
-      return null;
+      return { loop: null };
     }
   }, []);
 
@@ -192,35 +204,6 @@ export function useLoops(): UseLoopsResult {
       return false;
     }
   }, []);
-
-  // Start a loop
-  const startLoop = useCallback(
-    async (id: string): Promise<StartLoopResult> => {
-      try {
-        const result = await startLoopApi(id);
-        if (result.success) {
-          await refreshLoop(id);
-        }
-        return result;
-      } catch (err) {
-        setError(String(err));
-        return { success: false };
-      }
-    },
-    [refreshLoop]
-  );
-
-  // Stop a loop
-  const stopLoop = useCallback(async (id: string): Promise<boolean> => {
-    try {
-      await stopLoopApi(id);
-      await refreshLoop(id);
-      return true;
-    } catch (err) {
-      setError(String(err));
-      return false;
-    }
-  }, [refreshLoop]);
 
   // Accept a loop's changes
   const acceptLoop = useCallback(async (id: string): Promise<AcceptLoopResult> => {
@@ -292,8 +275,6 @@ export function useLoops(): UseLoopsResult {
     createLoop,
     updateLoop,
     deleteLoop,
-    startLoop,
-    stopLoop,
     acceptLoop,
     pushLoop,
     discardLoop,

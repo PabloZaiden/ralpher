@@ -23,6 +23,7 @@ export interface ModelInfo {
 
 /**
  * Request to create a new loop.
+ * Note: Loops are always started immediately after creation.
  */
 export interface CreateLoopRequest {
   /** Human-readable name */
@@ -45,8 +46,6 @@ export interface CreateLoopRequest {
   git?: Partial<GitConfig>;
   /** Base branch to create the loop from (default: current branch) */
   baseBranch?: string;
-  /** Start the loop immediately after creation (default: true) */
-  startImmediately?: boolean;
 }
 
 /**
@@ -174,6 +173,13 @@ export interface FileContentResponse {
  * Type for API responses that return a loop.
  */
 export type LoopResponse = Loop;
+
+/**
+ * Response from creating a loop.
+ * On success, returns the created loop (which is immediately started).
+ * On failure due to uncommitted changes, returns a 409 error response instead.
+ */
+export type CreateLoopResponse = Loop;
 
 /**
  * Type for API responses that return multiple loops.

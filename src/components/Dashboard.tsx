@@ -30,8 +30,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     error,
     connectionStatus,
     createLoop,
-    startLoop,
-    stopLoop,
     deleteLoop,
     acceptLoop,
     pushLoop,
@@ -207,18 +205,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     setCurrentBranch("");
   }, []);
 
-  // Handle start with uncommitted changes handling
-  async function handleStart(loopId: string) {
-    const result = await startLoop(loopId);
-    if (result.uncommittedError) {
-      setUncommittedModal({
-        open: true,
-        loopId,
-        error: result.uncommittedError,
-      });
-    }
-  }
-
   // Handle delete
   async function handleDelete() {
     if (!deleteModal.loopId) return;
@@ -369,7 +355,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   key={loop.config.id}
                   loop={loop}
                   onClick={() => onSelectLoop?.(loop.config.id)}
-                  onStop={() => stopLoop(loop.config.id)}
                   onDelete={() =>
                     setDeleteModal({ open: true, loopId: loop.config.id })
                   }
@@ -413,8 +398,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   key={loop.config.id}
                   loop={loop}
                   onClick={() => onSelectLoop?.(loop.config.id)}
-                  onStart={() => handleStart(loop.config.id)}
-                  onStop={() => stopLoop(loop.config.id)}
                   onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
                   onDelete={() =>
                     setDeleteModal({ open: true, loopId: loop.config.id })
@@ -455,24 +438,20 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       >
         <CreateLoopForm
           onSubmit={async (request) => {
-            const loop = await createLoop(request);
-            if (loop) {
+            const result = await createLoop(request);
+            if (result.loop) {
               handleCloseCreateModal();
               // Refresh last model in case it changed
               if (request.model) {
                 setLastModel(request.model);
               }
-              // Start the loop immediately if requested (default: true)
-              if (request.startImmediately !== false) {
-                const result = await startLoop(loop.config.id);
-                // If there are uncommitted changes, show error modal
-                if (result.uncommittedError) {
-                  setUncommittedModal({
-                    open: true,
-                    loopId: loop.config.id,
-                    error: result.uncommittedError,
-                  });
-                }
+              // If there are uncommitted changes, show error modal
+              if (result.startError) {
+                setUncommittedModal({
+                  open: true,
+                  loopId: result.loop.config.id,
+                  error: result.startError,
+                });
               }
             }
           }}
