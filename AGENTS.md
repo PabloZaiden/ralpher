@@ -169,7 +169,7 @@ const result = await Bun.$`git status`.text();
 ## Testing
 
 Always run `bun run build` before running tests, to make sure there are no build errors.
-Use `bun run test` to run all the tests.
+Use `bun run test` to run all the tests. Don't do `bun test` directly, since the script cleans a lot of the logs that add noise to the tests.
 
 Always run `bun run test` when you think you are done making changes.
 
@@ -227,3 +227,61 @@ Common fixes:
 2. **Unused parameters**: Prefix with `_` (e.g., `_unused`)
 3. **Index signature access**: Use `obj["prop"]` instead of `obj.prop` for `Record<string, unknown>` and `process.env`
 4. **Type-only imports**: Use `import type { X }` for types not used as values
+
+## Database Migrations
+
+The project uses a migration system to evolve the database schema over time while maintaining backward compatibility with existing databases.
+
+### How Migrations Work
+
+1. Migrations are defined in `src/persistence/migrations/index.ts`
+2. Each migration has a `version` (sequential integer), `name`, and `up` function
+3. The `schema_migrations` table tracks which migrations have been applied
+4. Migrations run automatically during database initialization
+5. Migrations are idempotent - they check if changes already exist before applying
+
+### Adding a New Migration
+
+When you need to add a new column, table, or modify the schema:
+
+1. **Add the migration** to the `migrations` array in `src/persistence/migrations/index.ts`:
+
+```typescript
+{
+  version: 2, // Next sequential number
+  name: "add_new_column",
+  up: (db) => {
+    // Check if column already exists (for idempotency)
+    const columns = getTableColumns(db, "loops");
+    if (columns.includes("new_column")) {
+      return;
+    }
+    db.run("ALTER TABLE loops ADD COLUMN new_column TEXT");
+  },
+}
+```
+
+2. **Do NOT modify the base schema** in `src/persistence/database.ts`. New columns/tables should only be added via migrations to ensure existing databases are properly upgraded.
+
+3. **Add a test** in `tests/unit/migrations.test.ts` to verify:
+   - The migration applies correctly to old databases (without the new column)
+   - The migration is idempotent (doesn't fail if run twice)
+   - The migration handles fresh databases (where column might already exist)
+
+### Migration Guidelines
+
+- **Never modify existing migrations** - only add new ones
+- **Always check if changes already exist** before applying (idempotent)
+- **Use sequential version numbers** - check the last migration's version
+- **Use descriptive snake_case names** - e.g., `add_user_preferences`
+- **Test with both old and new databases**
+
+### Resetting the Database
+
+If the database gets corrupted or you need a fresh start:
+
+1. **Via UI**: Server Settings modal -> "Reset all settings" button
+2. **Via API**: `POST /api/settings/reset-all`
+3. **Manual**: Delete `data/ralpher.db` and related WAL files, then restart
+
+This will delete all loops, sessions, and preferences. Use with caution.

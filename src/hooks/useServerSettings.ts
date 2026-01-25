@@ -19,12 +19,16 @@ export interface UseServerSettingsResult {
   saving: boolean;
   /** Whether a test operation is in progress */
   testing: boolean;
+  /** Whether a reset operation is in progress */
+  resetting: boolean;
   /** Refresh settings from the server */
   refresh: () => Promise<void>;
   /** Update server settings */
   updateSettings: (settings: ServerSettings) => Promise<boolean>;
   /** Test connection with provided settings */
   testConnection: (settings: ServerSettings, directory?: string) => Promise<{ success: boolean; error?: string }>;
+  /** Reset all settings (delete database and reinitialize) */
+  resetAll: () => Promise<boolean>;
 }
 
 /**
@@ -37,6 +41,7 @@ export function useServerSettings(): UseServerSettingsResult {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   // Fetch current settings
   const fetchSettings = useCallback(async () => {
@@ -131,6 +136,30 @@ export function useServerSettings(): UseServerSettingsResult {
     []
   );
 
+  // Reset all settings (delete database and reinitialize)
+  const resetAll = useCallback(async (): Promise<boolean> => {
+    try {
+      setResetting(true);
+      setError(null);
+
+      const response = await fetch("/api/settings/reset-all", {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to reset settings");
+      }
+
+      return true;
+    } catch (err) {
+      setError(String(err));
+      return false;
+    } finally {
+      setResetting(false);
+    }
+  }, []);
+
   // Initial fetch
   useEffect(() => {
     refresh();
@@ -143,8 +172,10 @@ export function useServerSettings(): UseServerSettingsResult {
     error,
     saving,
     testing,
+    resetting,
     refresh,
     updateSettings,
     testConnection,
+    resetAll,
   };
 }
