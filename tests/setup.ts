@@ -10,6 +10,7 @@ import { GitService } from "../src/core/git-service";
 import { LoopManager } from "../src/core/loop-manager";
 import { backendManager } from "../src/core/backend-manager";
 import { ensureDataDirectories } from "../src/persistence/paths";
+import { closeDatabase } from "../src/persistence/database";
 import { TestCommandExecutor } from "./mocks/mock-executor";
 import { MockOpenCodeBackend } from "./mocks/mock-backend";
 import type { LoopEvent } from "../src/types/events";
@@ -129,6 +130,9 @@ export async function teardownTestContext(ctx: TestContext): Promise<void> {
 
   // Reset global backend manager
   backendManager.resetForTesting();
+
+  // Close the database connection
+  closeDatabase();
 
   // Clean up env
   delete process.env["RALPHER_DATA_DIR"];

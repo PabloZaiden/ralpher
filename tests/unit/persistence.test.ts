@@ -18,6 +18,10 @@ describe("Persistence", () => {
   });
 
   afterEach(async () => {
+    // Close the database before cleaning up
+    const { closeDatabase } = await import("../../src/persistence/database");
+    closeDatabase();
+
     // Clean up
     delete process.env["RALPHER_DATA_DIR"];
     await rm(testDataDir, { recursive: true });
@@ -30,17 +34,12 @@ describe("Persistence", () => {
       expect(getDataDir()).toBe(testDataDir);
     });
 
-    test("getLoopsDir returns correct path", async () => {
-      const { getLoopsDir } = await import("../../src/persistence/paths");
-      expect(getLoopsDir()).toBe(join(testDataDir, "loops"));
+    test("getDatabasePath returns correct path", async () => {
+      const { getDatabasePath } = await import("../../src/persistence/paths");
+      expect(getDatabasePath()).toBe(join(testDataDir, "ralpher.db"));
     });
 
-    test("getSessionsDir returns correct path", async () => {
-      const { getSessionsDir } = await import("../../src/persistence/paths");
-      expect(getSessionsDir()).toBe(join(testDataDir, "sessions"));
-    });
-
-    test("ensureDataDirectories creates directories", async () => {
+    test("ensureDataDirectories creates database", async () => {
       const { ensureDataDirectories, isDataDirectoryReady } = await import("../../src/persistence/paths");
 
       await ensureDataDirectories();
@@ -65,7 +64,6 @@ describe("Persistence", () => {
           prompt: "Do something",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          backend: { type: "opencode" as const, mode: "spawn" as const },
           stopPattern: "<promise>COMPLETE</promise>$",
           git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
         },
@@ -95,7 +93,7 @@ describe("Persistence", () => {
       expect(loaded).toBeNull();
     });
 
-    test("deleteLoop removes the loop file", async () => {
+    test("deleteLoop removes the loop", async () => {
       const { ensureDataDirectories } = await import("../../src/persistence/paths");
       const { saveLoop, loadLoop, deleteLoop } = await import("../../src/persistence/loops");
 
@@ -109,7 +107,6 @@ describe("Persistence", () => {
           prompt: "Test",
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          backend: { type: "opencode" as const, mode: "spawn" as const },
           stopPattern: "<promise>COMPLETE</promise>$",
           git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
         },
@@ -144,7 +141,6 @@ describe("Persistence", () => {
           prompt: "Test 1",
           createdAt: "2024-01-01T00:00:00Z",
           updatedAt: "2024-01-01T00:00:00Z",
-          backend: { type: "opencode" as const, mode: "spawn" as const },
           stopPattern: "<promise>COMPLETE</promise>$",
           git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
         },
@@ -164,7 +160,6 @@ describe("Persistence", () => {
           prompt: "Test 2",
           createdAt: "2024-01-02T00:00:00Z",
           updatedAt: "2024-01-02T00:00:00Z",
-          backend: { type: "opencode" as const, mode: "spawn" as const },
           stopPattern: "<promise>COMPLETE</promise>$",
           git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
         },
