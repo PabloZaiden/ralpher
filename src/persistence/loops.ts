@@ -216,9 +216,11 @@ function rowToLoop(row: Record<string, unknown>): Loop {
   if (row["pending_prompt"] !== null) {
     state.pendingPrompt = row["pending_prompt"] as string;
   }
-  if (row["plan_mode_active"] === 1) {
+  // Reconstruct planMode if any plan mode field is set (not just when active)
+  if (row["plan_mode_active"] !== null || row["planning_folder_cleared"] === 1 || 
+      row["plan_session_id"] !== null || row["plan_feedback_rounds"] !== null) {
     state.planMode = {
-      active: true,
+      active: row["plan_mode_active"] === 1,
       planSessionId: row["plan_session_id"] as string | undefined,
       planServerUrl: row["plan_server_url"] as string | undefined,
       feedbackRounds: (row["plan_feedback_rounds"] as number) ?? 0,

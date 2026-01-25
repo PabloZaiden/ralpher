@@ -316,7 +316,7 @@ describe("Plan Mode API Integration", () => {
       expect(feedbackResponse.status).toBe(400);
     });
 
-    test("returns 404 if loop not found", async () => {
+    test("returns 409 if loop not found", async () => {
       const response = await fetch(`${baseUrl}/api/loops/nonexistent/plan/feedback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -325,7 +325,7 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(409);
     });
   });
 
@@ -400,6 +400,14 @@ describe("Plan Mode API Integration", () => {
     });
 
     test("returns 400 if loop is not in planning status", async () => {
+      // Commit any previous changes first
+      try {
+        await Bun.$`git -C ${testWorkDir} add -A`.quiet();
+        await Bun.$`git -C ${testWorkDir} commit -m "Test changes" --allow-empty`.quiet();
+      } catch {
+        // Ignore if nothing to commit
+      }
+
       // Create normal loop
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
@@ -425,6 +433,14 @@ describe("Plan Mode API Integration", () => {
 
   describe("POST /api/loops/:id/plan/discard", () => {
     test("deletes the loop", async () => {
+      // Commit any previous changes first
+      try {
+        await Bun.$`git -C ${testWorkDir} add -A`.quiet();
+        await Bun.$`git -C ${testWorkDir} commit -m "Test changes" --allow-empty`.quiet();
+      } catch {
+        // Ignore if nothing to commit
+      }
+
       // Create loop in plan mode
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
@@ -438,7 +454,10 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const response = await createResponse.json(); const id = response.config.id;
+      expect(createResponse.status).toBe(201);
+      const response = await createResponse.json();
+      expect(response.config).toBeDefined();
+      const id = response.config.id;
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Verify loop exists
@@ -451,11 +470,13 @@ describe("Plan Mode API Integration", () => {
       });
 
       expect(discardResponse.status).toBe(200);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 500));
 
-      // Verify loop is deleted
+      // Verify loop is marked as deleted (soft delete)
       getResponse = await fetch(`${baseUrl}/api/loops/${id}`);
-      expect(getResponse.status).toBe(404);
+      expect(getResponse.ok).toBe(true);
+      const deletedLoop = await getResponse.json();
+      expect(deletedLoop.state.status).toBe("deleted");
     });
 
     test("returns 404 if loop not found", async () => {

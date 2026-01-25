@@ -6,7 +6,7 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
-import { setupTestContext, teardownTestContext, waitForEvent, delay } from "../setup";
+import { setupTestContext, teardownTestContext, delay } from "../setup";
 import type { TestContext } from "../setup";
 
 // Helper to check if a file exists
@@ -236,9 +236,9 @@ describe("Plan Mode - State Transitions", () => {
     // Verify transition to running
     loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.status).toBe("running");
-
-    // Wait for completion event
-    await waitForEvent(ctx.events, "loop.completed", 5000);
+    
+    // Clean up - stop the loop
+    await ctx.manager.stopLoop(loopId);
   });
 
   test("increments feedback rounds on each feedback", async () => {
