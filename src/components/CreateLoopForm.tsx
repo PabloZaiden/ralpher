@@ -39,7 +39,8 @@ export interface CreateLoopFormProps {
   branchesLoading?: boolean;
   /** Current branch name */
   currentBranch?: string;
-
+  /** Initial directory to pre-fill (last used) */
+  initialDirectory?: string;
 }
 
 export function CreateLoopForm({
@@ -54,9 +55,10 @@ export function CreateLoopForm({
   branches = [],
   branchesLoading = false,
   currentBranch = "",
+  initialDirectory = "",
 }: CreateLoopFormProps) {
   const [name, setName] = useState("Continue working on the plan");
-  const [directory, setDirectory] = useState("");
+  const [directory, setDirectory] = useState(initialDirectory);
   const [prompt, setPrompt] = useState("Do everything that's pending in the plan");
   const [maxIterations, setMaxIterations] = useState<string>("");
   const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>("10");
@@ -65,6 +67,13 @@ export function CreateLoopForm({
   const [submitting, setSubmitting] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedBranch, setSelectedBranch] = useState<string>("");
+
+  // Update directory when initialDirectory prop changes (e.g., after async fetch)
+  useEffect(() => {
+    if (initialDirectory && !directory) {
+      setDirectory(initialDirectory);
+    }
+  }, [initialDirectory, directory]);
 
   // Reset selected branch when current branch changes (directory changed)
   useEffect(() => {

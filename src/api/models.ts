@@ -5,7 +5,7 @@
 
 import { backendManager } from "../core/backend-manager";
 import { OpenCodeBackend } from "../backends/opencode";
-import { getLastModel, setLastModel } from "../persistence/preferences";
+import { getLastModel, setLastModel, getLastDirectory, setLastDirectory } from "../persistence/preferences";
 import type { ErrorResponse } from "../types/api";
 
 /**
@@ -101,6 +101,35 @@ export const preferencesRoutes = {
           providerID: body.providerID,
           modelID: body.modelID,
         });
+
+        return Response.json({ success: true });
+      } catch (error) {
+        return errorResponse("save_failed", String(error), 500);
+      }
+    },
+  },
+
+  "/api/preferences/last-directory": {
+    /**
+     * GET /api/preferences/last-directory - Get last used working directory
+     */
+    async GET(): Promise<Response> {
+      const lastDirectory = await getLastDirectory();
+      return Response.json(lastDirectory ?? null);
+    },
+
+    /**
+     * PUT /api/preferences/last-directory - Set last used working directory
+     */
+    async PUT(req: Request): Promise<Response> {
+      try {
+        const body = await req.json() as { directory: string };
+        
+        if (!body.directory) {
+          return errorResponse("invalid_body", "directory is required");
+        }
+
+        await setLastDirectory(body.directory);
 
         return Response.json({ success: true });
       } catch (error) {

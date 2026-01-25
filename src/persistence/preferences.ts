@@ -16,6 +16,8 @@ export interface UserPreferences {
     providerID: string;
     modelID: string;
   };
+  /** Last used working directory for loop creation */
+  lastDirectory?: string;
   /** Global server settings */
   serverSettings?: ServerSettings;
 }
@@ -91,5 +93,22 @@ export async function getServerSettings(): Promise<ServerSettings> {
 export async function setServerSettings(settings: ServerSettings): Promise<void> {
   const prefs = await loadPreferences();
   prefs.serverSettings = settings;
+  await savePreferences(prefs);
+}
+
+/**
+ * Get the last used working directory.
+ */
+export async function getLastDirectory(): Promise<string | undefined> {
+  const prefs = await loadPreferences();
+  return prefs.lastDirectory;
+}
+
+/**
+ * Set the last used working directory.
+ */
+export async function setLastDirectory(directory: string): Promise<void> {
+  const prefs = await loadPreferences();
+  prefs.lastDirectory = directory;
   await savePreferences(prefs);
 }
