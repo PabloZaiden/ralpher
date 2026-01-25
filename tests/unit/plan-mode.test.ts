@@ -313,9 +313,9 @@ describe("Plan Mode - State Transitions", () => {
     await ctx.manager.startPlanMode(loopId);
     await delay(200);
 
-    // Get the plan session info
+    // Get the plan session info from state.session (where it's stored during planning)
     let loopData = await ctx.manager.getLoop(loopId);
-    const planSessionId = loopData!.state.planMode?.planSessionId;
+    const planSessionId = loopData!.state.session?.id;
     expect(planSessionId).toBeDefined();
 
     // Accept the plan
@@ -323,7 +323,9 @@ describe("Plan Mode - State Transitions", () => {
     await delay(200);
 
     // Verify the session is still the same (session continuity)
+    // After acceptance, it should be copied to planMode.planSessionId for persistence
     loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.planMode?.planSessionId).toBe(planSessionId);
+    expect(loopData!.state.session?.id).toBe(planSessionId);
   });
 });

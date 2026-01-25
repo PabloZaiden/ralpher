@@ -83,14 +83,21 @@ export const loopsCrudRoutes = {
 
         if (hasChanges) {
           const changedFiles = await git.getChangedFiles(body.directory);
-          return Response.json(
-            {
-              error: "uncommitted_changes",
-              message: "Directory has uncommitted changes. Please commit or stash your changes before creating a loop.",
-              changedFiles,
-            },
-            { status: 409 }
-          );
+          
+          // If planMode and clearPlanningFolder are enabled, allow uncommitted changes in .planning/ only
+          const onlyPlanningChanges = body.planMode && body.clearPlanningFolder &&
+            changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
+          
+          if (!onlyPlanningChanges) {
+            return Response.json(
+              {
+                error: "uncommitted_changes",
+                message: "Directory has uncommitted changes. Please commit or stash your changes before creating a loop.",
+                changedFiles,
+              },
+              { status: 409 }
+            );
+          }
         }
       } catch (preflightError) {
         return errorResponse("preflight_failed", `Failed to check for uncommitted changes: ${String(preflightError)}`, 500);

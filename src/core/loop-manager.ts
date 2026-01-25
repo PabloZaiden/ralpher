@@ -185,13 +185,20 @@ export class LoopManager {
     const hasChanges = await git.hasUncommittedChanges(loop.config.directory);
     if (hasChanges) {
       const changedFiles = await git.getChangedFiles(loop.config.directory);
-      const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
-        code: string;
-        changedFiles: string[];
-      };
-      error.code = "UNCOMMITTED_CHANGES";
-      error.changedFiles = changedFiles;
-      throw error;
+      
+      // If clearPlanningFolder is enabled, allow uncommitted changes in .planning/ only
+      const onlyPlanningChanges = loop.config.clearPlanningFolder &&
+        changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
+      
+      if (!onlyPlanningChanges) {
+        const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
+          code: string;
+          changedFiles: string[];
+        };
+        error.code = "UNCOMMITTED_CHANGES";
+        error.changedFiles = changedFiles;
+        throw error;
+      }
     }
 
     // Clear .planning folder BEFORE starting session (if requested)
@@ -498,13 +505,22 @@ Follow the standard loop execution flow:
 
     if (hasChanges) {
       const changedFiles = await git.getChangedFiles(loop.config.directory);
-      const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
-        code: string;
-        changedFiles: string[];
-      };
-      error.code = "UNCOMMITTED_CHANGES";
-      error.changedFiles = changedFiles;
-      throw error;
+      
+      // If the loop has plan mode and folder was already cleared, or if clearPlanningFolder is enabled,
+      // allow uncommitted changes in .planning/ only (since we're about to clear it or already cleared it)
+      const shouldAllowPlanningChanges = 
+        (loop.state.planMode?.planningFolderCleared || loop.config.clearPlanningFolder) &&
+        changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
+      
+      if (!shouldAllowPlanningChanges) {
+        const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
+          code: string;
+          changedFiles: string[];
+        };
+        error.code = "UNCOMMITTED_CHANGES";
+        error.changedFiles = changedFiles;
+        throw error;
+      }
     }
 
     // Get backend from global manager
