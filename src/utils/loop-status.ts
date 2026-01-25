@@ -40,16 +40,12 @@ export function getStatusLabel(status: LoopStatus): string {
 
 /**
  * Check if a loop can be accepted (merged or pushed).
- * Loops that have completed, failed, or hit max iterations
- * can have their changes accepted.
- * Note: "stopped" is now an internal-only state for graceful shutdown.
+ * Only loops that completed successfully or hit max iterations
+ * can have their changes accepted. Failed loops should be
+ * reviewed manually or discarded.
  */
 export function canAccept(status: LoopStatus): boolean {
-  return (
-    status === "completed" ||
-    status === "max_iterations" ||
-    status === "failed"
-  );
+  return status === "completed" || status === "max_iterations";
 }
 
 /**

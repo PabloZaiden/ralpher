@@ -176,13 +176,10 @@ export type LoopResponse = Loop;
 
 /**
  * Response from creating a loop.
- * Includes the loop data, and optionally a _startError if the loop was created
- * but failed to start (e.g., due to uncommitted changes).
+ * On success, returns the created loop (which is immediately started).
+ * On failure due to uncommitted changes, returns a 409 error response instead.
  */
-export interface CreateLoopResponse extends Loop {
-  /** Optional error if the loop failed to start after creation */
-  _startError?: UncommittedChangesError;
-}
+export type CreateLoopResponse = Loop;
 
 /**
  * Type for API responses that return multiple loops.

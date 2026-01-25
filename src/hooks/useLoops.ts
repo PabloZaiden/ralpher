@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest, CreateLoopResponse, UncommittedChangesError } from "../types";
+import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest, UncommittedChangesError } from "../types";
 import { useGlobalEvents } from "./useWebSocket";
 import {
   acceptLoopApi,
@@ -145,20 +145,25 @@ export function useLoops(): UseLoopsResult {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
       });
+      
+      // Handle uncommitted changes error (409)
+      if (response.status === 409) {
+        const errorData = await response.json() as UncommittedChangesError;
+        return {
+          loop: null,
+          startError: errorData,
+        };
+      }
+      
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to create loop");
       }
-      const data = (await response.json()) as CreateLoopResponse;
       
-      // Extract the loop (without _startError) and the startError if present
-      const { _startError, ...loop } = data;
+      const loop = (await response.json()) as Loop;
       setLoops((prev) => [...prev, loop]);
       
-      return {
-        loop,
-        startError: _startError,
-      };
+      return { loop };
     } catch (err) {
       setError(String(err));
       return { loop: null };

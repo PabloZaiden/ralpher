@@ -7,7 +7,7 @@ export { useLoops, type UseLoopsResult, type CreateLoopResult } from "./useLoops
 export { useLoop, type UseLoopResult } from "./useLoop";
 export { useServerSettings, type UseServerSettingsResult } from "./useServerSettings";
 
-// Shared loop action API functions (start kept for internal use only)
+// Shared loop action API functions
 export {
   acceptLoopApi,
   pushLoopApi,

@@ -184,9 +184,9 @@ describe("Loops Control API Integration", () => {
   });
 
   describe("POST /api/loops/:id/accept", () => {
-    // Note: With auto-start, loops are never in "idle" status anymore.
-    // Loops start immediately on creation and run until completion.
-
+    // Note: Loops are auto-started on creation by default, but they can still
+    // remain in "idle" status if auto-start fails (e.g., git issues/uncommitted changes).
+    
     test("returns 404 for non-existent loop", async () => {
       const response = await fetch(`${baseUrl}/api/loops/non-existent/accept`, {
         method: "POST",
@@ -288,8 +288,14 @@ describe("Loops Control API Integration", () => {
     });
 
     test("returns exists=false for missing plan.md", async () => {
-      // Create a new workdir without .planning
+      // Create a new workdir without .planning (but with git)
       const emptyWorkDir = await mkdtemp(join(tmpdir(), "ralpher-empty-work-"));
+      await Bun.$`git init ${emptyWorkDir}`.quiet();
+      await Bun.$`git -C ${emptyWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${emptyWorkDir} config user.name "Test User"`.quiet();
+      await writeFile(join(emptyWorkDir, "README.md"), "# Empty");
+      await Bun.$`git -C ${emptyWorkDir} add .`.quiet();
+      await Bun.$`git -C ${emptyWorkDir} commit -m "Initial commit"`.quiet();
 
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",

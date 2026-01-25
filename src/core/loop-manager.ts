@@ -181,8 +181,13 @@ export class LoopManager {
     }
 
     // Don't allow updates to running loops
-    if (this.engines.has(loopId)) {
-      throw new Error("Cannot update a running loop. Stop it first.");
+    // Check actual engine status, not just existence in map (engine may still be in map after completion)
+    const engine = this.engines.get(loopId);
+    if (engine) {
+      const status = engine.state.status;
+      if (status === "running" || status === "starting") {
+        throw new Error("Cannot update a running loop. Stop it first.");
+      }
     }
 
     // Apply updates
@@ -328,7 +333,7 @@ export class LoopManager {
       return { success: false, error: "Loop not found" };
     }
 
-    // Must be completed
+    // Must be completed or max_iterations - failed loops should be reviewed manually
     if (loop.state.status !== "completed" && loop.state.status !== "max_iterations") {
       return { success: false, error: `Cannot accept loop in status: ${loop.state.status}` };
     }

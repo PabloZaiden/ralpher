@@ -74,6 +74,28 @@ export const loopsCrudRoutes = {
         return errorResponse("validation_error", validationError);
       }
 
+      // Preflight check: verify no uncommitted changes before creating the loop
+      // This prevents creating loops that can never be started
+      try {
+        const executor = await backendManager.getCommandExecutorAsync(body.directory);
+        const git = GitService.withExecutor(executor);
+        const hasChanges = await git.hasUncommittedChanges(body.directory);
+
+        if (hasChanges) {
+          const changedFiles = await git.getChangedFiles(body.directory);
+          return Response.json(
+            {
+              error: "uncommitted_changes",
+              message: "Directory has uncommitted changes. Please commit or stash your changes before creating a loop.",
+              changedFiles,
+            },
+            { status: 409 }
+          );
+        }
+      } catch (preflightError) {
+        return errorResponse("preflight_failed", `Failed to check for uncommitted changes: ${String(preflightError)}`, 500);
+      }
+
       try {
         const loop = await loopManager.createLoop({
           name: body.name,
@@ -101,29 +123,20 @@ export const loopsCrudRoutes = {
         }
 
         // Always start the loop immediately after creation
+        // Since we pre-checked for uncommitted changes, this should succeed
         try {
           await loopManager.startLoop(loop.config.id);
           // Return the loop with updated state after starting
           const updatedLoop = await loopManager.getLoop(loop.config.id);
           return Response.json(updatedLoop ?? loop, { status: 201 });
         } catch (startError) {
-          // Check for uncommitted changes error
-          const err = startError as Error & { code?: string; changedFiles?: string[] };
-          if (err.code === "UNCOMMITTED_CHANGES") {
-            // Return the loop but include the uncommitted changes error info
-            const response = {
-              ...loop,
-              _startError: {
-                error: "uncommitted_changes",
-                message: err.message,
-                changedFiles: err.changedFiles ?? [],
-              },
-            };
-            return Response.json(response, { status: 201 });
+          // If start fails for any reason, delete the loop to avoid orphaned idle loops
+          try {
+            await loopManager.deleteLoop(loop.config.id);
+          } catch {
+            // Ignore delete errors
           }
-          // For other start errors, still return the created loop but log the error
-          console.error("Failed to start loop after creation:", startError);
-          return Response.json(loop, { status: 201 });
+          return errorResponse("start_failed", `Loop created but failed to start: ${String(startError)}`, 500);
         }
       } catch (error) {
         return errorResponse("create_failed", String(error), 500);
