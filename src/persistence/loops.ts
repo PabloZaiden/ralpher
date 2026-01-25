@@ -7,6 +7,60 @@ import type { Loop, LoopConfig, LoopState } from "../types";
 import { getDatabase } from "./database";
 
 /**
+ * Allowed column names for the loops table.
+ * This list must match the schema in database.ts.
+ * Used to validate column names before SQL interpolation to prevent injection.
+ */
+const ALLOWED_LOOP_COLUMNS = new Set([
+  "id",
+  "name",
+  "directory",
+  "prompt",
+  "created_at",
+  "updated_at",
+  "model_provider_id",
+  "model_model_id",
+  "max_iterations",
+  "max_consecutive_errors",
+  "activity_timeout_seconds",
+  "stop_pattern",
+  "git_branch_prefix",
+  "git_commit_prefix",
+  "base_branch",
+  "status",
+  "current_iteration",
+  "started_at",
+  "completed_at",
+  "last_activity_at",
+  "session_id",
+  "session_server_url",
+  "error_message",
+  "error_iteration",
+  "error_timestamp",
+  "git_original_branch",
+  "git_working_branch",
+  "git_commits",
+  "recent_iterations",
+  "logs",
+  "messages",
+  "tool_calls",
+  "consecutive_errors",
+  "pending_prompt",
+]);
+
+/**
+ * Validate that all column names are in the allowed list.
+ * Throws an error if any column name is not allowed.
+ */
+function validateColumnNames(columns: string[]): void {
+  for (const column of columns) {
+    if (!ALLOWED_LOOP_COLUMNS.has(column)) {
+      throw new Error(`Invalid column name: ${column}`);
+    }
+  }
+}
+
+/**
  * Convert a Loop to a flat object for database insertion.
  */
 function loopToRow(loop: Loop): Record<string, unknown> {
@@ -156,6 +210,9 @@ export async function saveLoop(loop: Loop): Promise<void> {
   const row = loopToRow(loop);
   
   const columns = Object.keys(row);
+  // Validate column names to prevent SQL injection
+  validateColumnNames(columns);
+  
   const placeholders = columns.map(() => "?").join(", ");
   const values = Object.values(row) as (string | number | null | Uint8Array)[];
   
@@ -244,6 +301,9 @@ export async function updateLoopState(loopId: string, state: LoopState): Promise
     
     const newRow = loopToRow(loop);
     const columns = Object.keys(newRow);
+    // Validate column names to prevent SQL injection
+    validateColumnNames(columns);
+    
     const placeholders = columns.map(() => "?").join(", ");
     const values = Object.values(newRow) as (string | number | null | Uint8Array)[];
     
@@ -281,6 +341,9 @@ export async function updateLoopConfig(loopId: string, config: LoopConfig): Prom
     
     const newRow = loopToRow(loop);
     const columns = Object.keys(newRow);
+    // Validate column names to prevent SQL injection
+    validateColumnNames(columns);
+    
     const placeholders = columns.map(() => "?").join(", ");
     const values = Object.values(newRow) as (string | number | null | Uint8Array)[];
     
