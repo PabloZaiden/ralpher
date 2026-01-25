@@ -1,71 +1,27 @@
 /**
  * Persistence path configuration for Ralph Loops Management System.
- * Provides centralized path management for the data directory.
+ * Provides data directory path configuration.
  * Supports environment variable override for Docker volume mounting.
+ * 
+ * Note: Most path functions have been removed as we now use SQLite.
+ * The database path is managed in database.ts.
  */
 
-import { join } from "path";
-import { mkdir, access } from "fs/promises";
+import { getDataDir, getDatabasePath, initializeDatabase, isDatabaseReady } from "./database";
+
+// Re-export from database.ts for backward compatibility
+export { getDataDir, getDatabasePath };
 
 /**
- * Get the root data directory path.
- * Can be overridden via RALPHER_DATA_DIR environment variable.
- */
-export function getDataDir(): string {
-  return process.env["RALPHER_DATA_DIR"] ?? "./data";
-}
-
-/**
- * Get the loops directory path.
- * Stores loop configuration and state JSON files.
- */
-export function getLoopsDir(): string {
-  return join(getDataDir(), "loops");
-}
-
-/**
- * Get the sessions directory path.
- * Stores backend session mappings.
- */
-export function getSessionsDir(): string {
-  return join(getDataDir(), "sessions");
-}
-
-/**
- * Get the path for a specific loop's JSON file.
- */
-export function getLoopFilePath(loopId: string): string {
-  return join(getLoopsDir(), `${loopId}.json`);
-}
-
-/**
- * Get the path for a backend's session mapping file.
- */
-export function getSessionsFilePath(backendName: string): string {
-  return join(getSessionsDir(), `${backendName}.json`);
-}
-
-/**
- * Ensure all required directories exist.
- * Creates them if they don't exist.
+ * Ensure all required directories exist and database is initialized.
  */
 export async function ensureDataDirectories(): Promise<void> {
-  const dirs = [getDataDir(), getLoopsDir(), getSessionsDir()];
-
-  for (const dir of dirs) {
-    await mkdir(dir, { recursive: true });
-  }
+  await initializeDatabase();
 }
 
 /**
  * Check if the data directory is properly configured.
  */
 export async function isDataDirectoryReady(): Promise<boolean> {
-  try {
-    await access(getLoopsDir());
-    await access(getSessionsDir());
-    return true;
-  } catch {
-    return false;
-  }
+  return isDatabaseReady();
 }

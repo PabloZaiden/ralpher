@@ -1,10 +1,9 @@
 /**
  * User preferences persistence for Ralph Loops Management System.
- * Stores user preferences like last used model selection and server settings.
+ * Stores user preferences in SQLite database using a key-value pattern.
  */
 
-import { join } from "path";
-import { getDataDir } from "./paths";
+import { getDatabase } from "./database";
 import { getDefaultServerSettings, type ServerSettings } from "../types/settings";
 
 /**
@@ -23,47 +22,103 @@ export interface UserPreferences {
 }
 
 /**
- * Get the path to the preferences file.
+ * Get a preference value by key.
  */
-export function getPreferencesFilePath(): string {
-  return join(getDataDir(), "preferences.json");
+function getPreference(key: string): string | null {
+  const db = getDatabase();
+  const stmt = db.prepare("SELECT value FROM preferences WHERE key = ?");
+  const row = stmt.get(key) as { value: string } | null;
+  return row?.value ?? null;
 }
 
 /**
- * Load user preferences from disk.
- * Returns default preferences if file doesn't exist.
+ * Set a preference value by key.
+ */
+function setPreference(key: string, value: string): void {
+  const db = getDatabase();
+  const stmt = db.prepare("INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)");
+  stmt.run(key, value);
+}
+
+/**
+ * Delete a preference by key.
+ */
+function deletePreference(key: string): void {
+  const db = getDatabase();
+  const stmt = db.prepare("DELETE FROM preferences WHERE key = ?");
+  stmt.run(key);
+}
+
+/**
+ * Load user preferences from database.
+ * Returns default preferences if no preferences are stored.
  */
 export async function loadPreferences(): Promise<UserPreferences> {
-  const filePath = getPreferencesFilePath();
-  const file = Bun.file(filePath);
-
-  if (!(await file.exists())) {
-    return {};
+  const prefs: UserPreferences = {};
+  
+  const lastModelJson = getPreference("lastModel");
+  if (lastModelJson) {
+    try {
+      prefs.lastModel = JSON.parse(lastModelJson);
+    } catch {
+      // Ignore invalid JSON
+    }
   }
-
-  try {
-    const content = await file.text();
-    return JSON.parse(content) as UserPreferences;
-  } catch {
-    // Return empty preferences if file is corrupted
-    return {};
+  
+  const lastDirectory = getPreference("lastDirectory");
+  if (lastDirectory) {
+    prefs.lastDirectory = lastDirectory;
   }
+  
+  const serverSettingsJson = getPreference("serverSettings");
+  if (serverSettingsJson) {
+    try {
+      prefs.serverSettings = JSON.parse(serverSettingsJson);
+    } catch {
+      // Ignore invalid JSON
+    }
+  }
+  
+  return prefs;
 }
 
 /**
- * Save user preferences to disk.
+ * Save user preferences to database.
  */
 export async function savePreferences(prefs: UserPreferences): Promise<void> {
-  const filePath = getPreferencesFilePath();
-  await Bun.write(filePath, JSON.stringify(prefs, null, 2));
+  if (prefs.lastModel) {
+    setPreference("lastModel", JSON.stringify(prefs.lastModel));
+  } else {
+    deletePreference("lastModel");
+  }
+  
+  if (prefs.lastDirectory) {
+    setPreference("lastDirectory", prefs.lastDirectory);
+  } else {
+    deletePreference("lastDirectory");
+  }
+  
+  if (prefs.serverSettings) {
+    setPreference("serverSettings", JSON.stringify(prefs.serverSettings));
+  } else {
+    deletePreference("serverSettings");
+  }
 }
 
 /**
  * Get the last used model.
  */
 export async function getLastModel(): Promise<UserPreferences["lastModel"]> {
-  const prefs = await loadPreferences();
-  return prefs.lastModel;
+  const lastModelJson = getPreference("lastModel");
+  if (!lastModelJson) {
+    return undefined;
+  }
+  
+  try {
+    return JSON.parse(lastModelJson);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -73,9 +128,7 @@ export async function setLastModel(model: {
   providerID: string;
   modelID: string;
 }): Promise<void> {
-  const prefs = await loadPreferences();
-  prefs.lastModel = model;
-  await savePreferences(prefs);
+  setPreference("lastModel", JSON.stringify(model));
 }
 
 /**
@@ -83,32 +136,35 @@ export async function setLastModel(model: {
  * Returns default settings if not set.
  */
 export async function getServerSettings(): Promise<ServerSettings> {
-  const prefs = await loadPreferences();
-  return prefs.serverSettings ?? getDefaultServerSettings();
+  const serverSettingsJson = getPreference("serverSettings");
+  if (!serverSettingsJson) {
+    return getDefaultServerSettings();
+  }
+  
+  try {
+    return JSON.parse(serverSettingsJson);
+  } catch {
+    return getDefaultServerSettings();
+  }
 }
 
 /**
  * Set the server settings.
  */
 export async function setServerSettings(settings: ServerSettings): Promise<void> {
-  const prefs = await loadPreferences();
-  prefs.serverSettings = settings;
-  await savePreferences(prefs);
+  setPreference("serverSettings", JSON.stringify(settings));
 }
 
 /**
  * Get the last used working directory.
  */
 export async function getLastDirectory(): Promise<string | undefined> {
-  const prefs = await loadPreferences();
-  return prefs.lastDirectory;
+  return getPreference("lastDirectory") ?? undefined;
 }
 
 /**
  * Set the last used working directory.
  */
 export async function setLastDirectory(directory: string): Promise<void> {
-  const prefs = await loadPreferences();
-  prefs.lastDirectory = directory;
-  await savePreferences(prefs);
+  setPreference("lastDirectory", directory);
 }
