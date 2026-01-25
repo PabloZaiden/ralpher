@@ -384,7 +384,7 @@ export const loopsControlRoutes = {
         return successResponse();
       } catch (error) {
         const errorMsg = String(error);
-        if (errorMsg.includes("not running")) {
+        if (errorMsg.includes("not running") || errorMsg.includes("not found")) {
           return errorResponse("not_running", errorMsg, 409);
         }
         if (errorMsg.includes("not in planning status")) {

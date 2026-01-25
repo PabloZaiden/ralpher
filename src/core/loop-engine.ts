@@ -566,6 +566,62 @@ export class LoopEngine {
   }
 
   /**
+   * Reconnect to an existing session for plan mode feedback.
+   * This is called when the engine is recreated after a server restart
+   * while a loop is still in planning mode.
+   */
+  async reconnectSession(): Promise<void> {
+    log.trace("[LoopEngine] reconnectSession: Entry point");
+    
+    // Check if we already have a session
+    if (this.sessionId) {
+      log.trace("[LoopEngine] reconnectSession: Already have sessionId", { sessionId: this.sessionId });
+      return;
+    }
+    
+    // Check if the loop state has a session we can reconnect to
+    const existingSession = this.loop.state.session;
+    if (existingSession?.id) {
+      log.trace("[LoopEngine] reconnectSession: Found existing session in state", { 
+        sessionId: existingSession.id,
+        serverUrl: existingSession.serverUrl,
+      });
+      
+      // Make sure the backend is connected
+      const settings = backendManager.getSettings();
+      const isConnected = this.backend.isConnected();
+      
+      if (!isConnected) {
+        this.emitLog("info", "Reconnecting to backend...", {
+          mode: settings.mode,
+          hostname: settings.hostname,
+          port: settings.port,
+        });
+        await this.backend.connect({
+          mode: settings.mode,
+          hostname: settings.hostname,
+          port: settings.port,
+          password: settings.password,
+          directory: this.config.directory,
+        });
+        this.emitLog("info", "Backend connection re-established");
+      }
+      
+      // Reuse the existing session ID
+      this.sessionId = existingSession.id;
+      this.emitLog("info", "Reconnected to existing session", { sessionId: this.sessionId });
+      log.trace("[LoopEngine] reconnectSession: Reconnected to session", { sessionId: this.sessionId });
+      return;
+    }
+    
+    // No existing session, create a new one
+    log.trace("[LoopEngine] reconnectSession: No existing session, creating new one");
+    this.emitLog("info", "No existing session found, creating new session");
+    await this.setupSession();
+    log.trace("[LoopEngine] reconnectSession: Exit point (new session created)");
+  }
+
+  /**
    * Run the main iteration loop.
    * Now continues on errors unless max consecutive identical errors is reached.
    */

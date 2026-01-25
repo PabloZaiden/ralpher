@@ -257,9 +257,48 @@ export class LoopManager {
    * Send feedback on a plan to refine it.
    */
   async sendPlanFeedback(loopId: string, feedback: string): Promise<void> {
-    const engine = this.engines.get(loopId);
+    let engine = this.engines.get(loopId);
+    
+    // If engine doesn't exist but loop is in planning status, recreate the engine
+    // This handles the case where the server was restarted while a loop was in planning mode
     if (!engine) {
-      throw new Error("Loop plan mode is not running");
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        throw new Error(`Loop not found: ${loopId}`);
+      }
+      
+      if (loop.state.status !== "planning") {
+        throw new Error("Loop plan mode is not running");
+      }
+      
+      // Recreate the engine for this planning loop
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const git = GitService.withExecutor(executor);
+      const backend = backendManager.getBackend();
+      
+      engine = new LoopEngine({
+        loop,
+        backend,
+        gitService: git,
+        eventEmitter: this.emitter,
+        onPersistState: async (state) => {
+          await updateLoopState(loopId, state);
+        },
+      });
+      
+      this.engines.set(loopId, engine);
+      
+      // Need to set up the session for the engine
+      // The engine will reconnect to the existing session if possible
+      try {
+        await engine.reconnectSession();
+      } catch (error) {
+        log.warn(`Failed to reconnect session for plan feedback: ${String(error)}`);
+        // Continue anyway - we'll create a new session
+      }
+      
+      // Start state persistence
+      this.startStatePersistence(loopId);
     }
 
     // Verify loop is in planning status

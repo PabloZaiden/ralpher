@@ -389,6 +389,10 @@ export function useLoop(loopId: string): UseLoopResult {
     try {
       const response = await fetch(`/api/loops/${loopId}/diff`);
       if (!response.ok) {
+        // 400 "no_git_branch" is expected when loop is in planning mode or hasn't started yet
+        if (response.status === 400) {
+          return []; // Return empty diff instead of showing error
+        }
         throw new Error(`Failed to get diff: ${response.statusText}`);
       }
       return (await response.json()) as FileDiff[];

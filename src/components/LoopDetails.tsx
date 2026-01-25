@@ -227,6 +227,23 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     }
   }, [activeTab, getPlan, getStatusFile, getDiff]);
 
+  // Load plan content when in planning mode
+  // This is needed because the tab-based loading above only works when the "plan" tab is selected,
+  // but in planning mode we show PlanReviewPanel instead of tabs
+  useEffect(() => {
+    async function loadPlanForPlanningMode() {
+      if (loop?.state.status === "planning") {
+        try {
+          const content = await getPlan();
+          setPlanContent(content);
+        } catch {
+          // Ignore errors - plan might not exist yet
+        }
+      }
+    }
+    loadPlanForPlanningMode();
+  }, [loop?.state.status, getPlan, gitChangeCounter]);
+
   // Handle delete
   async function handleDelete() {
     const success = await remove();
