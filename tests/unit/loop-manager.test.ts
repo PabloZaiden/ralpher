@@ -218,4 +218,53 @@ describe("LoopManager", () => {
       expect(manager.isRunning(loop.config.id)).toBe(false);
     });
   });
+
+  describe("clearPlanningFolder option", () => {
+    test("creates a loop with clearPlanningFolder = true", async () => {
+      const loop = await manager.createLoop({
+        name: "Clear Planning Loop",
+        directory: testWorkDir,
+        prompt: "Task with clearing",
+        clearPlanningFolder: true,
+      });
+
+      expect(loop.config.clearPlanningFolder).toBe(true);
+    });
+
+    test("creates a loop with clearPlanningFolder = false", async () => {
+      const loop = await manager.createLoop({
+        name: "Keep Planning Loop",
+        directory: testWorkDir,
+        prompt: "Task without clearing",
+        clearPlanningFolder: false,
+      });
+
+      expect(loop.config.clearPlanningFolder).toBe(false);
+    });
+
+    test("creates a loop with clearPlanningFolder undefined (default)", async () => {
+      const loop = await manager.createLoop({
+        name: "Default Planning Loop",
+        directory: testWorkDir,
+        prompt: "Task with default",
+      });
+
+      expect(loop.config.clearPlanningFolder).toBeUndefined();
+    });
+
+    test("clearPlanningFolder is persisted correctly", async () => {
+      const created = await manager.createLoop({
+        name: "Persisted Clear Planning",
+        directory: testWorkDir,
+        prompt: "Test persistence",
+        clearPlanningFolder: true,
+      });
+
+      // Fetch the loop to verify persistence
+      const fetched = await manager.getLoop(created.config.id);
+
+      expect(fetched).not.toBeNull();
+      expect(fetched!.config.clearPlanningFolder).toBe(true);
+    });
+  });
 });

@@ -193,6 +193,21 @@ export class LoopEngine {
   }
 
   /**
+   * Set a pending prompt that will be used for the next iteration.
+   * This overrides the config.prompt for one iteration only.
+   */
+  setPendingPrompt(prompt: string): void {
+    this.updateState({ pendingPrompt: prompt });
+  }
+
+  /**
+   * Clear any pending prompt, reverting to the config.prompt.
+   */
+  clearPendingPrompt(): void {
+    this.updateState({ pendingPrompt: undefined });
+  }
+
+  /**
    * Start the loop execution.
    * This sets up the git branch and backend session.
    */
@@ -213,17 +228,17 @@ export class LoopEngine {
     });
 
     try {
-      // Clear .planning folder if requested
-      if (this.config.clearPlanningFolder) {
-        this.emitLog("info", "Clearing .planning folder...");
-        await this.clearPlanningFolder();
-      }
-
-      // Set up git branch
+      // Set up git branch first (before any file modifications)
       this.emitLog("info", "Setting up git branch...");
       log.trace("[LoopEngine] Starting setupGitBranch...");
       await this.setupGitBranch();
       log.trace("[LoopEngine] setupGitBranch completed successfully");
+
+      // Clear .planning folder if requested (after branch setup, so deletions are on the new branch)
+      if (this.config.clearPlanningFolder) {
+        this.emitLog("info", "Clearing .planning folder...");
+        await this.clearPlanningFolder();
+      }
 
       // Create backend session
       this.emitLog("info", "Connecting to AI backend...");
@@ -288,6 +303,7 @@ export class LoopEngine {
 
   /**
    * Clear the .planning folder contents (except .gitkeep).
+   * If any tracked files were deleted, commits the changes.
    */
   private async clearPlanningFolder(): Promise<void> {
     const planningDir = `${this.config.directory}/.planning`;
@@ -334,6 +350,26 @@ export class LoopEngine {
         deletedCount: filesToDelete.length,
         preservedFiles: files.includes(".gitkeep") ? [".gitkeep"] : [],
       });
+      
+      // Check if clearing caused any uncommitted changes (deleted tracked files)
+      // If so, commit them so the loop can proceed cleanly
+      const hasChanges = await this.git.hasUncommittedChanges(this.config.directory);
+      if (hasChanges) {
+        this.emitLog("info", "Committing cleared .planning folder...");
+        try {
+          const commitInfo = await this.git.commit(
+            this.config.directory,
+            `${this.config.git.commitPrefix} Clear .planning folder for fresh start`
+          );
+          this.emitLog("info", `Committed .planning folder cleanup`, {
+            sha: commitInfo.sha.slice(0, 8),
+            filesChanged: commitInfo.filesChanged,
+          });
+        } catch (commitError) {
+          // Log but don't fail - the loop can still proceed
+          this.emitLog("warn", `Failed to commit .planning folder cleanup: ${String(commitError)}`);
+        }
+      }
     } catch (error) {
       // Log error but don't fail the loop - this is not critical
       this.emitLog("warn", `Failed to clear .planning folder: ${String(error)}`);

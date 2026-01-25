@@ -118,7 +118,8 @@ function createTables(database: Database): void {
         messages TEXT,
         tool_calls TEXT,
         consecutive_errors TEXT,
-        pending_prompt TEXT
+        pending_prompt TEXT,
+        clear_planning_folder INTEGER DEFAULT 0
       )
     `);
 

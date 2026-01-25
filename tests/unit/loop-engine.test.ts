@@ -25,6 +25,7 @@ import type {
 import { createEventStream, type EventStream } from "../../src/utils/event-stream";
 import { GitService } from "../../src/core/git-service";
 import { TestCommandExecutor } from "../mocks/mock-executor";
+import { backendManager } from "../../src/core/backend-manager";
 
 describe("StopPatternDetector", () => {
   test("matches default stop pattern at end of string", () => {
@@ -183,6 +184,9 @@ describe("LoopEngine", () => {
     const executor = new TestCommandExecutor();
     gitService = new GitService(executor);
     
+    // Set up backendManager with test executor factory for clearPlanningFolder
+    backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
+    
     // Initialize git in the test directory (git is always required)
     await Bun.$`git init`.cwd(testDir).quiet();
     await Bun.$`git config user.email "test@test.com"`.cwd(testDir).quiet();
@@ -193,6 +197,7 @@ describe("LoopEngine", () => {
   });
 
   afterEach(async () => {
+    backendManager.resetForTesting();
     await rm(testDir, { recursive: true });
   });
 
@@ -956,4 +961,276 @@ describe("LoopEngine", () => {
     expect(busyLog).toBeDefined();
     expect(idleLog).toBeDefined();
   }, 10000);
+
+  describe("clearPlanningFolder", () => {
+    test("clears .planning folder when clearPlanningFolder is true", async () => {
+      // Create .planning folder with files
+      const planningDir = join(testDir, ".planning");
+      await Bun.$`mkdir -p ${planningDir}`.quiet();
+      await writeFile(join(planningDir, "plan.md"), "# Old Plan\nSome old content");
+      await writeFile(join(planningDir, "status.md"), "# Old Status\nPrevious status");
+      await writeFile(join(planningDir, ".gitkeep"), "");
+      
+      // Commit the .planning folder so there are no uncommitted changes
+      await Bun.$`git add .`.cwd(testDir).quiet();
+      await Bun.$`git commit -m "Add planning files"`.cwd(testDir).quiet();
+
+      const loop = createTestLoop({ 
+        maxIterations: 1, 
+        clearPlanningFolder: true 
+      });
+      mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      expect(engine.state.status).toBe("completed");
+
+      // Verify .planning folder was cleared (only .gitkeep should remain)
+      const { readdir } = await import("fs/promises");
+      const files = await readdir(planningDir);
+      expect(files).toEqual([".gitkeep"]);
+      
+      // Check that log event was emitted for clearing
+      const clearLogs = emittedEvents.filter(
+        (e) => e.type === "loop.log" && e.message.includes("Clearing .planning folder")
+      );
+      expect(clearLogs.length).toBe(1);
+    }, 10000);
+
+    test("does not clear .planning folder when clearPlanningFolder is false (default)", async () => {
+      // Create .planning folder with files
+      const planningDir = join(testDir, ".planning");
+      await Bun.$`mkdir -p ${planningDir}`.quiet();
+      await writeFile(join(planningDir, "plan.md"), "# Existing Plan");
+      await writeFile(join(planningDir, "status.md"), "# Existing Status");
+      
+      // Commit the .planning folder so there are no uncommitted changes
+      await Bun.$`git add .`.cwd(testDir).quiet();
+      await Bun.$`git commit -m "Add planning files"`.cwd(testDir).quiet();
+
+      const loop = createTestLoop({ 
+        maxIterations: 1,
+        clearPlanningFolder: false,
+      });
+      mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      expect(engine.state.status).toBe("completed");
+
+      // Verify .planning folder still has all files
+      const { readdir, readFile } = await import("fs/promises");
+      const files = await readdir(planningDir);
+      expect(files.sort()).toEqual(["plan.md", "status.md"]);
+      
+      // Verify content is preserved
+      const planContent = await readFile(join(planningDir, "plan.md"), "utf-8");
+      expect(planContent).toBe("# Existing Plan");
+      
+      // Check that no clear log event was emitted
+      const clearLogs = emittedEvents.filter(
+        (e) => e.type === "loop.log" && e.message.includes("Clearing .planning folder")
+      );
+      expect(clearLogs.length).toBe(0);
+    }, 10000);
+
+    test("handles missing .planning folder gracefully", async () => {
+      // Ensure no .planning folder exists
+      const planningDir = join(testDir, ".planning");
+      await Bun.$`rm -rf ${planningDir}`.quiet();
+
+      const loop = createTestLoop({ 
+        maxIterations: 1, 
+        clearPlanningFolder: true 
+      });
+      mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      // Should not throw an error
+      await engine.start();
+
+      expect(engine.state.status).toBe("completed");
+      
+      // Check that debug log was emitted about missing directory
+      const debugLogs = emittedEvents.filter(
+        (e) => e.type === "loop.log" && e.message.includes("does not exist")
+      );
+      expect(debugLogs.length).toBe(1);
+    }, 10000);
+
+    test("handles empty .planning folder gracefully", async () => {
+      // Create empty .planning folder
+      const planningDir = join(testDir, ".planning");
+      await Bun.$`mkdir -p ${planningDir}`.quiet();
+      
+      // Commit the .planning folder so there are no uncommitted changes
+      await writeFile(join(planningDir, ".gitkeep"), "");
+      await Bun.$`git add .`.cwd(testDir).quiet();
+      await Bun.$`git commit -m "Add empty planning folder"`.cwd(testDir).quiet();
+      await Bun.$`rm ${planningDir}/.gitkeep`.quiet();
+      await Bun.$`git add .`.cwd(testDir).quiet();
+      await Bun.$`git commit -m "Remove gitkeep"`.cwd(testDir).quiet();
+
+      const loop = createTestLoop({ 
+        maxIterations: 1, 
+        clearPlanningFolder: true 
+      });
+      mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      expect(engine.state.status).toBe("completed");
+      
+      // Check that debug log was emitted about empty directory
+      const debugLogs = emittedEvents.filter(
+        (e) => e.type === "loop.log" && e.message.includes("already empty")
+      );
+      expect(debugLogs.length).toBe(1);
+    }, 10000);
+
+    test("preserves .gitkeep when clearing .planning folder", async () => {
+      // Create .planning folder with files including .gitkeep
+      const planningDir = join(testDir, ".planning");
+      await Bun.$`mkdir -p ${planningDir}`.quiet();
+      await writeFile(join(planningDir, "plan.md"), "# Plan to delete");
+      await writeFile(join(planningDir, "status.md"), "# Status to delete");
+      await writeFile(join(planningDir, ".gitkeep"), "");
+      
+      // Commit the .planning folder so there are no uncommitted changes
+      await Bun.$`git add .`.cwd(testDir).quiet();
+      await Bun.$`git commit -m "Add planning files with gitkeep"`.cwd(testDir).quiet();
+
+      const loop = createTestLoop({ 
+        maxIterations: 1, 
+        clearPlanningFolder: true 
+      });
+      mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      expect(engine.state.status).toBe("completed");
+
+      // Verify only .gitkeep remains
+      const { readdir } = await import("fs/promises");
+      const files = await readdir(planningDir);
+      expect(files).toEqual([".gitkeep"]);
+      
+      // Check log shows correct count of deleted files
+      const clearLogs = emittedEvents.filter(
+        (e) => e.type === "loop.log" && e.message.includes("2 file(s) deleted")
+      );
+      expect(clearLogs.length).toBe(1);
+    }, 10000);
+
+    test("clears subdirectories in .planning folder", async () => {
+      // Create .planning folder with nested structure
+      const planningDir = join(testDir, ".planning");
+      const subDir = join(planningDir, "subdir");
+      await Bun.$`mkdir -p ${subDir}`.quiet();
+      await writeFile(join(planningDir, "plan.md"), "# Main plan");
+      await writeFile(join(subDir, "nested.md"), "# Nested file");
+      await writeFile(join(planningDir, ".gitkeep"), "");
+      
+      // Commit the .planning folder so there are no uncommitted changes
+      await Bun.$`git add .`.cwd(testDir).quiet();
+      await Bun.$`git commit -m "Add nested planning files"`.cwd(testDir).quiet();
+
+      const loop = createTestLoop({ 
+        maxIterations: 1, 
+        clearPlanningFolder: true 
+      });
+      mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      expect(engine.state.status).toBe("completed");
+
+      // Verify only .gitkeep remains (subdirectory should be deleted)
+      const { readdir } = await import("fs/promises");
+      const files = await readdir(planningDir);
+      expect(files).toEqual([".gitkeep"]);
+    }, 10000);
+
+    test("clearing happens after git branch setup (so deletions can be committed)", async () => {
+      // Create .planning folder with files
+      const planningDir = join(testDir, ".planning");
+      await Bun.$`mkdir -p ${planningDir}`.quiet();
+      await writeFile(join(planningDir, "plan.md"), "# Old Plan");
+      await writeFile(join(planningDir, ".gitkeep"), "");
+      
+      // Commit the .planning folder
+      await Bun.$`git add .`.cwd(testDir).quiet();
+      await Bun.$`git commit -m "Add planning files"`.cwd(testDir).quiet();
+
+      const loop = createTestLoop({ 
+        maxIterations: 1, 
+        clearPlanningFolder: true 
+      });
+      mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      // Check the order of events: git setup should happen before clear (since clear commits after)
+      const logEvents = emittedEvents.filter((e) => e.type === "loop.log");
+      const clearIndex = logEvents.findIndex((e) => 
+        e.type === "loop.log" && e.message.includes("Clearing .planning folder")
+      );
+      const gitIndex = logEvents.findIndex((e) => 
+        e.type === "loop.log" && e.message.includes("Setting up git branch")
+      );
+      
+      expect(clearIndex).toBeGreaterThan(-1);
+      expect(gitIndex).toBeGreaterThan(-1);
+      // Git setup happens first, then clearing (so deletions are on the new branch and can be committed)
+      expect(gitIndex).toBeLessThan(clearIndex);
+    }, 10000);
+  });
 });
