@@ -193,6 +193,21 @@ export class LoopEngine {
   }
 
   /**
+   * Set a pending prompt that will be used for the next iteration.
+   * This overrides the config.prompt for one iteration only.
+   */
+  setPendingPrompt(prompt: string): void {
+    this.updateState({ pendingPrompt: prompt });
+  }
+
+  /**
+   * Clear any pending prompt, reverting to the config.prompt.
+   */
+  clearPendingPrompt(): void {
+    this.updateState({ pendingPrompt: undefined });
+  }
+
+  /**
    * Start the loop execution.
    * This sets up the git branch and backend session.
    */
@@ -213,11 +228,17 @@ export class LoopEngine {
     });
 
     try {
-      // Set up git branch
+      // Set up git branch first (before any file modifications)
       this.emitLog("info", "Setting up git branch...");
       log.trace("[LoopEngine] Starting setupGitBranch...");
       await this.setupGitBranch();
       log.trace("[LoopEngine] setupGitBranch completed successfully");
+
+      // Clear .planning folder if requested (after branch setup, so deletions are on the new branch)
+      if (this.config.clearPlanningFolder) {
+        this.emitLog("info", "Clearing .planning folder...");
+        await this.clearPlanningFolder();
+      }
 
       // Create backend session
       this.emitLog("info", "Connecting to AI backend...");
@@ -281,30 +302,83 @@ export class LoopEngine {
   }
 
   /**
-   * Set a pending prompt for the next iteration.
-   * This will override config.prompt for the next iteration only.
+   * Clear the .planning folder contents (except .gitkeep).
+   * If any tracked files were deleted, commits the changes.
    */
-  setPendingPrompt(prompt: string): void {
-    this.updateState({
-      pendingPrompt: prompt,
-    });
-    this.emitLog("info", "Pending prompt set for next iteration", {
-      promptLength: prompt.length,
-    });
+  private async clearPlanningFolder(): Promise<void> {
+    const planningDir = `${this.config.directory}/.planning`;
+    
+    try {
+      // Get command executor for the directory
+      const executor = await backendManager.getCommandExecutorAsync(this.config.directory);
+      
+      // Check if .planning directory exists
+      const exists = await executor.directoryExists(planningDir);
+      
+      if (!exists) {
+        this.emitLog("debug", ".planning directory does not exist, skipping clear");
+        return;
+      }
+      
+      // List all files in the directory
+      const files = await executor.listDirectory(planningDir);
+      
+      if (files.length === 0) {
+        this.emitLog("debug", ".planning directory is already empty");
+        return;
+      }
+      
+      // Filter out .gitkeep
+      const filesToDelete = files.filter((file) => file !== ".gitkeep");
+      
+      if (filesToDelete.length === 0) {
+        this.emitLog("debug", ".planning directory only contains .gitkeep");
+        return;
+      }
+      
+      // Delete all files except .gitkeep using rm command
+      const fileArgs = filesToDelete.map((file) => `${planningDir}/${file}`);
+      const result = await executor.exec("rm", ["-rf", ...fileArgs], {
+        cwd: this.config.directory,
+      });
+      
+      if (!result.success) {
+        throw new Error(`rm command failed: ${result.stderr}`);
+      }
+      
+      this.emitLog("info", `Cleared .planning folder: ${filesToDelete.length} file(s) deleted`, {
+        deletedCount: filesToDelete.length,
+        preservedFiles: files.includes(".gitkeep") ? [".gitkeep"] : [],
+      });
+      
+      // Check if clearing caused any uncommitted changes (deleted tracked files)
+      // If so, commit them so the loop can proceed cleanly
+      const hasChanges = await this.git.hasUncommittedChanges(this.config.directory);
+      if (hasChanges) {
+        this.emitLog("info", "Committing cleared .planning folder...");
+        try {
+          const commitInfo = await this.git.commit(
+            this.config.directory,
+            `${this.config.git.commitPrefix} Clear .planning folder for fresh start`
+          );
+          this.emitLog("info", `Committed .planning folder cleanup`, {
+            sha: commitInfo.sha.slice(0, 8),
+            filesChanged: commitInfo.filesChanged,
+          });
+        } catch (commitError) {
+          // Log but don't fail - the loop can still proceed
+          this.emitLog("warn", `Failed to commit .planning folder cleanup: ${String(commitError)}`);
+        }
+      }
+    } catch (error) {
+      // Log error but don't fail the loop - this is not critical
+      this.emitLog("warn", `Failed to clear .planning folder: ${String(error)}`);
+    }
   }
 
   /**
-   * Clear the pending prompt.
-   */
-  clearPendingPrompt(): void {
-    this.updateState({
-      pendingPrompt: undefined,
-    });
-    this.emitLog("info", "Pending prompt cleared");
-  }
-
-  /**
-   * Set up the git branch for this loop.
+   * Set up git branch for the loop.
+   * Git is always enabled for loops.
    */
   private async setupGitBranch(): Promise<void> {
     const directory = this.config.directory;

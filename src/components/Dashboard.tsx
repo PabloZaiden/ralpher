@@ -43,8 +43,10 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     loading: serverLoading,
     saving: serverSaving,
     testing: serverTesting,
+    resetting: serverResetting,
     updateSettings: updateServerSettings,
     testConnection: testServerConnection,
+    resetAll: resetAllSettings,
   } = useServerSettings();
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
@@ -535,8 +537,10 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         status={serverStatus}
         onSave={updateServerSettings}
         onTest={testServerConnection}
+        onResetAll={resetAllSettings}
         saving={serverSaving}
         testing={serverTesting}
+        resetting={serverResetting}
         remoteOnly={remoteOnly}
       />
     </div>

@@ -105,10 +105,12 @@ export const loopsCrudRoutes = {
           modelID: body.model?.modelID,
           maxIterations: body.maxIterations,
           maxConsecutiveErrors: body.maxConsecutiveErrors,
+          activityTimeoutSeconds: body.activityTimeoutSeconds,
           stopPattern: body.stopPattern,
           gitBranchPrefix: body.git?.branchPrefix,
           gitCommitPrefix: body.git?.commitPrefix,
           baseBranch: body.baseBranch,
+          clearPlanningFolder: body.clearPlanningFolder,
         });
 
         // Save the model as last used if provided

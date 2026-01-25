@@ -5,6 +5,7 @@
 
 import { backendManager } from "../core/backend-manager";
 import { getAppConfig, isRemoteOnlyMode } from "../core/config";
+import { deleteAndReinitializeDatabase } from "../persistence/database";
 import type { ServerSettings } from "../types/settings";
 import type { ErrorResponse } from "../types/api";
 
@@ -164,6 +165,30 @@ export const settingsRoutes = {
         return Response.json({ 
           success: true, 
           message: "Backend connection reset successfully" 
+        });
+      } catch (error) {
+        return errorResponse("reset_failed", String(error), 500);
+      }
+    },
+  },
+
+  "/api/settings/reset-all": {
+    /**
+     * POST /api/settings/reset-all - Delete database and reinitialize
+     * This is a destructive operation that deletes all loops, sessions, and preferences.
+     * The database is recreated fresh with all migrations applied.
+     */
+    async POST(): Promise<Response> {
+      try {
+        // Reset backend manager first
+        await backendManager.reset();
+        
+        // Delete and reinitialize the database
+        await deleteAndReinitializeDatabase();
+        
+        return Response.json({ 
+          success: true, 
+          message: "All settings have been reset. Database recreated." 
         });
       } catch (error) {
         return errorResponse("reset_failed", String(error), 500);

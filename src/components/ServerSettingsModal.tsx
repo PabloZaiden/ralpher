@@ -20,10 +20,14 @@ export interface ServerSettingsModalProps {
   onSave: (settings: ServerSettings) => Promise<boolean>;
   /** Callback to test connection */
   onTest: (settings: ServerSettings) => Promise<{ success: boolean; error?: string }>;
+  /** Callback to reset all settings */
+  onResetAll?: () => Promise<boolean>;
   /** Whether saving is in progress */
   saving?: boolean;
   /** Whether testing is in progress */
   testing?: boolean;
+  /** Whether resetting is in progress */
+  resetting?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
   remoteOnly?: boolean;
 }
@@ -38,8 +42,10 @@ export function ServerSettingsModal({
   status,
   onSave,
   onTest,
+  onResetAll,
   saving = false,
   testing = false,
+  resetting = false,
   remoteOnly = false,
 }: ServerSettingsModalProps) {
   // Form state
@@ -49,6 +55,7 @@ export function ServerSettingsModal({
   const [password, setPassword] = useState("");
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Initialize form from settings when modal opens
   useEffect(() => {
@@ -332,6 +339,61 @@ export function ServerSettingsModal({
                       </span>
                     </>
                   )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Reset All Settings - Danger Zone */}
+        {onResetAll && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+            <div className="p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-200 mb-2">
+                Danger Zone
+              </h3>
+              <p className="text-sm text-red-600 dark:text-red-400 mb-4">
+                This will delete all loops, sessions, and preferences. This action cannot be undone.
+              </p>
+              {!showResetConfirm ? (
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setShowResetConfirm(true)}
+                  disabled={resetting}
+                >
+                  Reset all settings
+                </Button>
+              ) : (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-red-600 dark:text-red-400">Are you sure?</span>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="sm"
+                    onClick={async () => {
+                      const success = await onResetAll();
+                      if (success) {
+                        setShowResetConfirm(false);
+                        onClose();
+                        // Reload the page to get fresh state
+                        window.location.reload();
+                      }
+                    }}
+                    loading={resetting}
+                  >
+                    Yes, delete everything
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowResetConfirm(false)}
+                    disabled={resetting}
+                  >
+                    Cancel
+                  </Button>
                 </div>
               )}
             </div>

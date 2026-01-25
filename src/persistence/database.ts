@@ -6,6 +6,7 @@
 
 import { Database } from "bun:sqlite";
 import { join } from "path";
+import { runMigrations } from "./migrations";
 
 let db: Database | null = null;
 
@@ -71,6 +72,9 @@ export async function initializeDatabase(): Promise<void> {
   
   // Create tables
   createTables(db);
+  
+  // Run any pending migrations
+  runMigrations(db);
 }
 
 /**
@@ -189,8 +193,43 @@ export function resetDatabase(): void {
     db!.run("DROP TABLE IF EXISTS loops");
     db!.run("DROP TABLE IF EXISTS sessions");
     db!.run("DROP TABLE IF EXISTS preferences");
+    db!.run("DROP TABLE IF EXISTS schema_migrations");
   });
   
   dropAllTables();
   createTables(db);
+  runMigrations(db);
+}
+
+/**
+ * Delete the database file completely and reinitialize.
+ * This is a destructive operation - all data will be lost.
+ * Use for "Reset all settings" functionality.
+ */
+export async function deleteAndReinitializeDatabase(): Promise<void> {
+  const dbPath = getDatabasePath();
+  
+  // Close existing connection
+  closeDatabase();
+  
+  // Delete the database file and related WAL files
+  const { unlink } = await import("fs/promises");
+  try {
+    await unlink(dbPath);
+  } catch {
+    // File might not exist, that's ok
+  }
+  try {
+    await unlink(`${dbPath}-wal`);
+  } catch {
+    // WAL file might not exist
+  }
+  try {
+    await unlink(`${dbPath}-shm`);
+  } catch {
+    // SHM file might not exist
+  }
+  
+  // Reinitialize
+  await initializeDatabase();
 }

@@ -41,6 +41,9 @@ export interface LoopConfig {
 
   /** Base branch to create the loop from (if different from current when started) */
   baseBranch?: string;
+
+  /** Whether to clear .planning folder on start (default: false) */
+  clearPlanningFolder?: boolean;
 }
 
 /**

@@ -46,6 +46,8 @@ export interface CreateLoopRequest {
   git?: Partial<GitConfig>;
   /** Base branch to create the loop from (default: current branch) */
   baseBranch?: string;
+  /** Clear the .planning folder contents before starting (default: false) */
+  clearPlanningFolder?: boolean;
 }
 
 /**

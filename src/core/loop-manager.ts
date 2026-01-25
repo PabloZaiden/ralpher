@@ -43,6 +43,8 @@ export interface CreateLoopOptions {
   maxIterations?: number;
   /** Maximum consecutive identical errors before failsafe exit (default: 5) */
   maxConsecutiveErrors?: number;
+  /** Activity timeout in seconds - time without events before treating as error (default: 180 = 3 minutes) */
+  activityTimeoutSeconds?: number;
   /** Custom stop pattern (default: "<promise>COMPLETE</promise>$") */
   stopPattern?: string;
   /** Git branch prefix (default: "ralph/") */
@@ -51,6 +53,8 @@ export interface CreateLoopOptions {
   gitCommitPrefix?: string;
   /** Base branch to create the loop from (default: current branch) */
   baseBranch?: string;
+  /** Clear the .planning folder contents before starting (default: false) */
+  clearPlanningFolder?: boolean;
 }
 
 /**
@@ -113,12 +117,14 @@ export class LoopManager {
           : undefined,
       maxIterations: options.maxIterations,
       maxConsecutiveErrors: options.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors,
+      activityTimeoutSeconds: options.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
       stopPattern: options.stopPattern ?? DEFAULT_LOOP_CONFIG.stopPattern,
       git: {
         branchPrefix: options.gitBranchPrefix ?? DEFAULT_LOOP_CONFIG.git.branchPrefix,
         commitPrefix: options.gitCommitPrefix ?? DEFAULT_LOOP_CONFIG.git.commitPrefix,
       },
       baseBranch: options.baseBranch,
+      clearPlanningFolder: options.clearPlanningFolder ?? false,
     };
 
     const state = createInitialState(id);

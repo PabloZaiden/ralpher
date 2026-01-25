@@ -448,4 +448,83 @@ describe("Loops CRUD API Integration", () => {
       expect(body.error).toBe("not_found");
     });
   });
+
+  describe("clearPlanningFolder option", () => {
+    test("creates a loop with clearPlanningFolder = true", async () => {
+      const response = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Clear Planning Test",
+          directory: testWorkDir,
+          prompt: "Task with clearing",
+          clearPlanningFolder: true,
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const body = await response.json();
+      expect(body.config.clearPlanningFolder).toBe(true);
+    });
+
+    test("creates a loop with clearPlanningFolder = false", async () => {
+      const response = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Keep Planning Test",
+          directory: testWorkDir,
+          prompt: "Task without clearing",
+          clearPlanningFolder: false,
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const body = await response.json();
+      expect(body.config.clearPlanningFolder).toBe(false);
+    });
+
+    test("creates a loop with clearPlanningFolder defaulting to false", async () => {
+      const response = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Default Planning Test",
+          directory: testWorkDir,
+          prompt: "Task with default",
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const body = await response.json();
+      // Default value is false (not clearing the planning folder)
+      expect(body.config.clearPlanningFolder).toBe(false);
+    });
+
+    test("GET returns clearPlanningFolder value correctly", async () => {
+      // Create a loop with clearPlanningFolder = true
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Get Clear Planning Test",
+          directory: testWorkDir,
+          prompt: "Test",
+          clearPlanningFolder: true,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Wait for the loop to complete
+      await waitForLoopCompletion(loopId);
+
+      // Get the loop and verify clearPlanningFolder is set
+      const getResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      expect(getResponse.status).toBe(200);
+
+      const getBody = await getResponse.json();
+      expect(getBody.config.clearPlanningFolder).toBe(true);
+    });
+  });
 });
