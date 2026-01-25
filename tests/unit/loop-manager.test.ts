@@ -242,14 +242,15 @@ describe("LoopManager", () => {
       expect(loop.config.clearPlanningFolder).toBe(false);
     });
 
-    test("creates a loop with clearPlanningFolder undefined (default)", async () => {
+    test("creates a loop with clearPlanningFolder defaulting to false", async () => {
       const loop = await manager.createLoop({
         name: "Default Planning Loop",
         directory: testWorkDir,
         prompt: "Task with default",
       });
 
-      expect(loop.config.clearPlanningFolder).toBeUndefined();
+      // After persistence, clearPlanningFolder defaults to false (not undefined)
+      expect(loop.config.clearPlanningFolder).toBe(false);
     });
 
     test("clearPlanningFolder is persisted correctly", async () => {

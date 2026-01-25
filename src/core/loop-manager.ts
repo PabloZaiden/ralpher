@@ -124,7 +124,7 @@ export class LoopManager {
         commitPrefix: options.gitCommitPrefix ?? DEFAULT_LOOP_CONFIG.git.commitPrefix,
       },
       baseBranch: options.baseBranch,
-      clearPlanningFolder: options.clearPlanningFolder,
+      clearPlanningFolder: options.clearPlanningFolder ?? false,
     };
 
     const state = createInitialState(id);

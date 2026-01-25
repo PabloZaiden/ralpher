@@ -484,7 +484,7 @@ describe("Loops CRUD API Integration", () => {
       expect(body.config.clearPlanningFolder).toBe(false);
     });
 
-    test("creates a loop with clearPlanningFolder undefined (default)", async () => {
+    test("creates a loop with clearPlanningFolder defaulting to false", async () => {
       const response = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
