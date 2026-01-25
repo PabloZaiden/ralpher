@@ -55,6 +55,8 @@ export interface CreateLoopOptions {
   baseBranch?: string;
   /** Clear the .planning folder contents before starting (default: false) */
   clearPlanningFolder?: boolean;
+  /** Start in plan creation mode instead of immediate execution */
+  planMode?: boolean;
 }
 
 /**
@@ -128,6 +130,17 @@ export class LoopManager {
     };
 
     const state = createInitialState(id);
+    
+    // If plan mode is enabled, initialize plan mode state
+    if (options.planMode) {
+      state.status = "planning";
+      state.planMode = {
+        active: true,
+        feedbackRounds: 0,
+        planningFolderCleared: false,
+      };
+    }
+    
     const loop: Loop = { config, state };
 
     // Save to persistence
@@ -142,6 +155,189 @@ export class LoopManager {
     });
 
     return loop;
+  }
+
+  /**
+   * Start a loop in plan mode (plan creation phase).
+   * This creates the plan and sets up the planning session.
+   */
+  async startPlanMode(loopId: string): Promise<void> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      throw new Error(`Loop not found: ${loopId}`);
+    }
+
+    // Check if loop is in planning status
+    if (loop.state.status !== "planning") {
+      throw new Error(`Loop is not in planning status: ${loop.state.status}`);
+    }
+
+    // Check if already has an engine running
+    if (this.engines.has(loopId)) {
+      throw new Error("Loop plan mode is already running");
+    }
+
+    // Get the appropriate command executor
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+    const git = GitService.withExecutor(executor);
+
+    // Check for uncommitted changes
+    const hasChanges = await git.hasUncommittedChanges(loop.config.directory);
+    if (hasChanges) {
+      const changedFiles = await git.getChangedFiles(loop.config.directory);
+      const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
+        code: string;
+        changedFiles: string[];
+      };
+      error.code = "UNCOMMITTED_CHANGES";
+      error.changedFiles = changedFiles;
+      throw error;
+    }
+
+    // Clear .planning folder BEFORE starting session (if requested)
+    if (loop.config.clearPlanningFolder && !loop.state.planMode?.planningFolderCleared) {
+      const planningDir = `${loop.config.directory}/.planning`;
+      
+      try {
+        const exists = await executor.directoryExists(planningDir);
+        if (exists) {
+          const files = await executor.listDirectory(planningDir);
+          const filesToDelete = files.filter((file) => file !== ".gitkeep");
+          
+          if (filesToDelete.length > 0) {
+            const fileArgs = filesToDelete.map((file) => `${planningDir}/${file}`);
+            await executor.exec("rm", ["-rf", ...fileArgs], {
+              cwd: loop.config.directory,
+            });
+          }
+        }
+        
+        // Mark as cleared
+        if (loop.state.planMode) {
+          loop.state.planMode.planningFolderCleared = true;
+          await updateLoopState(loopId, loop.state);
+        }
+      } catch (error) {
+        log.warn(`Failed to clear .planning folder: ${String(error)}`);
+      }
+    }
+
+    // Get backend from global manager
+    const backend = backendManager.getBackend();
+
+    // Create engine with plan mode prompt
+    const engine = new LoopEngine({
+      loop,
+      backend,
+      gitService: git,
+      eventEmitter: this.emitter,
+      onPersistState: async (state) => {
+        await updateLoopState(loopId, state);
+      },
+    });
+
+    this.engines.set(loopId, engine);
+
+    // Start the plan creation
+    engine.start().catch((error) => {
+      log.error(`Loop ${loopId} plan mode failed:`, String(error));
+    });
+
+    // Persist state changes periodically
+    this.startStatePersistence(loopId);
+  }
+
+  /**
+   * Send feedback on a plan to refine it.
+   */
+  async sendPlanFeedback(loopId: string, feedback: string): Promise<void> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      throw new Error("Loop plan mode is not running");
+    }
+
+    // Verify loop is in planning status
+    if (engine.state.status !== "planning") {
+      throw new Error(`Loop is not in planning status: ${engine.state.status}`);
+    }
+
+    // Increment feedback rounds
+    if (engine.state.planMode) {
+      engine.state.planMode.feedbackRounds += 1;
+    }
+
+    // Set the feedback as a pending prompt
+    engine.setPendingPrompt(feedback);
+  }
+
+  /**
+   * Accept a plan and transition to execution mode.
+   * Reuses the same session from plan creation.
+   */
+  async acceptPlan(loopId: string): Promise<void> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      throw new Error("Loop plan mode is not running");
+    }
+
+    // Verify loop is in planning status
+    if (engine.state.status !== "planning") {
+      throw new Error(`Loop is not in planning status: ${engine.state.status}`);
+    }
+
+    // Store the plan session info before transitioning
+    const planSessionId = engine.state.session?.id;
+    const planServerUrl = engine.state.session?.serverUrl;
+
+    // Update state to transition from planning to running
+    // Mark plan mode as no longer active but preserve the flag that folder was cleared
+    const updatedState: Partial<LoopState> = {
+      status: "running",
+      planMode: {
+        active: false,
+        planSessionId,
+        planServerUrl,
+        feedbackRounds: engine.state.planMode?.feedbackRounds ?? 0,
+        planningFolderCleared: engine.state.planMode?.planningFolderCleared ?? false,
+      },
+    };
+    
+    Object.assign(engine.state, updatedState);
+    await updateLoopState(loopId, engine.state);
+
+    // Send the "start execution" prompt to the existing session
+    const executionPrompt = `The plan has been accepted. Now execute all tasks in the plan.
+
+Follow the standard loop execution flow:
+- Read AGENTS.md and the plan in .planning/plan.md
+- Pick up the most important task to continue with
+- Update .planning/status.md with your progress
+- If you complete all tasks in the plan, end your response with:
+
+<promise>COMPLETE</promise>`;
+
+    engine.setPendingPrompt(executionPrompt);
+
+    // Emit event
+    this.emitter.emit({
+      type: "loop.started",
+      loopId,
+      iteration: 0,
+      timestamp: createTimestamp(),
+    });
+  }
+
+  /**
+   * Discard a plan and delete the loop.
+   */
+  async discardPlan(loopId: string): Promise<boolean> {
+    // Stop the engine if running
+    if (this.engines.has(loopId)) {
+      await this.stopLoop(loopId, "Plan discarded");
+    }
+
+    // Delete the loop
+    return this.deleteLoop(loopId);
   }
 
   /**
