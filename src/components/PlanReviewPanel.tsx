@@ -4,7 +4,8 @@
 
 import { useState } from "react";
 import { Button, Card } from "./common";
-import type { Loop } from "../types";
+import { LogViewer, type LogEntry } from "./LogViewer";
+import type { Loop, MessageData, ToolCallData } from "../types";
 
 export interface PlanReviewPanelProps {
   /** The loop in planning mode */
@@ -17,7 +18,15 @@ export interface PlanReviewPanelProps {
   onAcceptPlan: () => Promise<void>;
   /** Callback to discard the plan */
   onDiscardPlan: () => Promise<void>;
+  /** Messages for the log viewer */
+  messages?: MessageData[];
+  /** Tool calls for the log viewer */
+  toolCalls?: ToolCallData[];
+  /** Logs for the log viewer */
+  logs?: LogEntry[];
 }
+
+type PlanTab = "plan" | "log";
 
 export function PlanReviewPanel({
   loop,
@@ -25,12 +34,17 @@ export function PlanReviewPanel({
   onSendFeedback,
   onAcceptPlan,
   onDiscardPlan,
+  messages = [],
+  toolCalls = [],
+  logs = [],
 }: PlanReviewPanelProps) {
   const [feedback, setFeedback] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [activeTab, setActiveTab] = useState<PlanTab>("plan");
 
   const feedbackRounds = loop.state.planMode?.feedbackRounds ?? 0;
+  const hasActivity = messages.length > 0 || toolCalls.length > 0 || logs.length > 0;
 
   const handleSendFeedback = async () => {
     if (!feedback.trim()) return;
@@ -63,33 +77,74 @@ export function PlanReviewPanel({
     }
   };
 
+  const tabs: { id: PlanTab; label: string }[] = [
+    { id: "plan", label: "Plan" },
+    { id: "log", label: "Activity Log" },
+  ];
+
   return (
     <div className="space-y-4">
-      {/* Plan Content Display */}
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Plan Review
-          </h3>
-          {feedbackRounds > 0 && (
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              Feedback rounds: {feedbackRounds}
+      {/* Tab navigation */}
+      <div className="flex border-b border-gray-200 dark:border-gray-700">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`relative px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              activeTab === tab.id
+                ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+            }`}
+          >
+            <span className="flex items-center gap-2">
+              {tab.label}
+              {tab.id === "log" && hasActivity && activeTab !== "log" && (
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500" />
+                </span>
+              )}
             </span>
-          )}
-        </div>
+          </button>
+        ))}
+        {feedbackRounds > 0 && (
+          <span className="ml-auto flex items-center text-sm text-gray-600 dark:text-gray-400 px-4">
+            Feedback rounds: {feedbackRounds}
+          </span>
+        )}
+      </div>
 
-        <div className="prose prose-sm dark:prose-invert max-w-none">
-          {planContent ? (
-            <pre className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto text-sm">
-              {planContent}
-            </pre>
-          ) : (
-            <p className="text-gray-600 dark:text-gray-400">
-              Waiting for AI to generate plan...
-            </p>
-          )}
-        </div>
-      </Card>
+      {/* Tab content */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        {activeTab === "plan" && (
+          <div className="p-6">
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              {planContent ? (
+                <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
+                  {planContent}
+                </pre>
+              ) : (
+                <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400">
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500" />
+                  </span>
+                  <span>Waiting for AI to generate plan...</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "log" && (
+          <LogViewer
+            messages={messages}
+            toolCalls={toolCalls}
+            logs={logs}
+            maxHeight="500px"
+          />
+        )}
+      </div>
 
       {/* Feedback Input */}
       <Card className="p-6">

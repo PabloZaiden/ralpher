@@ -501,6 +501,9 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   await discardPlan();
                   if (onBack) onBack();
                 }}
+                messages={messages}
+                toolCalls={toolCalls}
+                logs={logs}
               />
             ) : (
               <>
