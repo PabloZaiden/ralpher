@@ -161,7 +161,8 @@ export function useLoops(): UseLoopsResult {
       }
       
       const loop = (await response.json()) as Loop;
-      setLoops((prev) => [...prev, loop]);
+      // Don't add to state here - let the WebSocket event handle it
+      // to avoid duplicate entries during the brief moment before refresh completes
       
       return { loop };
     } catch (err) {
@@ -183,6 +184,7 @@ export function useLoops(): UseLoopsResult {
         throw new Error(errorData.message || "Failed to update loop");
       }
       const loop = (await response.json()) as Loop;
+      // Update state immediately for config changes (no WebSocket event for PATCH)
       setLoops((prev) =>
         prev.map((l) => (l.config.id === id ? loop : l))
       );
@@ -197,7 +199,8 @@ export function useLoops(): UseLoopsResult {
   const deleteLoop = useCallback(async (id: string): Promise<boolean> => {
     try {
       await deleteLoopApi(id);
-      setLoops((prev) => prev.filter((l) => l.config.id !== id));
+      // Don't remove from state here - let the WebSocket event handle it
+      // to avoid race conditions with state updates
       return true;
     } catch (err) {
       setError(String(err));
@@ -245,6 +248,8 @@ export function useLoops(): UseLoopsResult {
   const purgeLoop = useCallback(async (id: string): Promise<boolean> => {
     try {
       await purgeLoopApi(id);
+      // Remove from state immediately since purge doesn't emit a WebSocket event
+      // (archived loops are removed from the system entirely)
       setLoops((prev) => prev.filter((l) => l.config.id !== id));
       return true;
     } catch (err) {
