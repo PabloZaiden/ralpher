@@ -336,6 +336,23 @@ export class LoopEngine {
   }
 
   /**
+   * Continue loop execution after plan acceptance.
+   * Used to start the execution phase after a plan has been accepted.
+   * The engine must be in running status with a pending prompt set.
+   */
+  async continueExecution(): Promise<void> {
+    if (this.loop.state.status !== "running") {
+      throw new Error(`Cannot continue execution in status: ${this.loop.state.status}`);
+    }
+    
+    log.trace("[LoopEngine] continueExecution: Starting execution loop");
+    this.emitLog("info", "Starting execution after plan acceptance");
+    
+    // Run the loop
+    await this.runLoop();
+  }
+
+  /**
    * Clear the .planning folder contents (except .gitkeep).
    * If any tracked files were deleted, commits the changes.
    */

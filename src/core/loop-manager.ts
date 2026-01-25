@@ -400,6 +400,11 @@ Follow the standard loop execution flow:
       iteration: 0,
       timestamp: createTimestamp(),
     });
+
+    // Start the execution loop in the background
+    engine.continueExecution().catch((error) => {
+      log.error(`Loop ${loopId} execution after plan acceptance failed:`, String(error));
+    });
   }
 
   /**
