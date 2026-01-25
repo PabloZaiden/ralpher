@@ -114,6 +114,25 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     fetchLastModel();
   }, []);
 
+  // Last directory state
+  const [lastDirectory, setLastDirectory] = useState<string | null>(null);
+
+  // Fetch last directory on mount
+  useEffect(() => {
+    async function fetchLastDirectory() {
+      try {
+        const response = await fetch("/api/preferences/last-directory");
+        if (response.ok) {
+          const data = await response.json();
+          setLastDirectory(data);
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+    fetchLastDirectory();
+  }, []);
+
   // Fetch models when directory changes
   const fetchModels = useCallback(async (directory: string) => {
     if (!directory) {
@@ -445,6 +464,17 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               if (request.model) {
                 setLastModel(request.model);
               }
+              // Save last used directory
+              try {
+                await fetch("/api/preferences/last-directory", {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ directory: request.directory }),
+                });
+                setLastDirectory(request.directory);
+              } catch {
+                // Ignore errors saving preference
+              }
               // If there are uncommitted changes, show error modal
               if (result.startError) {
                 setUncommittedModal({
@@ -464,6 +494,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           branches={branches}
           branchesLoading={branchesLoading}
           currentBranch={currentBranch}
+          initialDirectory={lastDirectory ?? ""}
         />
       </Modal>
 
