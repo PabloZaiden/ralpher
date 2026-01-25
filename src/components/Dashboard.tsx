@@ -460,6 +460,19 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         <CreateLoopForm
           onSubmit={async (request) => {
             const result = await createLoop(request);
+            
+            // Handle uncommitted changes error first
+            if (result.startError) {
+              setUncommittedModal({
+                open: true,
+                loopId: result.loop?.config.id ?? null,
+                error: result.startError,
+              });
+              handleCloseCreateModal();
+              return;
+            }
+            
+            // Handle success case
             if (result.loop) {
               handleCloseCreateModal();
               // Refresh last model in case it changed
@@ -476,14 +489,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                 setLastDirectory(request.directory);
               } catch {
                 // Ignore errors saving preference
-              }
-              // If there are uncommitted changes, show error modal
-              if (result.startError) {
-                setUncommittedModal({
-                  open: true,
-                  loopId: result.loop.config.id,
-                  error: result.startError,
-                });
               }
             }
           }}
