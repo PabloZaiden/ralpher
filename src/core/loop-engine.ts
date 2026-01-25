@@ -212,15 +212,19 @@ export class LoopEngine {
    * This sets up the git branch and backend session.
    */
   async start(): Promise<void> {
-    if (this.loop.state.status !== "idle" && this.loop.state.status !== "stopped") {
+    // Allow starting from idle, stopped, or planning (for plan mode)
+    if (this.loop.state.status !== "idle" && this.loop.state.status !== "stopped" && this.loop.state.status !== "planning") {
       throw new Error(`Cannot start loop in status: ${this.loop.state.status}`);
     }
 
     this.emitLog("info", "Starting loop execution", { loopName: this.config.name });
 
     this.aborted = false;
+    
+    // Only update status if not in plan mode (preserve "planning" status)
+    const isInPlanMode = this.loop.state.status === "planning";
     this.updateState({
-      status: "starting",
+      status: isInPlanMode ? "planning" : "starting",
       startedAt: createTimestamp(),
       currentIteration: 0,
       recentIterations: [],
@@ -229,10 +233,13 @@ export class LoopEngine {
 
     try {
       // Set up git branch first (before any file modifications)
-      this.emitLog("info", "Setting up git branch...");
-      log.trace("[LoopEngine] Starting setupGitBranch...");
-      await this.setupGitBranch();
-      log.trace("[LoopEngine] setupGitBranch completed successfully");
+      // Skip git setup in plan mode - it will happen when plan is accepted
+      if (!isInPlanMode) {
+        this.emitLog("info", "Setting up git branch...");
+        log.trace("[LoopEngine] Starting setupGitBranch...");
+        await this.setupGitBranch();
+        log.trace("[LoopEngine] setupGitBranch completed successfully");
+      }
 
       // Clear .planning folder if requested (after branch setup, so deletions are on the new branch)
       // NEVER clear if plan mode already cleared it
@@ -249,15 +256,17 @@ export class LoopEngine {
       await this.setupSession();
       log.trace("[LoopEngine] setupSession completed successfully");
 
-      // Emit started event
-      log.trace("[LoopEngine] About to emit loop.started event");
-      this.emit({
-        type: "loop.started",
-        loopId: this.config.id,
-        iteration: 0,
-        timestamp: createTimestamp(),
-      });
-      log.trace("[LoopEngine] loop.started event emitted");
+      // Emit started event (skip in plan mode - will emit when plan is accepted)
+      if (!isInPlanMode) {
+        log.trace("[LoopEngine] About to emit loop.started event");
+        this.emit({
+          type: "loop.started",
+          loopId: this.config.id,
+          iteration: 0,
+          timestamp: createTimestamp(),
+        });
+        log.trace("[LoopEngine] loop.started event emitted");
+      }
 
       log.trace("[LoopEngine] About to emit 'Loop started successfully' log");
       this.emitLog("info", "Loop started successfully, beginning iterations");
@@ -302,6 +311,14 @@ export class LoopEngine {
     });
 
     this.emitLog("info", "Loop stopped");
+  }
+
+  /**
+   * Set up git branch for the loop (public method for plan mode acceptance).
+   * This is called when transitioning from planning to execution.
+   */
+  async setupGitBranchForPlanAcceptance(): Promise<void> {
+    await this.setupGitBranch(true);
   }
 
   /**
@@ -381,9 +398,10 @@ export class LoopEngine {
 
   /**
    * Set up git branch for the loop.
-   * Git is always enabled for loops.
+   * Creates or checks out the working branch.
+   * @param allowPlanningFolderChanges - If true, allow uncommitted changes in .planning folder only
    */
-  private async setupGitBranch(): Promise<void> {
+  private async setupGitBranch(allowPlanningFolderChanges = false): Promise<void> {
     const directory = this.config.directory;
     
     // Generate branch name using loop name and start timestamp
@@ -405,7 +423,18 @@ export class LoopEngine {
     this.emitLog("debug", "Checking for uncommitted changes");
     const hasChanges = await this.git.hasUncommittedChanges(directory);
     if (hasChanges) {
-      throw new Error("Directory has uncommitted changes. Please commit or stash them first.");
+      // If allowing .planning folder changes (plan mode acceptance), check if only .planning has changes
+      if (allowPlanningFolderChanges) {
+        const changedFiles = await this.git.getChangedFiles(directory);
+        const onlyPlanningChanges = changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
+        if (!onlyPlanningChanges) {
+          throw new Error("Directory has uncommitted changes. Please commit or stash them first.");
+        }
+        // Allow .planning changes to proceed
+        this.emitLog("debug", "Allowing uncommitted changes in .planning folder for plan mode acceptance");
+      } else {
+        throw new Error("Directory has uncommitted changes. Please commit or stash them first.");
+      }
     }
 
     // If a base branch was specified, checkout that branch first

@@ -186,9 +186,8 @@ export class LoopManager {
     if (hasChanges) {
       const changedFiles = await git.getChangedFiles(loop.config.directory);
       
-      // If clearPlanningFolder is enabled, allow uncommitted changes in .planning/ only
-      const onlyPlanningChanges = loop.config.clearPlanningFolder &&
-        changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
+      // In plan mode, always allow uncommitted changes in .planning/ only
+      const onlyPlanningChanges = changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
       
       if (!onlyPlanningChanges) {
         const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
@@ -306,6 +305,13 @@ export class LoopManager {
     // Store the plan session info before transitioning
     const planSessionId = engine.state.session?.id;
     const planServerUrl = engine.state.session?.serverUrl;
+
+    // Set up git branch now (was skipped during plan mode)
+    try {
+      await engine.setupGitBranchForPlanAcceptance();
+    } catch (error) {
+      throw new Error(`Failed to set up git branch: ${String(error)}`);
+    }
 
     // Update state to transition from planning to running
     // Mark plan mode as no longer active but preserve the flag that folder was cleared
