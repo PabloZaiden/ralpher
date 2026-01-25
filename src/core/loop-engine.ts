@@ -1165,6 +1165,8 @@ When the updated plan is ready, end your response with:
 
 - Never ask for input from the user or any questions. This will always run unattended
 
+- When you think you're done, check the plan and status files to ensure all tasks are actually marked as completed.
+
 - Only if you have completed every single non-manual task in the plan, end your response with:
 
 <promise>COMPLETE</promise>`;
