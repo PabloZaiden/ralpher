@@ -481,8 +481,16 @@ export class LoopEngine {
     }
 
     // Get the current branch (original branch / base branch)
-    const originalBranch = await this.git.getCurrentBranch(directory);
-    this.emitLog("info", `Current branch: ${originalBranch}`);
+    // If we already have git state with originalBranch, preserve it
+    // (This handles plan mode where branch setup happens after plan acceptance)
+    let originalBranch: string;
+    if (this.loop.state.git?.originalBranch) {
+      originalBranch = this.loop.state.git.originalBranch;
+      this.emitLog("info", `Preserving existing original branch: ${originalBranch}`);
+    } else {
+      originalBranch = await this.git.getCurrentBranch(directory);
+      this.emitLog("info", `Current branch: ${originalBranch}`);
+    }
 
     // Pull latest changes from the base branch to minimize merge conflicts
     this.emitLog("info", `Pulling latest changes from remote for branch: ${originalBranch}`);
