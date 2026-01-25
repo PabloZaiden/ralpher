@@ -110,6 +110,22 @@ export interface LoopState {
 
   /** Pending prompt for the next iteration (if set, overrides config.prompt for next iteration only) */
   pendingPrompt?: string;
+
+  /** Plan mode state (when loop is in planning status) */
+  planMode?: {
+    /** Whether plan mode is active */
+    active: boolean;
+    /** The session ID from plan creation (to reuse) */
+    planSessionId?: string;
+    /** Server URL from plan creation */
+    planServerUrl?: string;
+    /** Number of feedback rounds */
+    feedbackRounds: number;
+    /** Plan content (cached for display) */
+    planContent?: string;
+    /** Whether .planning folder was already cleared (prevents re-clearing) */
+    planningFolderCleared: boolean;
+  };
 }
 
 /**
@@ -177,6 +193,7 @@ export interface ConsecutiveErrorTracker {
  */
 export type LoopStatus =
   | "idle"           // Created but not started
+  | "planning"       // Loop is in plan creation/review mode
   | "starting"       // Initializing backend connection
   | "running"        // Actively executing an iteration
   | "waiting"        // Between iterations

@@ -235,7 +235,10 @@ export class LoopEngine {
       log.trace("[LoopEngine] setupGitBranch completed successfully");
 
       // Clear .planning folder if requested (after branch setup, so deletions are on the new branch)
-      if (this.config.clearPlanningFolder) {
+      // NEVER clear if plan mode already cleared it
+      if (this.loop.state.planMode?.planningFolderCleared) {
+        this.emitLog("info", "Skipping .planning folder clear - already cleared during plan mode");
+      } else if (this.config.clearPlanningFolder) {
         this.emitLog("info", "Clearing .planning folder...");
         await this.clearPlanningFolder();
       }
@@ -1077,8 +1080,64 @@ export class LoopEngine {
    * Build the prompt for an iteration.
    * Uses a consistent template that instructs the AI to follow the planning docs pattern.
    * If a pendingPrompt is set, it overrides the config.prompt for this iteration only.
+   * If loop is in planning mode, uses the plan creation prompt instead.
    */
   private buildPrompt(_iteration: number): PromptInput {
+    // Check if this is a plan mode iteration
+    if (this.loop.state.status === "planning" && this.loop.state.planMode?.active) {
+      // Plan mode prompt
+      const feedbackRounds = this.loop.state.planMode.feedbackRounds;
+      
+      if (feedbackRounds === 0) {
+        // Initial plan creation
+        const text = `- Goal: ${this.config.prompt}
+
+- Create a detailed plan to achieve this goal. Write the plan to \`./.planning/plan.md\`.
+
+- The plan should include:
+  - Clear objectives
+  - Step-by-step tasks with descriptions
+  - Any dependencies between tasks
+  - Estimated complexity per task
+
+- Create a \`./.planning/status.md\` file to track progress.
+
+- Do NOT start implementing yet. Only create the plan.
+
+- When the plan is ready, end your response with:
+
+<promise>PLAN_READY</promise>`;
+
+        return {
+          parts: [{ type: "text", text }],
+          model: this.config.model,
+        };
+      } else {
+        // Plan feedback prompt (uses pending prompt set by sendPlanFeedback)
+        const feedback = this.loop.state.pendingPrompt ?? "Please refine the plan based on feedback.";
+        
+        const text = `The user has provided feedback on your plan:
+
+---
+${feedback}
+---
+
+Please update the plan in \`./.planning/plan.md\` based on this feedback.
+
+When the updated plan is ready, end your response with:
+
+<promise>PLAN_READY</promise>`;
+
+        // Clear the pending prompt after use
+        this.updateState({ pendingPrompt: undefined });
+
+        return {
+          parts: [{ type: "text", text }],
+          model: this.config.model,
+        };
+      }
+    }
+    
     // Use pendingPrompt if set, otherwise use config.prompt
     const goalPrompt = this.loop.state.pendingPrompt ?? this.config.prompt;
     
