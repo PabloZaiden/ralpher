@@ -38,13 +38,28 @@ export function getDatabase(): Database {
 /**
  * Initialize the database connection and create tables.
  * Must be called before any database operations.
+ * If already initialized with the same path, returns early.
+ * If initialized with a different path, closes the old connection first.
  */
 export async function initializeDatabase(): Promise<void> {
+  const dbPath = getDatabasePath();
+  
+  // If already initialized with the same path, return early
+  if (db) {
+    // Check if it's the same database path - if so, nothing to do
+    // Note: db.filename returns the path of the open database
+    if (db.filename === dbPath) {
+      return;
+    }
+    // Different path - close the old connection to prevent resource leak
+    db.close();
+    db = null;
+  }
+  
   // Ensure data directory exists
   const { mkdir } = await import("fs/promises");
   await mkdir(getDataDir(), { recursive: true });
 
-  const dbPath = getDatabasePath();
   db = new Database(dbPath);
   
   // Enable WAL mode for better concurrency
