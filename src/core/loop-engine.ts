@@ -213,6 +213,12 @@ export class LoopEngine {
     });
 
     try {
+      // Clear .planning folder if requested
+      if (this.config.clearPlanningFolder) {
+        this.emitLog("info", "Clearing .planning folder...");
+        await this.clearPlanningFolder();
+      }
+
       // Set up git branch
       this.emitLog("info", "Setting up git branch...");
       log.trace("[LoopEngine] Starting setupGitBranch...");
@@ -281,30 +287,62 @@ export class LoopEngine {
   }
 
   /**
-   * Set a pending prompt for the next iteration.
-   * This will override config.prompt for the next iteration only.
+   * Clear the .planning folder contents (except .gitkeep).
    */
-  setPendingPrompt(prompt: string): void {
-    this.updateState({
-      pendingPrompt: prompt,
-    });
-    this.emitLog("info", "Pending prompt set for next iteration", {
-      promptLength: prompt.length,
-    });
+  private async clearPlanningFolder(): Promise<void> {
+    const planningDir = `${this.config.directory}/.planning`;
+    
+    try {
+      // Get command executor for the directory
+      const executor = await backendManager.getCommandExecutorAsync(this.config.directory);
+      
+      // Check if .planning directory exists
+      const exists = await executor.directoryExists(planningDir);
+      
+      if (!exists) {
+        this.emitLog("debug", ".planning directory does not exist, skipping clear");
+        return;
+      }
+      
+      // List all files in the directory
+      const files = await executor.listDirectory(planningDir);
+      
+      if (files.length === 0) {
+        this.emitLog("debug", ".planning directory is already empty");
+        return;
+      }
+      
+      // Filter out .gitkeep
+      const filesToDelete = files.filter((file) => file !== ".gitkeep");
+      
+      if (filesToDelete.length === 0) {
+        this.emitLog("debug", ".planning directory only contains .gitkeep");
+        return;
+      }
+      
+      // Delete all files except .gitkeep using rm command
+      const fileArgs = filesToDelete.map((file) => `${planningDir}/${file}`);
+      const result = await executor.exec("rm", ["-rf", ...fileArgs], {
+        cwd: this.config.directory,
+      });
+      
+      if (!result.success) {
+        throw new Error(`rm command failed: ${result.stderr}`);
+      }
+      
+      this.emitLog("info", `Cleared .planning folder: ${filesToDelete.length} file(s) deleted`, {
+        deletedCount: filesToDelete.length,
+        preservedFiles: files.includes(".gitkeep") ? [".gitkeep"] : [],
+      });
+    } catch (error) {
+      // Log error but don't fail the loop - this is not critical
+      this.emitLog("warn", `Failed to clear .planning folder: ${String(error)}`);
+    }
   }
 
   /**
-   * Clear the pending prompt.
-   */
-  clearPendingPrompt(): void {
-    this.updateState({
-      pendingPrompt: undefined,
-    });
-    this.emitLog("info", "Pending prompt cleared");
-  }
-
-  /**
-   * Set up the git branch for this loop.
+   * Set up git branch for the loop.
+   * Git is always enabled for loops.
    */
   private async setupGitBranch(): Promise<void> {
     const directory = this.config.directory;

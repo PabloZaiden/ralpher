@@ -67,6 +67,7 @@ export function CreateLoopForm({
   const [submitting, setSubmitting] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedBranch, setSelectedBranch] = useState<string>("");
+  const [clearPlanningFolder, setClearPlanningFolder] = useState(false);
 
   // Update directory when initialDirectory prop changes (e.g., after async fetch)
   useEffect(() => {
@@ -166,6 +167,11 @@ export function CreateLoopForm({
     // Add base branch if different from current
     if (selectedBranch && selectedBranch !== currentBranch) {
       request.baseBranch = selectedBranch;
+    }
+
+    // Add clearPlanningFolder if enabled
+    if (clearPlanningFolder) {
+      request.clearPlanningFolder = true;
     }
 
     try {
@@ -491,6 +497,26 @@ export function CreateLoopForm({
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Time without AI activity before treating as error and retrying. Minimum: 60 seconds. (default: 180)
             </p>
+          </div>
+
+          {/* Clear planning folder */}
+          <div>
+            <label className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={clearPlanningFolder}
+                onChange={(e) => setClearPlanningFolder(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+              />
+              <div className="flex-1">
+                <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Clear ./.planning folder
+                </span>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  Delete existing plan and status files before starting
+                </p>
+              </div>
+            </label>
           </div>
         </div>
       )}
