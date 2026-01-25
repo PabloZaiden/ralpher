@@ -118,6 +118,7 @@ export async function getSessionMapping(
 
 /**
  * Set a session mapping for a loop.
+ * Uses UPSERT to preserve created_at on updates.
  */
 export async function setSessionMapping(
   backendName: string,
@@ -127,9 +128,13 @@ export async function setSessionMapping(
 ): Promise<void> {
   const db = getDatabase();
   
+  // Use INSERT ... ON CONFLICT to preserve created_at on updates
   const stmt = db.prepare(`
-    INSERT OR REPLACE INTO sessions (backend_name, loop_id, session_id, server_url, created_at)
+    INSERT INTO sessions (backend_name, loop_id, session_id, server_url, created_at)
     VALUES (?, ?, ?, ?, ?)
+    ON CONFLICT(backend_name, loop_id) DO UPDATE SET
+      session_id = excluded.session_id,
+      server_url = excluded.server_url
   `);
   
   stmt.run(

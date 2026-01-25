@@ -119,15 +119,16 @@ function createTables(database: Database): void {
     `);
 
     // Sessions table - maps loops to backend sessions
+    // Uses composite primary key (backend_name, loop_id) since id was unused
+    // and this combination is already unique
     database.run(`
       CREATE TABLE IF NOT EXISTS sessions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
         backend_name TEXT NOT NULL,
         loop_id TEXT NOT NULL,
         session_id TEXT NOT NULL,
         server_url TEXT,
         created_at TEXT NOT NULL,
-        UNIQUE(backend_name, loop_id)
+        PRIMARY KEY (backend_name, loop_id)
       )
     `);
 
@@ -144,10 +145,8 @@ function createTables(database: Database): void {
       CREATE INDEX IF NOT EXISTS idx_loops_created_at ON loops(created_at DESC)
     `);
 
-    // Create index for faster session lookups
-    database.run(`
-      CREATE INDEX IF NOT EXISTS idx_sessions_backend_loop ON sessions(backend_name, loop_id)
-    `);
+    // Note: No index needed for sessions - composite primary key (backend_name, loop_id)
+    // already provides efficient lookup
   });
   
   createAllTables();
