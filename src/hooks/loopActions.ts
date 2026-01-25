@@ -137,3 +137,56 @@ export async function clearPendingPromptApi(loopId: string): Promise<boolean> {
 
   return true;
 }
+
+/**
+ * Send feedback to refine a plan via the API.
+ */
+export async function sendPlanFeedbackApi(
+  loopId: string,
+  feedback: string
+): Promise<boolean> {
+  const response = await fetch(`/api/loops/${loopId}/plan/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ feedback }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || "Failed to send plan feedback");
+  }
+
+  return true;
+}
+
+/**
+ * Accept a plan and start the loop execution via the API.
+ */
+export async function acceptPlanApi(loopId: string): Promise<boolean> {
+  const response = await fetch(`/api/loops/${loopId}/plan/accept`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || "Failed to accept plan");
+  }
+
+  return true;
+}
+
+/**
+ * Discard a plan and delete the loop via the API.
+ */
+export async function discardPlanApi(loopId: string): Promise<boolean> {
+  const response = await fetch(`/api/loops/${loopId}/plan/discard`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || "Failed to discard plan");
+  }
+
+  return true;
+}
