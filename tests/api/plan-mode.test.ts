@@ -158,6 +158,16 @@ describe("Plan Mode API Integration", () => {
   });
 
   describe("POST /api/loops (plan mode)", () => {
+    // Helper to commit any changes after tests
+    async function commitChanges() {
+      try {
+        await Bun.$`git -C ${testWorkDir} add -A`.quiet();
+        await Bun.$`git -C ${testWorkDir} commit -m "Test changes" --allow-empty`.quiet();
+      } catch {
+        // Ignore if nothing to commit
+      }
+    }
+
     test("creates loop in planning status when planMode is true", async () => {
       const response = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
@@ -173,19 +183,22 @@ describe("Plan Mode API Integration", () => {
 
       expect(response.ok).toBe(true);
       const data = await response.json();
-      expect(data.id).toBeDefined();
+      expect(data.config?.id).toBeDefined();
 
       // Get the loop and verify status
-      const getResponse = await fetch(`${baseUrl}/api/loops/${data.id}`);
+      const getResponse = await fetch(`${baseUrl}/api/loops/${data.config.id}`);
       expect(getResponse.ok).toBe(true);
       const loop = await getResponse.json();
       expect(loop.state.status).toBe("planning");
       expect(loop.state.planMode?.active).toBe(true);
+
+      // Clean up for next test
+      await commitChanges();
     });
 
     test("clears planning folder before plan creation when clearPlanningFolder is true", async () => {
-      // Setup: Create existing files
-      const planningDir = join(testWorkDir, ".planning-test1");
+      // Setup: Create existing files in .planning folder
+      const planningDir = join(testWorkDir, ".planning");
       await mkdir(planningDir, { recursive: true });
       await writeFile(join(planningDir, "old-plan.md"), "Old content");
 
@@ -196,7 +209,6 @@ describe("Plan Mode API Integration", () => {
           name: "Test Clear Folder",
           prompt: "Create a plan",
           directory: testWorkDir,
-          planningFolderPath: ".planning-test1",
           maxIterations: 1,
           clearPlanningFolder: true,
           planMode: true,
@@ -213,9 +225,12 @@ describe("Plan Mode API Integration", () => {
       expect(await exists(join(planningDir, "old-plan.md"))).toBe(false);
 
       // Verify state tracks clearing
-      const getResponse = await fetch(`${baseUrl}/api/loops/${data.id}`);
-      const loop = await getResponse.json();
+      const getResponse2 = await fetch(`${baseUrl}/api/loops/${data.config.id}`);
+      const loop = await getResponse2.json();
       expect(loop.state.planMode?.planningFolderCleared).toBe(true);
+
+      // Clean up for next test
+      await commitChanges();
     });
 
     test("returns 400 if required fields missing", async () => {
@@ -247,7 +262,7 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const { id } = await createResponse.json();
+      const response = await createResponse.json(); const id = response.config.id;
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Get initial feedback rounds
@@ -287,7 +302,7 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const { id } = await createResponse.json();
+      const response = await createResponse.json(); const id = response.config.id;
 
       // Try to send feedback (should fail)
       const feedbackResponse = await fetch(`${baseUrl}/api/loops/${id}/plan/feedback`, {
@@ -329,7 +344,7 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const { id } = await createResponse.json();
+      const response = await createResponse.json(); const id = response.config.id;
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Verify in planning status
@@ -370,7 +385,7 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const { id } = await createResponse.json();
+      const response = await createResponse.json(); const id = response.config.id;
       await new Promise((resolve) => setTimeout(resolve, 300));
 
       // Create a plan file
@@ -397,7 +412,7 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const { id } = await createResponse.json();
+      const response = await createResponse.json(); const id = response.config.id;
 
       // Try to accept (should fail)
       const acceptResponse = await fetch(`${baseUrl}/api/loops/${id}/plan/accept`, {
@@ -423,7 +438,7 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const { id } = await createResponse.json();
+      const response = await createResponse.json(); const id = response.config.id;
       await new Promise((resolve) => setTimeout(resolve, 200));
 
       // Verify loop exists

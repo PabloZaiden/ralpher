@@ -242,26 +242,27 @@ describe("Plan Mode E2E Workflow", () => {
     await ctx.manager.startPlanMode(loopId);
     await delay(300);
 
-    // Get the planning session ID
+    // Get the planning session ID from state.session (where it's stored during planning)
     let loopData: Loop | null = await ctx.manager.getLoop(loopId);
-    const planSessionId = loopData!.state.planMode?.planSessionId;
+    const planSessionId = loopData!.state.session?.id;
     expect(planSessionId).toBeDefined();
 
     // Send feedback (uses same session)
     await ctx.manager.sendPlanFeedback(loopId, "Add more details");
     await delay(200);
 
-    // Verify session ID unchanged
+    // Verify session ID unchanged (still in state.session during planning)
     loopData = await ctx.manager.getLoop(loopId);
-    expect(loopData!.state.planMode?.planSessionId).toBe(planSessionId);
+    expect(loopData!.state.session?.id).toBe(planSessionId);
 
     // Accept plan (transitions to execution with same session)
     await ctx.manager.acceptPlan(loopId);
     await delay(300);
 
-    // Verify session ID still unchanged (session continuity maintained)
+    // Verify session ID preserved in both places after acceptance
     loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.planMode?.planSessionId).toBe(planSessionId);
+    expect(loopData!.state.session?.id).toBe(planSessionId);
     expect(loopData!.state.status).toBe("running");
 
     // Verify the same session is being used for execution
