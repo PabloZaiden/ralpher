@@ -30,6 +30,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     loading,
     error,
     connectionStatus,
+    refresh,
     createLoop,
     deleteLoop,
     acceptLoop,
@@ -548,6 +549,9 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                       console.error("Failed to update draft:", error);
                       return false;
                     }
+                    
+                    // Refresh loops to update React state with new data
+                    await refresh();
                     
                     // Success - close modal
                     return true;
