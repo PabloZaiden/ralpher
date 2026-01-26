@@ -197,8 +197,8 @@ describe("Loops Control API Integration", () => {
   });
 
   describe("POST /api/loops/:id/discard", () => {
-    test("returns error for loop without git branch (not started)", async () => {
-      // Create a loop but don't start it - no git branch created
+    test("returns error for loop without git branch (plan mode)", async () => {
+      // Create a loop in plan mode - no git branch created until plan acceptance
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -206,6 +206,7 @@ describe("Loops Control API Integration", () => {
           name: "Discard No Branch Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
+          planMode: true,
           backend: { type: "mock" },
         }),
       });
@@ -237,7 +238,7 @@ describe("Loops Control API Integration", () => {
       expect(response.status).toBe(404);
     });
 
-    test("returns 400 for loop without git branch (not started)", async () => {
+    test("returns 400 for loop without git branch (plan mode)", async () => {
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -245,6 +246,7 @@ describe("Loops Control API Integration", () => {
           name: "Diff No Git Branch Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
+          planMode: true,
           backend: { type: "mock" },
         }),
       });

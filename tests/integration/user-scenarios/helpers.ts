@@ -1,0 +1,647 @@
+/**
+ * Shared test utilities for user scenario integration tests.
+ * These helpers simulate UI interactions via API calls.
+ */
+
+import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import { serve, type Server } from "bun";
+import { apiRoutes } from "../../../src/api";
+import { ensureDataDirectories } from "../../../src/persistence/paths";
+import { backendManager } from "../../../src/core/backend-manager";
+import { loopManager } from "../../../src/core/loop-manager";
+import { closeDatabase } from "../../../src/persistence/database";
+import { TestCommandExecutor } from "../../mocks/mock-executor";
+import type { LoopBackend } from "../../../src/core/loop-engine";
+import type {
+  AgentSession,
+  AgentResponse,
+  AgentEvent,
+  BackendConnectionConfig,
+  CreateSessionOptions,
+  PromptInput,
+} from "../../../src/backends/types";
+import { createEventStream, type EventStream } from "../../../src/utils/event-stream";
+import type { Loop } from "../../../src/types/loop";
+
+/**
+ * Test context containing all test dependencies.
+ */
+export interface TestServerContext {
+  /** Temporary data directory for persistence */
+  dataDir: string;
+  /** Temporary working directory (simulates a project) */
+  workDir: string;
+  /** Default branch for the test repo */
+  defaultBranch: string;
+  /** The test server */
+  server: Server<unknown>;
+  /** Base URL for API calls */
+  baseUrl: string;
+  /** Mock backend instance */
+  mockBackend: ConfigurableMockBackend;
+  /** Local git remote path (for push tests) */
+  remoteDir?: string;
+}
+
+/**
+ * Configurable mock backend that allows dynamic response configuration.
+ * This enables tests to control iteration outcomes.
+ */
+export class ConfigurableMockBackend implements LoopBackend {
+  readonly name = "opencode";
+
+  private connected = false;
+  private directory = "";
+  private responseIndex = 0;
+  private pendingPrompt = false;
+  private responses: string[];
+  private readonly sessions = new Map<string, AgentSession>();
+
+  constructor(responses: string[] = ["<promise>COMPLETE</promise>"]) {
+    this.responses = responses;
+  }
+
+  /**
+   * Reset the response index and optionally set new responses.
+   */
+  reset(responses?: string[]): void {
+    this.responseIndex = 0;
+    if (responses) {
+      this.responses = responses;
+    }
+  }
+
+  /**
+   * Set the responses for subsequent prompts.
+   */
+  setResponses(responses: string[]): void {
+    this.responses = responses;
+    this.responseIndex = 0;
+  }
+
+  /**
+   * Get the current response index.
+   */
+  getResponseIndex(): number {
+    return this.responseIndex;
+  }
+
+  private getNextResponse(): string {
+    const response = this.responses[this.responseIndex % this.responses.length] ?? "<promise>COMPLETE</promise>";
+    this.responseIndex++;
+    return response;
+  }
+
+  private checkForError(response: string): void {
+    if (response.startsWith("ERROR:")) {
+      throw new Error(response.slice(6));
+    }
+  }
+
+  async connect(config: BackendConnectionConfig): Promise<void> {
+    this.connected = true;
+    this.directory = config.directory;
+  }
+
+  async disconnect(): Promise<void> {
+    this.connected = false;
+    this.directory = "";
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  async createSession(options: CreateSessionOptions): Promise<AgentSession> {
+    const session: AgentSession = {
+      id: `mock-session-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      title: options.title,
+      createdAt: new Date().toISOString(),
+    };
+    this.sessions.set(session.id, session);
+    return session;
+  }
+
+  async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
+    const response = this.getNextResponse();
+    this.checkForError(response);
+    return {
+      id: `msg-${Date.now()}`,
+      content: response,
+      parts: [{ type: "text", text: response }],
+    };
+  }
+
+  async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
+    this.pendingPrompt = true;
+  }
+
+  async abortSession(_sessionId: string): Promise<void> {
+    // Mock - no-op
+  }
+
+  async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
+    const { stream, push, end } = createEventStream<AgentEvent>();
+
+    (async () => {
+      // Wait for pendingPrompt to be set
+      let attempts = 0;
+      while (!this.pendingPrompt && attempts < 100) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        attempts++;
+      }
+      this.pendingPrompt = false;
+
+      // Get the next response
+      const response = this.responses[this.responseIndex % this.responses.length] ?? "<promise>COMPLETE</promise>";
+      this.responseIndex++;
+
+      // Check if this is an error response
+      if (response.startsWith("ERROR:")) {
+        push({ type: "error", message: response.slice(6) });
+        end();
+        return;
+      }
+
+      // Emit normal message events
+      push({ type: "message.start", messageId: `msg-${Date.now()}` });
+      push({ type: "message.delta", content: response });
+      push({ type: "message.complete", content: response });
+      end();
+    })();
+
+    return stream;
+  }
+
+  async replyToPermission(_requestId: string, _response: string): Promise<void> {
+    // Mock - no-op
+  }
+
+  async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
+    // Mock - no-op
+  }
+
+  // OpenCode-specific methods
+  getSdkClient(): null {
+    return null;
+  }
+
+  getDirectory(): string {
+    return this.directory;
+  }
+
+  getConnectionInfo(): { baseUrl: string; authHeaders: Record<string, string> } | null {
+    if (!this.connected) {
+      return null;
+    }
+    return {
+      baseUrl: "http://mock-server:4096",
+      authHeaders: {},
+    };
+  }
+
+  abortAllSubscriptions(): void {
+    // Mock - no-op
+  }
+
+  async getModels(_directory: string): Promise<[]> {
+    return [];
+  }
+
+  async getSession(id: string): Promise<AgentSession | null> {
+    return this.sessions.get(id) ?? null;
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    this.sessions.delete(id);
+  }
+}
+
+/**
+ * Options for setting up a test server context.
+ */
+export interface SetupServerOptions {
+  /** Initial responses for the mock backend */
+  mockResponses?: string[];
+  /** Create a local git remote for push tests */
+  withRemote?: boolean;
+  /** Initial files to create in the work directory */
+  initialFiles?: Record<string, string>;
+  /** Create .planning directory with default files */
+  withPlanningDir?: boolean;
+}
+
+/**
+ * Set up a test server with all dependencies.
+ */
+export async function setupTestServer(options: SetupServerOptions = {}): Promise<TestServerContext> {
+  const {
+    mockResponses = ["<promise>COMPLETE</promise>"],
+    withRemote = false,
+    initialFiles = {},
+    withPlanningDir = false,
+  } = options;
+
+  // Create temp directories
+  const dataDir = await mkdtemp(join(tmpdir(), "ralpher-scenario-data-"));
+  const workDir = await mkdtemp(join(tmpdir(), "ralpher-scenario-work-"));
+
+  // Set env var for persistence
+  process.env["RALPHER_DATA_DIR"] = dataDir;
+  await ensureDataDirectories();
+
+  // Create initial files
+  for (const [path, content] of Object.entries(initialFiles)) {
+    const fullPath = join(workDir, path);
+    const dir = fullPath.substring(0, fullPath.lastIndexOf("/"));
+    if (dir !== workDir) {
+      await mkdir(dir, { recursive: true });
+    }
+    await writeFile(fullPath, content);
+  }
+
+  // Initialize git repo
+  await Bun.$`git init ${workDir}`.quiet();
+  await Bun.$`git -C ${workDir} config user.email "test@test.com"`.quiet();
+  await Bun.$`git -C ${workDir} config user.name "Test User"`.quiet();
+  await writeFile(join(workDir, "README.md"), "# Test Project\n");
+  await Bun.$`git -C ${workDir} add .`.quiet();
+  await Bun.$`git -C ${workDir} commit -m "Initial commit"`.quiet();
+  const defaultBranchResult = await Bun.$`git -C ${workDir} branch --show-current`.quiet();
+  const defaultBranch = defaultBranchResult.text().trim() || "main";
+
+  // Create .planning directory if requested
+  if (withPlanningDir) {
+    const planningDir = join(workDir, ".planning");
+    await mkdir(planningDir, { recursive: true });
+    await writeFile(join(planningDir, "plan.md"), "# Plan\n\nThis is the plan.");
+    await writeFile(join(planningDir, "status.md"), "# Status\n\nIn progress.");
+    await Bun.$`git -C ${workDir} add .`.quiet();
+    await Bun.$`git -C ${workDir} commit -m "Add planning files"`.quiet();
+  }
+
+  // Create local git remote if requested
+  let remoteDir: string | undefined;
+  if (withRemote) {
+    remoteDir = await mkdtemp(join(tmpdir(), "ralpher-scenario-remote-"));
+    await Bun.$`git init --bare ${remoteDir}`.quiet();
+    await Bun.$`git -C ${workDir} remote add origin ${remoteDir}`.quiet();
+    await Bun.$`git -C ${workDir} push -u origin ${defaultBranch}`.quiet();
+  }
+
+  // Reset loop manager to clear any stale engines from previous tests
+  loopManager.resetForTesting();
+
+  // Set up mock backend
+  const mockBackend = new ConfigurableMockBackend(mockResponses);
+  backendManager.setBackendForTesting(mockBackend);
+  backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
+
+  // Start test server
+  const server = serve({
+    port: 0, // Random available port
+    routes: {
+      ...apiRoutes,
+    },
+  });
+
+  const baseUrl = server.url.toString().replace(/\/$/, "");
+
+  return {
+    dataDir,
+    workDir,
+    defaultBranch,
+    server,
+    baseUrl,
+    mockBackend,
+    remoteDir,
+  };
+}
+
+/**
+ * Clean up a test server context.
+ */
+export async function teardownTestServer(ctx?: TestServerContext | null): Promise<void> {
+  if (!ctx) {
+    return;
+  }
+
+  // Stop server
+  ctx.server?.stop(true);
+
+  // Reset loop manager (clear engines map)
+  loopManager.resetForTesting();
+
+  // Reset backend manager
+  backendManager.resetForTesting();
+
+  // Close database
+  closeDatabase();
+
+  // Clean up env
+  delete process.env["RALPHER_DATA_DIR"];
+
+  // Remove temp directories
+  await rm(ctx.dataDir, { recursive: true, force: true });
+  await rm(ctx.workDir, { recursive: true, force: true });
+  if (ctx.remoteDir) {
+    await rm(ctx.remoteDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Create a loop via the API.
+ */
+export async function createLoopViaAPI(
+  baseUrl: string,
+  options: {
+    name: string;
+    directory: string;
+    prompt: string;
+    maxIterations?: number;
+    planMode?: boolean;
+    clearPlanningFolder?: boolean;
+    baseBranch?: string;
+  }
+): Promise<{ status: number; body: Loop | { error: string; message: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
+
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Get a loop via the API.
+ */
+export async function getLoopViaAPI(
+  baseUrl: string,
+  loopId: string
+): Promise<{ status: number; body: Loop | { error: string; message: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}`);
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Wait for a loop to reach a specific status.
+ */
+export async function waitForLoopStatus(
+  baseUrl: string,
+  loopId: string,
+  expectedStatus: string | string[],
+  timeoutMs = 10000
+): Promise<Loop> {
+  const statuses = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+  const startTime = Date.now();
+  let lastStatus = "";
+  let lastLoop: Loop | null = null;
+
+  while (Date.now() - startTime < timeoutMs) {
+    const { status, body } = await getLoopViaAPI(baseUrl, loopId);
+    if (status === 200) {
+      const loop = body as Loop;
+      lastLoop = loop;
+      lastStatus = loop.state?.status ?? "no state";
+      if (statuses.includes(loop.state.status)) {
+        return loop;
+      }
+    } else {
+      lastStatus = `HTTP ${status}`;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  throw new Error(
+    `Loop ${loopId} did not reach status [${statuses.join(", ")}] within ${timeoutMs}ms. Last status: ${lastStatus}${lastLoop?.state?.error ? `, error: ${lastLoop.state.error.message}` : ""}`
+  );
+}
+
+/**
+ * Accept a loop via the API.
+ */
+export async function acceptLoopViaAPI(
+  baseUrl: string,
+  loopId: string
+): Promise<{ status: number; body: { success: boolean; mergeCommit?: string; error?: string; message?: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}/accept`, {
+    method: "POST",
+  });
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Push a loop via the API.
+ */
+export async function pushLoopViaAPI(
+  baseUrl: string,
+  loopId: string
+): Promise<{ status: number; body: { success: boolean; remoteBranch?: string; error?: string; message?: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}/push`, {
+    method: "POST",
+  });
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Discard a loop via the API.
+ */
+export async function discardLoopViaAPI(
+  baseUrl: string,
+  loopId: string
+): Promise<{ status: number; body: { success: boolean; error?: string; message?: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}/discard`, {
+    method: "POST",
+  });
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Send plan feedback via the API.
+ */
+export async function sendPlanFeedbackViaAPI(
+  baseUrl: string,
+  loopId: string,
+  feedback: string
+): Promise<{ status: number; body: { success: boolean; error?: string; message?: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}/plan/feedback`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ feedback }),
+  });
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Accept a plan via the API.
+ */
+export async function acceptPlanViaAPI(
+  baseUrl: string,
+  loopId: string
+): Promise<{ status: number; body: { success: boolean; error?: string; message?: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}/plan/accept`, {
+    method: "POST",
+  });
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Discard a plan via the API.
+ */
+export async function discardPlanViaAPI(
+  baseUrl: string,
+  loopId: string
+): Promise<{ status: number; body: { success: boolean; error?: string; message?: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}/plan/discard`, {
+    method: "POST",
+  });
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Get the diff for a loop via the API.
+ */
+export async function getLoopDiffViaAPI(
+  baseUrl: string,
+  loopId: string
+): Promise<{ status: number; body: unknown }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}/diff`);
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Get the plan content for a loop via the API.
+ */
+export async function getLoopPlanViaAPI(
+  baseUrl: string,
+  loopId: string
+): Promise<{ status: number; body: { content: string; exists: boolean } | { error: string; message: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}/plan`);
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Get the status file content for a loop via the API.
+ */
+export async function getLoopStatusFileViaAPI(
+  baseUrl: string,
+  loopId: string
+): Promise<{ status: number; body: { content: string; exists: boolean } | { error: string; message: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}/status-file`);
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Get the current git branch in a directory.
+ */
+export async function getCurrentBranch(workDir: string): Promise<string> {
+  const result = await Bun.$`git -C ${workDir} rev-parse --abbrev-ref HEAD`.quiet();
+  return result.stdout.toString().trim();
+}
+
+/**
+ * Check if a branch exists in a directory.
+ */
+export async function branchExists(workDir: string, branchName: string): Promise<boolean> {
+  try {
+    const result = await Bun.$`git -C ${workDir} show-ref --verify --quiet refs/heads/${branchName}`.nothrow();
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Check if a branch exists on a remote.
+ */
+export async function remoteBranchExists(workDir: string, branchName: string, remote = "origin"): Promise<boolean> {
+  try {
+    // Fetch first to update remote refs
+    await Bun.$`git -C ${workDir} fetch ${remote}`.nothrow();
+    const result = await Bun.$`git -C ${workDir} show-ref --verify --quiet refs/remotes/${remote}/${branchName}`.nothrow();
+    return result.exitCode === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Validate loop state for UI display.
+ * Returns an array of validation errors, or empty array if valid.
+ */
+export function validateLoopState(loop: Loop, expectations: {
+  status?: string;
+  iterationCount?: number;
+  hasGitBranch?: boolean;
+  hasError?: boolean;
+  planMode?: {
+    active?: boolean;
+    feedbackRounds?: number;
+  };
+}): string[] {
+  const errors: string[] = [];
+
+  if (expectations.status !== undefined && loop.state.status !== expectations.status) {
+    errors.push(`Expected status "${expectations.status}" but got "${loop.state.status}"`);
+  }
+
+  if (expectations.iterationCount !== undefined && loop.state.currentIteration !== expectations.iterationCount) {
+    errors.push(`Expected ${expectations.iterationCount} iterations but got ${loop.state.currentIteration}`);
+  }
+
+  if (expectations.hasGitBranch !== undefined) {
+    const hasGit = !!loop.state.git?.workingBranch;
+    if (expectations.hasGitBranch !== hasGit) {
+      errors.push(`Expected hasGitBranch=${expectations.hasGitBranch} but got ${hasGit}`);
+    }
+  }
+
+  if (expectations.hasError !== undefined) {
+    const hasError = !!loop.state.error;
+    if (expectations.hasError !== hasError) {
+      errors.push(`Expected hasError=${expectations.hasError} but got ${hasError}`);
+    }
+  }
+
+  if (expectations.planMode !== undefined) {
+    if (expectations.planMode.active !== undefined) {
+      const active = loop.state.planMode?.active ?? false;
+      if (expectations.planMode.active !== active) {
+        errors.push(`Expected planMode.active=${expectations.planMode.active} but got ${active}`);
+      }
+    }
+    if (expectations.planMode.feedbackRounds !== undefined) {
+      const rounds = loop.state.planMode?.feedbackRounds ?? 0;
+      if (expectations.planMode.feedbackRounds !== rounds) {
+        errors.push(`Expected planMode.feedbackRounds=${expectations.planMode.feedbackRounds} but got ${rounds}`);
+      }
+    }
+  }
+
+  return errors;
+}
+
+/**
+ * Assert loop state matches expectations.
+ * Throws if validation fails.
+ */
+export function assertLoopState(loop: Loop, expectations: Parameters<typeof validateLoopState>[1]): void {
+  const errors = validateLoopState(loop, expectations);
+  if (errors.length > 0) {
+    throw new Error(`Loop state validation failed:\n${errors.join("\n")}`);
+  }
+}

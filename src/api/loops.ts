@@ -11,6 +11,7 @@ import { loopManager } from "../core/loop-manager";
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
 import { setLastModel } from "../persistence/preferences";
+import { log } from "../core/logger";
 import type {
   CreateLoopRequest,
   UpdateLoopRequest,
@@ -123,13 +124,14 @@ export const loopsCrudRoutes = {
 
         // Save the model as last used if provided
         if (body.model?.providerID && body.model?.modelID) {
-          // Fire and forget - don't block on this
-          setLastModel({
-            providerID: body.model.providerID,
-            modelID: body.model.modelID,
-          }).catch(() => {
-            // Ignore errors saving preferences
-          });
+          try {
+            await setLastModel({
+              providerID: body.model.providerID,
+              modelID: body.model.modelID,
+            });
+          } catch (error) {
+            log.warn(`Failed to save last model: ${String(error)}`);
+          }
         }
 
         // If plan mode is enabled, start the plan mode session

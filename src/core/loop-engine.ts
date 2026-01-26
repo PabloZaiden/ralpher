@@ -291,6 +291,10 @@ export class LoopEngine {
     this.emitLog("info", `Stopping loop: ${reason}`);
     this.aborted = true;
 
+    // Clear the persistence callback to prevent stale async operations
+    // from overwriting state after the loop is stopped/deleted
+    this.onPersistState = undefined;
+
     if (this.sessionId) {
       try {
         this.emitLog("info", "Aborting backend session...");

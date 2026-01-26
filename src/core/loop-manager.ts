@@ -246,13 +246,16 @@ export class LoopManager {
 
     this.engines.set(loopId, engine);
 
-    // Start the plan creation
-    engine.start().catch((error) => {
-      log.error(`Loop ${loopId} plan mode failed:`, String(error));
-    });
-
     // Persist state changes periodically
     this.startStatePersistence(loopId);
+
+    // Start the plan creation
+    try {
+      await engine.start();
+    } catch (error) {
+      log.error(`Loop ${loopId} plan mode failed:`, String(error));
+      throw error;
+    }
   }
 
   /**
@@ -328,9 +331,12 @@ export class LoopManager {
     });
 
     // Run another plan iteration to process the feedback
-    engine.runPlanIteration().catch((error) => {
+    try {
+      await engine.runPlanIteration();
+    } catch (error) {
       log.error(`Loop ${loopId} plan feedback iteration failed:`, String(error));
-    });
+      throw error;
+    }
   }
 
   /**
@@ -403,19 +409,26 @@ Follow the standard loop execution flow:
       timestamp: createTimestamp(),
     });
 
-    // Start the execution loop in the background
-    engine.continueExecution().catch((error) => {
+    // Start the execution loop
+    try {
+      await engine.continueExecution();
+    } catch (error) {
       log.error(`Loop ${loopId} execution after plan acceptance failed:`, String(error));
-    });
+      throw error;
+    }
   }
 
   /**
    * Discard a plan and delete the loop.
    */
   async discardPlan(loopId: string): Promise<boolean> {
+    log.debug(`[LoopManager] discardPlan: Starting for loop ${loopId}, engine exists: ${this.engines.has(loopId)}`);
+    
     // Stop the engine if running
     if (this.engines.has(loopId)) {
+      log.debug(`[LoopManager] discardPlan: Stopping engine for loop ${loopId}`);
       await this.stopLoop(loopId, "Plan discarded");
+      log.debug(`[LoopManager] discardPlan: Engine stopped for loop ${loopId}`);
     }
 
     // Emit plan discarded event
@@ -425,8 +438,11 @@ Follow the standard loop execution flow:
       timestamp: createTimestamp(),
     });
 
-    // Delete the loop
-    return this.deleteLoop(loopId);
+    // Delete the loop (explicit await to ensure completion before returning)
+    log.debug(`[LoopManager] discardPlan: Calling deleteLoop for ${loopId}`);
+    const result = await this.deleteLoop(loopId);
+    log.debug(`[LoopManager] discardPlan: deleteLoop returned ${result} for ${loopId}`);
+    return result;
   }
 
   /**
@@ -500,19 +516,25 @@ Follow the standard loop execution flow:
    * Use purgeLoop() to actually delete the files.
    */
   async deleteLoop(loopId: string): Promise<boolean> {
+    log.debug(`[LoopManager] deleteLoop: Starting for loop ${loopId}, engine exists: ${this.engines.has(loopId)}`);
+    
     // Stop if running
     if (this.engines.has(loopId)) {
+      log.debug(`[LoopManager] deleteLoop: Stopping engine for loop ${loopId}`);
       await this.stopLoop(loopId, "Loop deleted");
     }
 
     // Get loop to check for git branch
     const loop = await loadLoop(loopId);
     if (!loop) {
+      log.debug(`[LoopManager] deleteLoop: Loop ${loopId} not found`);
       return false;
     }
+    log.debug(`[LoopManager] deleteLoop: Loaded loop ${loopId}, status: ${loop.state.status}, hasGitBranch: ${!!loop.state.git?.workingBranch}`);
     
     // If there's a working branch, discard it first
     if (loop.state.git?.workingBranch) {
+      log.debug(`[LoopManager] deleteLoop: Discarding git branch for loop ${loopId}`);
       const discardResult = await this.discardLoop(loopId);
       if (!discardResult.success) {
         // Log but don't fail the delete - user explicitly wants to delete
@@ -521,11 +543,13 @@ Follow the standard loop execution flow:
     }
 
     // Update status to 'deleted' (soft delete - final state)
+    log.debug(`[LoopManager] deleteLoop: Updating status to deleted for loop ${loopId}`);
     const updatedState = {
       ...loop.state,
       status: "deleted" as const,
     };
     await updateLoopState(loopId, updatedState);
+    log.debug(`[LoopManager] deleteLoop: Status updated to deleted for loop ${loopId}`);
 
     this.emitter.emit({
       type: "loop.deleted",
@@ -597,13 +621,16 @@ Follow the standard loop execution flow:
 
     this.engines.set(loopId, engine);
 
-    // Start in background
-    engine.start().catch((error) => {
-      log.error(`Loop ${loopId} failed:`, String(error));
-    });
-
     // Persist state changes periodically
     this.startStatePersistence(loopId);
+
+    // Start the loop
+    try {
+      await engine.start();
+    } catch (error) {
+      log.error(`Loop ${loopId} failed:`, String(error));
+      throw error;
+    }
   }
 
   /**
@@ -674,6 +701,9 @@ Follow the standard loop execution flow:
         status: "merged" as const,
       };
       await updateLoopState(loopId, updatedState);
+
+      // Remove engine from in-memory map so getLoop returns persisted state
+      this.engines.delete(loopId);
 
       // Emit event
       this.emitter.emit({
@@ -749,6 +779,9 @@ Follow the standard loop execution flow:
       };
       await updateLoopState(loopId, updatedState);
 
+      // Remove engine from in-memory map so getLoop returns persisted state
+      this.engines.delete(loopId);
+
       // Emit event
       this.emitter.emit({
         type: "loop.pushed",
@@ -802,6 +835,16 @@ Follow the standard loop execution flow:
 
       // Delete the working branch
       await git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
+
+      // Update status to 'deleted' (final state)
+      const updatedState = {
+        ...loop.state,
+        status: "deleted" as const,
+      };
+      await updateLoopState(loopId, updatedState);
+
+      // Remove engine from in-memory map so getLoop returns persisted state
+      this.engines.delete(loopId);
 
       // Emit event
       this.emitter.emit({
@@ -946,6 +989,15 @@ Follow the standard loop execution flow:
       this.stopLoop(loopId, "Server shutdown")
     );
     await Promise.allSettled(promises);
+  }
+
+  /**
+   * Reset the loop manager for testing purposes.
+   * Clears all engines without persisting state.
+   */
+  resetForTesting(): void {
+    this.engines.clear();
+    this.loopsBeingAccepted.clear();
   }
 }
 
