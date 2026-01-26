@@ -168,6 +168,8 @@ export class LoopEngine {
   private aborted = false;
   private sessionId: string | null = null;
   private onPersistState?: (state: LoopState) => Promise<void>;
+  /** Guard to prevent concurrent runLoop() executions */
+  private isLoopRunning = false;
 
   constructor(options: LoopEngineOptions) {
     this.loop = options.loop;
@@ -343,6 +345,13 @@ export class LoopEngine {
   async continueExecution(): Promise<void> {
     if (this.loop.state.status !== "running") {
       throw new Error(`Cannot continue execution in status: ${this.loop.state.status}`);
+    }
+    
+    // Check if already running (guard against duplicate calls)
+    if (this.isLoopRunning) {
+      log.warn("[LoopEngine] continueExecution: Loop is already running, ignoring duplicate call");
+      this.emitLog("warn", "Execution already in progress, ignoring duplicate continueExecution call");
+      return;
     }
     
     log.trace("[LoopEngine] continueExecution: Starting execution loop");
@@ -649,180 +658,197 @@ export class LoopEngine {
   /**
    * Run the main iteration loop.
    * Now continues on errors unless max consecutive identical errors is reached.
+   * Protected by isLoopRunning guard to prevent concurrent executions.
    */
   private async runLoop(): Promise<void> {
     log.trace("[LoopEngine] runLoop: Entry point");
-    this.emitLog("debug", "Entering runLoop", {
-      aborted: this.aborted,
-      status: this.loop.state.status,
-      shouldContinue: this.shouldContinue(),
-    });
-    log.trace("[LoopEngine] runLoop: Emitted debug log, checking while condition", {
-      aborted: this.aborted,
-      shouldContinue: this.shouldContinue(),
-    });
-
-    while (!this.aborted && this.shouldContinue()) {
-      log.trace("[LoopEngine] runLoop: Entered while loop, about to call runIteration");
-      this.emitLog("debug", "Loop iteration check passed", {
+    
+    // Guard against concurrent runLoop() calls
+    if (this.isLoopRunning) {
+      log.warn("[LoopEngine] runLoop: Already running, skipping duplicate call");
+      this.emitLog("warn", "Loop execution already in progress, ignoring duplicate call");
+      return;
+    }
+    
+    this.isLoopRunning = true;
+    log.trace("[LoopEngine] runLoop: Set isLoopRunning = true");
+    
+    try {
+      this.emitLog("debug", "Entering runLoop", {
         aborted: this.aborted,
         status: this.loop.state.status,
+        shouldContinue: this.shouldContinue(),
+      });
+      log.trace("[LoopEngine] runLoop: Emitted debug log, checking while condition", {
+        aborted: this.aborted,
+        shouldContinue: this.shouldContinue(),
       });
 
-      const iterationResult = await this.runIteration();
-      log.trace("[LoopEngine] runLoop: runIteration completed", { outcome: iterationResult.outcome });
-
-      if (iterationResult.outcome === "complete") {
-        this.emitLog("info", "Stop pattern detected - loop completed successfully", {
-          totalIterations: this.loop.state.currentIteration,
-        });
-        // Clear consecutive error tracker on success
-        this.updateState({
-          status: "completed",
-          completedAt: createTimestamp(),
-          consecutiveErrors: undefined,
+      while (!this.aborted && this.shouldContinue()) {
+        log.trace("[LoopEngine] runLoop: Entered while loop, about to call runIteration");
+        this.emitLog("debug", "Loop iteration check passed", {
+          aborted: this.aborted,
+          status: this.loop.state.status,
         });
 
-        this.emit({
-          type: "loop.completed",
-          loopId: this.config.id,
-          totalIterations: this.loop.state.currentIteration,
-          timestamp: createTimestamp(),
-        });
-        return;
-      }
+        const iterationResult = await this.runIteration();
+        log.trace("[LoopEngine] runLoop: runIteration completed", { outcome: iterationResult.outcome });
 
-      if (iterationResult.outcome === "plan_ready") {
-        this.emitLog("info", "Plan ready - waiting for user feedback or acceptance", {
-          iteration: this.loop.state.currentIteration,
-        });
-        
-        // Read plan content from .planning/plan.md if possible
-        let planContent: string | undefined;
-        try {
-          const planFile = Bun.file(`${this.config.directory}/.planning/plan.md`);
-          if (await planFile.exists()) {
-            planContent = await planFile.text();
-          }
-        } catch {
-          // Ignore errors reading plan file
-        }
-
-        // Update plan mode state with the plan content
-        if (this.loop.state.planMode) {
-          this.updateState({
-            planMode: {
-              ...this.loop.state.planMode,
-              planContent,
-            },
+        if (iterationResult.outcome === "complete") {
+          this.emitLog("info", "Stop pattern detected - loop completed successfully", {
+            totalIterations: this.loop.state.currentIteration,
           });
-        }
-
-        // Emit plan ready event
-        this.emit({
-          type: "loop.plan.ready",
-          loopId: this.config.id,
-          planContent: planContent ?? iterationResult.responseContent,
-          timestamp: createTimestamp(),
-        });
-        
-        // Exit the loop but stay in "planning" status
-        // The loop will be resumed when user sends feedback or accepts the plan
-        return;
-      }
-
-      if (iterationResult.outcome === "error") {
-        const errorMessage = iterationResult.error ?? "Unknown error";
-        this.emitLog("error", `Iteration failed with error: ${errorMessage}`);
-
-        // Error iterations don't count towards maxIterations - roll back the counter
-        // This treats the error as a retry, not a completed iteration
-        this.updateState({
-          currentIteration: this.loop.state.currentIteration - 1,
-        });
-
-        // Track consecutive identical errors
-        const shouldFailsafe = this.trackConsecutiveError(errorMessage);
-
-        if (shouldFailsafe) {
-          const maxErrors = this.config.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors;
-          this.emitLog("error", `Failsafe exit: ${maxErrors} consecutive identical errors`, {
-            errorMessage,
-          });
+          // Clear consecutive error tracker on success
           this.updateState({
-            status: "failed",
+            status: "completed",
             completedAt: createTimestamp(),
-            error: {
-              message: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
-              iteration: this.loop.state.currentIteration,
-              timestamp: createTimestamp(),
-            },
+            consecutiveErrors: undefined,
           });
 
           this.emit({
-            type: "loop.error",
+            type: "loop.completed",
             loopId: this.config.id,
-            error: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
-            iteration: this.loop.state.currentIteration,
+            totalIterations: this.loop.state.currentIteration,
             timestamp: createTimestamp(),
           });
           return;
         }
 
-        // Log that we're continuing despite the error (as a retry)
-        this.emitLog("warn", "Error occurred, retrying iteration", {
-          errorMessage,
-          consecutiveErrors: this.loop.state.consecutiveErrors?.count ?? 1,
-          maxConsecutiveErrors: this.config.maxConsecutiveErrors ?? "unlimited",
-        });
+        if (iterationResult.outcome === "plan_ready") {
+          this.emitLog("info", "Plan ready - waiting for user feedback or acceptance", {
+            iteration: this.loop.state.currentIteration,
+          });
+          
+          // Read plan content from .planning/plan.md if possible
+          let planContent: string | undefined;
+          try {
+            const planFile = Bun.file(`${this.config.directory}/.planning/plan.md`);
+            if (await planFile.exists()) {
+              planContent = await planFile.text();
+            }
+          } catch {
+            // Ignore errors reading plan file
+          }
 
-        // Emit error event but don't stop
-        this.emit({
-          type: "loop.error",
-          loopId: this.config.id,
-          error: errorMessage,
-          iteration: this.loop.state.currentIteration,
-          timestamp: createTimestamp(),
-        });
+          // Update plan mode state with the plan content
+          if (this.loop.state.planMode) {
+            this.updateState({
+              planMode: {
+                ...this.loop.state.planMode,
+                planContent,
+              },
+            });
+          }
 
-        // Continue to retry (next iteration will use same iteration number)
-      } else {
-        // Successful iteration (outcome === "continue") - clear error tracker
-        this.updateState({ consecutiveErrors: undefined });
+          // Emit plan ready event
+          this.emit({
+            type: "loop.plan.ready",
+            loopId: this.config.id,
+            planContent: planContent ?? iterationResult.responseContent,
+            timestamp: createTimestamp(),
+          });
+          
+          // Exit the loop but stay in "planning" status
+          // The loop will be resumed when user sends feedback or accepts the plan
+          return;
+        }
+
+        if (iterationResult.outcome === "error") {
+          const errorMessage = iterationResult.error ?? "Unknown error";
+          this.emitLog("error", `Iteration failed with error: ${errorMessage}`);
+
+          // Error iterations don't count towards maxIterations - roll back the counter
+          // This treats the error as a retry, not a completed iteration
+          this.updateState({
+            currentIteration: this.loop.state.currentIteration - 1,
+          });
+
+          // Track consecutive identical errors
+          const shouldFailsafe = this.trackConsecutiveError(errorMessage);
+
+          if (shouldFailsafe) {
+            const maxErrors = this.config.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors;
+            this.emitLog("error", `Failsafe exit: ${maxErrors} consecutive identical errors`, {
+              errorMessage,
+            });
+            this.updateState({
+              status: "failed",
+              completedAt: createTimestamp(),
+              error: {
+                message: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
+                iteration: this.loop.state.currentIteration,
+                timestamp: createTimestamp(),
+              },
+            });
+
+            this.emit({
+              type: "loop.error",
+              loopId: this.config.id,
+              error: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
+              iteration: this.loop.state.currentIteration,
+              timestamp: createTimestamp(),
+            });
+            return;
+          }
+
+          // Log that we're continuing despite the error (as a retry)
+          this.emitLog("warn", "Error occurred, retrying iteration", {
+            errorMessage,
+            consecutiveErrors: this.loop.state.consecutiveErrors?.count ?? 1,
+            maxConsecutiveErrors: this.config.maxConsecutiveErrors ?? "unlimited",
+          });
+
+          // Emit error event but don't stop
+          this.emit({
+            type: "loop.error",
+            loopId: this.config.id,
+            error: errorMessage,
+            iteration: this.loop.state.currentIteration,
+            timestamp: createTimestamp(),
+          });
+
+          // Continue to retry (next iteration will use same iteration number)
+        } else {
+          // Successful iteration (outcome === "continue") - clear error tracker
+          this.updateState({ consecutiveErrors: undefined });
+        }
+
+        // Check max iterations
+        if (
+          this.config.maxIterations &&
+          this.loop.state.currentIteration >= this.config.maxIterations
+        ) {
+          this.emitLog("warn", `Reached maximum iterations limit: ${this.config.maxIterations}`);
+          this.updateState({
+            status: "max_iterations",
+            completedAt: createTimestamp(),
+          });
+
+          this.emit({
+            type: "loop.stopped",
+            loopId: this.config.id,
+            reason: `Reached maximum iterations: ${this.config.maxIterations}`,
+            timestamp: createTimestamp(),
+          });
+          return;
+        }
+
+        // Check if aborted during iteration
+        if (this.aborted) {
+          this.emitLog("debug", "Aborted during iteration, exiting runLoop");
+          return; // Stop method already updated status
+        }
       }
 
-      // Check max iterations
-      if (
-        this.config.maxIterations &&
-        this.loop.state.currentIteration >= this.config.maxIterations
-      ) {
-        this.emitLog("warn", `Reached maximum iterations limit: ${this.config.maxIterations}`);
-        this.updateState({
-          status: "max_iterations",
-          completedAt: createTimestamp(),
-        });
-
-        this.emit({
-          type: "loop.stopped",
-          loopId: this.config.id,
-          reason: `Reached maximum iterations: ${this.config.maxIterations}`,
-          timestamp: createTimestamp(),
-        });
-        return;
-      }
-
-      // Check if aborted during iteration
-      if (this.aborted) {
-        this.emitLog("debug", "Aborted during iteration, exiting runLoop");
-        return; // Stop method already updated status
-      }
+      this.emitLog("debug", "Exiting runLoop - loop condition not met", {
+        aborted: this.aborted,
+        status: this.loop.state.status,
+        shouldContinue: this.shouldContinue(),
+      });
+    } finally {
+      this.isLoopRunning = false;
+      log.trace("[LoopEngine] runLoop: Set isLoopRunning = false");
     }
-
-    this.emitLog("debug", "Exiting runLoop - loop condition not met", {
-      aborted: this.aborted,
-      status: this.loop.state.status,
-      shouldContinue: this.shouldContinue(),
-    });
   }
 
   /**
