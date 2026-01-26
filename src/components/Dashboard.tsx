@@ -520,7 +520,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           activityTimeoutSeconds: editLoop.config.activityTimeoutSeconds,
           baseBranch: editLoop.config.baseBranch,
           clearPlanningFolder: editLoop.config.clearPlanningFolder,
-          planMode: editLoop.state.planMode?.active ?? false,
+          planMode: editLoop.config.planMode ?? false,
         } : null;
         
         return (
