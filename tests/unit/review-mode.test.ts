@@ -102,8 +102,10 @@ describe("Review Mode", () => {
         const remoteDir = join(ctx.dataDir, "remote-" + Date.now() + ".git");
         await Bun.$`git init --bare ${remoteDir}`.quiet();
         await Bun.$`git -C ${ctx.workDir} remote add origin ${remoteDir}`.quiet();
-        // Push main branch first (this will set up the remote properly)
-        await Bun.$`git -C ${ctx.workDir} push origin main`.quiet();
+        // Get current branch name (could be 'main' or 'master' depending on git config)
+        const currentBranch = (await Bun.$`git -C ${ctx.workDir} branch --show-current`.text()).trim();
+        // Push current branch first (this will set up the remote properly)
+        await Bun.$`git -C ${ctx.workDir} push origin ${currentBranch}`.quiet();
 
         // Create and complete a loop
         const loop = await ctx.manager.createLoop({

@@ -233,6 +233,21 @@ afterEach(async () => {
 });
 ```
 
+### Git Branch Names in Tests
+
+**IMPORTANT:** Never hardcode `main` or `master` as branch names in tests. The default branch name varies between environments (local machines may use `main`, CI may use `master`).
+
+Always get the current branch name dynamically:
+
+```typescript
+// WRONG - will fail on systems with different default branch
+await Bun.$`git -C ${workDir} push origin main`.quiet();
+
+// CORRECT - works on all systems
+const currentBranch = (await Bun.$`git -C ${workDir} branch --show-current`.text()).trim();
+await Bun.$`git -C ${workDir} push origin ${currentBranch}`.quiet();
+```
+
 ## General Guidelines
 
 - Git operations are allowed. The system manages git branches, commits, and merges for Ralph Loops.
