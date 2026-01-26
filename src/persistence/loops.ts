@@ -53,6 +53,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "plan_feedback_rounds",
   "plan_content",
   "planning_folder_cleared",
+  "review_mode",
 ]);
 
 /**
@@ -116,6 +117,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     plan_feedback_rounds: state.planMode?.feedbackRounds ?? 0,
     plan_content: state.planMode?.planContent ?? null,
     planning_folder_cleared: state.planMode?.planningFolderCleared ? 1 : 0,
+    review_mode: state.reviewMode ? JSON.stringify(state.reviewMode) : null,
   };
 }
 
@@ -227,6 +229,10 @@ function rowToLoop(row: Record<string, unknown>): Loop {
       planContent: row["plan_content"] as string | undefined,
       planningFolderCleared: row["planning_folder_cleared"] === 1,
     };
+  }
+  // Reconstruct reviewMode from JSON
+  if (row["review_mode"] !== null) {
+    state.reviewMode = JSON.parse(row["review_mode"] as string);
   }
 
   return { config, state };

@@ -277,12 +277,17 @@ describe("Plan + Loop User Scenarios", () => {
         // Verify we're back on original branch
         expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
 
-        // Verify working branch was deleted
-        expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
+        // Verify working branch was NOT deleted (kept for review mode)
+        expect(await branchExists(ctx.workDir, workingBranch)).toBe(true);
 
         // Verify final state
         const mergedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
         assertLoopState(mergedLoop, { status: "merged" });
+        
+        // Verify reviewMode was initialized
+        expect(mergedLoop.state.reviewMode).toBeDefined();
+        expect(mergedLoop.state.reviewMode?.addressable).toBe(true);
+        expect(mergedLoop.state.reviewMode?.completionAction).toBe("merge");
       });
     });
 
@@ -498,10 +503,15 @@ describe("Plan + Loop User Scenarios", () => {
 
         // Verify final state
         expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
-        expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
+        expect(await branchExists(ctx.workDir, workingBranch)).toBe(true); // Branch kept for review mode
 
         const mergedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
         assertLoopState(mergedLoop, { status: "merged" });
+        
+        // Verify reviewMode was initialized
+        expect(mergedLoop.state.reviewMode).toBeDefined();
+        expect(mergedLoop.state.reviewMode?.addressable).toBe(true);
+        expect(mergedLoop.state.reviewMode?.completionAction).toBe("merge");
       });
     });
 

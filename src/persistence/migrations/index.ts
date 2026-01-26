@@ -145,6 +145,25 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 3,
+    name: "add_review_mode_support",
+    up: (db) => {
+      // Check if the loops table exists
+      if (!tableExists(db, "loops")) {
+        log.debug("loops table does not exist, skipping migration 3");
+        return;
+      }
+      
+      const columns = getTableColumns(db, "loops");
+      
+      // Add review_mode column to store review mode state as JSON
+      if (!columns.includes("review_mode")) {
+        db.run("ALTER TABLE loops ADD COLUMN review_mode TEXT");
+        log.info("Added review_mode column to loops table");
+      }
+    },
+  },
 ];
 
 /**

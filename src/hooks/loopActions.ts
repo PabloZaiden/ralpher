@@ -190,3 +190,38 @@ export async function discardPlanApi(loopId: string): Promise<boolean> {
 
   return true;
 }
+
+/**
+ * Result of an address comments action.
+ */
+export interface AddressCommentsResult {
+  success: boolean;
+  reviewCycle?: number;
+  branch?: string;
+}
+
+/**
+ * Address reviewer comments on a pushed/merged loop via the API.
+ */
+export async function addressReviewCommentsApi(
+  loopId: string,
+  comments: string
+): Promise<AddressCommentsResult> {
+  const response = await fetch(`/api/loops/${loopId}/address-comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comments }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || "Failed to address comments");
+  }
+
+  const data = await response.json();
+  return {
+    success: true,
+    reviewCycle: data.reviewCycle,
+    branch: data.branch,
+  };
+}

@@ -19,6 +19,9 @@ import type {
   PushResponse,
   ErrorResponse,
   FileContentResponse,
+  AddressCommentsRequest,
+  AddressCommentsResponse,
+  ReviewHistoryResponse,
 } from "../types/api";
 import { validateCreateLoopRequest } from "../types/api";
 
@@ -583,10 +586,85 @@ export const loopsDataRoutes = {
 };
 
 /**
+ * Loops review routes - handle review comments after push/merge.
+ */
+export const loopsReviewRoutes = {
+  "/api/loops/:id/address-comments": {
+    /**
+     * POST /api/loops/:id/address-comments - Address reviewer comments
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      const body = await parseBody<AddressCommentsRequest>(req);
+      if (!body) {
+        return errorResponse("invalid_body", "Request body must be valid JSON");
+      }
+
+      // Validate comments field
+      if (!body.comments || typeof body.comments !== "string") {
+        return errorResponse("validation_error", "Comments field is required and must be a string");
+      }
+
+      if (body.comments.trim() === "") {
+        return errorResponse("validation_error", "Comments cannot be empty");
+      }
+
+      try {
+        const result = await loopManager.addressReviewComments(req.params.id, body.comments);
+        
+        if (!result.success) {
+          const responseBody: AddressCommentsResponse = {
+            success: false,
+            error: result.error,
+          };
+          return Response.json(responseBody, { status: 400 });
+        }
+
+        const responseBody: AddressCommentsResponse = {
+          success: true,
+          reviewCycle: result.reviewCycle,
+          branch: result.branch,
+        };
+        return Response.json(responseBody);
+      } catch (error) {
+        return errorResponse("address_comments_failed", String(error), 500);
+      }
+    },
+  },
+
+  "/api/loops/:id/review-history": {
+    /**
+     * GET /api/loops/:id/review-history - Get review history for a loop
+     */
+    async GET(req: Request & { params: { id: string } }): Promise<Response> {
+      try {
+        const result = await loopManager.getReviewHistory(req.params.id);
+        
+        if (!result.success) {
+          const responseBody: ReviewHistoryResponse = {
+            success: false,
+            error: result.error,
+          };
+          return Response.json(responseBody, { status: result.error === "Loop not found" ? 404 : 400 });
+        }
+
+        const responseBody: ReviewHistoryResponse = {
+          success: true,
+          history: result.history,
+        };
+        return Response.json(responseBody);
+      } catch (error) {
+        return errorResponse("get_review_history_failed", String(error), 500);
+      }
+    },
+  },
+};
+
+/**
  * All loops routes combined.
  */
 export const loopsRoutes = {
   ...loopsCrudRoutes,
   ...loopsControlRoutes,
   ...loopsDataRoutes,
+  ...loopsReviewRoutes,
 };

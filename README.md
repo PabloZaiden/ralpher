@@ -136,6 +136,49 @@ When a loop completes (or you stop it manually):
 2. Click "Accept (Merge)" to merge the branch into the original
 3. Or delete the loop to discard changes
 
+### Addressing Reviewer Comments
+
+After accepting or pushing a loop, you can iteratively improve the work based on reviewer feedback:
+
+#### For Pushed Loops
+
+1. Complete a loop and click "Push" to push the branch to the remote
+2. Loop status becomes "Pushed" with an "Addressable" badge
+3. After code review, click "Address Comments" button
+4. Enter reviewer feedback in the modal
+5. The loop restarts on the same branch to address the comments
+6. Push again after completion - cycle repeats as needed
+
+Each review cycle adds new commits to the same branch. Perfect for PR-based workflows where you iterate on feedback before merging.
+
+#### For Merged Loops
+
+1. Complete a loop and click "Accept (Merge)" to merge into main/base branch
+2. Loop status becomes "Merged" with an "Addressable" badge  
+3. After reviewing the merged changes, click "Address Comments"
+4. Enter feedback about what needs improvement
+5. The loop creates a new review branch (`<branch-prefix><name>-review-<N>`)
+6. Work is done on the review branch, then merged back to main
+7. Merge again after completion - cycle repeats as needed
+
+Each review cycle creates a new branch from the base branch. Perfect for post-merge refinements and iterative improvements.
+
+#### Review History
+
+- View the "Review" tab in loop details to see:
+  - Number of review cycles completed
+  - List of review branches created
+  - Whether the loop is currently addressable
+- Review mode tracks all branches and cycles for full audit history
+
+#### Ending Review Mode
+
+- Click "Purge" on a merged/pushed loop to:
+  - Clean up review branches
+  - Mark loop as non-addressable
+  - Permanently delete the loop record
+- Once purged, the loop can no longer receive comments
+
 ### Modifying In-Flight
 
 While a loop is running:
@@ -163,7 +206,10 @@ See [docs/API.md](docs/API.md) for complete API documentation.
 | `/api/loops/:id/accept` | POST | Merge git branch |
 | `/api/loops/:id/push` | POST | Push branch to remote |
 | `/api/loops/:id/discard` | POST | Delete git branch |
+| `/api/loops/:id/purge` | POST | Purge loop and cleanup branches |
 | `/api/loops/:id/pending-prompt` | PUT | Set next iteration prompt |
+| `/api/loops/:id/address-comments` | POST | Address reviewer comments |
+| `/api/loops/:id/review-history` | GET | Get review cycle history |
 | `/api/ws` | WebSocket | Real-time events stream |
 
 ## Technology Stack

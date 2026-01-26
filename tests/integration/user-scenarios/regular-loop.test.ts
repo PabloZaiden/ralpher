@@ -258,8 +258,8 @@ describe("Regular Loop User Scenarios", () => {
       // Verify we're back on the original branch
       expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
 
-      // Verify the working branch was deleted
-      expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
+      // Verify the working branch was NOT deleted (kept for review mode)
+      expect(await branchExists(ctx.workDir, workingBranch)).toBe(true);
 
       // Verify the loop state is now "merged"
       const mergedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
@@ -267,6 +267,12 @@ describe("Regular Loop User Scenarios", () => {
         status: "merged",
         hasError: false,
       });
+      
+      // Verify reviewMode was initialized
+      expect(mergedLoop.state.reviewMode).toBeDefined();
+      expect(mergedLoop.state.reviewMode?.addressable).toBe(true);
+      expect(mergedLoop.state.reviewMode?.completionAction).toBe("merge");
+      expect(mergedLoop.state.reviewMode?.reviewCycles).toBe(0);
     });
   });
 

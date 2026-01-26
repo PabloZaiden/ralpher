@@ -13,6 +13,7 @@ import { ConnectionStatusBar } from "./ConnectionStatusBar";
 import { ServerSettingsModal } from "./ServerSettingsModal";
 import {
   AcceptLoopModal,
+  AddressCommentsModal,
   DeleteLoopModal,
   PurgeLoopModal,
   UncommittedChangesModal,
@@ -73,6 +74,10 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     loopId: null,
   });
   const [purgeModal, setPurgeModal] = useState<{ open: boolean; loopId: string | null }>({
+    open: false,
+    loopId: null,
+  });
+  const [addressCommentsModal, setAddressCommentsModal] = useState<{ open: boolean; loopId: string | null }>({
     open: false,
     loopId: null,
   });
@@ -252,6 +257,29 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     if (!purgeModal.loopId) return;
     await purgeLoop(purgeModal.loopId);
     setPurgeModal({ open: false, loopId: null });
+  }
+
+  // Handle address comments
+  async function handleAddressComments(comments: string) {
+    if (!addressCommentsModal.loopId) return;
+    // The useLoops hook doesn't have addressReviewComments yet, so we'll call the API directly
+    try {
+      const response = await fetch(`/api/loops/${addressCommentsModal.loopId}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to address comments");
+      }
+      
+      setAddressCommentsModal({ open: false, loopId: null });
+    } catch (error) {
+      console.error("Failed to address comments:", error);
+      // TODO: Show error toast
+    }
   }
 
   // Group loops by status
@@ -442,6 +470,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   loop={loop}
                   onClick={() => onSelectLoop?.(loop.config.id)}
                   onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
+                  onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
                 />
               ))}
             </div>
@@ -526,6 +555,17 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         onClose={() => setPurgeModal({ open: false, loopId: null })}
         onPurge={handlePurge}
       />
+
+      {/* Address Comments modal */}
+      {addressCommentsModal.loopId && (
+        <AddressCommentsModal
+          isOpen={addressCommentsModal.open}
+          onClose={() => setAddressCommentsModal({ open: false, loopId: null })}
+          onSubmit={handleAddressComments}
+          loopName={loops.find(l => l.config.id === addressCommentsModal.loopId)?.config.name || ""}
+          reviewCycle={(loops.find(l => l.config.id === addressCommentsModal.loopId)?.state.reviewMode?.reviewCycles || 0) + 1}
+        />
+      )}
 
       {/* Uncommitted changes modal */}
       <UncommittedChangesModal
