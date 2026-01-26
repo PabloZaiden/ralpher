@@ -535,28 +535,66 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               initialLoopData={initialLoopData}
               isEditingDraft={isEditingDraft}
               onSubmit={async (request) => {
-                // If editing, update the draft
+                // If editing a draft
                 if (isEditing) {
-                  try {
-                    const response = await fetch(`/api/loops/${editLoop.config.id}`, {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify(request),
-                    });
-                    
-                    if (!response.ok) {
-                      const error = await response.json();
+                  // If draft flag is set, this is an "Update Draft" action
+                  if (request.draft) {
+                    try {
+                      const response = await fetch(`/api/loops/${editLoop.config.id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(request),
+                      });
+                      
+                      if (!response.ok) {
+                        const error = await response.json();
+                        console.error("Failed to update draft:", error);
+                        return false;
+                      }
+                      
+                      // Refresh loops to update React state with new data
+                      await refresh();
+                      
+                      // Success - close modal
+                      return true;
+                    } catch (error) {
                       console.error("Failed to update draft:", error);
                       return false;
                     }
+                  }
+                  
+                  // Otherwise, this is a "Start Loop" action - transition draft to execution
+                  try {
+                    const startResponse = await fetch(`/api/loops/${editLoop.config.id}/draft/start`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ planMode: request.planMode ?? false }),
+                    });
                     
-                    // Refresh loops to update React state with new data
+                    if (!startResponse.ok) {
+                      const error = await startResponse.json();
+                      
+                      // Check for uncommitted changes error
+                      if (error.error === "uncommitted_changes") {
+                        setUncommittedModal({
+                          open: true,
+                          loopId: editLoop.config.id,
+                          error: error.message,
+                        });
+                        return true; // Close the modal, uncommitted modal will show
+                      }
+                      
+                      console.error("Failed to start draft:", error);
+                      return false;
+                    }
+                    
+                    // Refresh loops to update React state
                     await refresh();
                     
                     // Success - close modal
                     return true;
                   } catch (error) {
-                    console.error("Failed to update draft:", error);
+                    console.error("Failed to start draft:", error);
                     return false;
                   }
                 }

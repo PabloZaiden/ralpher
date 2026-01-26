@@ -132,6 +132,7 @@ export class LoopManager {
       },
       baseBranch: options.baseBranch,
       clearPlanningFolder: options.clearPlanningFolder ?? false,
+      planMode: options.planMode,
     };
 
     const state = createInitialState(id);

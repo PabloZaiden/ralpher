@@ -44,6 +44,9 @@ export interface LoopConfig {
 
   /** Whether to clear .planning folder on start (default: false) */
   clearPlanningFolder?: boolean;
+
+  /** Whether to start in plan mode (for drafts, this indicates the intended mode) */
+  planMode?: boolean;
 }
 
 /**
