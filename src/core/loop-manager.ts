@@ -58,6 +58,8 @@ export interface CreateLoopOptions {
   clearPlanningFolder?: boolean;
   /** Start in plan creation mode instead of immediate execution */
   planMode?: boolean;
+  /** Save as draft without starting (no git branch or session created) */
+  draft?: boolean;
 }
 
 /**
@@ -134,8 +136,12 @@ export class LoopManager {
 
     const state = createInitialState(id);
     
-    // If plan mode is enabled, initialize plan mode state
-    if (options.planMode) {
+    // If draft mode is enabled, set status to draft (no session or git setup)
+    if (options.draft) {
+      state.status = "draft";
+    }
+    // Else if plan mode is enabled, initialize plan mode state
+    else if (options.planMode) {
       state.status = "planning";
       state.planMode = {
         active: true,

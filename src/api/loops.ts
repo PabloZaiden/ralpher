@@ -11,6 +11,7 @@ import { loopManager } from "../core/loop-manager";
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
 import { setLastModel } from "../persistence/preferences";
+import { updateLoopState } from "../persistence/loops";
 import { log } from "../core/logger";
 import type {
   CreateLoopRequest,
@@ -78,33 +79,36 @@ export const loopsCrudRoutes = {
         return errorResponse("validation_error", validationError);
       }
 
-      // Preflight check: verify no uncommitted changes before creating the loop
-      // This prevents creating loops that can never be started
-      try {
-        const executor = await backendManager.getCommandExecutorAsync(body.directory);
-        const git = GitService.withExecutor(executor);
-        const hasChanges = await git.hasUncommittedChanges(body.directory);
+      // Skip preflight check for drafts (drafts don't modify git)
+      if (!body.draft) {
+        // Preflight check: verify no uncommitted changes before creating the loop
+        // This prevents creating loops that can never be started
+        try {
+          const executor = await backendManager.getCommandExecutorAsync(body.directory);
+          const git = GitService.withExecutor(executor);
+          const hasChanges = await git.hasUncommittedChanges(body.directory);
 
-        if (hasChanges) {
-          const changedFiles = await git.getChangedFiles(body.directory);
-          
-          // If planMode and clearPlanningFolder are enabled, allow uncommitted changes in .planning/ only
-          const onlyPlanningChanges = body.planMode && body.clearPlanningFolder &&
-            changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
-          
-          if (!onlyPlanningChanges) {
-            return Response.json(
-              {
-                error: "uncommitted_changes",
-                message: "Directory has uncommitted changes. Please commit or stash your changes before creating a loop.",
-                changedFiles,
-              },
-              { status: 409 }
-            );
+          if (hasChanges) {
+            const changedFiles = await git.getChangedFiles(body.directory);
+            
+            // If planMode and clearPlanningFolder are enabled, allow uncommitted changes in .planning/ only
+            const onlyPlanningChanges = body.planMode && body.clearPlanningFolder &&
+              changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
+            
+            if (!onlyPlanningChanges) {
+              return Response.json(
+                {
+                  error: "uncommitted_changes",
+                  message: "Directory has uncommitted changes. Please commit or stash your changes before creating a loop.",
+                  changedFiles,
+                },
+                { status: 409 }
+              );
+            }
           }
+        } catch (preflightError) {
+          return errorResponse("preflight_failed", `Failed to check for uncommitted changes: ${String(preflightError)}`, 500);
         }
-      } catch (preflightError) {
-        return errorResponse("preflight_failed", `Failed to check for uncommitted changes: ${String(preflightError)}`, 500);
       }
 
       try {
@@ -123,6 +127,7 @@ export const loopsCrudRoutes = {
           baseBranch: body.baseBranch,
           clearPlanningFolder: body.clearPlanningFolder,
           planMode: body.planMode,
+          draft: body.draft,
         });
 
         // Save the model as last used if provided
@@ -135,6 +140,11 @@ export const loopsCrudRoutes = {
           } catch (error) {
             log.warn(`Failed to save last model: ${String(error)}`);
           }
+        }
+
+        // If draft mode is enabled, return the loop without starting
+        if (body.draft) {
+          return Response.json(loop, { status: 201 });
         }
 
         // If plan mode is enabled, start the plan mode session
@@ -224,6 +234,60 @@ export const loopsCrudRoutes = {
     },
 
     /**
+     * PUT /api/loops/:id - Update a draft loop (only allowed for draft status)
+     */
+    async PUT(req: Request & { params: { id: string } }): Promise<Response> {
+      const body = await parseBody<Partial<CreateLoopRequest>>(req);
+      if (!body) {
+        return errorResponse("invalid_body", "Request body must be valid JSON");
+      }
+
+      // Load the loop
+      const loop = await loopManager.getLoop(req.params.id);
+      if (!loop) {
+        return errorResponse("not_found", "Loop not found", 404);
+      }
+
+      // Verify it's a draft
+      if (loop.state.status !== "draft") {
+        return errorResponse("not_draft", "Only draft loops can be updated via PUT. Use PATCH for other loops.", 400);
+      }
+
+      try {
+        // Build updates object from body
+        const updates: Record<string, unknown> = {};
+        
+        if (body.name !== undefined) updates["name"] = body.name;
+        if (body.directory !== undefined) updates["directory"] = body.directory;
+        if (body.prompt !== undefined) updates["prompt"] = body.prompt;
+        if (body.model !== undefined) updates["model"] = body.model;
+        if (body.maxIterations !== undefined) updates["maxIterations"] = body.maxIterations;
+        if (body.maxConsecutiveErrors !== undefined) updates["maxConsecutiveErrors"] = body.maxConsecutiveErrors;
+        if (body.activityTimeoutSeconds !== undefined) updates["activityTimeoutSeconds"] = body.activityTimeoutSeconds;
+        if (body.stopPattern !== undefined) updates["stopPattern"] = body.stopPattern;
+        if (body.baseBranch !== undefined) updates["baseBranch"] = body.baseBranch;
+        if (body.clearPlanningFolder !== undefined) updates["clearPlanningFolder"] = body.clearPlanningFolder;
+        if (body.planMode !== undefined) updates["planMode"] = body.planMode;
+        
+        // Handle git config merge
+        if (body.git !== undefined) {
+          updates["git"] = { ...loop.config.git, ...body.git };
+        }
+
+        // Update timestamp
+        updates["updatedAt"] = new Date().toISOString();
+
+        const updatedLoop = await loopManager.updateLoop(req.params.id, updates);
+        if (!updatedLoop) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        return Response.json(updatedLoop);
+      } catch (error) {
+        return errorResponse("update_failed", String(error), 500);
+      }
+    },
+
+    /**
      * DELETE /api/loops/:id - Delete a loop
      */
     async DELETE(req: Request & { params: { id: string } }): Promise<Response> {
@@ -241,6 +305,96 @@ export const loopsCrudRoutes = {
  * Note: Loops are automatically started during creation - there are no start/stop API endpoints.
  */
 export const loopsControlRoutes = {
+  "/api/loops/:id/draft/start": {
+    /**
+     * POST /api/loops/:id/draft/start - Start a draft loop (plan mode or immediate execution)
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      const body = await parseBody<{ planMode: boolean }>(req);
+      if (!body || typeof body.planMode !== "boolean") {
+        return errorResponse("invalid_body", "Request body must contain a 'planMode' boolean");
+      }
+
+      // Load the loop
+      const loop = await loopManager.getLoop(req.params.id);
+      if (!loop) {
+        return errorResponse("not_found", "Loop not found", 404);
+      }
+
+      // Verify it's a draft
+      if (loop.state.status !== "draft") {
+        return errorResponse("not_draft", "Loop is not in draft status", 400);
+      }
+
+      // Preflight check: verify no uncommitted changes before starting
+      try {
+        const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+        const git = GitService.withExecutor(executor);
+        const hasChanges = await git.hasUncommittedChanges(loop.config.directory);
+
+        if (hasChanges) {
+          const changedFiles = await git.getChangedFiles(loop.config.directory);
+          
+          // If planMode and clearPlanningFolder are enabled, allow uncommitted changes in .planning/ only
+          const onlyPlanningChanges = body.planMode && loop.config.clearPlanningFolder &&
+            changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
+          
+          if (!onlyPlanningChanges) {
+            return Response.json(
+              {
+                error: "uncommitted_changes",
+                message: "Directory has uncommitted changes. Please commit or stash your changes before starting a loop.",
+                changedFiles,
+              },
+              { status: 409 }
+            );
+          }
+        }
+      } catch (preflightError) {
+        return errorResponse("preflight_failed", `Failed to check for uncommitted changes: ${String(preflightError)}`, 500);
+      }
+
+      // Transition draft to appropriate status before starting
+      // This is necessary because engine.start() only accepts idle/stopped/planning status
+      if (body.planMode) {
+        try {
+          // Update to planning status before starting
+          loop.state.status = "planning";
+          loop.state.planMode = {
+            active: true,
+            feedbackRounds: 0,
+            planningFolderCleared: false,
+          };
+          await updateLoopState(req.params.id, loop.state);
+          
+          // Start plan mode - this will handle git setup and further state updates
+          await loopManager.startPlanMode(req.params.id);
+          
+          // Return updated loop
+          const updatedLoop = await loopManager.getLoop(req.params.id);
+          return Response.json(updatedLoop ?? loop);
+        } catch (startError) {
+          return errorResponse("start_plan_failed", `Failed to start plan mode: ${String(startError)}`, 500);
+        }
+      } else {
+        try {
+          // Update to idle status before starting (engine will change it to "starting")
+          loop.state.status = "idle";
+          await updateLoopState(req.params.id, loop.state);
+          
+          // Start the loop immediately - this will handle git setup and state updates
+          await loopManager.startLoop(req.params.id);
+          
+          // Return updated loop
+          const updatedLoop = await loopManager.getLoop(req.params.id);
+          return Response.json(updatedLoop ?? loop);
+        } catch (startError) {
+          return errorResponse("start_failed", `Failed to start loop: ${String(startError)}`, 500);
+        }
+      }
+    },
+  },
+
   "/api/loops/:id/accept": {
     /**
      * POST /api/loops/:id/accept - Accept and merge a completed loop

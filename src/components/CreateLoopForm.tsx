@@ -41,6 +41,21 @@ export interface CreateLoopFormProps {
   currentBranch?: string;
   /** Initial directory to pre-fill (last used) */
   initialDirectory?: string;
+  /** Loop ID if editing an existing draft */
+  editLoopId?: string | null;
+  /** Initial loop data for editing */
+  initialLoopData?: {
+    name: string;
+    directory: string;
+    prompt: string;
+    model?: { providerID: string; modelID: string };
+    maxIterations?: number;
+    maxConsecutiveErrors?: number;
+    activityTimeoutSeconds?: number;
+    baseBranch?: string;
+    clearPlanningFolder?: boolean;
+    planMode?: boolean;
+  } | null;
 }
 
 export function CreateLoopForm({
@@ -56,19 +71,23 @@ export function CreateLoopForm({
   branchesLoading = false,
   currentBranch = "",
   initialDirectory = "",
+  editLoopId = null,
+  initialLoopData = null,
 }: CreateLoopFormProps) {
-  const [name, setName] = useState("Continue working on the plan");
-  const [directory, setDirectory] = useState(initialDirectory);
-  const [prompt, setPrompt] = useState("Do everything that's pending in the plan");
-  const [maxIterations, setMaxIterations] = useState<string>("");
-  const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>("10");
-  const [activityTimeoutSeconds, setActivityTimeoutSeconds] = useState<string>("180");
+  const isEditing = !!editLoopId;
+  
+  const [name, setName] = useState(initialLoopData?.name ?? "Continue working on the plan");
+  const [directory, setDirectory] = useState(initialLoopData?.directory ?? initialDirectory);
+  const [prompt, setPrompt] = useState(initialLoopData?.prompt ?? "Do everything that's pending in the plan");
+  const [maxIterations, setMaxIterations] = useState<string>(initialLoopData?.maxIterations?.toString() ?? "");
+  const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>(initialLoopData?.maxConsecutiveErrors?.toString() ?? "10");
+  const [activityTimeoutSeconds, setActivityTimeoutSeconds] = useState<string>(initialLoopData?.activityTimeoutSeconds?.toString() ?? "180");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("");
-  const [selectedBranch, setSelectedBranch] = useState<string>("");
-  const [clearPlanningFolder, setClearPlanningFolder] = useState(false);
-  const [planMode, setPlanMode] = useState(false);
+  const [selectedBranch, setSelectedBranch] = useState<string>(initialLoopData?.baseBranch ?? "");
+  const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
+  const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? false);
 
   // Update directory when initialDirectory prop changes (e.g., after async fetch)
   useEffect(() => {
@@ -85,10 +104,23 @@ export function CreateLoopForm({
     }
   }, [currentBranch]);
 
-  // Set initial model when lastModel or models change
+  // Set initial model when lastModel, models, or initialLoopData change
   useEffect(() => {
     if (selectedModel) return; // Don't override if user already selected
 
+    // If editing and initial loop data has a model, use that
+    if (initialLoopData?.model && models.length > 0) {
+      const modelKey = `${initialLoopData.model.providerID}:${initialLoopData.model.modelID}`;
+      const exists = models.some(
+        (m) => `${m.providerID}:${m.modelID}` === modelKey
+      );
+      if (exists) {
+        setSelectedModel(modelKey);
+        return;
+      }
+    }
+
+    // Otherwise, try lastModel
     if (lastModel && models.length > 0) {
       const modelKey = `${lastModel.providerID}:${lastModel.modelID}`;
       const exists = models.some(
@@ -105,7 +137,7 @@ export function CreateLoopForm({
     if (firstConnected) {
       setSelectedModel(`${firstConnected.providerID}:${firstConnected.modelID}`);
     }
-  }, [lastModel, models, selectedModel]);
+  }, [lastModel, models, selectedModel, initialLoopData]);
 
   // Notify parent when directory changes (debounced)
   useEffect(() => {
@@ -118,7 +150,7 @@ export function CreateLoopForm({
     return () => clearTimeout(timer);
   }, [directory, onDirectoryChange]);
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent, asDraft = false) {
     e.preventDefault();
 
     if (!name.trim() || !directory.trim() || !prompt.trim()) {
@@ -175,9 +207,14 @@ export function CreateLoopForm({
       request.clearPlanningFolder = true;
     }
 
-    // Add planMode if enabled
-    if (planMode) {
+    // Add planMode if enabled (unless saving as draft)
+    if (planMode && !asDraft) {
       request.planMode = true;
+    }
+
+    // Add draft flag if saving as draft
+    if (asDraft) {
+      request.draft = true;
     }
 
     try {
@@ -555,8 +592,22 @@ export function CreateLoopForm({
       )}
 
       {/* Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+        {/* Left side - Save as Draft button */}
+        {!isEditing && (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={(e) => handleSubmit(e, true)}
+            disabled={isSubmitting || !name.trim() || !directory.trim() || !prompt.trim()}
+            loading={isSubmitting}
+          >
+            Save as Draft
+          </Button>
+        )}
+        
+        {/* Right side - Cancel and Create/Start buttons */}
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 sm:ml-auto">
           <Button
             type="button"
             variant="ghost"
@@ -566,7 +617,10 @@ export function CreateLoopForm({
             Cancel
           </Button>
           <Button type="submit" loading={isSubmitting}>
-            {planMode ? "Create Plan" : "Create Loop"}
+            {isEditing 
+              ? (planMode ? "Start Plan" : "Start Loop")
+              : (planMode ? "Create Plan" : "Create Loop")
+            }
           </Button>
         </div>
       </div>

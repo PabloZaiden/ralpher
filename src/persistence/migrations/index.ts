@@ -164,6 +164,21 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 4,
+    name: "add_draft_status_support",
+    up: (db) => {
+      // Check if the loops table exists
+      if (!tableExists(db, "loops")) {
+        log.debug("loops table does not exist, skipping migration 4");
+        return;
+      }
+      
+      // No schema changes needed - draft status uses existing status column
+      // This migration exists for documentation purposes and to track the feature addition
+      log.info("Draft status support enabled (no schema changes required)");
+    },
+  },
 ];
 
 /**

@@ -527,4 +527,230 @@ describe("Loops CRUD API Integration", () => {
       expect(getBody.config.clearPlanningFolder).toBe(true);
     });
   });
+
+  describe("Draft loops", () => {
+    test("creates a draft loop without starting", async () => {
+      const response = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Draft Loop",
+          directory: testWorkDir,
+          prompt: "Draft task",
+          draft: true,
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const body = await response.json();
+      expect(body.state.status).toBe("draft");
+      expect(body.state.session).toBeUndefined();
+      expect(body.state.git).toBeUndefined();
+    });
+
+    test("non-draft loops still auto-start", async () => {
+      const response = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Normal Loop",
+          directory: testWorkDir,
+          prompt: "Normal task",
+          draft: false,
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const body = await response.json();
+      expect(body.state.status).not.toBe("draft");
+      expect(body.state.status).not.toBe("idle");
+    });
+
+    test("can update a draft loop via PUT", async () => {
+      // Create draft
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Draft to Update",
+          directory: testWorkDir,
+          prompt: "Original prompt",
+          draft: true,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Update draft
+      const updateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Updated Draft",
+          prompt: "Updated prompt",
+        }),
+      });
+
+      expect(updateResponse.status).toBe(200);
+      const updateBody = await updateResponse.json();
+      expect(updateBody.config.name).toBe("Updated Draft");
+      expect(updateBody.config.prompt).toBe("Updated prompt");
+      expect(updateBody.state.status).toBe("draft");
+    });
+
+    test("cannot update non-draft loop via PUT", async () => {
+      // Create regular loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Regular Loop",
+          directory: testWorkDir,
+          prompt: "Task",
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Wait for completion
+      await waitForLoopCompletion(loopId);
+
+      // Try to update
+      const updateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Should Fail",
+        }),
+      });
+
+      expect(updateResponse.status).toBe(400);
+      const body = await updateResponse.json();
+      expect(body.error).toBe("not_draft");
+    });
+
+    test("can start draft as immediate execution", async () => {
+      // Create draft
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Draft to Start",
+          directory: testWorkDir,
+          prompt: "Task",
+          draft: true,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Start draft
+      const startResponse = await fetch(`${baseUrl}/api/loops/${loopId}/draft/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planMode: false,
+        }),
+      });
+
+      expect(startResponse.status).toBe(200);
+      const startBody = await startResponse.json();
+      expect(startBody.state.status).not.toBe("draft");
+      
+      // Wait for completion
+      await waitForLoopCompletion(loopId);
+      
+      // Verify final state
+      const getResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      const getBody = await getResponse.json();
+      expect(getBody.state.status).toBe("completed");
+      expect(getBody.state.git).toBeDefined();
+    });
+
+    test("can start draft as plan mode", async () => {
+      // Create draft
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Draft to Plan",
+          directory: testWorkDir,
+          prompt: "Task",
+          draft: true,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Start draft in plan mode
+      const startResponse = await fetch(`${baseUrl}/api/loops/${loopId}/draft/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planMode: true,
+        }),
+      });
+
+      expect(startResponse.status).toBe(200);
+      const startBody = await startResponse.json();
+      expect(startBody.state.status).toBe("planning");
+    });
+
+    test("cannot start non-draft loop via draft/start", async () => {
+      // Create regular loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Regular Loop",
+          directory: testWorkDir,
+          prompt: "Task",
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Try to start via draft endpoint
+      const startResponse = await fetch(`${baseUrl}/api/loops/${loopId}/draft/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          planMode: false,
+        }),
+      });
+
+      expect(startResponse.status).toBe(400);
+      const body = await startResponse.json();
+      expect(body.error).toBe("not_draft");
+    });
+
+    test("can delete a draft loop", async () => {
+      // Create draft
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Draft to Delete",
+          directory: testWorkDir,
+          prompt: "Task",
+          draft: true,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Delete draft
+      const deleteResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "DELETE",
+      });
+
+      expect(deleteResponse.status).toBe(200);
+
+      // Verify it's soft-deleted (still exists but with status "deleted")
+      const getResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      expect(getResponse.status).toBe(200);
+      const getBody = await getResponse.json();
+      expect(getBody.state.status).toBe("deleted");
+    });
+  });
 });
