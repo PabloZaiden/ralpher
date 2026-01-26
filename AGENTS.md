@@ -74,6 +74,26 @@ const handler = async (e: FormEvent) => {
 };
 ```
 
+**CRITICAL: Always await async operations in API handlers.** Never use fire-and-forget patterns like `.then()` or `.catch()` without `await` in API route handlers. The API response should only be sent after all operations complete:
+
+```typescript
+// WRONG - fire and forget, errors are silently swallowed
+async POST(req) {
+  engine.start().catch((error) => log.error(error));
+  return Response.json({ success: true }); // Returns before start() completes!
+}
+
+// CORRECT - await all async operations
+async POST(req) {
+  try {
+    await engine.start();
+    return Response.json({ success: true });
+  } catch (error) {
+    return Response.json({ success: false, error: String(error) }, { status: 500 });
+  }
+}
+```
+
 ### React Components
 
 - Use functional components only (no class components)

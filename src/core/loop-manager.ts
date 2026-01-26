@@ -1079,9 +1079,12 @@ Follow the standard loop execution flow:
         this.startStatePersistence(loopId);
 
         // Start execution (this will emit loop.started and set status to running)
-        engine.start().catch((error) => {
+        try {
+          await engine.start();
+        } catch (error) {
           log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
-        });
+          return { success: false, error: String(error) };
+        }
 
         return {
           success: true,
@@ -1140,9 +1143,12 @@ Follow the standard loop execution flow:
         this.startStatePersistence(loopId);
 
         // Start execution (this will emit loop.started and set status to running)
-        engine.start().catch((error) => {
+        try {
+          await engine.start();
+        } catch (error) {
           log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
-        });
+          return { success: false, error: String(error) };
+        }
 
         return {
           success: true,

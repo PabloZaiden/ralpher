@@ -430,4 +430,70 @@ describe("Review Cycle User Scenarios", () => {
       expect(history.history.reviewCycles).toBe(0);
     });
   });
+
+  describe("Review Mode Execution Verification", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: [
+          // Initial work
+          "Initial work done! <promise>COMPLETE</promise>",
+          // Review cycle - takes some time to complete
+          "Addressed comments! <promise>COMPLETE</promise>",
+        ],
+        withPlanningDir: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("address-comments API waits for loop to start before returning", async () => {
+      // This test verifies that the address-comments API properly awaits
+      // the engine.start() call instead of using fire-and-forget pattern.
+      // The bug was: API returned success:true immediately before loop started,
+      // causing the loop to appear "running" but not actually execute.
+
+      // Create and complete initial loop
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Await Start Test",
+        directory: ctx.workDir,
+        prompt: "Implement a feature",
+      });
+      const loop = body as Loop;
+
+      // Wait for initial completion and merge
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
+
+      // Address comments - this should only return AFTER the loop has started
+      const addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Please add error handling" }),
+      });
+      expect(addressResponse.status).toBe(200);
+      const addressResult = await addressResponse.json();
+      expect(addressResult.success).toBe(true);
+
+      // CRITICAL: Immediately after the API returns success, the loop should
+      // be in a running state (or already completed if very fast).
+      // If the API used fire-and-forget, the loop might still be in "merged" status.
+      const loopAfterAddress = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}`);
+      const loopState = await loopAfterAddress.json();
+      
+      // The loop should NOT still be in "merged" status - it should have transitioned
+      // to running, starting, or already completed
+      expect(loopState.state.status).not.toBe("merged");
+      expect(loopState.state.status).not.toBe("pushed");
+      expect(["starting", "running", "completed"]).toContain(loopState.state.status);
+
+      // Wait for final completion
+      const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      expect(completedLoop.state.reviewMode?.reviewCycles).toBe(1);
+    });
+  });
 });
