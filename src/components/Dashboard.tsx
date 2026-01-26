@@ -245,6 +245,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   async function handleDelete() {
     if (!deleteModal.loopId) return;
     await deleteLoop(deleteModal.loopId);
+    await refresh(); // Refresh loops to update React state
     setDeleteModal({ open: false, loopId: null });
   }
 
