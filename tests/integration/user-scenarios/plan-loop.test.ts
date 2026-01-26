@@ -21,6 +21,7 @@ import {
   branchExists,
   remoteBranchExists,
   assertLoopState,
+  waitForGitAvailable,
   type TestServerContext,
 } from "./helpers";
 import type { Loop } from "../../../src/types/loop";
@@ -118,6 +119,11 @@ describe("Plan + Loop User Scenarios", () => {
           executionResponses: ["<promise>COMPLETE</promise>"],
         })
       );
+
+      // Wait for any pending operations from previous test to complete
+      // This includes git operations and async cleanup
+      await waitForGitAvailable(ctx.workDir);
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       // Add extra files to .planning
       await writeFile(join(ctx.workDir, ".planning/extra-plan.md"), "Extra plan content");

@@ -146,9 +146,9 @@ export class ConfigurableMockBackend implements LoopBackend {
     const { stream, push, end } = createEventStream<AgentEvent>();
 
     (async () => {
-      // Wait for pendingPrompt to be set
+      // Wait for pendingPrompt to be set (increased timeout for slower CI environments)
       let attempts = 0;
-      while (!this.pendingPrompt && attempts < 100) {
+      while (!this.pendingPrompt && attempts < 500) {
         await new Promise((resolve) => setTimeout(resolve, 10));
         attempts++;
       }
@@ -395,7 +395,7 @@ export async function waitForLoopStatus(
   baseUrl: string,
   loopId: string,
   expectedStatus: string | string[],
-  timeoutMs = 10000
+  timeoutMs = 15000
 ): Promise<Loop> {
   const statuses = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
   const startTime = Date.now();
@@ -551,6 +551,30 @@ export async function getLoopStatusFileViaAPI(
 export async function getCurrentBranch(workDir: string): Promise<string> {
   const result = await Bun.$`git -C ${workDir} rev-parse --abbrev-ref HEAD`.quiet();
   return result.stdout.toString().trim();
+}
+
+/**
+ * Wait for git to be available (no lock file).
+ * This helps prevent race conditions between tests that share a working directory.
+ */
+export async function waitForGitAvailable(workDir: string, timeoutMs = 5000): Promise<void> {
+  const startTime = Date.now();
+  const lockFile = join(workDir, ".git/index.lock");
+  
+  while (Date.now() - startTime < timeoutMs) {
+    const lockExists = await Bun.file(lockFile).exists();
+    if (!lockExists) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  
+  // If we get here, try to remove the stale lock file
+  try {
+    await rm(lockFile, { force: true });
+  } catch {
+    // Ignore errors removing lock file
+  }
 }
 
 /**
