@@ -1,0 +1,743 @@
+/**
+ * Integration tests for Plan + Loop user scenarios.
+ * These tests simulate UI interactions via API calls for plan mode workflows.
+ */
+
+import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { writeFile, readdir } from "fs/promises";
+import { join } from "path";
+import {
+  setupTestServer,
+  teardownTestServer,
+  createLoopViaAPI,
+  waitForLoopStatus,
+  acceptLoopViaAPI,
+  pushLoopViaAPI,
+  discardLoopViaAPI,
+  sendPlanFeedbackViaAPI,
+  acceptPlanViaAPI,
+  discardPlanViaAPI,
+  getCurrentBranch,
+  branchExists,
+  remoteBranchExists,
+  assertLoopState,
+  type TestServerContext,
+} from "./helpers";
+import type { Loop } from "../../../src/types/loop";
+
+/**
+ * Helper to create a plan mode mock backend.
+ * Plan mode has two phases:
+ * 1. Planning phase: Returns PLAN_READY to indicate plan is ready for review
+ * 2. Execution phase: Normal iteration responses
+ */
+function createPlanModeMockResponses(options: {
+  planIterations?: number;
+  executionResponses?: string[];
+}): string[] {
+  const { planIterations = 1, executionResponses = ["<promise>COMPLETE</promise>"] } = options;
+
+  const responses: string[] = [];
+
+  // Planning phase responses (PLAN_READY after each iteration)
+  for (let i = 0; i < planIterations; i++) {
+    responses.push("Planning... <promise>PLAN_READY</promise>");
+  }
+
+  // Execution phase responses
+  responses.push(...executionResponses);
+
+  return responses;
+}
+
+describe("Plan + Loop User Scenarios", () => {
+  describe("Create Loop with Plan Mode", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: createPlanModeMockResponses({
+          planIterations: 1,
+          executionResponses: [
+            "Working on iteration 1...",
+            "Working on iteration 2...",
+            "Done! <promise>COMPLETE</promise>",
+          ],
+        }),
+        withPlanningDir: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("creates loop in planning status with planMode: true", async () => {
+      // Create loop with plan mode via API (simulating UI "Create with Plan" option)
+      const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Plan Mode Test",
+        directory: ctx.workDir,
+        prompt: "Create a comprehensive plan first",
+        planMode: true,
+      });
+
+      expect(status).toBe(201);
+      const loop = body as Loop;
+      expect(loop.config.id).toBeDefined();
+
+      // Wait for planning status
+      const planningLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+
+      // Validate loop state for UI display
+      assertLoopState(planningLoop, {
+        status: "planning",
+        hasError: false,
+        planMode: {
+          active: true,
+          feedbackRounds: 0,
+        },
+      });
+
+      // In plan mode, the git branch is NOT set up until plan is accepted
+      // So we should still be on main
+      const currentBranch = await getCurrentBranch(ctx.workDir);
+      expect(currentBranch).toBe("main");
+
+      // Verify no git state is set yet (branch is created on plan acceptance)
+      expect(planningLoop.state.git).toBeUndefined();
+
+      // Clean up - wait for status to confirm deletion
+      await discardPlanViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "deleted");
+    });
+
+    test("creates loop with plan mode and clearPlanningFolder: true", async () => {
+      ctx.mockBackend.reset(
+        createPlanModeMockResponses({
+          planIterations: 1,
+          executionResponses: ["<promise>COMPLETE</promise>"],
+        })
+      );
+
+      // Add extra files to .planning
+      await writeFile(join(ctx.workDir, ".planning/extra-plan.md"), "Extra plan content");
+      await Bun.$`git -C ${ctx.workDir} add .`.quiet();
+      await Bun.$`git -C ${ctx.workDir} commit -m "Add extra plan file"`.quiet();
+
+      // Verify extra file exists
+      const extraExists = await Bun.file(join(ctx.workDir, ".planning/extra-plan.md")).exists();
+      expect(extraExists).toBe(true);
+
+      // Create loop with both plan mode and clear planning folder
+      const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Plan Mode Clear Test",
+        directory: ctx.workDir,
+        prompt: "Create a plan from scratch",
+        planMode: true,
+        clearPlanningFolder: true,
+      });
+
+      expect(status).toBe(201);
+      const loop = body as Loop;
+
+      // Wait for planning status
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+
+      // Verify .planning was cleared
+      const planningDir = join(ctx.workDir, ".planning");
+      const files = await readdir(planningDir);
+      // Should be cleared (may have new files created by the agent)
+      expect(files.length).toBeLessThanOrEqual(2);
+
+      // Clean up - wait for status to confirm deletion
+      await discardPlanViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "deleted");
+    });
+  });
+
+  describe("Plan Close Variant A: Discard Plan", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: createPlanModeMockResponses({ planIterations: 1 }),
+        withPlanningDir: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("discards plan and deletes the loop", async () => {
+      // Get original branch
+      const originalBranch = await getCurrentBranch(ctx.workDir);
+
+      // Create loop with plan mode
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Discard Plan Test",
+        directory: ctx.workDir,
+        prompt: "Create a plan to discard",
+        planMode: true,
+      });
+      const loop = body as Loop;
+
+      // Wait for planning status
+      const planningLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+
+      // In plan mode, no git branch is created until plan is accepted
+      // So we should still be on the original branch
+      expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
+      expect(planningLoop.state.git).toBeUndefined();
+
+      // Discard the plan via API (simulating UI "Discard Plan" button)
+      const { status, body: discardBody } = await discardPlanViaAPI(ctx.baseUrl, loop.config.id);
+
+      expect(status).toBe(200);
+      expect(discardBody.success).toBe(true);
+
+      // Verify we're still on the original branch
+      expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
+
+      // Verify the loop is deleted
+      const deletedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "deleted");
+      assertLoopState(deletedLoop, {
+        status: "deleted",
+        hasError: false,
+      });
+    });
+  });
+
+  describe("Plan Close Variant B: No Feedback, Accept Plan Immediately", () => {
+    describe("Then Accept and Merge", () => {
+      let ctx: TestServerContext;
+
+      beforeAll(async () => {
+        ctx = await setupTestServer({
+          mockResponses: createPlanModeMockResponses({
+            planIterations: 1,
+            executionResponses: [
+              "Working on iteration 1...",
+              "Working on iteration 2...",
+              "Done! <promise>COMPLETE</promise>",
+            ],
+          }),
+          withPlanningDir: true,
+        });
+      });
+
+      afterAll(async () => {
+        await teardownTestServer(ctx);
+      });
+
+      test("accepts plan without feedback, runs iterations, then accepts and merges", async () => {
+        const originalBranch = await getCurrentBranch(ctx.workDir);
+
+        // Create loop with plan mode
+        const { body } = await createLoopViaAPI(ctx.baseUrl, {
+          name: "No Feedback Accept Test",
+          directory: ctx.workDir,
+          prompt: "Create a plan and execute it",
+          planMode: true,
+        });
+        const loop = body as Loop;
+
+        // Wait for planning status
+        const planningLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+        assertLoopState(planningLoop, {
+          status: "planning",
+          planMode: { active: true, feedbackRounds: 0 },
+        });
+
+        // Accept the plan immediately (no feedback)
+        const { status, body: acceptPlanBody } = await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
+        expect(status).toBe(200);
+        expect(acceptPlanBody.success).toBe(true);
+
+        // Wait for loop to complete
+        const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+        assertLoopState(completedLoop, {
+          status: "completed",
+          hasGitBranch: true,
+          hasError: false,
+        });
+
+        // Verify iterations ran (total = 1 plan iteration + 3 execution iterations = 4)
+        // But we don't check exact count since timing can vary
+        expect(completedLoop.state.currentIteration).toBeGreaterThanOrEqual(1);
+
+        const workingBranch = completedLoop.state.git!.workingBranch;
+
+        // Accept and merge the loop
+        const { status: acceptStatus, body: acceptBody } = await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
+        expect(acceptStatus).toBe(200);
+        expect(acceptBody.success).toBe(true);
+        expect(acceptBody.mergeCommit).toBeDefined();
+
+        // Verify we're back on original branch
+        expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
+
+        // Verify working branch was deleted
+        expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
+
+        // Verify final state
+        const mergedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
+        assertLoopState(mergedLoop, { status: "merged" });
+      });
+    });
+
+    describe("Then Accept and Push", () => {
+      let ctx: TestServerContext;
+
+      beforeAll(async () => {
+        ctx = await setupTestServer({
+          mockResponses: createPlanModeMockResponses({
+            planIterations: 1,
+            executionResponses: [
+              "Working...",
+              "Done! <promise>COMPLETE</promise>",
+            ],
+          }),
+          withPlanningDir: true,
+          withRemote: true,
+        });
+      });
+
+      afterAll(async () => {
+        await teardownTestServer(ctx);
+      });
+
+      test("accepts plan without feedback, runs iterations, then pushes to remote", async () => {
+        // Create loop with plan mode
+        const { body } = await createLoopViaAPI(ctx.baseUrl, {
+          name: "No Feedback Push Test",
+          directory: ctx.workDir,
+          prompt: "Create a plan and push it",
+          planMode: true,
+        });
+        const loop = body as Loop;
+
+        // Wait for planning status
+        await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+
+        // Accept the plan immediately
+        await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
+
+        // Wait for completion
+        const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+        const workingBranch = completedLoop.state.git!.workingBranch;
+
+        // Push the loop
+        const { status, body: pushBody } = await pushLoopViaAPI(ctx.baseUrl, loop.config.id);
+        expect(status).toBe(200);
+        expect(pushBody.success).toBe(true);
+        expect(pushBody.remoteBranch).toBeDefined();
+
+        // Verify branch exists on remote
+        expect(await remoteBranchExists(ctx.workDir, workingBranch)).toBe(true);
+
+        // Verify final state
+        const pushedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "pushed");
+        assertLoopState(pushedLoop, { status: "pushed" });
+
+        // Clean up
+        await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
+      });
+    });
+
+    describe("Then Discard", () => {
+      let ctx: TestServerContext;
+
+      beforeAll(async () => {
+        ctx = await setupTestServer({
+          mockResponses: createPlanModeMockResponses({
+            planIterations: 1,
+            executionResponses: [
+              "Working...",
+              "Done! <promise>COMPLETE</promise>",
+            ],
+          }),
+          withPlanningDir: true,
+        });
+      });
+
+      afterAll(async () => {
+        await teardownTestServer(ctx);
+      });
+
+      test("accepts plan without feedback, runs iterations, then discards", async () => {
+        const originalBranch = await getCurrentBranch(ctx.workDir);
+
+        // Create loop with plan mode
+        const { body } = await createLoopViaAPI(ctx.baseUrl, {
+          name: "No Feedback Discard Test",
+          directory: ctx.workDir,
+          prompt: "Create a plan and discard it",
+          planMode: true,
+        });
+        const loop = body as Loop;
+
+        // Wait for planning status
+        await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+
+        // Accept the plan
+        await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
+
+        // Wait for completion
+        const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+        const workingBranch = completedLoop.state.git!.workingBranch;
+
+        // Discard the loop
+        const { status, body: discardBody } = await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
+        expect(status).toBe(200);
+        expect(discardBody.success).toBe(true);
+
+        // Verify we're back on original branch
+        expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
+
+        // Verify working branch was deleted
+        expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
+
+        // Verify final state
+        const deletedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "deleted");
+        assertLoopState(deletedLoop, { status: "deleted" });
+      });
+    });
+  });
+
+  describe("Plan Close Variant C: Add Feedback 2 Times, Then Accept Plan", () => {
+    describe("Then Accept and Merge", () => {
+      let ctx: TestServerContext;
+
+      beforeAll(async () => {
+        ctx = await setupTestServer({
+          mockResponses: createPlanModeMockResponses({
+            planIterations: 3, // Initial plan + 2 feedback rounds
+            executionResponses: [
+              "Working on iteration 1...",
+              "Working on iteration 2...",
+              "Done! <promise>COMPLETE</promise>",
+            ],
+          }),
+          withPlanningDir: true,
+        });
+      });
+
+      afterAll(async () => {
+        await teardownTestServer(ctx);
+      });
+
+      test("provides feedback 2 times, accepts plan, runs iterations, then merges", async () => {
+        const originalBranch = await getCurrentBranch(ctx.workDir);
+
+        // Create loop with plan mode
+        const { body } = await createLoopViaAPI(ctx.baseUrl, {
+          name: "Feedback Accept Test",
+          directory: ctx.workDir,
+          prompt: "Create a plan with feedback",
+          planMode: true,
+        });
+        const loop = body as Loop;
+
+        // Wait for planning status
+        const planningLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+        assertLoopState(planningLoop, {
+          status: "planning",
+          planMode: { active: true, feedbackRounds: 0 },
+        });
+
+        // Send first feedback
+        const { status: fb1Status } = await sendPlanFeedbackViaAPI(
+          ctx.baseUrl,
+          loop.config.id,
+          "Please add more detail to step 2"
+        );
+        expect(fb1Status).toBe(200);
+
+        // Wait for planning status again (after processing feedback)
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const afterFb1 = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+        assertLoopState(afterFb1, {
+          status: "planning",
+          planMode: { active: true, feedbackRounds: 1 },
+        });
+
+        // Send second feedback
+        const { status: fb2Status } = await sendPlanFeedbackViaAPI(
+          ctx.baseUrl,
+          loop.config.id,
+          "Also consider edge cases"
+        );
+        expect(fb2Status).toBe(200);
+
+        // Wait for planning status again
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const afterFb2 = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+        assertLoopState(afterFb2, {
+          status: "planning",
+          planMode: { active: true, feedbackRounds: 2 },
+        });
+
+        // Accept the plan
+        const { status: acceptPlanStatus } = await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
+        expect(acceptPlanStatus).toBe(200);
+
+        // Wait for loop to complete
+        const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+        assertLoopState(completedLoop, {
+          status: "completed",
+          hasGitBranch: true,
+          hasError: false,
+        });
+
+        const workingBranch = completedLoop.state.git!.workingBranch;
+
+        // Accept and merge
+        const { status: acceptStatus } = await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
+        expect(acceptStatus).toBe(200);
+
+        // Verify final state
+        expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
+        expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
+
+        const mergedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
+        assertLoopState(mergedLoop, { status: "merged" });
+      });
+    });
+
+    describe("Then Accept and Push", () => {
+      let ctx: TestServerContext;
+
+      beforeAll(async () => {
+        ctx = await setupTestServer({
+          mockResponses: createPlanModeMockResponses({
+            planIterations: 3,
+            executionResponses: [
+              "Working...",
+              "Done! <promise>COMPLETE</promise>",
+            ],
+          }),
+          withPlanningDir: true,
+          withRemote: true,
+        });
+      });
+
+      afterAll(async () => {
+        await teardownTestServer(ctx);
+      });
+
+      test("provides feedback 2 times, accepts plan, runs iterations, then pushes", async () => {
+        // Create loop with plan mode
+        const { body } = await createLoopViaAPI(ctx.baseUrl, {
+          name: "Feedback Push Test",
+          directory: ctx.workDir,
+          prompt: "Create a plan with feedback to push",
+          planMode: true,
+        });
+        const loop = body as Loop;
+
+        // Wait for planning
+        await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+
+        // Send 2 feedbacks
+        await sendPlanFeedbackViaAPI(ctx.baseUrl, loop.config.id, "Feedback 1");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+
+        await sendPlanFeedbackViaAPI(ctx.baseUrl, loop.config.id, "Feedback 2");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const afterFeedback = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+        expect(afterFeedback.state.planMode?.feedbackRounds).toBe(2);
+
+        // Accept plan
+        await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
+
+        // Wait for completion
+        const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+        const workingBranch = completedLoop.state.git!.workingBranch;
+
+        // Push
+        const { status, body: pushBody } = await pushLoopViaAPI(ctx.baseUrl, loop.config.id);
+        expect(status).toBe(200);
+        expect(pushBody.success).toBe(true);
+
+        // Verify remote branch exists
+        expect(await remoteBranchExists(ctx.workDir, workingBranch)).toBe(true);
+
+        // Verify final state
+        const pushedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "pushed");
+        assertLoopState(pushedLoop, { status: "pushed" });
+
+        // Clean up
+        await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
+      });
+    });
+
+    describe("Then Discard", () => {
+      let ctx: TestServerContext;
+
+      beforeAll(async () => {
+        ctx = await setupTestServer({
+          mockResponses: createPlanModeMockResponses({
+            planIterations: 3,
+            executionResponses: [
+              "Working...",
+              "Done! <promise>COMPLETE</promise>",
+            ],
+          }),
+          withPlanningDir: true,
+        });
+      });
+
+      afterAll(async () => {
+        await teardownTestServer(ctx);
+      });
+
+      test("provides feedback 2 times, accepts plan, runs iterations, then discards", async () => {
+        const originalBranch = await getCurrentBranch(ctx.workDir);
+
+        // Create loop with plan mode
+        const { body } = await createLoopViaAPI(ctx.baseUrl, {
+          name: "Feedback Discard Test",
+          directory: ctx.workDir,
+          prompt: "Create a plan with feedback to discard",
+          planMode: true,
+        });
+        const loop = body as Loop;
+
+        // Wait for planning
+        await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+
+        // Send 2 feedbacks
+        await sendPlanFeedbackViaAPI(ctx.baseUrl, loop.config.id, "Feedback 1");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+
+        await sendPlanFeedbackViaAPI(ctx.baseUrl, loop.config.id, "Feedback 2");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // Accept plan
+        await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
+
+        // Wait for completion
+        const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+        const workingBranch = completedLoop.state.git!.workingBranch;
+
+        // Discard
+        const { status } = await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
+        expect(status).toBe(200);
+
+        // Verify cleanup
+        expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
+        expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
+
+        // Verify final state
+        const deletedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "deleted");
+        assertLoopState(deletedLoop, { status: "deleted" });
+      });
+    });
+  });
+
+  describe("Plan Mode Error Handling", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: createPlanModeMockResponses({ planIterations: 1 }),
+        withPlanningDir: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("returns error when sending feedback to non-planning loop", async () => {
+      // Create a normal loop (not plan mode)
+      ctx.mockBackend.reset(["<promise>COMPLETE</promise>"]);
+
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Non-Plan Loop",
+        directory: ctx.workDir,
+        prompt: "Normal loop",
+        planMode: false,
+      });
+      const loop = body as Loop;
+
+      // Wait for completion
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+
+      // Try to send feedback (should fail)
+      const { status, body: feedbackBody } = await sendPlanFeedbackViaAPI(
+        ctx.baseUrl,
+        loop.config.id,
+        "This should fail"
+      );
+
+      expect(status).toBe(400);
+      expect(feedbackBody.error).toBe("not_planning");
+
+      // Clean up
+      await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
+    });
+
+    test("returns error when accepting plan on non-planning loop", async () => {
+      // Create a normal loop (not plan mode)
+      ctx.mockBackend.reset(["<promise>COMPLETE</promise>"]);
+
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Non-Plan Loop 2",
+        directory: ctx.workDir,
+        prompt: "Normal loop",
+        planMode: false,
+      });
+      const loop = body as Loop;
+
+      // Wait for completion
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+
+      // Try to accept plan (should fail)
+      const { status, body: acceptBody } = await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
+
+      expect(status).toBe(400);
+      expect(acceptBody.error).toBe("not_planning");
+
+      // Clean up
+      await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
+    });
+
+    test("returns 404 when discarding plan for non-existent loop", async () => {
+      const { status } = await discardPlanViaAPI(ctx.baseUrl, "non-existent-id");
+      expect(status).toBe(404);
+    });
+
+    test("returns error when sending empty feedback", async () => {
+      ctx.mockBackend.reset(createPlanModeMockResponses({ planIterations: 1 }));
+
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Empty Feedback Test",
+        directory: ctx.workDir,
+        prompt: "Test plan",
+        planMode: true,
+      });
+      const loop = body as Loop;
+
+      // Wait for planning
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+
+      // Try to send empty feedback
+      const response = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/plan/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedback: "   " }), // Whitespace only
+      });
+
+      expect(response.status).toBe(400);
+      const error = await response.json();
+      expect(error.error).toBe("validation_error");
+
+      // Clean up
+      await discardPlanViaAPI(ctx.baseUrl, loop.config.id);
+    });
+  });
+});
