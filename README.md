@@ -18,11 +18,10 @@ A Ralph Loop (named after the "Ralph Wiggum technique") is an autonomous AI deve
 ## Features
 
 - **Web Dashboard**: Real-time monitoring of multiple concurrent loops
-- **REST API**: Full control over loop lifecycle (create, start, stop, accept, discard)
+- **REST API**: Full control over loop lifecycle
 - **Git Integration**: Automatic branch per loop, commit per iteration, merge on accept
-- **Real-time Updates**: Server-Sent Events (SSE) for live log streaming
+- **Real-time Updates**: Live log streaming
 - **Model Selection**: Choose AI models from available providers
-- **Pending Prompt**: Modify next iteration's prompt while loop is running
 
 ## Quick Start
 
@@ -62,7 +61,7 @@ bun run build
 ./dist/ralpher
 ```
 
-The build creates a single standalone executable (~55 MB) that includes the Bun runtime and all dependencies. No installation required on the target machine.
+The build creates a single standalone executable that includes the Bun runtime and all dependencies. No installation required on the target machine.
 
 ### Cross-compilation
 
@@ -87,13 +86,13 @@ bun run build --target=bun-windows-x64
 
 ### Data Directory
 
-Ralpher stores loop configurations and state in the data directory:
+Ralpher stores all data in a SQLite database within the data directory:
 
 ```
 data/
-├── loops/           # Loop configs and state (JSON files)
-├── sessions/        # Backend session mappings
-└── preferences.json # User preferences (last model, etc.)
+├── ralpher.db       # SQLite database (loops, sessions, preferences)
+├── ralpher.db-shm   # SQLite shared memory (runtime)
+└── ralpher.db-wal   # SQLite write-ahead log (runtime)
 ```
 
 For Docker deployments, mount this directory as a volume:
@@ -118,15 +117,15 @@ volumes:
 1. Click "New Loop" in the dashboard
 2. Enter a name and the working directory path
 3. Write your task prompt (the PRD/requirements)
-4. Optionally select a model and configure max iterations
-5. Click "Create"
+4. Select a model and configure max iterations
+5. Click "Create" - the loop starts automatically
 
-### Starting a Loop
+### Monitoring a Loop
 
 1. Click on a loop card to view details
-2. Click "Start" to begin execution
-3. If uncommitted changes exist, choose to commit, stash, or cancel
-4. Watch real-time logs as the AI works
+2. Watch real-time logs as the AI works
+3. Use the "Prompt" tab to modify the next iteration's prompt
+4. Use the "Diff" tab to see changes made so far
 
 ### Accepting Changes
 
@@ -191,27 +190,6 @@ While a loop is running:
 
 See [docs/API.md](docs/API.md) for complete API documentation.
 
-### Quick Reference
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/health` | GET | Health check |
-| `/api/loops` | GET | List all loops |
-| `/api/loops` | POST | Create a new loop |
-| `/api/loops/:id` | GET | Get loop details |
-| `/api/loops/:id` | PATCH | Update loop config |
-| `/api/loops/:id` | DELETE | Delete a loop |
-| `/api/loops/:id/start` | POST | Start loop execution |
-| `/api/loops/:id/stop` | POST | Stop loop execution |
-| `/api/loops/:id/accept` | POST | Merge git branch |
-| `/api/loops/:id/push` | POST | Push branch to remote |
-| `/api/loops/:id/discard` | POST | Delete git branch |
-| `/api/loops/:id/purge` | POST | Purge loop and cleanup branches |
-| `/api/loops/:id/pending-prompt` | PUT | Set next iteration prompt |
-| `/api/loops/:id/address-comments` | POST | Address reviewer comments |
-| `/api/loops/:id/review-history` | GET | Get review cycle history |
-| `/api/ws` | WebSocket | Real-time events stream |
-
 ## Technology Stack
 
 | Category | Technology |
@@ -239,17 +217,14 @@ Both modes work identically from the user's perspective - the same UI and API en
 ## Testing
 
 ```bash
-# Run all tests
-bun test
-
-# Run with timeout (via npm script)
+# Run all tests (recommended)
 bun run test
 
 # Run specific test file
 bun test tests/api/loops-crud.test.ts
 
 # Type check
-bun x tsc --noEmit
+bunx tsc --noEmit
 ```
 
 ## Development
@@ -292,5 +267,5 @@ MIT
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes with tests
-4. Run `bun run build && bun test`
+4. Run `bun run build && bun run test`
 5. Submit a pull request

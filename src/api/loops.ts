@@ -238,7 +238,7 @@ export const loopsCrudRoutes = {
 
 /**
  * Loops control routes (accept, discard, push, etc.).
- * Note: Start functionality is handled automatically during loop creation.
+ * Note: Loops are automatically started during creation - there are no start/stop API endpoints.
  */
 export const loopsControlRoutes = {
   "/api/loops/:id/accept": {

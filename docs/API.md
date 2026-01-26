@@ -204,64 +204,7 @@ Delete a loop.
 
 ### Loop Control
 
-#### POST /api/loops/:id/start
-
-Start loop execution.
-
-**Request Body** (optional)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `handleUncommitted` | string | How to handle uncommitted changes: "commit" or "stash" |
-
-**Response**
-
-```json
-{
-  "success": true
-}
-```
-
-**Errors**
-
-| Status | Error | Description |
-|--------|-------|-------------|
-| 404 | `not_found` | Loop not found |
-| 409 | `already_running` | Loop is already running |
-| 409 | `uncommitted_changes` | Directory has uncommitted changes |
-
-**Uncommitted Changes Response**
-
-When uncommitted changes are detected:
-
-```json
-{
-  "error": "uncommitted_changes",
-  "message": "Target directory has uncommitted changes",
-  "options": ["commit", "stash", "cancel"],
-  "changedFiles": ["src/foo.ts", "src/bar.ts"]
-}
-```
-
-Re-submit the request with `handleUncommitted` set to "commit" or "stash".
-
-#### POST /api/loops/:id/stop
-
-Stop a running loop.
-
-**Response**
-
-```json
-{
-  "success": true
-}
-```
-
-**Errors**
-
-| Status | Error | Description |
-|--------|-------|-------------|
-| 409 | `not_running` | Loop is not running |
+Loops are automatically started when created. The following endpoints control loop lifecycle after creation.
 
 #### POST /api/loops/:id/accept
 
@@ -458,6 +401,77 @@ Get the contents of `.planning/status.md` from the loop's directory.
 
 ---
 
+### Plan Mode
+
+Plan mode allows reviewing and refining a plan before execution begins.
+
+#### POST /api/loops/:id/plan/feedback
+
+Send feedback to refine the plan during planning phase.
+
+**Request Body**
+
+```json
+{
+  "feedback": "Please also consider error handling for edge cases"
+}
+```
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 409 | `not_running` | Loop is not running or not found |
+| 400 | `not_planning` | Loop is not in planning status |
+| 400 | `validation_error` | Feedback is empty |
+
+#### POST /api/loops/:id/plan/accept
+
+Accept the plan and start loop execution.
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 409 | `not_running` | Loop is not running |
+| 400 | `not_planning` | Loop is not in planning status |
+
+#### POST /api/loops/:id/plan/discard
+
+Discard the plan and delete the loop.
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+
+---
+
 ### Models
 
 #### GET /api/models
@@ -530,6 +544,58 @@ Set the last used model.
   "success": true
 }
 ```
+
+#### GET /api/preferences/last-directory
+
+Get the last used working directory.
+
+**Response**
+
+```json
+"/path/to/last/project"
+```
+
+Returns `null` if no directory has been used.
+
+#### PUT /api/preferences/last-directory
+
+Set the last used working directory.
+
+**Request Body**
+
+```json
+{
+  "directory": "/path/to/project"
+}
+```
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+---
+
+### Configuration
+
+#### GET /api/config
+
+Get application configuration based on environment.
+
+**Response**
+
+```json
+{
+  "remoteOnly": false
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `remoteOnly` | If true, spawn mode is disabled (set via RALPHER_REMOTE_ONLY env var) |
 
 ---
 
@@ -655,6 +721,32 @@ Test connection with provided settings.
 {
   "success": true,
   "message": "Connection successful"
+}
+```
+
+#### POST /api/backend/reset
+
+Force reset the backend connection. Aborts all active subscriptions and clears connection state. Useful for recovering from stale/hung connections.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "message": "Backend connection reset successfully"
+}
+```
+
+#### POST /api/settings/reset-all
+
+Delete database and reinitialize. This is a destructive operation that deletes all loops, sessions, and preferences. The database is recreated fresh with all migrations applied.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "message": "All settings have been reset. Database recreated."
 }
 ```
 
@@ -807,6 +899,7 @@ ws.onclose = () => {
 |--------|-------------|
 | `idle` | Created but not started |
 | `starting` | Initializing backend connection |
+| `planning` | In plan mode, awaiting plan approval |
 | `running` | Actively executing |
 | `waiting` | Between iterations |
 | `completed` | Stop pattern matched |
@@ -840,10 +933,12 @@ ws.onclose = () => {
 
 ## Examples
 
-### Create and Start a Loop
+### Create a Loop
+
+Loops are automatically started upon creation. The API will reject creation if there are uncommitted changes.
 
 ```bash
-# Create a loop
+# Create a loop (starts automatically)
 curl -X POST http://localhost:3000/api/loops \
   -H "Content-Type: application/json" \
   -d '{
@@ -852,26 +947,28 @@ curl -X POST http://localhost:3000/api/loops \
     "prompt": "Implement JWT-based authentication with login and signup endpoints"
   }'
 
-# Response: {"config":{"id":"abc-123",...},"state":{...}}
+# Response: {"config":{"id":"abc-123",...},"state":{"status":"running",...}}
 
-# Start the loop
-curl -X POST http://localhost:3000/api/loops/abc-123/start
-
-# Watch events
-curl -N http://localhost:3000/api/loops/abc-123/events
+# Watch events via WebSocket (use wscat or similar)
+wscat -c ws://localhost:3000/api/ws?loopId=abc-123
 ```
 
 ### Handle Uncommitted Changes
 
+Uncommitted changes are checked at loop creation time:
+
 ```bash
-# Try to start
-curl -X POST http://localhost:3000/api/loops/abc-123/start
+# Try to create a loop with uncommitted changes
+curl -X POST http://localhost:3000/api/loops \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "My Loop",
+    "directory": "/path/to/dirty/project",
+    "prompt": "Do something"
+  }'
 # Response: 409 {"error":"uncommitted_changes","changedFiles":["src/foo.ts"]}
 
-# Commit changes and start
-curl -X POST http://localhost:3000/api/loops/abc-123/start \
-  -H "Content-Type: application/json" \
-  -d '{"handleUncommitted": "commit"}'
+# Commit or stash your changes first, then try again
 ```
 
 ### Modify Next Iteration Prompt
