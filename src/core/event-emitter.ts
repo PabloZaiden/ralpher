@@ -32,6 +32,14 @@ export class SimpleEventEmitter<T = LoopEvent> {
    * Emit an event to all subscribers.
    */
   emit(event: T): void {
+    // Only log subscriber count for loop.log events to avoid spam
+    const eventType = (event as { type?: string }).type;
+    if (this.handlers.size > 1 && eventType === "loop.log") {
+      log.debug("[EventEmitter] emit: Multiple subscribers detected", {
+        subscriberCount: this.handlers.size,
+        eventType,
+      });
+    }
     for (const handler of this.handlers) {
       try {
         handler(event);

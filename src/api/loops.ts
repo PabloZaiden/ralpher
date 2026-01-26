@@ -83,14 +83,21 @@ export const loopsCrudRoutes = {
 
         if (hasChanges) {
           const changedFiles = await git.getChangedFiles(body.directory);
-          return Response.json(
-            {
-              error: "uncommitted_changes",
-              message: "Directory has uncommitted changes. Please commit or stash your changes before creating a loop.",
-              changedFiles,
-            },
-            { status: 409 }
-          );
+          
+          // If planMode and clearPlanningFolder are enabled, allow uncommitted changes in .planning/ only
+          const onlyPlanningChanges = body.planMode && body.clearPlanningFolder &&
+            changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
+          
+          if (!onlyPlanningChanges) {
+            return Response.json(
+              {
+                error: "uncommitted_changes",
+                message: "Directory has uncommitted changes. Please commit or stash your changes before creating a loop.",
+                changedFiles,
+              },
+              { status: 409 }
+            );
+          }
         }
       } catch (preflightError) {
         return errorResponse("preflight_failed", `Failed to check for uncommitted changes: ${String(preflightError)}`, 500);
@@ -111,6 +118,7 @@ export const loopsCrudRoutes = {
           gitCommitPrefix: body.git?.commitPrefix,
           baseBranch: body.baseBranch,
           clearPlanningFolder: body.clearPlanningFolder,
+          planMode: body.planMode,
         });
 
         // Save the model as last used if provided
@@ -124,21 +132,40 @@ export const loopsCrudRoutes = {
           });
         }
 
-        // Always start the loop immediately after creation
-        // Since we pre-checked for uncommitted changes, this should succeed
-        try {
-          await loopManager.startLoop(loop.config.id);
-          // Return the loop with updated state after starting
-          const updatedLoop = await loopManager.getLoop(loop.config.id);
-          return Response.json(updatedLoop ?? loop, { status: 201 });
-        } catch (startError) {
-          // If start fails for any reason, delete the loop to avoid orphaned idle loops
+        // If plan mode is enabled, start the plan mode session
+        // Otherwise, start the loop immediately
+        if (body.planMode) {
           try {
-            await loopManager.deleteLoop(loop.config.id);
-          } catch {
-            // Ignore delete errors
+            await loopManager.startPlanMode(loop.config.id);
+            // Return the loop with updated state after starting plan mode
+            const updatedLoop = await loopManager.getLoop(loop.config.id);
+            return Response.json(updatedLoop ?? loop, { status: 201 });
+          } catch (startError) {
+            // If start fails, delete the loop to avoid orphaned idle loops
+            try {
+              await loopManager.deleteLoop(loop.config.id);
+            } catch {
+              // Ignore delete errors
+            }
+            return errorResponse("start_plan_failed", `Loop created but failed to start plan mode: ${String(startError)}`, 500);
           }
-          return errorResponse("start_failed", `Loop created but failed to start: ${String(startError)}`, 500);
+        } else {
+          // Always start the loop immediately after creation (normal mode)
+          // Since we pre-checked for uncommitted changes, this should succeed
+          try {
+            await loopManager.startLoop(loop.config.id);
+            // Return the loop with updated state after starting
+            const updatedLoop = await loopManager.getLoop(loop.config.id);
+            return Response.json(updatedLoop ?? loop, { status: 201 });
+          } catch (startError) {
+            // If start fails for any reason, delete the loop to avoid orphaned idle loops
+            try {
+              await loopManager.deleteLoop(loop.config.id);
+            } catch {
+              // Ignore delete errors
+            }
+            return errorResponse("start_failed", `Loop created but failed to start: ${String(startError)}`, 500);
+          }
         }
       } catch (error) {
         return errorResponse("create_failed", String(error), 500);
@@ -335,6 +362,74 @@ export const loopsControlRoutes = {
       }
 
       return successResponse();
+    },
+  },
+
+  "/api/loops/:id/plan/feedback": {
+    /**
+     * POST /api/loops/:id/plan/feedback - Send feedback to refine the plan
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      const body = await parseBody<{ feedback: string }>(req);
+      if (!body || typeof body.feedback !== "string") {
+        return errorResponse("invalid_body", "Request body must contain a 'feedback' string");
+      }
+
+      if (!body.feedback.trim()) {
+        return errorResponse("validation_error", "Feedback cannot be empty");
+      }
+
+      try {
+        await loopManager.sendPlanFeedback(req.params.id, body.feedback);
+        return successResponse();
+      } catch (error) {
+        const errorMsg = String(error);
+        if (errorMsg.includes("not running") || errorMsg.includes("not found")) {
+          return errorResponse("not_running", errorMsg, 409);
+        }
+        if (errorMsg.includes("not in planning status")) {
+          return errorResponse("not_planning", errorMsg, 400);
+        }
+        return errorResponse("feedback_failed", errorMsg, 500);
+      }
+    },
+  },
+
+  "/api/loops/:id/plan/accept": {
+    /**
+     * POST /api/loops/:id/plan/accept - Accept the plan and start execution
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      try {
+        await loopManager.acceptPlan(req.params.id);
+        return successResponse();
+      } catch (error) {
+        const errorMsg = String(error);
+        if (errorMsg.includes("not running")) {
+          return errorResponse("not_running", errorMsg, 409);
+        }
+        if (errorMsg.includes("not in planning status")) {
+          return errorResponse("not_planning", errorMsg, 400);
+        }
+        return errorResponse("accept_failed", errorMsg, 500);
+      }
+    },
+  },
+
+  "/api/loops/:id/plan/discard": {
+    /**
+     * POST /api/loops/:id/plan/discard - Discard the plan and delete the loop
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      try {
+        const deleted = await loopManager.discardPlan(req.params.id);
+        if (!deleted) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        return successResponse();
+      } catch (error) {
+        return errorResponse("discard_failed", String(error), 500);
+      }
     },
   },
 };

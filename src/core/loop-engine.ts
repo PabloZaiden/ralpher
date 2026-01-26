@@ -99,7 +99,7 @@ export interface IterationResult {
   /** Whether the loop should continue */
   continue: boolean;
   /** The outcome of this iteration */
-  outcome: "continue" | "complete" | "error";
+  outcome: "continue" | "complete" | "error" | "plan_ready";
   /** The full response content from the AI */
   responseContent: string;
   /** Error message if outcome is "error" */
@@ -168,6 +168,8 @@ export class LoopEngine {
   private aborted = false;
   private sessionId: string | null = null;
   private onPersistState?: (state: LoopState) => Promise<void>;
+  /** Guard to prevent concurrent runLoop() executions */
+  private isLoopRunning = false;
 
   constructor(options: LoopEngineOptions) {
     this.loop = options.loop;
@@ -212,15 +214,19 @@ export class LoopEngine {
    * This sets up the git branch and backend session.
    */
   async start(): Promise<void> {
-    if (this.loop.state.status !== "idle" && this.loop.state.status !== "stopped") {
+    // Allow starting from idle, stopped, or planning (for plan mode)
+    if (this.loop.state.status !== "idle" && this.loop.state.status !== "stopped" && this.loop.state.status !== "planning") {
       throw new Error(`Cannot start loop in status: ${this.loop.state.status}`);
     }
 
     this.emitLog("info", "Starting loop execution", { loopName: this.config.name });
 
     this.aborted = false;
+    
+    // Only update status if not in plan mode (preserve "planning" status)
+    const isInPlanMode = this.loop.state.status === "planning";
     this.updateState({
-      status: "starting",
+      status: isInPlanMode ? "planning" : "starting",
       startedAt: createTimestamp(),
       currentIteration: 0,
       recentIterations: [],
@@ -229,13 +235,19 @@ export class LoopEngine {
 
     try {
       // Set up git branch first (before any file modifications)
-      this.emitLog("info", "Setting up git branch...");
-      log.trace("[LoopEngine] Starting setupGitBranch...");
-      await this.setupGitBranch();
-      log.trace("[LoopEngine] setupGitBranch completed successfully");
+      // Skip git setup in plan mode - it will happen when plan is accepted
+      if (!isInPlanMode) {
+        this.emitLog("info", "Setting up git branch...");
+        log.trace("[LoopEngine] Starting setupGitBranch...");
+        await this.setupGitBranch();
+        log.trace("[LoopEngine] setupGitBranch completed successfully");
+      }
 
       // Clear .planning folder if requested (after branch setup, so deletions are on the new branch)
-      if (this.config.clearPlanningFolder) {
+      // NEVER clear if plan mode already cleared it
+      if (this.loop.state.planMode?.planningFolderCleared) {
+        this.emitLog("info", "Skipping .planning folder clear - already cleared during plan mode");
+      } else if (this.config.clearPlanningFolder) {
         this.emitLog("info", "Clearing .planning folder...");
         await this.clearPlanningFolder();
       }
@@ -246,15 +258,17 @@ export class LoopEngine {
       await this.setupSession();
       log.trace("[LoopEngine] setupSession completed successfully");
 
-      // Emit started event
-      log.trace("[LoopEngine] About to emit loop.started event");
-      this.emit({
-        type: "loop.started",
-        loopId: this.config.id,
-        iteration: 0,
-        timestamp: createTimestamp(),
-      });
-      log.trace("[LoopEngine] loop.started event emitted");
+      // Emit started event (skip in plan mode - will emit when plan is accepted)
+      if (!isInPlanMode) {
+        log.trace("[LoopEngine] About to emit loop.started event");
+        this.emit({
+          type: "loop.started",
+          loopId: this.config.id,
+          iteration: 0,
+          timestamp: createTimestamp(),
+        });
+        log.trace("[LoopEngine] loop.started event emitted");
+      }
 
       log.trace("[LoopEngine] About to emit 'Loop started successfully' log");
       this.emitLog("info", "Loop started successfully, beginning iterations");
@@ -299,6 +313,52 @@ export class LoopEngine {
     });
 
     this.emitLog("info", "Loop stopped");
+  }
+
+  /**
+   * Set up git branch for the loop (public method for plan mode acceptance).
+   * This is called when transitioning from planning to execution.
+   */
+  async setupGitBranchForPlanAcceptance(): Promise<void> {
+    await this.setupGitBranch(true);
+  }
+
+  /**
+   * Run a single plan mode iteration.
+   * Used to process feedback or continue plan refinement.
+   * The engine must already be in planning status.
+   */
+  async runPlanIteration(): Promise<void> {
+    if (this.loop.state.status !== "planning") {
+      throw new Error(`Cannot run plan iteration in status: ${this.loop.state.status}`);
+    }
+    
+    // Run the loop (will run one iteration and return on plan_ready or error)
+    await this.runLoop();
+  }
+
+  /**
+   * Continue loop execution after plan acceptance.
+   * Used to start the execution phase after a plan has been accepted.
+   * The engine must be in running status with a pending prompt set.
+   */
+  async continueExecution(): Promise<void> {
+    if (this.loop.state.status !== "running") {
+      throw new Error(`Cannot continue execution in status: ${this.loop.state.status}`);
+    }
+    
+    // Check if already running (guard against duplicate calls)
+    if (this.isLoopRunning) {
+      log.warn("[LoopEngine] continueExecution: Loop is already running, ignoring duplicate call");
+      this.emitLog("warn", "Execution already in progress, ignoring duplicate continueExecution call");
+      return;
+    }
+    
+    log.trace("[LoopEngine] continueExecution: Starting execution loop");
+    this.emitLog("info", "Starting execution after plan acceptance");
+    
+    // Run the loop
+    await this.runLoop();
   }
 
   /**
@@ -378,9 +438,10 @@ export class LoopEngine {
 
   /**
    * Set up git branch for the loop.
-   * Git is always enabled for loops.
+   * Creates or checks out the working branch.
+   * @param allowPlanningFolderChanges - If true, allow uncommitted changes in .planning folder only
    */
-  private async setupGitBranch(): Promise<void> {
+  private async setupGitBranch(allowPlanningFolderChanges = false): Promise<void> {
     const directory = this.config.directory;
     
     // Generate branch name using loop name and start timestamp
@@ -402,7 +463,21 @@ export class LoopEngine {
     this.emitLog("debug", "Checking for uncommitted changes");
     const hasChanges = await this.git.hasUncommittedChanges(directory);
     if (hasChanges) {
-      throw new Error("Directory has uncommitted changes. Please commit or stash them first.");
+      // If allowing .planning folder changes (plan mode acceptance), check if only .planning has changes
+      if (allowPlanningFolderChanges) {
+        const changedFiles = await this.git.getChangedFiles(directory);
+        // Also check for ".planning/" (with trailing slash) which is how git reports untracked directories
+        const onlyPlanningChanges = changedFiles.every(
+          (file) => file.startsWith(".planning/") || file === ".planning" || file === ".planning/"
+        );
+        if (!onlyPlanningChanges) {
+          throw new Error("Directory has uncommitted changes. Please commit or stash them first.");
+        }
+        // Allow .planning changes to proceed
+        this.emitLog("debug", "Allowing uncommitted changes in .planning folder for plan mode acceptance");
+      } else {
+        throw new Error("Directory has uncommitted changes. Please commit or stash them first.");
+      }
     }
 
     // If a base branch was specified, checkout that branch first
@@ -415,8 +490,16 @@ export class LoopEngine {
     }
 
     // Get the current branch (original branch / base branch)
-    const originalBranch = await this.git.getCurrentBranch(directory);
-    this.emitLog("info", `Current branch: ${originalBranch}`);
+    // If we already have git state with originalBranch, preserve it
+    // (This handles plan mode where branch setup happens after plan acceptance)
+    let originalBranch: string;
+    if (this.loop.state.git?.originalBranch) {
+      originalBranch = this.loop.state.git.originalBranch;
+      this.emitLog("info", `Preserving existing original branch: ${originalBranch}`);
+    } else {
+      originalBranch = await this.git.getCurrentBranch(directory);
+      this.emitLog("info", `Current branch: ${originalBranch}`);
+    }
 
     // Pull latest changes from the base branch to minimize merge conflicts
     this.emitLog("info", `Pulling latest changes from remote for branch: ${originalBranch}`);
@@ -517,143 +600,255 @@ export class LoopEngine {
   }
 
   /**
+   * Reconnect to an existing session for plan mode feedback.
+   * This is called when the engine is recreated after a server restart
+   * while a loop is still in planning mode.
+   */
+  async reconnectSession(): Promise<void> {
+    log.trace("[LoopEngine] reconnectSession: Entry point");
+    
+    // Check if we already have a session
+    if (this.sessionId) {
+      log.trace("[LoopEngine] reconnectSession: Already have sessionId", { sessionId: this.sessionId });
+      return;
+    }
+    
+    // Check if the loop state has a session we can reconnect to
+    const existingSession = this.loop.state.session;
+    if (existingSession?.id) {
+      log.trace("[LoopEngine] reconnectSession: Found existing session in state", { 
+        sessionId: existingSession.id,
+        serverUrl: existingSession.serverUrl,
+      });
+      
+      // Make sure the backend is connected
+      const settings = backendManager.getSettings();
+      const isConnected = this.backend.isConnected();
+      
+      if (!isConnected) {
+        this.emitLog("info", "Reconnecting to backend...", {
+          mode: settings.mode,
+          hostname: settings.hostname,
+          port: settings.port,
+        });
+        await this.backend.connect({
+          mode: settings.mode,
+          hostname: settings.hostname,
+          port: settings.port,
+          password: settings.password,
+          directory: this.config.directory,
+        });
+        this.emitLog("info", "Backend connection re-established");
+      }
+      
+      // Reuse the existing session ID
+      this.sessionId = existingSession.id;
+      this.emitLog("info", "Reconnected to existing session", { sessionId: this.sessionId });
+      log.trace("[LoopEngine] reconnectSession: Reconnected to session", { sessionId: this.sessionId });
+      return;
+    }
+    
+    // No existing session, create a new one
+    log.trace("[LoopEngine] reconnectSession: No existing session, creating new one");
+    this.emitLog("info", "No existing session found, creating new session");
+    await this.setupSession();
+    log.trace("[LoopEngine] reconnectSession: Exit point (new session created)");
+  }
+
+  /**
    * Run the main iteration loop.
    * Now continues on errors unless max consecutive identical errors is reached.
+   * Protected by isLoopRunning guard to prevent concurrent executions.
    */
   private async runLoop(): Promise<void> {
     log.trace("[LoopEngine] runLoop: Entry point");
-    this.emitLog("debug", "Entering runLoop", {
-      aborted: this.aborted,
-      status: this.loop.state.status,
-      shouldContinue: this.shouldContinue(),
-    });
-    log.trace("[LoopEngine] runLoop: Emitted debug log, checking while condition", {
-      aborted: this.aborted,
-      shouldContinue: this.shouldContinue(),
-    });
-
-    while (!this.aborted && this.shouldContinue()) {
-      log.trace("[LoopEngine] runLoop: Entered while loop, about to call runIteration");
-      this.emitLog("debug", "Loop iteration check passed", {
+    
+    // Guard against concurrent runLoop() calls
+    if (this.isLoopRunning) {
+      log.warn("[LoopEngine] runLoop: Already running, skipping duplicate call");
+      this.emitLog("warn", "Loop execution already in progress, ignoring duplicate call");
+      return;
+    }
+    
+    this.isLoopRunning = true;
+    log.trace("[LoopEngine] runLoop: Set isLoopRunning = true");
+    
+    try {
+      this.emitLog("debug", "Entering runLoop", {
         aborted: this.aborted,
         status: this.loop.state.status,
+        shouldContinue: this.shouldContinue(),
+      });
+      log.trace("[LoopEngine] runLoop: Emitted debug log, checking while condition", {
+        aborted: this.aborted,
+        shouldContinue: this.shouldContinue(),
       });
 
-      const iterationResult = await this.runIteration();
-      log.trace("[LoopEngine] runLoop: runIteration completed", { outcome: iterationResult.outcome });
-
-      if (iterationResult.outcome === "complete") {
-        this.emitLog("info", "Stop pattern detected - loop completed successfully", {
-          totalIterations: this.loop.state.currentIteration,
-        });
-        // Clear consecutive error tracker on success
-        this.updateState({
-          status: "completed",
-          completedAt: createTimestamp(),
-          consecutiveErrors: undefined,
+      while (!this.aborted && this.shouldContinue()) {
+        log.trace("[LoopEngine] runLoop: Entered while loop, about to call runIteration");
+        this.emitLog("debug", "Loop iteration check passed", {
+          aborted: this.aborted,
+          status: this.loop.state.status,
         });
 
-        this.emit({
-          type: "loop.completed",
-          loopId: this.config.id,
-          totalIterations: this.loop.state.currentIteration,
-          timestamp: createTimestamp(),
-        });
-        return;
-      }
+        const iterationResult = await this.runIteration();
+        log.trace("[LoopEngine] runLoop: runIteration completed", { outcome: iterationResult.outcome });
 
-      if (iterationResult.outcome === "error") {
-        const errorMessage = iterationResult.error ?? "Unknown error";
-        this.emitLog("error", `Iteration failed with error: ${errorMessage}`);
-
-        // Error iterations don't count towards maxIterations - roll back the counter
-        // This treats the error as a retry, not a completed iteration
-        this.updateState({
-          currentIteration: this.loop.state.currentIteration - 1,
-        });
-
-        // Track consecutive identical errors
-        const shouldFailsafe = this.trackConsecutiveError(errorMessage);
-
-        if (shouldFailsafe) {
-          const maxErrors = this.config.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors;
-          this.emitLog("error", `Failsafe exit: ${maxErrors} consecutive identical errors`, {
-            errorMessage,
+        if (iterationResult.outcome === "complete") {
+          this.emitLog("info", "Stop pattern detected - loop completed successfully", {
+            totalIterations: this.loop.state.currentIteration,
           });
+          // Clear consecutive error tracker on success
           this.updateState({
-            status: "failed",
+            status: "completed",
             completedAt: createTimestamp(),
-            error: {
-              message: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
-              iteration: this.loop.state.currentIteration,
-              timestamp: createTimestamp(),
-            },
+            consecutiveErrors: undefined,
           });
 
           this.emit({
-            type: "loop.error",
+            type: "loop.completed",
             loopId: this.config.id,
-            error: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
-            iteration: this.loop.state.currentIteration,
+            totalIterations: this.loop.state.currentIteration,
             timestamp: createTimestamp(),
           });
           return;
         }
 
-        // Log that we're continuing despite the error (as a retry)
-        this.emitLog("warn", "Error occurred, retrying iteration", {
-          errorMessage,
-          consecutiveErrors: this.loop.state.consecutiveErrors?.count ?? 1,
-          maxConsecutiveErrors: this.config.maxConsecutiveErrors ?? "unlimited",
-        });
+        if (iterationResult.outcome === "plan_ready") {
+          this.emitLog("info", "Plan ready - waiting for user feedback or acceptance", {
+            iteration: this.loop.state.currentIteration,
+          });
+          
+          // Read plan content from .planning/plan.md if possible
+          let planContent: string | undefined;
+          try {
+            const planFile = Bun.file(`${this.config.directory}/.planning/plan.md`);
+            if (await planFile.exists()) {
+              planContent = await planFile.text();
+            }
+          } catch {
+            // Ignore errors reading plan file
+          }
 
-        // Emit error event but don't stop
-        this.emit({
-          type: "loop.error",
-          loopId: this.config.id,
-          error: errorMessage,
-          iteration: this.loop.state.currentIteration,
-          timestamp: createTimestamp(),
-        });
+          // Update plan mode state with the plan content
+          if (this.loop.state.planMode) {
+            this.updateState({
+              planMode: {
+                ...this.loop.state.planMode,
+                planContent,
+              },
+            });
+          }
 
-        // Continue to retry (next iteration will use same iteration number)
-      } else {
-        // Successful iteration (outcome === "continue") - clear error tracker
-        this.updateState({ consecutiveErrors: undefined });
+          // Emit plan ready event
+          this.emit({
+            type: "loop.plan.ready",
+            loopId: this.config.id,
+            planContent: planContent ?? iterationResult.responseContent,
+            timestamp: createTimestamp(),
+          });
+          
+          // Exit the loop but stay in "planning" status
+          // The loop will be resumed when user sends feedback or accepts the plan
+          return;
+        }
+
+        if (iterationResult.outcome === "error") {
+          const errorMessage = iterationResult.error ?? "Unknown error";
+          this.emitLog("error", `Iteration failed with error: ${errorMessage}`);
+
+          // Error iterations don't count towards maxIterations - roll back the counter
+          // This treats the error as a retry, not a completed iteration
+          this.updateState({
+            currentIteration: this.loop.state.currentIteration - 1,
+          });
+
+          // Track consecutive identical errors
+          const shouldFailsafe = this.trackConsecutiveError(errorMessage);
+
+          if (shouldFailsafe) {
+            const maxErrors = this.config.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors;
+            this.emitLog("error", `Failsafe exit: ${maxErrors} consecutive identical errors`, {
+              errorMessage,
+            });
+            this.updateState({
+              status: "failed",
+              completedAt: createTimestamp(),
+              error: {
+                message: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
+                iteration: this.loop.state.currentIteration,
+                timestamp: createTimestamp(),
+              },
+            });
+
+            this.emit({
+              type: "loop.error",
+              loopId: this.config.id,
+              error: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
+              iteration: this.loop.state.currentIteration,
+              timestamp: createTimestamp(),
+            });
+            return;
+          }
+
+          // Log that we're continuing despite the error (as a retry)
+          this.emitLog("warn", "Error occurred, retrying iteration", {
+            errorMessage,
+            consecutiveErrors: this.loop.state.consecutiveErrors?.count ?? 1,
+            maxConsecutiveErrors: this.config.maxConsecutiveErrors ?? "unlimited",
+          });
+
+          // Emit error event but don't stop
+          this.emit({
+            type: "loop.error",
+            loopId: this.config.id,
+            error: errorMessage,
+            iteration: this.loop.state.currentIteration,
+            timestamp: createTimestamp(),
+          });
+
+          // Continue to retry (next iteration will use same iteration number)
+        } else {
+          // Successful iteration (outcome === "continue") - clear error tracker
+          this.updateState({ consecutiveErrors: undefined });
+        }
+
+        // Check max iterations
+        if (
+          this.config.maxIterations &&
+          this.loop.state.currentIteration >= this.config.maxIterations
+        ) {
+          this.emitLog("warn", `Reached maximum iterations limit: ${this.config.maxIterations}`);
+          this.updateState({
+            status: "max_iterations",
+            completedAt: createTimestamp(),
+          });
+
+          this.emit({
+            type: "loop.stopped",
+            loopId: this.config.id,
+            reason: `Reached maximum iterations: ${this.config.maxIterations}`,
+            timestamp: createTimestamp(),
+          });
+          return;
+        }
+
+        // Check if aborted during iteration
+        if (this.aborted) {
+          this.emitLog("debug", "Aborted during iteration, exiting runLoop");
+          return; // Stop method already updated status
+        }
       }
 
-      // Check max iterations
-      if (
-        this.config.maxIterations &&
-        this.loop.state.currentIteration >= this.config.maxIterations
-      ) {
-        this.emitLog("warn", `Reached maximum iterations limit: ${this.config.maxIterations}`);
-        this.updateState({
-          status: "max_iterations",
-          completedAt: createTimestamp(),
-        });
-
-        this.emit({
-          type: "loop.stopped",
-          loopId: this.config.id,
-          reason: `Reached maximum iterations: ${this.config.maxIterations}`,
-          timestamp: createTimestamp(),
-        });
-        return;
-      }
-
-      // Check if aborted during iteration
-      if (this.aborted) {
-        this.emitLog("debug", "Aborted during iteration, exiting runLoop");
-        return; // Stop method already updated status
-      }
+      this.emitLog("debug", "Exiting runLoop - loop condition not met", {
+        aborted: this.aborted,
+        status: this.loop.state.status,
+        shouldContinue: this.shouldContinue(),
+      });
+    } finally {
+      this.isLoopRunning = false;
+      log.trace("[LoopEngine] runLoop: Set isLoopRunning = false");
     }
-
-    this.emitLog("debug", "Exiting runLoop - loop condition not met", {
-      aborted: this.aborted,
-      status: this.loop.state.status,
-      shouldContinue: this.shouldContinue(),
-    });
   }
 
   /**
@@ -716,13 +911,17 @@ export class LoopEngine {
     log.trace("[LoopEngine] runIteration: Entry point");
     const iteration = this.loop.state.currentIteration + 1;
     const startedAt = createTimestamp();
+    
+    // Check if we're in plan mode - need to check before updating status
+    const isInPlanMode = this.loop.state.status === "planning" && this.loop.state.planMode?.active;
 
     this.emitLog("info", `Starting iteration ${iteration}`, {
       maxIterations: this.config.maxIterations,
     });
 
+    // In plan mode, keep status as "planning"; otherwise set to "running"
     this.updateState({
-      status: "running",
+      status: isInPlanMode ? "planning" : "running",
       currentIteration: iteration,
       lastActivityAt: startedAt,
     });
@@ -1010,11 +1209,21 @@ export class LoopEngine {
 
       // Check for stop pattern
       this.emitLog("info", "Evaluating stop pattern...");
-      if (outcome !== "error" && this.stopDetector.matches(responseContent)) {
-        this.emitLog("info", "Stop pattern matched - task is complete");
-        outcome = "complete";
-      } else if (outcome !== "error") {
-        this.emitLog("info", "Stop pattern not matched - will continue to next iteration");
+      
+      // In plan mode, check for PLAN_READY marker instead of the normal stop pattern
+      const isInPlanMode = this.loop.state.status === "planning" && this.loop.state.planMode?.active;
+      const planReadyPattern = /<promise>PLAN_READY<\/promise>/;
+      
+      if (outcome !== "error") {
+        if (isInPlanMode && planReadyPattern.test(responseContent)) {
+          this.emitLog("info", "PLAN_READY marker detected - plan is ready for review");
+          outcome = "plan_ready";
+        } else if (this.stopDetector.matches(responseContent)) {
+          this.emitLog("info", "Stop pattern matched - task is complete");
+          outcome = "complete";
+        } else {
+          this.emitLog("info", "Stop pattern not matched - will continue to next iteration");
+        }
       }
 
       // Commit changes after iteration
@@ -1077,8 +1286,64 @@ export class LoopEngine {
    * Build the prompt for an iteration.
    * Uses a consistent template that instructs the AI to follow the planning docs pattern.
    * If a pendingPrompt is set, it overrides the config.prompt for this iteration only.
+   * If loop is in planning mode, uses the plan creation prompt instead.
    */
   private buildPrompt(_iteration: number): PromptInput {
+    // Check if this is a plan mode iteration
+    if (this.loop.state.status === "planning" && this.loop.state.planMode?.active) {
+      // Plan mode prompt
+      const feedbackRounds = this.loop.state.planMode.feedbackRounds;
+      
+      if (feedbackRounds === 0) {
+        // Initial plan creation
+        const text = `- Goal: ${this.config.prompt}
+
+- Create a detailed plan to achieve this goal. Write the plan to \`./.planning/plan.md\`.
+
+- The plan should include:
+  - Clear objectives
+  - Step-by-step tasks with descriptions
+  - Any dependencies between tasks
+  - Estimated complexity per task
+
+- Create a \`./.planning/status.md\` file to track progress.
+
+- Do NOT start implementing yet. Only create the plan.
+
+- When the plan is ready, end your response with:
+
+<promise>PLAN_READY</promise>`;
+
+        return {
+          parts: [{ type: "text", text }],
+          model: this.config.model,
+        };
+      } else {
+        // Plan feedback prompt (uses pending prompt set by sendPlanFeedback)
+        const feedback = this.loop.state.pendingPrompt ?? "Please refine the plan based on feedback.";
+        
+        const text = `The user has provided feedback on your plan:
+
+---
+${feedback}
+---
+
+Please update the plan in \`./.planning/plan.md\` based on this feedback.
+
+When the updated plan is ready, end your response with:
+
+<promise>PLAN_READY</promise>`;
+
+        // Clear the pending prompt after use
+        this.updateState({ pendingPrompt: undefined });
+
+        return {
+          parts: [{ type: "text", text }],
+          model: this.config.model,
+        };
+      }
+    }
+    
     // Use pendingPrompt if set, otherwise use config.prompt
     const goalPrompt = this.loop.state.pendingPrompt ?? this.config.prompt;
     
@@ -1106,7 +1371,9 @@ export class LoopEngine {
 
 - Never ask for input from the user or any questions. This will always run unattended
 
-- If you have completed all tasks in the plan, end your response with:
+- When you think you're done, check the plan and status files to ensure all tasks are actually marked as completed.
+
+- Only if you have completed every single non-manual task in the plan, end your response with:
 
 <promise>COMPLETE</promise>`;
 
@@ -1248,7 +1515,7 @@ Output ONLY the commit message, nothing else.`
    */
   private shouldContinue(): boolean {
     const status = this.loop.state.status;
-    return status === "running" || status === "starting";
+    return status === "running" || status === "starting" || status === "planning";
   }
 
   /**

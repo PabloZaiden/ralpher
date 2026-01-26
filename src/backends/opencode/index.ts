@@ -435,6 +435,10 @@ export class OpenCodeBackend {
     
     // Track this subscription for reset functionality
     this.activeSubscriptions.add(abortController);
+    log.debug("[OpenCodeBackend] subscribeToEvents: Active subscription count", { 
+      count: this.activeSubscriptions.size,
+      sessionId,
+    });
 
     // v2 SDK uses flattened parameters
     log.trace("[OpenCodeBackend] subscribeToEvents: About to call client.event.subscribe");
@@ -462,6 +466,11 @@ export class OpenCodeBackend {
       try {
         log.trace("[OpenCodeBackend] subscribeToEvents: Starting background event loop");
         for await (const event of subscription.stream) {
+          // Check if aborted
+          if (abortController.signal.aborted) {
+            log.debug("[OpenCodeBackend] subscribeToEvents: Abort detected in loop, breaking");
+            break;
+          }
           log.trace("[OpenCodeBackend] subscribeToEvents: Received raw event", { type: (event as OpenCodeEvent).type });
           
           // Filter events for our session and translate them
@@ -487,10 +496,19 @@ export class OpenCodeBackend {
         log.trace("[OpenCodeBackend] subscribeToEvents: SDK stream ended");
         end();
       } catch (err) {
-        log.error("[OpenCodeBackend] subscribeToEvents: Error in event loop", { error: String(err) });
+        // AbortError is expected when we close the subscription
+        const isAbortError = err instanceof Error && err.name === "AbortError";
+        if (!isAbortError) {
+          log.error("[OpenCodeBackend] subscribeToEvents: Error in event loop", { error: String(err) });
+        } else {
+          log.debug("[OpenCodeBackend] subscribeToEvents: Subscription aborted (expected)");
+        }
         end();
       } finally {
         // Remove from tracking when done
+        log.debug("[OpenCodeBackend] subscribeToEvents: Background loop exiting", {
+          activeCount: self.activeSubscriptions.size,
+        });
         self.activeSubscriptions.delete(abortController);
       }
     })();
@@ -499,9 +517,15 @@ export class OpenCodeBackend {
     const wrappedStream: EventStream<AgentEvent> = {
       next: () => stream.next(),
       close: () => {
+        log.debug("[OpenCodeBackend] subscribeToEvents: Closing subscription", {
+          activeBeforeClose: self.activeSubscriptions.size,
+        });
         stream.close();
         abortController.abort();
         self.activeSubscriptions.delete(abortController);
+        log.debug("[OpenCodeBackend] subscribeToEvents: Subscription closed", {
+          activeAfterClose: self.activeSubscriptions.size,
+        });
       },
     };
 

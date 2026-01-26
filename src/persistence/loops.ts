@@ -47,6 +47,12 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "tool_calls",
   "consecutive_errors",
   "pending_prompt",
+  "plan_mode_active",
+  "plan_session_id",
+  "plan_server_url",
+  "plan_feedback_rounds",
+  "plan_content",
+  "planning_folder_cleared",
 ]);
 
 /**
@@ -104,6 +110,12 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     tool_calls: state.toolCalls ? JSON.stringify(state.toolCalls) : null,
     consecutive_errors: state.consecutiveErrors ? JSON.stringify(state.consecutiveErrors) : null,
     pending_prompt: state.pendingPrompt ?? null,
+    plan_mode_active: state.planMode?.active ? 1 : 0,
+    plan_session_id: state.planMode?.planSessionId ?? null,
+    plan_server_url: state.planMode?.planServerUrl ?? null,
+    plan_feedback_rounds: state.planMode?.feedbackRounds ?? 0,
+    plan_content: state.planMode?.planContent ?? null,
+    planning_folder_cleared: state.planMode?.planningFolderCleared ? 1 : 0,
   };
 }
 
@@ -203,6 +215,18 @@ function rowToLoop(row: Record<string, unknown>): Loop {
   }
   if (row["pending_prompt"] !== null) {
     state.pendingPrompt = row["pending_prompt"] as string;
+  }
+  // Reconstruct planMode if any plan mode field is set (not just when active)
+  if (row["plan_mode_active"] !== null || row["planning_folder_cleared"] === 1 || 
+      row["plan_session_id"] !== null || row["plan_feedback_rounds"] !== null) {
+    state.planMode = {
+      active: row["plan_mode_active"] === 1,
+      planSessionId: row["plan_session_id"] as string | undefined,
+      planServerUrl: row["plan_server_url"] as string | undefined,
+      feedbackRounds: (row["plan_feedback_rounds"] as number) ?? 0,
+      planContent: row["plan_content"] as string | undefined,
+      planningFolderCleared: row["planning_folder_cleared"] === 1,
+    };
   }
 
   return { config, state };

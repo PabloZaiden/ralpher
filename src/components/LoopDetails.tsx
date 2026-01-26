@@ -12,6 +12,7 @@ import {
   DeleteLoopModal,
   PurgeLoopModal,
 } from "./LoopModals";
+import { PlanReviewPanel } from "./PlanReviewPanel";
 import {
   getStatusLabel,
   canAccept,
@@ -94,6 +95,9 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     getDiff,
     getPlan,
     getStatusFile,
+    sendPlanFeedback,
+    acceptPlan,
+    discardPlan,
   } = useLoop(loopId);
 
   const [activeTab, setActiveTab] = useState<TabId>("log");
@@ -222,6 +226,23 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       loadContent();
     }
   }, [activeTab, getPlan, getStatusFile, getDiff]);
+
+  // Load plan content when in planning mode
+  // This is needed because the tab-based loading above only works when the "plan" tab is selected,
+  // but in planning mode we show PlanReviewPanel instead of tabs
+  useEffect(() => {
+    async function loadPlanForPlanningMode() {
+      if (loop?.state.status === "planning") {
+        try {
+          const content = await getPlan();
+          setPlanContent(content);
+        } catch {
+          // Ignore errors - plan might not exist yet
+        }
+      }
+    }
+    loadPlanForPlanningMode();
+  }, [loop?.state.status, getPlan, gitChangeCounter]);
 
   // Handle delete
   async function handleDelete() {
@@ -466,250 +487,272 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
           {/* Right column - Tabs content */}
           <div className="lg:col-span-4 xl:col-span-5">
-            {/* Tab navigation */}
-            <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4 overflow-x-auto">
-              {tabs.map((tab) => {
-                const hasUpdate = tabsWithUpdates.has(tab.id);
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => handleTabChange(tab.id)}
-                    className={`relative px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                      activeTab === tab.id
-                        ? "border-blue-500 text-blue-600 dark:text-blue-400"
-                        : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
-                    }`}
-                  >
-                    {tab.label}
-                    {hasUpdate && activeTab !== tab.id && (
-                      <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-blue-500" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+            {state.status === "planning" ? (
+              <PlanReviewPanel
+                loop={loop}
+                planContent={planContent?.content ?? ""}
+                onSendFeedback={async (feedback) => {
+                  await sendPlanFeedback(feedback);
+                }}
+                onAcceptPlan={async () => {
+                  await acceptPlan();
+                }}
+                onDiscardPlan={async () => {
+                  await discardPlan();
+                  if (onBack) onBack();
+                }}
+                messages={messages}
+                toolCalls={toolCalls}
+                logs={logs}
+              />
+            ) : (
+              <>
+                {/* Tab navigation */}
+                <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4 overflow-x-auto">
+                  {tabs.map((tab) => {
+                    const hasUpdate = tabsWithUpdates.has(tab.id);
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => handleTabChange(tab.id)}
+                        className={`relative px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                          activeTab === tab.id
+                            ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                            : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
+                        }`}
+                      >
+                        {tab.label}
+                        {hasUpdate && activeTab !== tab.id && (
+                          <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-blue-500" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
 
-            {/* Tab content */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-              {activeTab === "log" && (
-                <LogViewer
-                  messages={messages}
-                  toolCalls={toolCalls}
-                  logs={logs}
-                  maxHeight="600px"
-                />
-              )}
+                {/* Tab content */}
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                  {activeTab === "log" && (
+                    <LogViewer
+                      messages={messages}
+                      toolCalls={toolCalls}
+                      logs={logs}
+                      maxHeight="600px"
+                    />
+                  )}
 
-              {activeTab === "prompt" && (
-                <div className="p-4 space-y-6">
-                  {/* Original Task Prompt (read-only) */}
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                      Original Task Prompt
-                    </h3>
-                    <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4">
-                      {config.prompt || "No prompt specified."}
-                    </pre>
-                  </div>
-
-                  {/* Pending Prompt Editor (only when running) */}
-                  {isLoopRunning(state.status) && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                          Pending Prompt for Next Iteration
-                          {state.pendingPrompt && (
-                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                              Scheduled
-                            </span>
-                          )}
+                  {activeTab === "prompt" && (
+                    <div className="p-4 space-y-6">
+                      {/* Original Task Prompt (read-only) */}
+                      <div>
+                        <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+                          Original Task Prompt
                         </h3>
-                        {pendingPromptDirty && (
-                          <span className="text-xs text-yellow-600 dark:text-yellow-400">
-                            Unsaved changes
-                          </span>
-                        )}
+                        <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4">
+                          {config.prompt || "No prompt specified."}
+                        </pre>
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                        Modify the prompt for the next iteration. The current iteration will continue with the original prompt.
-                      </p>
-                      <textarea
-                        value={pendingPromptText}
-                        onChange={(e) => {
-                          setPendingPromptText(e.target.value);
-                          setPendingPromptDirty(true);
-                        }}
-                        placeholder="Enter a modified prompt for the next iteration..."
-                        rows={5}
-                        className="w-full px-3 py-2 text-sm font-mono rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        disabled={pendingPromptSaving}
-                      />
-                      <div className="flex gap-2 mt-2">
-                        <Button
-                          size="sm"
-                          onClick={handleSavePendingPrompt}
-                          disabled={!pendingPromptText.trim() || pendingPromptSaving}
-                        >
-                          {pendingPromptSaving ? "Saving..." : state.pendingPrompt ? "Update Pending Prompt" : "Set Pending Prompt"}
-                        </Button>
-                        {state.pendingPrompt && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={handleClearPendingPrompt}
-                            disabled={pendingPromptSaving}
-                          >
-                            Clear Pending Prompt
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  )}
 
-                  {/* Show existing pending prompt for non-running loops (read-only info) */}
-                  {!isLoopRunning(state.status) && state.pendingPrompt && (
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                        Pending Prompt (Unused)
-                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
-                          Not Applied
-                        </span>
-                      </h3>
-                      <pre className="whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4 border border-dashed border-gray-300 dark:border-gray-600">
-                        {state.pendingPrompt}
-                      </pre>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        This pending prompt was set but the loop is no longer running.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Info message when loop is not running and no pending prompt */}
-                  {!isLoopRunning(state.status) && !state.pendingPrompt && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Pending prompts can only be set while the loop is running. Start the loop to modify the prompt for subsequent iterations.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {activeTab === "plan" && (
-                <div className="p-4">
-                  {loadingContent ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
-                    </div>
-                  ) : planContent?.exists ? (
-                    <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono">
-                      {planContent.content}
-                    </pre>
-                  ) : (
-                    <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-                      No plan.md file found in the project directory.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {activeTab === "status" && (
-                <div className="p-4">
-                  {loadingContent ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
-                    </div>
-                  ) : statusContent?.exists ? (
-                    <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono">
-                      {statusContent.content}
-                    </pre>
-                  ) : (
-                    <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-                      No status.md file found in the project directory.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {activeTab === "diff" && (
-                <div className="p-4">
-                  {loadingContent ? (
-                    <div className="flex justify-center py-8">
-                      <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
-                    </div>
-                  ) : diffContent.length > 0 ? (
-                    <div className="space-y-2">
-                      {diffContent.map((file) => {
-                        const isExpanded = expandedFiles.has(file.path);
-                        const hasPatch = !!file.patch;
-                        
-                        return (
-                          <div
-                            key={file.path}
-                            className="bg-gray-50 dark:bg-gray-900 rounded text-xs sm:text-sm overflow-hidden"
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (hasPatch) {
-                                  setExpandedFiles((prev) => {
-                                    const next = new Set(prev);
-                                    if (isExpanded) {
-                                      next.delete(file.path);
-                                    } else {
-                                      next.add(file.path);
-                                    }
-                                    return next;
-                                  });
-                                }
-                              }}
-                              className={`w-full flex items-center gap-2 sm:gap-3 p-2 text-left ${
-                                hasPatch ? "cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" : "cursor-default"
-                              }`}
-                            >
-                              {hasPatch && (
-                                <span className="text-gray-400 flex-shrink-0 text-sm">
-                                  {isExpanded ? "▼" : "▶"}
+                      {/* Pending Prompt Editor (only when running) */}
+                      {isLoopRunning(state.status) && (
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                              Pending Prompt for Next Iteration
+                              {state.pendingPrompt && (
+                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                  Scheduled
                                 </span>
                               )}
-                              <span
-                                className={`font-medium flex-shrink-0 ${
-                                  file.status === "added"
-                                    ? "text-green-600 dark:text-green-400"
-                                    : file.status === "deleted"
-                                    ? "text-red-600 dark:text-red-400"
-                                    : file.status === "renamed"
-                                    ? "text-purple-600 dark:text-purple-400"
-                                    : "text-yellow-600 dark:text-yellow-400"
-                                }`}
-                              >
-                                {file.status === "added" && "+"}
-                                {file.status === "deleted" && "-"}
-                                {file.status === "renamed" && "→"}
-                                {file.status === "modified" && "~"}
+                            </h3>
+                            {pendingPromptDirty && (
+                              <span className="text-xs text-yellow-600 dark:text-yellow-400">
+                                Unsaved changes
                               </span>
-                              <span className="font-mono text-gray-900 dark:text-gray-100 flex-1 truncate min-w-0">
-                                {file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
-                              </span>
-                              <span className="text-gray-500 dark:text-gray-400 flex-shrink-0 whitespace-nowrap">
-                                <span className="text-green-600 dark:text-green-400">+{file.additions}</span>
-                                {" "}
-                                <span className="text-red-600 dark:text-red-400">-{file.deletions}</span>
-                              </span>
-                            </button>
-                            {isExpanded && file.patch && (
-                              <DiffPatchViewer patch={file.patch} />
                             )}
                           </div>
-                        );
-                      })}
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                            Modify the prompt for the next iteration. The current iteration will continue with the original prompt.
+                          </p>
+                          <textarea
+                            value={pendingPromptText}
+                            onChange={(e) => {
+                              setPendingPromptText(e.target.value);
+                              setPendingPromptDirty(true);
+                            }}
+                            placeholder="Enter a modified prompt for the next iteration..."
+                            rows={5}
+                            className="w-full px-3 py-2 text-sm font-mono rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            disabled={pendingPromptSaving}
+                          />
+                          <div className="flex gap-2 mt-2">
+                            <Button
+                              size="sm"
+                              onClick={handleSavePendingPrompt}
+                              disabled={!pendingPromptText.trim() || pendingPromptSaving}
+                            >
+                              {pendingPromptSaving ? "Saving..." : state.pendingPrompt ? "Update Pending Prompt" : "Set Pending Prompt"}
+                            </Button>
+                            {state.pendingPrompt && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={handleClearPendingPrompt}
+                                disabled={pendingPromptSaving}
+                              >
+                                Clear Pending Prompt
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Show existing pending prompt for non-running loops (read-only info) */}
+                      {!isLoopRunning(state.status) && state.pendingPrompt && (
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+                            Pending Prompt (Unused)
+                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
+                              Not Applied
+                            </span>
+                          </h3>
+                          <pre className="whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4 border border-dashed border-gray-300 dark:border-gray-600">
+                            {state.pendingPrompt}
+                          </pre>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            This pending prompt was set but the loop is no longer running.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Info message when loop is not running and no pending prompt */}
+                      {!isLoopRunning(state.status) && !state.pendingPrompt && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Pending prompts can only be set while the loop is running. Start the loop to modify the prompt for subsequent iterations.
+                        </p>
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-                      No changes yet.
-                    </p>
+                  )}
+
+                  {activeTab === "plan" && (
+                    <div className="p-4">
+                      {loadingContent ? (
+                        <div className="flex justify-center py-8">
+                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
+                        </div>
+                      ) : planContent?.exists ? (
+                        <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono">
+                          {planContent.content}
+                        </pre>
+                      ) : (
+                        <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+                          No plan.md file found in the project directory.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === "status" && (
+                    <div className="p-4">
+                      {loadingContent ? (
+                        <div className="flex justify-center py-8">
+                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
+                        </div>
+                      ) : statusContent?.exists ? (
+                        <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono">
+                          {statusContent.content}
+                        </pre>
+                      ) : (
+                        <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+                          No status.md file found in the project directory.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === "diff" && (
+                    <div className="p-4">
+                      {loadingContent ? (
+                        <div className="flex justify-center py-8">
+                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
+                        </div>
+                      ) : diffContent.length > 0 ? (
+                        <div className="space-y-2">
+                          {diffContent.map((file) => {
+                            const isExpanded = expandedFiles.has(file.path);
+                            const hasPatch = !!file.patch;
+                            
+                            return (
+                              <div
+                                key={file.path}
+                                className="bg-gray-50 dark:bg-gray-900 rounded text-xs sm:text-sm overflow-hidden"
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (hasPatch) {
+                                      setExpandedFiles((prev) => {
+                                        const next = new Set(prev);
+                                        if (isExpanded) {
+                                          next.delete(file.path);
+                                        } else {
+                                          next.add(file.path);
+                                        }
+                                        return next;
+                                      });
+                                    }
+                                  }}
+                                  className={`w-full flex items-center gap-2 sm:gap-3 p-2 text-left ${
+                                    hasPatch ? "cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800" : "cursor-default"
+                                  }`}
+                                >
+                                  {hasPatch && (
+                                    <span className="text-gray-400 flex-shrink-0 text-sm">
+                                      {isExpanded ? "▼" : "▶"}
+                                    </span>
+                                  )}
+                                  <span
+                                    className={`font-medium flex-shrink-0 ${
+                                      file.status === "added"
+                                        ? "text-green-600 dark:text-green-400"
+                                        : file.status === "deleted"
+                                        ? "text-red-600 dark:text-red-400"
+                                        : file.status === "renamed"
+                                        ? "text-purple-600 dark:text-purple-400"
+                                        : "text-yellow-600 dark:text-yellow-400"
+                                    }`}
+                                  >
+                                    {file.status === "added" && "+"}
+                                    {file.status === "deleted" && "-"}
+                                    {file.status === "renamed" && "→"}
+                                    {file.status === "modified" && "~"}
+                                  </span>
+                                  <span className="font-mono text-gray-900 dark:text-gray-100 flex-1 truncate min-w-0">
+                                    {file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
+                                  </span>
+                                  <span className="text-gray-500 dark:text-gray-400 flex-shrink-0 whitespace-nowrap">
+                                    <span className="text-green-600 dark:text-green-400">+{file.additions}</span>
+                                    {" "}
+                                    <span className="text-red-600 dark:text-red-400">-{file.deletions}</span>
+                                  </span>
+                                </button>
+                                {isExpanded && file.patch && (
+                                  <DiffPatchViewer patch={file.patch} />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+                          No changes yet.
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
       </main>

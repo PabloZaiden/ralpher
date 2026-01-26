@@ -23,6 +23,9 @@ import {
   purgeLoopApi,
   setPendingPromptApi,
   clearPendingPromptApi,
+  sendPlanFeedbackApi,
+  acceptPlanApi,
+  discardPlanApi,
   type AcceptLoopResult,
   type PushLoopResult,
 } from "./loopActions";
@@ -88,6 +91,12 @@ export interface UseLoopResult {
   getPlan: () => Promise<FileContentResponse>;
   /** Get the status.md content */
   getStatusFile: () => Promise<FileContentResponse>;
+  /** Send feedback to refine the plan (only works when loop is in planning status) */
+  sendPlanFeedback: (feedback: string) => Promise<boolean>;
+  /** Accept the plan and start the loop execution (only works when loop is in planning status) */
+  acceptPlan: () => Promise<boolean>;
+  /** Discard the plan and delete the loop (only works when loop is in planning status) */
+  discardPlan: () => Promise<boolean>;
 }
 
 /**
@@ -183,6 +192,10 @@ export function useLoop(loopId: string): UseLoopResult {
       case "loop.pushed":
       case "loop.discarded":
       case "loop.error":
+      case "loop.plan.ready":
+      case "loop.plan.feedback":
+      case "loop.plan.accepted":
+      case "loop.plan.discarded":
         refresh();
         break;
 
@@ -376,6 +389,10 @@ export function useLoop(loopId: string): UseLoopResult {
     try {
       const response = await fetch(`/api/loops/${loopId}/diff`);
       if (!response.ok) {
+        // 400 "no_git_branch" is expected when loop is in planning mode or hasn't started yet
+        if (response.status === 400) {
+          return []; // Return empty diff instead of showing error
+        }
         throw new Error(`Failed to get diff: ${response.statusText}`);
       }
       return (await response.json()) as FileDiff[];
@@ -413,6 +430,45 @@ export function useLoop(loopId: string): UseLoopResult {
     }
   }, [loopId]);
 
+  // Send feedback to refine the plan
+  const sendPlanFeedback = useCallback(
+    async (feedback: string): Promise<boolean> => {
+      try {
+        await sendPlanFeedbackApi(loopId, feedback);
+        await refresh();
+        return true;
+      } catch (err) {
+        setError(String(err));
+        return false;
+      }
+    },
+    [loopId, refresh]
+  );
+
+  // Accept the plan and start the loop execution
+  const acceptPlan = useCallback(async (): Promise<boolean> => {
+    try {
+      await acceptPlanApi(loopId);
+      await refresh();
+      return true;
+    } catch (err) {
+      setError(String(err));
+      return false;
+    }
+  }, [loopId, refresh]);
+
+  // Discard the plan and delete the loop
+  const discardPlan = useCallback(async (): Promise<boolean> => {
+    try {
+      await discardPlanApi(loopId);
+      setLoop(null);
+      return true;
+    } catch (err) {
+      setError(String(err));
+      return false;
+    }
+  }, [loopId]);
+
   // Initial fetch
   useEffect(() => {
     refresh();
@@ -441,5 +497,8 @@ export function useLoop(loopId: string): UseLoopResult {
     getDiff,
     getPlan,
     getStatusFile,
+    sendPlanFeedback,
+    acceptPlan,
+    discardPlan,
   };
 }

@@ -68,6 +68,7 @@ export function CreateLoopForm({
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedBranch, setSelectedBranch] = useState<string>("");
   const [clearPlanningFolder, setClearPlanningFolder] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
 
   // Update directory when initialDirectory prop changes (e.g., after async fetch)
   useEffect(() => {
@@ -172,6 +173,11 @@ export function CreateLoopForm({
     // Add clearPlanningFolder if enabled
     if (clearPlanningFolder) {
       request.clearPlanningFolder = true;
+    }
+
+    // Add planMode if enabled
+    if (planMode) {
+      request.planMode = true;
     }
 
     try {
@@ -411,7 +417,7 @@ export function CreateLoopForm({
           id="prompt"
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Do everything that's pending in the plan"
+          placeholder={planMode ? "Describe what you want to achieve. The AI will create a detailed plan based on this." : "Do everything that's pending in the plan"}
           required
           rows={5}
           className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
@@ -419,6 +425,26 @@ export function CreateLoopForm({
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           The prompt sent to the AI agent at the start of each iteration
         </p>
+      </div>
+
+      {/* Plan Mode Toggle */}
+      <div>
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={planMode}
+            onChange={(e) => setPlanMode(e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+          />
+          <div className="flex-1">
+            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Plan Mode
+            </span>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Create and review a plan before starting the loop. The AI will generate a plan based on your prompt, and you can provide feedback before execution begins.
+            </p>
+          </div>
+        </label>
       </div>
 
       {/* Advanced options toggle */}
@@ -533,7 +559,7 @@ export function CreateLoopForm({
             Cancel
           </Button>
           <Button type="submit" loading={isSubmitting}>
-            Create Loop
+            {planMode ? "Create Plan" : "Create Loop"}
           </Button>
         </div>
       </div>

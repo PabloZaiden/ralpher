@@ -48,6 +48,8 @@ export interface CreateLoopRequest {
   baseBranch?: string;
   /** Clear the .planning folder contents before starting (default: false) */
   clearPlanningFolder?: boolean;
+  /** Start in plan creation mode instead of immediate execution */
+  planMode?: boolean;
 }
 
 /**
@@ -70,6 +72,21 @@ export interface UpdateLoopRequest {
   stopPattern?: string;
   /** Update git config */
   git?: Partial<GitConfig>;
+}
+
+/**
+ * Request to send feedback on a plan.
+ */
+export interface PlanFeedbackRequest {
+  /** User's feedback/comments on the plan */
+  feedback: string;
+}
+
+/**
+ * Request to accept a plan and start execution.
+ */
+export interface PlanAcceptRequest {
+  // Empty - just triggers acceptance
 }
 
 /**

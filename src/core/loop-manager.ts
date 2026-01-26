@@ -55,6 +55,8 @@ export interface CreateLoopOptions {
   baseBranch?: string;
   /** Clear the .planning folder contents before starting (default: false) */
   clearPlanningFolder?: boolean;
+  /** Start in plan creation mode instead of immediate execution */
+  planMode?: boolean;
 }
 
 /**
@@ -90,6 +92,8 @@ export interface PushLoopResult {
 export class LoopManager {
   private engines = new Map<string, LoopEngine>();
   private emitter: SimpleEventEmitter<LoopEvent>;
+  /** Guard to prevent concurrent accept/push operations on the same loop */
+  private loopsBeingAccepted = new Set<string>();
 
   constructor(options?: {
     eventEmitter?: SimpleEventEmitter<LoopEvent>;
@@ -128,6 +132,17 @@ export class LoopManager {
     };
 
     const state = createInitialState(id);
+    
+    // If plan mode is enabled, initialize plan mode state
+    if (options.planMode) {
+      state.status = "planning";
+      state.planMode = {
+        active: true,
+        feedbackRounds: 0,
+        planningFolderCleared: false,
+      };
+    }
+    
     const loop: Loop = { config, state };
 
     // Save to persistence
@@ -142,6 +157,276 @@ export class LoopManager {
     });
 
     return loop;
+  }
+
+  /**
+   * Start a loop in plan mode (plan creation phase).
+   * This creates the plan and sets up the planning session.
+   */
+  async startPlanMode(loopId: string): Promise<void> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      throw new Error(`Loop not found: ${loopId}`);
+    }
+
+    // Check if loop is in planning status
+    if (loop.state.status !== "planning") {
+      throw new Error(`Loop is not in planning status: ${loop.state.status}`);
+    }
+
+    // Check if already has an engine running
+    if (this.engines.has(loopId)) {
+      throw new Error("Loop plan mode is already running");
+    }
+
+    // Get the appropriate command executor
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+    const git = GitService.withExecutor(executor);
+
+    // Check for uncommitted changes
+    const hasChanges = await git.hasUncommittedChanges(loop.config.directory);
+    if (hasChanges) {
+      const changedFiles = await git.getChangedFiles(loop.config.directory);
+      
+      // In plan mode, always allow uncommitted changes in .planning/ only
+      const onlyPlanningChanges = changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
+      
+      if (!onlyPlanningChanges) {
+        const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
+          code: string;
+          changedFiles: string[];
+        };
+        error.code = "UNCOMMITTED_CHANGES";
+        error.changedFiles = changedFiles;
+        throw error;
+      }
+    }
+
+    // Clear .planning folder BEFORE starting session (if requested)
+    if (loop.config.clearPlanningFolder && !loop.state.planMode?.planningFolderCleared) {
+      const planningDir = `${loop.config.directory}/.planning`;
+      
+      try {
+        const exists = await executor.directoryExists(planningDir);
+        if (exists) {
+          const files = await executor.listDirectory(planningDir);
+          const filesToDelete = files.filter((file) => file !== ".gitkeep");
+          
+          if (filesToDelete.length > 0) {
+            const fileArgs = filesToDelete.map((file) => `${planningDir}/${file}`);
+            await executor.exec("rm", ["-rf", ...fileArgs], {
+              cwd: loop.config.directory,
+            });
+          }
+        }
+        
+        // Mark as cleared
+        if (loop.state.planMode) {
+          loop.state.planMode.planningFolderCleared = true;
+          await updateLoopState(loopId, loop.state);
+        }
+      } catch (error) {
+        log.warn(`Failed to clear .planning folder: ${String(error)}`);
+      }
+    }
+
+    // Get backend from global manager
+    const backend = backendManager.getBackend();
+
+    // Create engine with plan mode prompt
+    const engine = new LoopEngine({
+      loop,
+      backend,
+      gitService: git,
+      eventEmitter: this.emitter,
+      onPersistState: async (state) => {
+        await updateLoopState(loopId, state);
+      },
+    });
+
+    this.engines.set(loopId, engine);
+
+    // Start the plan creation
+    engine.start().catch((error) => {
+      log.error(`Loop ${loopId} plan mode failed:`, String(error));
+    });
+
+    // Persist state changes periodically
+    this.startStatePersistence(loopId);
+  }
+
+  /**
+   * Send feedback on a plan to refine it.
+   */
+  async sendPlanFeedback(loopId: string, feedback: string): Promise<void> {
+    let engine = this.engines.get(loopId);
+    
+    // If engine doesn't exist but loop is in planning status, recreate the engine
+    // This handles the case where the server was restarted while a loop was in planning mode
+    if (!engine) {
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        throw new Error(`Loop not found: ${loopId}`);
+      }
+      
+      if (loop.state.status !== "planning") {
+        throw new Error("Loop plan mode is not running");
+      }
+      
+      // Recreate the engine for this planning loop
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const git = GitService.withExecutor(executor);
+      const backend = backendManager.getBackend();
+      
+      engine = new LoopEngine({
+        loop,
+        backend,
+        gitService: git,
+        eventEmitter: this.emitter,
+        onPersistState: async (state) => {
+          await updateLoopState(loopId, state);
+        },
+      });
+      
+      this.engines.set(loopId, engine);
+      
+      // Need to set up the session for the engine
+      // The engine will reconnect to the existing session if possible
+      try {
+        await engine.reconnectSession();
+      } catch (error) {
+        log.warn(`Failed to reconnect session for plan feedback: ${String(error)}`);
+        // Continue anyway - we'll create a new session
+      }
+      
+      // Start state persistence
+      this.startStatePersistence(loopId);
+    }
+
+    // Verify loop is in planning status
+    if (engine.state.status !== "planning") {
+      throw new Error(`Loop is not in planning status: ${engine.state.status}`);
+    }
+
+    // Increment feedback rounds
+    if (engine.state.planMode) {
+      engine.state.planMode.feedbackRounds += 1;
+    }
+
+    // Persist state update
+    await updateLoopState(loopId, engine.state);
+
+    // Set the feedback as a pending prompt
+    engine.setPendingPrompt(feedback);
+
+    // Emit feedback event
+    this.emitter.emit({
+      type: "loop.plan.feedback",
+      loopId,
+      round: engine.state.planMode?.feedbackRounds ?? 0,
+      timestamp: createTimestamp(),
+    });
+
+    // Run another plan iteration to process the feedback
+    engine.runPlanIteration().catch((error) => {
+      log.error(`Loop ${loopId} plan feedback iteration failed:`, String(error));
+    });
+  }
+
+  /**
+   * Accept a plan and transition to execution mode.
+   * Reuses the same session from plan creation.
+   */
+  async acceptPlan(loopId: string): Promise<void> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      throw new Error("Loop plan mode is not running");
+    }
+
+    // Verify loop is in planning status
+    if (engine.state.status !== "planning") {
+      throw new Error(`Loop is not in planning status: ${engine.state.status}`);
+    }
+
+    // Store the plan session info before transitioning
+    const planSessionId = engine.state.session?.id;
+    const planServerUrl = engine.state.session?.serverUrl;
+
+    // Set up git branch now (was skipped during plan mode)
+    try {
+      await engine.setupGitBranchForPlanAcceptance();
+    } catch (error) {
+      throw new Error(`Failed to set up git branch: ${String(error)}`);
+    }
+
+    // Update state to transition from planning to running
+    // Mark plan mode as no longer active but preserve the flag that folder was cleared
+    const updatedState: Partial<LoopState> = {
+      status: "running",
+      planMode: {
+        active: false,
+        planSessionId,
+        planServerUrl,
+        feedbackRounds: engine.state.planMode?.feedbackRounds ?? 0,
+        planningFolderCleared: engine.state.planMode?.planningFolderCleared ?? false,
+      },
+    };
+    
+    Object.assign(engine.state, updatedState);
+    await updateLoopState(loopId, engine.state);
+
+    // Send the "start execution" prompt to the existing session
+    const executionPrompt = `The plan has been accepted. Now execute all tasks in the plan.
+
+Follow the standard loop execution flow:
+- Read AGENTS.md and the plan in .planning/plan.md
+- Pick up the most important task to continue with
+- Update .planning/status.md with your progress
+- If you complete all tasks in the plan, end your response with:
+
+<promise>COMPLETE</promise>`;
+
+    engine.setPendingPrompt(executionPrompt);
+
+    // Emit plan accepted event
+    this.emitter.emit({
+      type: "loop.plan.accepted",
+      loopId,
+      timestamp: createTimestamp(),
+    });
+
+    // Emit loop started event
+    this.emitter.emit({
+      type: "loop.started",
+      loopId,
+      iteration: 0,
+      timestamp: createTimestamp(),
+    });
+
+    // Start the execution loop in the background
+    engine.continueExecution().catch((error) => {
+      log.error(`Loop ${loopId} execution after plan acceptance failed:`, String(error));
+    });
+  }
+
+  /**
+   * Discard a plan and delete the loop.
+   */
+  async discardPlan(loopId: string): Promise<boolean> {
+    // Stop the engine if running
+    if (this.engines.has(loopId)) {
+      await this.stopLoop(loopId, "Plan discarded");
+    }
+
+    // Emit plan discarded event
+    this.emitter.emit({
+      type: "loop.plan.discarded",
+      loopId,
+      timestamp: createTimestamp(),
+    });
+
+    // Delete the loop
+    return this.deleteLoop(loopId);
   }
 
   /**
@@ -277,13 +562,22 @@ export class LoopManager {
 
     if (hasChanges) {
       const changedFiles = await git.getChangedFiles(loop.config.directory);
-      const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
-        code: string;
-        changedFiles: string[];
-      };
-      error.code = "UNCOMMITTED_CHANGES";
-      error.changedFiles = changedFiles;
-      throw error;
+      
+      // If the loop has plan mode and folder was already cleared, or if clearPlanningFolder is enabled,
+      // allow uncommitted changes in .planning/ only (since we're about to clear it or already cleared it)
+      const shouldAllowPlanningChanges = 
+        (loop.state.planMode?.planningFolderCleared || loop.config.clearPlanningFolder) &&
+        changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
+      
+      if (!shouldAllowPlanningChanges) {
+        const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
+          code: string;
+          changedFiles: string[];
+        };
+        error.code = "UNCOMMITTED_CHANGES";
+        error.changedFiles = changedFiles;
+        throw error;
+      }
     }
 
     // Get backend from global manager
@@ -333,6 +627,12 @@ export class LoopManager {
    * After merging, the loop status is set to 'merged' (final state).
    */
   async acceptLoop(loopId: string): Promise<AcceptLoopResult> {
+    // Guard against concurrent accept operations on the same loop
+    if (this.loopsBeingAccepted.has(loopId)) {
+      log.warn(`[LoopManager] acceptLoop: Already accepting loop ${loopId}, ignoring duplicate call`);
+      return { success: false, error: "Accept operation already in progress" };
+    }
+
     // Use getLoop to check engine state first
     const loop = await this.getLoop(loopId);
     if (!loop) {
@@ -348,6 +648,10 @@ export class LoopManager {
     if (!loop.state.git) {
       return { success: false, error: "No git branch was created for this loop" };
     }
+
+    // Mark as being accepted
+    this.loopsBeingAccepted.add(loopId);
+    log.debug(`[LoopManager] acceptLoop: Starting accept for loop ${loopId}`);
 
     try {
       // Get the appropriate command executor for the current mode
@@ -382,6 +686,10 @@ export class LoopManager {
       return { success: true, mergeCommit };
     } catch (error) {
       return { success: false, error: String(error) };
+    } finally {
+      // Always clear the guard
+      this.loopsBeingAccepted.delete(loopId);
+      log.debug(`[LoopManager] acceptLoop: Finished accept for loop ${loopId}`);
     }
   }
 
@@ -391,6 +699,12 @@ export class LoopManager {
    * The branch is NOT merged locally - it's pushed as-is for PR creation.
    */
   async pushLoop(loopId: string): Promise<PushLoopResult> {
+    // Guard against concurrent accept/push operations on the same loop
+    if (this.loopsBeingAccepted.has(loopId)) {
+      log.warn(`[LoopManager] pushLoop: Already processing loop ${loopId}, ignoring duplicate call`);
+      return { success: false, error: "Operation already in progress" };
+    }
+
     // Use getLoop to check engine state first
     const loop = await this.getLoop(loopId);
     if (!loop) {
@@ -406,6 +720,10 @@ export class LoopManager {
     if (!loop.state.git) {
       return { success: false, error: "No git branch was created for this loop" };
     }
+
+    // Mark as being processed
+    this.loopsBeingAccepted.add(loopId);
+    log.debug(`[LoopManager] pushLoop: Starting push for loop ${loopId}`);
 
     try {
       // Get the appropriate command executor for the current mode
@@ -442,6 +760,10 @@ export class LoopManager {
       return { success: true, remoteBranch };
     } catch (error) {
       return { success: false, error: String(error) };
+    } finally {
+      // Always clear the guard
+      this.loopsBeingAccepted.delete(loopId);
+      log.debug(`[LoopManager] pushLoop: Finished push for loop ${loopId}`);
     }
   }
 

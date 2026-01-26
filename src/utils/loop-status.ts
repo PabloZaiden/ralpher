@@ -13,6 +13,8 @@ export function getStatusLabel(status: LoopStatus): string {
   switch (status) {
     case "idle":
       return "Idle";
+    case "planning":
+      return "Planning";
     case "starting":
       return "Starting";
     case "running":

@@ -96,6 +96,55 @@ export const migrations: Migration[] = [
       log.info("Added clear_planning_folder column to loops table");
     },
   },
+  {
+    version: 2,
+    name: "add_plan_mode_columns",
+    up: (db) => {
+      // Check if the loops table exists
+      if (!tableExists(db, "loops")) {
+        log.debug("loops table does not exist, skipping migration 2");
+        return;
+      }
+      
+      const columns = getTableColumns(db, "loops");
+      
+      // Add plan_mode_active column
+      if (!columns.includes("plan_mode_active")) {
+        db.run("ALTER TABLE loops ADD COLUMN plan_mode_active INTEGER DEFAULT 0");
+        log.info("Added plan_mode_active column to loops table");
+      }
+      
+      // Add plan_session_id column
+      if (!columns.includes("plan_session_id")) {
+        db.run("ALTER TABLE loops ADD COLUMN plan_session_id TEXT");
+        log.info("Added plan_session_id column to loops table");
+      }
+      
+      // Add plan_server_url column
+      if (!columns.includes("plan_server_url")) {
+        db.run("ALTER TABLE loops ADD COLUMN plan_server_url TEXT");
+        log.info("Added plan_server_url column to loops table");
+      }
+      
+      // Add plan_feedback_rounds column
+      if (!columns.includes("plan_feedback_rounds")) {
+        db.run("ALTER TABLE loops ADD COLUMN plan_feedback_rounds INTEGER DEFAULT 0");
+        log.info("Added plan_feedback_rounds column to loops table");
+      }
+      
+      // Add plan_content column
+      if (!columns.includes("plan_content")) {
+        db.run("ALTER TABLE loops ADD COLUMN plan_content TEXT");
+        log.info("Added plan_content column to loops table");
+      }
+      
+      // Add planning_folder_cleared column
+      if (!columns.includes("planning_folder_cleared")) {
+        db.run("ALTER TABLE loops ADD COLUMN planning_folder_cleared INTEGER DEFAULT 0");
+        log.info("Added planning_folder_cleared column to loops table");
+      }
+    },
+  },
 ];
 
 /**

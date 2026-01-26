@@ -57,7 +57,11 @@ export type LoopEvent =
   | LoopDeletedEvent
   | LoopAcceptedEvent
   | LoopDiscardedEvent
-  | LoopPushedEvent;
+  | LoopPushedEvent
+  | LoopPlanReadyEvent
+  | LoopPlanFeedbackSentEvent
+  | LoopPlanAcceptedEvent
+  | LoopPlanDiscardedEvent;
 
 export interface LoopCreatedEvent {
   type: "loop.created";
@@ -84,7 +88,7 @@ export interface LoopIterationEndEvent {
   type: "loop.iteration.end";
   loopId: string;
   iteration: number;
-  outcome: "continue" | "complete" | "error";
+  outcome: "continue" | "complete" | "error" | "plan_ready";
   timestamp: string;
 }
 
@@ -193,6 +197,32 @@ export interface LoopPushedEvent {
   type: "loop.pushed";
   loopId: string;
   remoteBranch: string;
+  timestamp: string;
+}
+
+export interface LoopPlanReadyEvent {
+  type: "loop.plan.ready";
+  loopId: string;
+  planContent: string;
+  timestamp: string;
+}
+
+export interface LoopPlanFeedbackSentEvent {
+  type: "loop.plan.feedback";
+  loopId: string;
+  round: number;
+  timestamp: string;
+}
+
+export interface LoopPlanAcceptedEvent {
+  type: "loop.plan.accepted";
+  loopId: string;
+  timestamp: string;
+}
+
+export interface LoopPlanDiscardedEvent {
+  type: "loop.plan.discarded";
+  loopId: string;
   timestamp: string;
 }
 
