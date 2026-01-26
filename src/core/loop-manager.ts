@@ -24,6 +24,7 @@ import { GitService } from "./git-service";
 import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
 import { log } from "./logger";
+import { sanitizeBranchName } from "../utils";
 
 /**
  * Options for creating a new loop.
@@ -1048,9 +1049,8 @@ Follow the standard loop execution flow:
         // Increment review cycles
         loop.state.reviewMode.reviewCycles += 1;
         
-        // Update status back to running
-        loop.state.status = "running";
-        loop.state.startedAt = new Date().toISOString();
+        // Set status to idle so engine.start() can run (it will set to running)
+        loop.state.status = "idle";
         loop.state.completedAt = undefined;
 
         await updateLoopState(loopId, loop.state);
@@ -1059,6 +1059,7 @@ Follow the standard loop execution flow:
         const reviewPrompt = this.constructReviewPrompt(comments);
 
         // Create and start a new loop engine with the review prompt
+        // skipGitSetup: true because we've already checked out the branch for review
         const engine = new LoopEngine({
           loop: { config: loop.config, state: loop.state },
           backend,
@@ -1067,6 +1068,7 @@ Follow the standard loop execution flow:
           onPersistState: async (state) => {
             await updateLoopState(loopId, state);
           },
+          skipGitSetup: true,
         });
         this.engines.set(loopId, engine);
 
@@ -1076,15 +1078,7 @@ Follow the standard loop execution flow:
         // Start state persistence
         this.startStatePersistence(loopId);
 
-        // Emit loop started event
-        this.emitter.emit({
-          type: "loop.started",
-          loopId,
-          iteration: loop.state.currentIteration,
-          timestamp: createTimestamp(),
-        });
-
-        // Start execution
+        // Start execution (this will emit loop.started and set status to running)
         engine.start().catch((error) => {
           log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
         });
@@ -1105,7 +1099,8 @@ Follow the standard loop execution flow:
         loop.state.reviewMode.reviewCycles += 1;
 
         // Generate new review branch name
-        const reviewBranchName = `${loop.config.git.branchPrefix}${loop.config.name}-review-${loop.state.reviewMode.reviewCycles}`;
+        const safeName = sanitizeBranchName(loop.config.name);
+        const reviewBranchName = `${loop.config.git.branchPrefix}${safeName}-review-${loop.state.reviewMode.reviewCycles}`;
 
         // Check out original branch and create new review branch
         await git.checkoutBranch(loop.config.directory, loop.state.git.originalBranch);
@@ -1115,9 +1110,8 @@ Follow the standard loop execution flow:
         loop.state.git.workingBranch = reviewBranchName;
         loop.state.reviewMode.reviewBranches.push(reviewBranchName);
 
-        // Update status back to running
-        loop.state.status = "running";
-        loop.state.startedAt = new Date().toISOString();
+        // Set status to idle so engine.start() can run (it will set to running)
+        loop.state.status = "idle";
         loop.state.completedAt = undefined;
 
         await updateLoopState(loopId, loop.state);
@@ -1126,6 +1120,7 @@ Follow the standard loop execution flow:
         const reviewPrompt = this.constructReviewPrompt(comments);
 
         // Create and start a new loop engine with the review prompt
+        // skipGitSetup: true because we've already created the review branch
         const engine = new LoopEngine({
           loop: { config: loop.config, state: loop.state },
           backend,
@@ -1134,6 +1129,7 @@ Follow the standard loop execution flow:
           onPersistState: async (state) => {
             await updateLoopState(loopId, state);
           },
+          skipGitSetup: true,
         });
         this.engines.set(loopId, engine);
 
@@ -1143,15 +1139,7 @@ Follow the standard loop execution flow:
         // Start state persistence
         this.startStatePersistence(loopId);
 
-        // Emit loop started event
-        this.emitter.emit({
-          type: "loop.started",
-          loopId,
-          iteration: loop.state.currentIteration,
-          timestamp: createTimestamp(),
-        });
-
-        // Start execution
+        // Start execution (this will emit loop.started and set status to running)
         engine.start().catch((error) => {
           log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
         });

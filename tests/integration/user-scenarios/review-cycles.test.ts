@@ -408,7 +408,9 @@ describe("Review Cycle User Scenarios", () => {
       });
       expect(addressResponse.status).toBe(400);
       const result = await addressResponse.json();
-      expect(result.success).toBe(false);
+      // Error responses have { error, message } format, not { success: false }
+      expect(result.error).toBe("validation_error");
+      expect(result.message).toContain("empty");
     });
 
     test("review history returns correct info for non-addressable loop", async () => {

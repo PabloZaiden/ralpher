@@ -600,7 +600,7 @@ export const loopsReviewRoutes = {
       }
 
       // Validate comments field
-      if (!body.comments || typeof body.comments !== "string") {
+      if (body.comments === undefined || body.comments === null || typeof body.comments !== "string") {
         return errorResponse("validation_error", "Comments field is required and must be a string");
       }
 
