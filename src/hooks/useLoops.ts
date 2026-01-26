@@ -12,8 +12,10 @@ import {
   discardLoopApi,
   deleteLoopApi,
   purgeLoopApi,
+  addressReviewCommentsApi,
   type AcceptLoopResult,
   type PushLoopResult,
+  type AddressCommentsResult,
 } from "./loopActions";
 
 export interface CreateLoopResult {
@@ -48,6 +50,8 @@ export interface UseLoopsResult {
   discardLoop: (id: string) => Promise<boolean>;
   /** Purge a loop (permanently delete - only for merged/pushed/deleted loops) */
   purgeLoop: (id: string) => Promise<boolean>;
+  /** Address reviewer comments (only for pushed/merged loops with reviewMode.addressable = true) */
+  addressReviewComments: (id: string, comments: string) => Promise<AddressCommentsResult>;
   /** Get a loop by ID */
   getLoop: (id: string) => Loop | undefined;
 }
@@ -258,6 +262,18 @@ export function useLoops(): UseLoopsResult {
     }
   }, []);
 
+  // Address reviewer comments
+  const addressReviewComments = useCallback(async (id: string, comments: string): Promise<AddressCommentsResult> => {
+    try {
+      const result = await addressReviewCommentsApi(id, comments);
+      await refreshLoop(id);
+      return result;
+    } catch (err) {
+      setError(String(err));
+      return { success: false };
+    }
+  }, [refreshLoop]);
+
   // Get a loop by ID
   const getLoop = useCallback(
     (id: string): Loop | undefined => {
@@ -284,6 +300,7 @@ export function useLoops(): UseLoopsResult {
     pushLoop,
     discardLoop,
     purgeLoop,
+    addressReviewComments,
     getLoop,
   };
 }

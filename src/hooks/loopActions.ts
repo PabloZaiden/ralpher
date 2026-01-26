@@ -215,7 +215,10 @@ export async function addressReviewCommentsApi(
 
   if (!response.ok) {
     const errorData = await response.json();
-    throw new Error(errorData.message || "Failed to address comments");
+    // Handle both error shapes:
+    // - ErrorResponse: { error: string, message: string } (validation errors)
+    // - AddressCommentsResponse: { success: false, error: string } (logical failures)
+    throw new Error(errorData.message || errorData.error || "Failed to address comments");
   }
 
   const data = await response.json();

@@ -100,6 +100,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     sendPlanFeedback,
     acceptPlan,
     discardPlan,
+    addressReviewComments,
   } = useLoop(loopId);
 
   const [activeTab, setActiveTab] = useState<TabId>("log");
@@ -280,15 +281,9 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   // Handle address comments
   async function handleAddressComments(comments: string) {
     try {
-      const response = await fetch(`/api/loops/${loopId}/address-comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comments }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to address comments");
+      const result = await addressReviewComments(comments);
+      if (!result.success) {
+        throw new Error("Failed to address comments");
       }
     } catch (error) {
       console.error("Failed to address comments:", error);

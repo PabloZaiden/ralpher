@@ -35,6 +35,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     acceptLoop,
     pushLoop,
     purgeLoop,
+    addressReviewComments,
   } = useLoops();
 
   // Server settings state
@@ -262,19 +263,11 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   // Handle address comments
   async function handleAddressComments(comments: string) {
     if (!addressCommentsModal.loopId) return;
-    // The useLoops hook doesn't have addressReviewComments yet, so we'll call the API directly
     try {
-      const response = await fetch(`/api/loops/${addressCommentsModal.loopId}/address-comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comments }),
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to address comments");
+      const result = await addressReviewComments(addressCommentsModal.loopId, comments);
+      if (!result.success) {
+        throw new Error("Failed to address comments");
       }
-      
       setAddressCommentsModal({ open: false, loopId: null });
     } catch (error) {
       console.error("Failed to address comments:", error);
