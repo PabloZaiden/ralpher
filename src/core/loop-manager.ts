@@ -92,6 +92,8 @@ export interface PushLoopResult {
 export class LoopManager {
   private engines = new Map<string, LoopEngine>();
   private emitter: SimpleEventEmitter<LoopEvent>;
+  /** Guard to prevent concurrent accept/push operations on the same loop */
+  private loopsBeingAccepted = new Set<string>();
 
   constructor(options?: {
     eventEmitter?: SimpleEventEmitter<LoopEvent>;
@@ -625,6 +627,12 @@ Follow the standard loop execution flow:
    * After merging, the loop status is set to 'merged' (final state).
    */
   async acceptLoop(loopId: string): Promise<AcceptLoopResult> {
+    // Guard against concurrent accept operations on the same loop
+    if (this.loopsBeingAccepted.has(loopId)) {
+      log.warn(`[LoopManager] acceptLoop: Already accepting loop ${loopId}, ignoring duplicate call`);
+      return { success: false, error: "Accept operation already in progress" };
+    }
+
     // Use getLoop to check engine state first
     const loop = await this.getLoop(loopId);
     if (!loop) {
@@ -640,6 +648,10 @@ Follow the standard loop execution flow:
     if (!loop.state.git) {
       return { success: false, error: "No git branch was created for this loop" };
     }
+
+    // Mark as being accepted
+    this.loopsBeingAccepted.add(loopId);
+    log.debug(`[LoopManager] acceptLoop: Starting accept for loop ${loopId}`);
 
     try {
       // Get the appropriate command executor for the current mode
@@ -674,6 +686,10 @@ Follow the standard loop execution flow:
       return { success: true, mergeCommit };
     } catch (error) {
       return { success: false, error: String(error) };
+    } finally {
+      // Always clear the guard
+      this.loopsBeingAccepted.delete(loopId);
+      log.debug(`[LoopManager] acceptLoop: Finished accept for loop ${loopId}`);
     }
   }
 
@@ -683,6 +699,12 @@ Follow the standard loop execution flow:
    * The branch is NOT merged locally - it's pushed as-is for PR creation.
    */
   async pushLoop(loopId: string): Promise<PushLoopResult> {
+    // Guard against concurrent accept/push operations on the same loop
+    if (this.loopsBeingAccepted.has(loopId)) {
+      log.warn(`[LoopManager] pushLoop: Already processing loop ${loopId}, ignoring duplicate call`);
+      return { success: false, error: "Operation already in progress" };
+    }
+
     // Use getLoop to check engine state first
     const loop = await this.getLoop(loopId);
     if (!loop) {
@@ -698,6 +720,10 @@ Follow the standard loop execution flow:
     if (!loop.state.git) {
       return { success: false, error: "No git branch was created for this loop" };
     }
+
+    // Mark as being processed
+    this.loopsBeingAccepted.add(loopId);
+    log.debug(`[LoopManager] pushLoop: Starting push for loop ${loopId}`);
 
     try {
       // Get the appropriate command executor for the current mode
@@ -734,6 +760,10 @@ Follow the standard loop execution flow:
       return { success: true, remoteBranch };
     } catch (error) {
       return { success: false, error: String(error) };
+    } finally {
+      // Always clear the guard
+      this.loopsBeingAccepted.delete(loopId);
+      log.debug(`[LoopManager] pushLoop: Finished push for loop ${loopId}`);
     }
   }
 
