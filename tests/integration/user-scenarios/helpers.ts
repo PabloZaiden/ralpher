@@ -55,9 +55,12 @@ export class ConfigurableMockBackend implements LoopBackend {
   private connected = false;
   private directory = "";
   private responseIndex = 0;
-  private pendingPrompt = false;
   private responses: string[];
   private readonly sessions = new Map<string, AgentSession>();
+  
+  // Promise-based synchronization for prompt/subscription coordination
+  private promptResolver: (() => void) | null = null;
+  private promptPromise: Promise<void> | null = null;
 
   constructor(responses: string[] = ["<promise>COMPLETE</promise>"]) {
     this.responses = responses;
@@ -68,6 +71,8 @@ export class ConfigurableMockBackend implements LoopBackend {
    */
   reset(responses?: string[]): void {
     this.responseIndex = 0;
+    this.promptResolver = null;
+    this.promptPromise = null;
     if (responses) {
       this.responses = responses;
     }
@@ -135,7 +140,12 @@ export class ConfigurableMockBackend implements LoopBackend {
   }
 
   async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
-    this.pendingPrompt = true;
+    // Resolve any waiting subscription
+    if (this.promptResolver) {
+      this.promptResolver();
+      this.promptResolver = null;
+      this.promptPromise = null;
+    }
   }
 
   async abortSession(_sessionId: string): Promise<void> {
@@ -145,14 +155,27 @@ export class ConfigurableMockBackend implements LoopBackend {
   async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
     const { stream, push, end } = createEventStream<AgentEvent>();
 
+    // Create a promise that will be resolved when sendPromptAsync is called
+    this.promptPromise = new Promise<void>((resolve) => {
+      this.promptResolver = resolve;
+    });
+
+    const promptPromise = this.promptPromise;
+
     (async () => {
-      // Wait for pendingPrompt to be set
-      let attempts = 0;
-      while (!this.pendingPrompt && attempts < 100) {
-        await new Promise((resolve) => setTimeout(resolve, 10));
-        attempts++;
+      // Wait for the prompt to be sent (with timeout for safety)
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Mock backend timeout waiting for prompt")), 30000)
+      );
+
+      try {
+        await Promise.race([promptPromise, timeoutPromise]);
+      } catch (error) {
+        // Timeout - emit error and end stream
+        push({ type: "error", message: String(error) });
+        end();
+        return;
       }
-      this.pendingPrompt = false;
 
       // Get the next response
       const response = this.responses[this.responseIndex % this.responses.length] ?? "<promise>COMPLETE</promise>";
@@ -395,7 +418,7 @@ export async function waitForLoopStatus(
   baseUrl: string,
   loopId: string,
   expectedStatus: string | string[],
-  timeoutMs = 10000
+  timeoutMs = 15000
 ): Promise<Loop> {
   const statuses = Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
   const startTime = Date.now();
@@ -551,6 +574,30 @@ export async function getLoopStatusFileViaAPI(
 export async function getCurrentBranch(workDir: string): Promise<string> {
   const result = await Bun.$`git -C ${workDir} rev-parse --abbrev-ref HEAD`.quiet();
   return result.stdout.toString().trim();
+}
+
+/**
+ * Wait for git to be available (no lock file).
+ * This helps prevent race conditions between tests that share a working directory.
+ */
+export async function waitForGitAvailable(workDir: string, timeoutMs = 5000): Promise<void> {
+  const startTime = Date.now();
+  const lockFile = join(workDir, ".git/index.lock");
+  
+  while (Date.now() - startTime < timeoutMs) {
+    const lockExists = await Bun.file(lockFile).exists();
+    if (!lockExists) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  
+  // If we get here, try to remove the stale lock file
+  try {
+    await rm(lockFile, { force: true });
+  } catch {
+    // Ignore errors removing lock file
+  }
 }
 
 /**

@@ -22,6 +22,8 @@ export interface LoopCardProps {
   onDelete?: () => void;
   /** Callback when purge button is clicked */
   onPurge?: () => void;
+  /** Callback when address comments button is clicked */
+  onAddressComments?: () => void;
 }
 
 /**
@@ -50,10 +52,12 @@ export function LoopCard({
   onAccept,
   onDelete,
   onPurge,
+  onAddressComments,
 }: LoopCardProps) {
   const { config, state } = loop;
   const isActive = isLoopActive(state.status);
   const isPlanning = state.status === "planning";
+  const isAddressable = state.reviewMode?.addressable === true;
 
   return (
     <Card
@@ -85,13 +89,25 @@ export function LoopCard({
           <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 truncate flex-1 min-w-0">
             {config.name}
           </h3>
-          <Badge variant={getStatusBadgeVariant(state.status)} className="flex-shrink-0">
-            {getStatusLabel(state.status)}
-          </Badge>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Badge variant={getStatusBadgeVariant(state.status)}>
+              {getStatusLabel(state.status)}
+            </Badge>
+            {isAddressable && (
+              <Badge variant="info">
+                Addressable
+              </Badge>
+            )}
+          </div>
         </div>
         <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
           {config.directory}
         </p>
+        {state.reviewMode && state.reviewMode.reviewCycles > 0 && (
+          <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
+            Review Cycle: {state.reviewMode.reviewCycles}
+          </p>
+        )}
       </div>
 
       {/* Stats */}
@@ -142,19 +158,33 @@ export function LoopCard({
             Review Plan
           </Button>
         ) : isFinalState(state.status) ? (
-          /* Final state - only show Purge */
-          onPurge && (
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={(e) => {
-                e.stopPropagation();
-                onPurge();
-              }}
-            >
-              Purge
-            </Button>
-          )
+          /* Final state - show Address Comments (if addressable) or Purge */
+          <>
+            {isAddressable && onAddressComments && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddressComments();
+                }}
+              >
+                Address Comments
+              </Button>
+            )}
+            {onPurge && (
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPurge();
+                }}
+              >
+                Purge
+              </Button>
+            )}
+          </>
         ) : (
           <>
             {canAccept(state.status) && state.git && onAccept && (

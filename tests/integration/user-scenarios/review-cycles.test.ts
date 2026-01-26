@@ -1,0 +1,499 @@
+/**
+ * Integration tests for review cycle scenarios.
+ * Tests the ability to address reviewer comments after push/merge.
+ */
+
+import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import {
+  setupTestServer,
+  teardownTestServer,
+  createLoopViaAPI,
+  waitForLoopStatus,
+  pushLoopViaAPI,
+  acceptLoopViaAPI,
+  getCurrentBranch,
+  branchExists,
+  type TestServerContext,
+} from "./helpers";
+import type { Loop } from "../../../src/types/loop";
+
+describe("Review Cycle User Scenarios", () => {
+  describe("Pushed Loop with Single Review Cycle", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: [
+          // First iteration: complete the initial work
+          "Initial work done! <promise>COMPLETE</promise>",
+          // Second iteration: address reviewer comments
+          "Addressed reviewer comments! <promise>COMPLETE</promise>",
+        ],
+        withPlanningDir: true,
+        withRemote: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("pushed loop can receive and address reviewer comments", async () => {
+      // Create and complete initial loop
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Push Review Test",
+        directory: ctx.workDir,
+        prompt: "Implement a feature",
+      });
+      const loop = body as Loop;
+
+      // Wait for completion
+      const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      const workingBranch = completedLoop.state.git!.workingBranch;
+
+      // Push the loop
+      const { status: pushStatus, body: pushBody } = await pushLoopViaAPI(ctx.baseUrl, loop.config.id);
+      expect(pushStatus).toBe(200);
+      expect(pushBody.success).toBe(true);
+
+      // Verify loop is now "pushed" with review mode
+      const pushedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "pushed");
+      expect(pushedLoop.state.reviewMode).toBeDefined();
+      expect(pushedLoop.state.reviewMode?.addressable).toBe(true);
+      expect(pushedLoop.state.reviewMode?.completionAction).toBe("push");
+      expect(pushedLoop.state.reviewMode?.reviewCycles).toBe(0);
+
+      // Verify still on same branch
+      expect(await getCurrentBranch(ctx.workDir)).toBe(workingBranch);
+
+      // Address reviewer comments
+      const addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Please add error handling and improve documentation" }),
+      });
+      expect(addressResponse.status).toBe(200);
+      const addressResult = await addressResponse.json();
+      expect(addressResult.success).toBe(true);
+      expect(addressResult.reviewCycle).toBe(1);
+
+      // Wait for addressing to complete
+      const addressedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+
+      // Verify review cycle was incremented
+      expect(addressedLoop.state.reviewMode?.reviewCycles).toBe(1);
+
+      // Verify still on same branch (pushed loops don't create new branches)
+      expect(await getCurrentBranch(ctx.workDir)).toBe(workingBranch);
+
+      // Can push again after addressing comments
+      const { status: push2Status, body: push2Body } = await pushLoopViaAPI(ctx.baseUrl, loop.config.id);
+      expect(push2Status).toBe(200);
+      expect(push2Body.success).toBe(true);
+
+      // Verify pushed status maintained
+      const rePushedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "pushed");
+      expect(rePushedLoop.state.reviewMode?.reviewCycles).toBe(1);
+      expect(rePushedLoop.state.reviewMode?.addressable).toBe(true);
+    });
+  });
+
+  describe("Pushed Loop with Multiple Review Cycles", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: [
+          // Initial work
+          "Initial work! <promise>COMPLETE</promise>",
+          // Review cycle 1
+          "Addressed round 1! <promise>COMPLETE</promise>",
+          // Review cycle 2
+          "Addressed round 2! <promise>COMPLETE</promise>",
+          // Review cycle 3
+          "Addressed round 3! <promise>COMPLETE</promise>",
+        ],
+        withPlanningDir: true,
+        withRemote: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("pushed loop handles 3+ review cycles on same branch", async () => {
+      // Create and complete initial loop
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Multi Review Push Test",
+        directory: ctx.workDir,
+        prompt: "Build a complex feature",
+      });
+      const loop = body as Loop;
+
+      const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      const workingBranch = completedLoop.state.git!.workingBranch;
+
+      // Push initial work
+      await pushLoopViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "pushed");
+
+      // Review cycle 1
+      let addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Round 1: Add tests" }),
+      });
+      let addressResult = await addressResponse.json();
+      expect(addressResult.reviewCycle).toBe(1);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      await pushLoopViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "pushed");
+
+      // Review cycle 2
+      addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Round 2: Improve error messages" }),
+      });
+      addressResult = await addressResponse.json();
+      expect(addressResult.reviewCycle).toBe(2);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      await pushLoopViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "pushed");
+
+      // Review cycle 3
+      addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Round 3: Update documentation" }),
+      });
+      addressResult = await addressResponse.json();
+      expect(addressResult.reviewCycle).toBe(3);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+
+      // Verify review history
+      const historyResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/review-history`);
+      const history = await historyResponse.json();
+      expect(history.success).toBe(true);
+      expect(history.history.reviewCycles).toBe(3);
+      expect(history.history.addressable).toBe(true);
+      expect(history.history.completionAction).toBe("push");
+
+      // All cycles should be on same branch
+      expect(await getCurrentBranch(ctx.workDir)).toBe(workingBranch);
+    });
+  });
+
+  describe("Merged Loop with Single Review Cycle", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: [
+          // Initial work
+          "Initial work done! <promise>COMPLETE</promise>",
+          // Review cycle 1
+          "Addressed reviewer comments! <promise>COMPLETE</promise>",
+        ],
+        withPlanningDir: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("merged loop creates new branch for addressing comments", async () => {
+      const originalBranch = await getCurrentBranch(ctx.workDir);
+
+      // Create and complete initial loop
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Merge Review Test",
+        directory: ctx.workDir,
+        prompt: "Implement a feature",
+      });
+      const loop = body as Loop;
+
+      const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      const firstWorkingBranch = completedLoop.state.git!.workingBranch;
+
+      // Accept (merge) the loop
+      const { status: acceptStatus } = await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
+      expect(acceptStatus).toBe(200);
+
+      // Verify we're back on original branch
+      expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
+
+      // Verify loop is merged with review mode
+      const mergedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
+      expect(mergedLoop.state.reviewMode).toBeDefined();
+      expect(mergedLoop.state.reviewMode?.addressable).toBe(true);
+      expect(mergedLoop.state.reviewMode?.completionAction).toBe("merge");
+      expect(mergedLoop.state.reviewMode?.reviewCycles).toBe(0);
+
+      // Address reviewer comments
+      const addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Please add tests and improve error handling" }),
+      });
+      expect(addressResponse.status).toBe(200);
+      const addressResult = await addressResponse.json();
+      expect(addressResult.success).toBe(true);
+      expect(addressResult.reviewCycle).toBe(1);
+      expect(addressResult.branch).toContain("-review-1");
+
+      // Wait for addressing to complete
+      const addressedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+
+      // Verify review cycle was incremented
+      expect(addressedLoop.state.reviewMode?.reviewCycles).toBe(1);
+
+      // Verify new review branch was created
+      const reviewBranch = addressedLoop.state.git!.workingBranch;
+      expect(reviewBranch).toContain("-review-1");
+      expect(reviewBranch).not.toBe(firstWorkingBranch);
+      expect(await branchExists(ctx.workDir, reviewBranch)).toBe(true);
+
+      // Verify review branches array contains both branches
+      expect(addressedLoop.state.reviewMode?.reviewBranches.length).toBe(2);
+      expect(addressedLoop.state.reviewMode?.reviewBranches).toContain(firstWorkingBranch);
+      expect(addressedLoop.state.reviewMode?.reviewBranches).toContain(reviewBranch);
+
+      // Can merge again
+      const { status: accept2Status } = await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
+      expect(accept2Status).toBe(200);
+      expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
+    });
+  });
+
+  describe("Merged Loop with Multiple Review Cycles", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: [
+          // Initial work
+          "Initial work! <promise>COMPLETE</promise>",
+          // Review cycle 1
+          "Round 1 done! <promise>COMPLETE</promise>",
+          // Review cycle 2
+          "Round 2 done! <promise>COMPLETE</promise>",
+        ],
+        withPlanningDir: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("merged loop creates new branch for each review cycle", async () => {
+      const originalBranch = await getCurrentBranch(ctx.workDir);
+
+      // Create and complete initial loop
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Multi Merge Review Test",
+        directory: ctx.workDir,
+        prompt: "Complex feature",
+      });
+      const loop = body as Loop;
+
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      const initialBranch = (await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}`).then(r => r.json())).state.git.workingBranch;
+
+      // Initial merge
+      await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
+
+      // Review cycle 1
+      let addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Round 1 feedback" }),
+      });
+      let addressResult = await addressResponse.json();
+      expect(addressResult.reviewCycle).toBe(1);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      
+      const afterReview1 = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}`).then(r => r.json());
+      const review1Branch = afterReview1.state.git.workingBranch;
+      expect(review1Branch).toContain("-review-1");
+
+      // Merge again
+      await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
+      expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
+
+      // Review cycle 2
+      addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Round 2 feedback" }),
+      });
+      addressResult = await addressResponse.json();
+      expect(addressResult.reviewCycle).toBe(2);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+
+      const afterReview2 = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}`).then(r => r.json());
+      const review2Branch = afterReview2.state.git.workingBranch;
+      expect(review2Branch).toContain("-review-2");
+      expect(review2Branch).not.toBe(review1Branch);
+
+      // Verify review history tracks all branches
+      const historyResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/review-history`);
+      const history = await historyResponse.json();
+      expect(history.history.reviewCycles).toBe(2);
+      expect(history.history.reviewBranches.length).toBe(3); // initial + 2 review branches
+      expect(history.history.reviewBranches).toContain(initialBranch);
+      expect(history.history.reviewBranches).toContain(review1Branch);
+      expect(history.history.reviewBranches).toContain(review2Branch);
+    });
+  });
+
+  describe("Review Mode Edge Cases", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: ["Done! <promise>COMPLETE</promise>"],
+        withPlanningDir: true,
+        withRemote: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("cannot address comments on non-addressable loop", async () => {
+      // Create loop but don't push or merge
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Non Addressable Test",
+        directory: ctx.workDir,
+        prompt: "Do something",
+      });
+      const loop = body as Loop;
+
+      // Try to address comments - should fail
+      const addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "This should fail" }),
+      });
+      expect(addressResponse.status).toBe(400);
+      const result = await addressResponse.json();
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("not addressable");
+    });
+
+    test("cannot address comments with empty comment string", async () => {
+      // Create and push loop
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Empty Comment Test",
+        directory: ctx.workDir,
+        prompt: "Do something",
+      });
+      const loop = body as Loop;
+
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      await pushLoopViaAPI(ctx.baseUrl, loop.config.id);
+
+      // Try to address with empty comments
+      const addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "" }),
+      });
+      expect(addressResponse.status).toBe(400);
+      const result = await addressResponse.json();
+      // Error responses have { error, message } format, not { success: false }
+      expect(result.error).toBe("validation_error");
+      expect(result.message).toContain("empty");
+    });
+
+    test("review history returns correct info for non-addressable loop", async () => {
+      // Create loop but don't push or merge
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "History Test",
+        directory: ctx.workDir,
+        prompt: "Do something",
+      });
+      const loop = body as Loop;
+
+      // Get history
+      const historyResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/review-history`);
+      const history = await historyResponse.json();
+      expect(history.success).toBe(true);
+      expect(history.history.addressable).toBe(false);
+      expect(history.history.reviewCycles).toBe(0);
+    });
+  });
+
+  describe("Review Mode Execution Verification", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: [
+          // Initial work
+          "Initial work done! <promise>COMPLETE</promise>",
+          // Review cycle - takes some time to complete
+          "Addressed comments! <promise>COMPLETE</promise>",
+        ],
+        withPlanningDir: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("address-comments API waits for loop to start before returning", async () => {
+      // This test verifies that the address-comments API properly awaits
+      // the engine.start() call instead of using fire-and-forget pattern.
+      // The bug was: API returned success:true immediately before loop started,
+      // causing the loop to appear "running" but not actually execute.
+
+      // Create and complete initial loop
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        name: "Await Start Test",
+        directory: ctx.workDir,
+        prompt: "Implement a feature",
+      });
+      const loop = body as Loop;
+
+      // Wait for initial completion and merge
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
+
+      // Address comments - this should only return AFTER the loop has started
+      const addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Please add error handling" }),
+      });
+      expect(addressResponse.status).toBe(200);
+      const addressResult = await addressResponse.json();
+      expect(addressResult.success).toBe(true);
+
+      // CRITICAL: Immediately after the API returns success, the loop should
+      // be in a running state (or already completed if very fast).
+      // If the API used fire-and-forget, the loop might still be in "merged" status.
+      const loopAfterAddress = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}`);
+      const loopState = await loopAfterAddress.json();
+      
+      // The loop should NOT still be in "merged" status - it should have transitioned
+      // to running, starting, or already completed
+      expect(loopState.state.status).not.toBe("merged");
+      expect(loopState.state.status).not.toBe("pushed");
+      expect(["starting", "running", "completed"]).toContain(loopState.state.status);
+
+      // Wait for final completion
+      const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      expect(completedLoop.state.reviewMode?.reviewCycles).toBe(1);
+    });
+  });
+});

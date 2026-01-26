@@ -90,6 +90,47 @@ export interface PlanAcceptRequest {
 }
 
 /**
+ * Request to address reviewer comments on a pushed/merged loop.
+ */
+export interface AddressCommentsRequest {
+  /** Reviewer's comments to address */
+  comments: string;
+}
+
+/**
+ * Response for address comments operation.
+ */
+export interface AddressCommentsResponse {
+  success: boolean;
+  reviewCycle?: number;
+  branch?: string;
+  error?: string;
+}
+
+/**
+ * Review history for a loop.
+ */
+export interface ReviewHistory {
+  /** Whether loop can receive reviewer comments */
+  addressable: boolean;
+  /** Original action that completed the loop */
+  completionAction: "push" | "merge";
+  /** Number of review cycles (times comments were addressed) */
+  reviewCycles: number;
+  /** For merged loops: list of all branches created during reviews */
+  reviewBranches: string[];
+}
+
+/**
+ * Response for review history operation.
+ */
+export interface ReviewHistoryResponse {
+  success: boolean;
+  history?: ReviewHistory;
+  error?: string;
+}
+
+/**
  * Request to start a loop.
  * Note: Previously supported handleUncommitted option has been removed.
  * Loops now fail to start if there are uncommitted changes.

@@ -74,6 +74,26 @@ const handler = async (e: FormEvent) => {
 };
 ```
 
+**CRITICAL: Always await async operations in API handlers.** Never use fire-and-forget patterns like `.then()` or `.catch()` without `await` in API route handlers. The API response should only be sent after all operations complete:
+
+```typescript
+// WRONG - fire and forget, errors are silently swallowed
+async POST(req) {
+  engine.start().catch((error) => log.error(error));
+  return Response.json({ success: true }); // Returns before start() completes!
+}
+
+// CORRECT - await all async operations
+async POST(req) {
+  try {
+    await engine.start();
+    return Response.json({ success: true });
+  } catch (error) {
+    return Response.json({ success: false, error: String(error) }, { status: 500 });
+  }
+}
+```
+
 ### React Components
 
 - Use functional components only (no class components)
@@ -181,6 +201,16 @@ test("hello world", () => {
 });
 ```
 
+### Testing Guidelines
+
+- Every new feature that is not exclusively a UI change **MUST** have unit tests covering its functionality
+- Every new feature **SHOULD** have a scenario test (integration test) covering the complete user workflow
+- Every bug fix **MUST** have a test case that reproduces the bug
+- Every bug fix **SHOULD** have a scenario test covering the fix in a real-world context
+- Unit tests should be written alongside implementation, not after
+- Scenario tests should cover multiple combinations and edge cases
+- UI-only changes may rely on manual testing, but automated tests are preferred when possible
+
 ### Test Patterns
 
 1. **Unit tests** (`tests/unit/`): Test individual functions and classes
@@ -201,6 +231,21 @@ beforeEach(async () => {
 afterEach(async () => {
   await teardownTestContext(context);
 });
+```
+
+### Git Branch Names in Tests
+
+**IMPORTANT:** Never hardcode `main` or `master` as branch names in tests. The default branch name varies between environments (local machines may use `main`, CI may use `master`).
+
+Always get the current branch name dynamically:
+
+```typescript
+// WRONG - will fail on systems with different default branch
+await Bun.$`git -C ${workDir} push origin main`.quiet();
+
+// CORRECT - works on all systems
+const currentBranch = (await Bun.$`git -C ${workDir} branch --show-current`.text()).trim();
+await Bun.$`git -C ${workDir} push origin ${currentBranch}`.quiet();
 ```
 
 ## General Guidelines

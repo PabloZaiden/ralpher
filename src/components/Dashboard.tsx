@@ -13,6 +13,7 @@ import { ConnectionStatusBar } from "./ConnectionStatusBar";
 import { ServerSettingsModal } from "./ServerSettingsModal";
 import {
   AcceptLoopModal,
+  AddressCommentsModal,
   DeleteLoopModal,
   PurgeLoopModal,
   UncommittedChangesModal,
@@ -34,6 +35,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     acceptLoop,
     pushLoop,
     purgeLoop,
+    addressReviewComments,
   } = useLoops();
 
   // Server settings state
@@ -73,6 +75,10 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     loopId: null,
   });
   const [purgeModal, setPurgeModal] = useState<{ open: boolean; loopId: string | null }>({
+    open: false,
+    loopId: null,
+  });
+  const [addressCommentsModal, setAddressCommentsModal] = useState<{ open: boolean; loopId: string | null }>({
     open: false,
     loopId: null,
   });
@@ -252,6 +258,21 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     if (!purgeModal.loopId) return;
     await purgeLoop(purgeModal.loopId);
     setPurgeModal({ open: false, loopId: null });
+  }
+
+  // Handle address comments
+  async function handleAddressComments(comments: string) {
+    if (!addressCommentsModal.loopId) return;
+    try {
+      const result = await addressReviewComments(addressCommentsModal.loopId, comments);
+      if (!result.success) {
+        throw new Error("Failed to address comments");
+      }
+      setAddressCommentsModal({ open: false, loopId: null });
+    } catch (error) {
+      console.error("Failed to address comments:", error);
+      // TODO: Show error toast
+    }
   }
 
   // Group loops by status
@@ -442,6 +463,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   loop={loop}
                   onClick={() => onSelectLoop?.(loop.config.id)}
                   onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
+                  onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
                 />
               ))}
             </div>
@@ -468,13 +490,11 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                 loopId: result.loop?.config.id ?? null,
                 error: result.startError,
               });
-              handleCloseCreateModal();
-              return;
+              return true; // Consider this handled (modal will close)
             }
             
             // Handle success case
             if (result.loop) {
-              handleCloseCreateModal();
               // Refresh last model in case it changed
               if (request.model) {
                 setLastModel(request.model);
@@ -490,7 +510,10 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               } catch {
                 // Ignore errors saving preference
               }
+              return true; // Success - close the modal
             }
+            
+            return false; // Failed - keep modal open
           }}
           onCancel={handleCloseCreateModal}
           models={models}
@@ -526,6 +549,17 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         onClose={() => setPurgeModal({ open: false, loopId: null })}
         onPurge={handlePurge}
       />
+
+      {/* Address Comments modal */}
+      {addressCommentsModal.loopId && (
+        <AddressCommentsModal
+          isOpen={addressCommentsModal.open}
+          onClose={() => setAddressCommentsModal({ open: false, loopId: null })}
+          onSubmit={handleAddressComments}
+          loopName={loops.find(l => l.config.id === addressCommentsModal.loopId)?.config.name || ""}
+          reviewCycle={(loops.find(l => l.config.id === addressCommentsModal.loopId)?.state.reviewMode?.reviewCycles || 0) + 1}
+        />
+      )}
 
       {/* Uncommitted changes modal */}
       <UncommittedChangesModal

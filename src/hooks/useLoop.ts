@@ -26,8 +26,10 @@ import {
   sendPlanFeedbackApi,
   acceptPlanApi,
   discardPlanApi,
+  addressReviewCommentsApi,
   type AcceptLoopResult,
   type PushLoopResult,
+  type AddressCommentsResult,
 } from "./loopActions";
 
 /**
@@ -97,6 +99,8 @@ export interface UseLoopResult {
   acceptPlan: () => Promise<boolean>;
   /** Discard the plan and delete the loop (only works when loop is in planning status) */
   discardPlan: () => Promise<boolean>;
+  /** Address reviewer comments (only works for pushed/merged loops with reviewMode.addressable = true) */
+  addressReviewComments: (comments: string) => Promise<AddressCommentsResult>;
 }
 
 /**
@@ -172,10 +176,6 @@ export function useLoop(loopId: string): UseLoopResult {
           }
           return [...prev, event.tool];
         });
-        // When a tool completes, it may have modified files - trigger diff check
-        if (event.tool.status === "completed") {
-          setGitChangeCounter((prev) => prev + 1);
-        }
         break;
 
       case "loop.iteration.start":
@@ -469,6 +469,21 @@ export function useLoop(loopId: string): UseLoopResult {
     }
   }, [loopId]);
 
+  // Address reviewer comments
+  const addressReviewComments = useCallback(
+    async (comments: string): Promise<AddressCommentsResult> => {
+      try {
+        const result = await addressReviewCommentsApi(loopId, comments);
+        await refresh();
+        return result;
+      } catch (err) {
+        setError(String(err));
+        return { success: false };
+      }
+    },
+    [loopId, refresh]
+  );
+
   // Initial fetch
   useEffect(() => {
     refresh();
@@ -500,5 +515,6 @@ export function useLoop(loopId: string): UseLoopResult {
     sendPlanFeedback,
     acceptPlan,
     discardPlan,
+    addressReviewComments,
   };
 }

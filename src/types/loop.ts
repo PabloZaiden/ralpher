@@ -126,6 +126,18 @@ export interface LoopState {
     /** Whether .planning folder was already cleared (prevents re-clearing) */
     planningFolderCleared: boolean;
   };
+
+  /** Review mode state (for addressing reviewer comments after push/merge) */
+  reviewMode?: {
+    /** Whether loop can receive reviewer comments */
+    addressable: boolean;
+    /** Original action that completed the loop */
+    completionAction: "push" | "merge";
+    /** Number of review cycles (times comments were addressed) */
+    reviewCycles: number;
+    /** For merged loops: list of all branches created during reviews */
+    reviewBranches: string[];
+  };
 }
 
 /**

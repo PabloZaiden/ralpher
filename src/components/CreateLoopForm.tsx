@@ -17,8 +17,8 @@ export interface BranchInfo {
 }
 
 export interface CreateLoopFormProps {
-  /** Callback when form is submitted */
-  onSubmit: (request: CreateLoopRequest) => Promise<void>;
+  /** Callback when form is submitted. Returns true if successful, false otherwise. */
+  onSubmit: (request: CreateLoopRequest) => Promise<boolean>;
   /** Callback when form is cancelled */
   onCancel: () => void;
   /** Whether form is submitting */
@@ -181,7 +181,14 @@ export function CreateLoopForm({
     }
 
     try {
-      await onSubmit(request);
+      const success = await onSubmit(request);
+      if (success) {
+        // Close the modal on successful submission
+        onCancel();
+      }
+    } catch (error) {
+      // Keep form open on error so user can retry
+      console.error("Failed to create loop:", error);
     } finally {
       setSubmitting(false);
     }

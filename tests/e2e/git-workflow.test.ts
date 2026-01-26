@@ -202,9 +202,16 @@ describe("Git Workflow", () => {
       const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
       expect(currentBranch).toBe(originalBranch);
 
-      // Verify working branch was deleted
+      // Verify working branch was NOT deleted (kept for review mode)
       const branchExists = await ctx.git.branchExists(ctx.workDir, workingBranch);
-      expect(branchExists).toBe(false);
+      expect(branchExists).toBe(true);
+
+      // Verify reviewMode was initialized
+      const updatedLoop = await ctx.manager.getLoop(loop.config.id);
+      expect(updatedLoop?.state.reviewMode).toBeDefined();
+      expect(updatedLoop?.state.reviewMode?.addressable).toBe(true);
+      expect(updatedLoop?.state.reviewMode?.completionAction).toBe("merge");
+      expect(updatedLoop?.state.reviewMode?.reviewCycles).toBe(0);
 
       // Verify event was emitted
       expect(countEvents(ctx.events, "loop.accepted")).toBe(1);

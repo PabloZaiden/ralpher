@@ -24,6 +24,7 @@ import { GitService } from "./git-service";
 import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
 import { log } from "./logger";
+import { sanitizeBranchName } from "../utils";
 
 /**
  * Options for creating a new loop.
@@ -249,13 +250,11 @@ export class LoopManager {
     // Persist state changes periodically
     this.startStatePersistence(loopId);
 
-    // Start the plan creation
-    try {
-      await engine.start();
-    } catch (error) {
+    // Start the plan creation (fire and forget - don't block the caller)
+    // The loop runs asynchronously and updates state via events/persistence
+    engine.start().catch((error) => {
       log.error(`Loop ${loopId} plan mode failed:`, String(error));
-      throw error;
-    }
+    });
   }
 
   /**
@@ -624,13 +623,12 @@ Follow the standard loop execution flow:
     // Persist state changes periodically
     this.startStatePersistence(loopId);
 
-    // Start the loop
-    try {
-      await engine.start();
-    } catch (error) {
-      log.error(`Loop ${loopId} failed:`, String(error));
-      throw error;
-    }
+    // Start the loop (fire and forget - don't block the caller)
+    // The loop runs asynchronously and updates state via events/persistence
+    engine.start().catch((error) => {
+      log.error(`Loop ${loopId} failed to start:`, String(error));
+      // Engine handles its own error state via handleError()
+    });
   }
 
   /**
@@ -692,13 +690,30 @@ Follow the standard loop execution flow:
         loop.state.git.originalBranch
       );
 
-      // Delete the working branch
-      await git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
+      // DON'T delete the working branch - keep it for potential review cycles
+      // The branch will be cleaned up when purging or when creating new review branches
 
-      // Update status to 'merged' (final state)
+      // Initialize or preserve review mode state
+      const reviewMode = loop.state.reviewMode
+        ? {
+            // Preserve existing review mode, just update addressable and completionAction
+            ...loop.state.reviewMode,
+            addressable: true,
+            completionAction: "merge" as const,
+          }
+        : {
+            // First time accepting - initialize review mode
+            addressable: true,
+            completionAction: "merge" as const,
+            reviewCycles: 0,
+            reviewBranches: [loop.state.git.workingBranch],
+          };
+
+      // Update status to 'merged' with review mode enabled
       const updatedState = {
         ...loop.state,
         status: "merged" as const,
+        reviewMode,
       };
       await updateLoopState(loopId, updatedState);
 
@@ -766,16 +781,29 @@ Follow the standard loop execution flow:
         loop.state.git.workingBranch
       );
 
-      // Switch back to the original branch
-      await git.checkoutBranch(
-        loop.config.directory,
-        loop.state.git.originalBranch
-      );
+      // DON'T switch back to the original branch - stay on working branch for potential review cycles
 
-      // Update status to 'pushed' (final state)
+      // Initialize or preserve review mode state
+      const reviewMode = loop.state.reviewMode
+        ? {
+            // Preserve existing review mode, just update addressable and completionAction
+            ...loop.state.reviewMode,
+            addressable: true,
+            completionAction: "push" as const,
+          }
+        : {
+            // First time pushing - initialize review mode
+            addressable: true,
+            completionAction: "push" as const,
+            reviewCycles: 0,
+            reviewBranches: [loop.state.git.workingBranch],
+          };
+
+      // Update status to 'pushed' with review mode enabled
       const updatedState = {
         ...loop.state,
         status: "pushed" as const,
+        reviewMode,
       };
       await updateLoopState(loopId, updatedState);
 
@@ -862,6 +890,7 @@ Follow the standard loop execution flow:
   /**
    * Purge a loop (permanently delete files).
    * Only allowed for loops in 'merged', 'pushed', or 'deleted' states.
+   * Cleans up review branches and marks as non-addressable before deletion.
    */
   async purgeLoop(loopId: string): Promise<{ success: boolean; error?: string }> {
     const loop = await loadLoop(loopId);
@@ -872,6 +901,33 @@ Follow the standard loop execution flow:
     // Only allow purge for final states
     if (loop.state.status !== "merged" && loop.state.status !== "pushed" && loop.state.status !== "deleted") {
       return { success: false, error: `Cannot purge loop in status: ${loop.state.status}. Only merged, pushed, or deleted loops can be purged.` };
+    }
+
+    // Clean up review branches if review mode is active
+    if (loop.state.reviewMode?.addressable && loop.state.reviewMode.reviewBranches.length > 0) {
+      try {
+        const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+        const git = GitService.withExecutor(executor);
+        
+        // Try to delete review branches (ignore errors - they might already be deleted)
+        for (const branchName of loop.state.reviewMode.reviewBranches) {
+          try {
+            await git.deleteBranch(loop.config.directory, branchName);
+            log.debug(`Cleaned up review branch: ${branchName}`);
+          } catch (error) {
+            log.debug(`Could not delete branch ${branchName}: ${String(error)}`);
+          }
+        }
+      } catch (error) {
+        log.warn(`Failed to clean up review branches: ${String(error)}`);
+        // Continue with purge even if branch cleanup fails
+      }
+    }
+
+    // Mark as non-addressable before deletion
+    if (loop.state.reviewMode) {
+      loop.state.reviewMode.addressable = false;
+      await updateLoopState(loopId, loop.state);
     }
 
     // Actually delete the loop file
@@ -934,6 +990,228 @@ Follow the standard loop execution flow:
     engine.clearPendingPrompt();
 
     return { success: true };
+  }
+
+  /**
+   * Address reviewer comments on a pushed/merged loop.
+   * For pushed loops: resumes on the same branch.
+   * For merged loops: creates a new review branch.
+   */
+  async addressReviewComments(
+    loopId: string,
+    comments: string
+  ): Promise<{ success: boolean; error?: string; reviewCycle?: number; branch?: string }> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      return { success: false, error: "Loop not found" };
+    }
+
+    // Check if loop is addressable
+    if (!loop.state.reviewMode?.addressable) {
+      return { success: false, error: "Loop is not addressable. Only pushed or merged loops can receive reviewer comments." };
+    }
+
+    // Check if loop is in pushed or merged status
+    if (loop.state.status !== "pushed" && loop.state.status !== "merged") {
+      return { success: false, error: `Cannot address comments on loop with status: ${loop.state.status}` };
+    }
+
+    // Check if loop is already running
+    if (this.engines.has(loopId)) {
+      return { success: false, error: "Loop is already running" };
+    }
+
+    // Validate comments
+    if (!comments || comments.trim() === "") {
+      return { success: false, error: "Comments cannot be empty" };
+    }
+
+    try {
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const git = GitService.withExecutor(executor);
+
+      // Get backend instance
+      const backend = backendManager.getBackend();
+
+      // Handle based on completion action
+      if (loop.state.reviewMode.completionAction === "push") {
+        // PUSHED LOOP: Resume on the same branch
+        if (!loop.state.git?.workingBranch) {
+          return { success: false, error: "No working branch found for pushed loop" };
+        }
+
+        // Check out the existing working branch
+        await git.checkoutBranch(loop.config.directory, loop.state.git.workingBranch);
+
+        // Increment review cycles
+        loop.state.reviewMode.reviewCycles += 1;
+        
+        // Set status to idle so engine.start() can run (it will set to running)
+        loop.state.status = "idle";
+        loop.state.completedAt = undefined;
+
+        await updateLoopState(loopId, loop.state);
+
+        // Construct specialized prompt for addressing comments
+        const reviewPrompt = this.constructReviewPrompt(comments);
+
+        // Create and start a new loop engine with the review prompt
+        // skipGitSetup: true because we've already checked out the branch for review
+        const engine = new LoopEngine({
+          loop: { config: loop.config, state: loop.state },
+          backend,
+          gitService: git,
+          eventEmitter: this.emitter,
+          onPersistState: async (state) => {
+            await updateLoopState(loopId, state);
+          },
+          skipGitSetup: true,
+        });
+        this.engines.set(loopId, engine);
+
+        // Set the review prompt as pending
+        engine.setPendingPrompt(reviewPrompt);
+
+        // Start state persistence
+        this.startStatePersistence(loopId);
+
+        // Start execution (fire and forget - don't block the caller)
+        // The loop runs asynchronously and updates state via events/persistence
+        engine.start().catch((error) => {
+          log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
+        });
+
+        return {
+          success: true,
+          reviewCycle: loop.state.reviewMode.reviewCycles,
+          branch: loop.state.git.workingBranch,
+        };
+
+      } else {
+        // MERGED LOOP: Create a new review branch
+        if (!loop.state.git?.originalBranch) {
+          return { success: false, error: "No original branch found for merged loop" };
+        }
+
+        // Increment review cycles
+        loop.state.reviewMode.reviewCycles += 1;
+
+        // Generate new review branch name
+        const safeName = sanitizeBranchName(loop.config.name);
+        const reviewBranchName = `${loop.config.git.branchPrefix}${safeName}-review-${loop.state.reviewMode.reviewCycles}`;
+
+        // Check out original branch and create new review branch
+        await git.checkoutBranch(loop.config.directory, loop.state.git.originalBranch);
+        await git.createBranch(loop.config.directory, reviewBranchName);
+
+        // Update git state
+        loop.state.git.workingBranch = reviewBranchName;
+        loop.state.reviewMode.reviewBranches.push(reviewBranchName);
+
+        // Set status to idle so engine.start() can run (it will set to running)
+        loop.state.status = "idle";
+        loop.state.completedAt = undefined;
+
+        await updateLoopState(loopId, loop.state);
+
+        // Construct specialized prompt for addressing comments
+        const reviewPrompt = this.constructReviewPrompt(comments);
+
+        // Create and start a new loop engine with the review prompt
+        // skipGitSetup: true because we've already created the review branch
+        const engine = new LoopEngine({
+          loop: { config: loop.config, state: loop.state },
+          backend,
+          gitService: git,
+          eventEmitter: this.emitter,
+          onPersistState: async (state) => {
+            await updateLoopState(loopId, state);
+          },
+          skipGitSetup: true,
+        });
+        this.engines.set(loopId, engine);
+
+        // Set the review prompt as pending
+        engine.setPendingPrompt(reviewPrompt);
+
+        // Start state persistence
+        this.startStatePersistence(loopId);
+
+        // Start execution (fire and forget - don't block the caller)
+        // The loop runs asynchronously and updates state via events/persistence
+        engine.start().catch((error) => {
+          log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
+        });
+
+        return {
+          success: true,
+          reviewCycle: loop.state.reviewMode.reviewCycles,
+          branch: reviewBranchName,
+        };
+      }
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  /**
+   * Construct a specialized prompt for addressing reviewer comments.
+   */
+  private constructReviewPrompt(comments: string): string {
+    return `A reviewer has provided feedback on your previous work. Please address the following comments:
+
+---
+${comments}
+---
+
+Instructions:
+- Read AGENTS.md and .planning/status.md to understand what was previously done
+- Make targeted changes to address each reviewer comment
+- Update .planning/status.md with your progress addressing the feedback
+- Test your changes to ensure they work correctly
+- When all comments are fully addressed, end your response with:
+
+<promise>COMPLETE</promise>`;
+  }
+
+  /**
+   * Get review history for a loop.
+   */
+  async getReviewHistory(
+    loopId: string
+  ): Promise<{ success: boolean; error?: string; history?: {
+    addressable: boolean;
+    completionAction: "push" | "merge";
+    reviewCycles: number;
+    reviewBranches: string[];
+  } }> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      return { success: false, error: "Loop not found" };
+    }
+
+    // Return review mode if it exists, otherwise return null history
+    if (!loop.state.reviewMode) {
+      return {
+        success: true,
+        history: {
+          addressable: false,
+          completionAction: "push",
+          reviewCycles: 0,
+          reviewBranches: [],
+        },
+      };
+    }
+
+    return {
+      success: true,
+      history: {
+        addressable: loop.state.reviewMode.addressable,
+        completionAction: loop.state.reviewMode.completionAction,
+        reviewCycles: loop.state.reviewMode.reviewCycles,
+        reviewBranches: loop.state.reviewMode.reviewBranches,
+      },
+    };
   }
 
   /**

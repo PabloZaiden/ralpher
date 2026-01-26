@@ -167,7 +167,8 @@ export function UncommittedChangesModal({
 }
 
 // ============================================================================
-// Re-export AcceptLoopModal for convenience
+// Re-export AcceptLoopModal and AddressCommentsModal for convenience
 // ============================================================================
 
 export { AcceptLoopModal, type AcceptLoopModalProps } from "./AcceptLoopModal";
+export { AddressCommentsModal, type AddressCommentsModalProps } from "./AddressCommentsModal";

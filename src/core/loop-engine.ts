@@ -29,6 +29,7 @@ import { backendManager } from "./backend-manager";
 import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 import { log } from "./logger";
+import { sanitizeBranchName } from "../utils";
 
 /**
  * Generate a git-safe branch name from a loop name and timestamp.
@@ -46,12 +47,7 @@ function generateBranchName(prefix: string, name: string, timestamp: string): st
     .slice(0, 19);           // Take YYYY-MM-DD-HH-MM-SS
 
   // Sanitize the name for git branch
-  const safeName = name
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-")  // Replace non-alphanumeric with -
-    .replace(/-+/g, "-")          // Collapse multiple hyphens
-    .replace(/^-|-$/g, "")        // Trim leading/trailing hyphens
-    .slice(0, 40);                // Limit length
+  const safeName = sanitizeBranchName(name);
 
   return `${prefix}${safeName}-${dateStr}`;
 }
@@ -90,6 +86,8 @@ export interface LoopEngineOptions {
   eventEmitter?: SimpleEventEmitter<LoopEvent>;
   /** Callback to persist state to disk (optional) */
   onPersistState?: (state: LoopState) => Promise<void>;
+  /** Skip git branch setup (for review cycles where branch is already set up) */
+  skipGitSetup?: boolean;
 }
 
 /**
@@ -170,6 +168,8 @@ export class LoopEngine {
   private onPersistState?: (state: LoopState) => Promise<void>;
   /** Guard to prevent concurrent runLoop() executions */
   private isLoopRunning = false;
+  /** Skip git branch setup (for review cycles) */
+  private skipGitSetup: boolean;
 
   constructor(options: LoopEngineOptions) {
     this.loop = options.loop;
@@ -178,6 +178,7 @@ export class LoopEngine {
     this.emitter = options.eventEmitter ?? loopEventEmitter;
     this.stopDetector = new StopPatternDetector(options.loop.config.stopPattern);
     this.onPersistState = options.onPersistState;
+    this.skipGitSetup = options.skipGitSetup ?? false;
   }
 
   /**
@@ -236,11 +237,14 @@ export class LoopEngine {
     try {
       // Set up git branch first (before any file modifications)
       // Skip git setup in plan mode - it will happen when plan is accepted
-      if (!isInPlanMode) {
+      // Skip git setup for review cycles - branch is already set up
+      if (!isInPlanMode && !this.skipGitSetup) {
         this.emitLog("info", "Setting up git branch...");
         log.trace("[LoopEngine] Starting setupGitBranch...");
         await this.setupGitBranch();
         log.trace("[LoopEngine] setupGitBranch completed successfully");
+      } else if (this.skipGitSetup) {
+        this.emitLog("info", "Skipping git branch setup (review cycle)");
       }
 
       // Clear .planning folder if requested (after branch setup, so deletions are on the new branch)

@@ -9,6 +9,7 @@ import { Badge, Button, Card, getStatusBadgeVariant } from "./common";
 import { LogViewer } from "./LogViewer";
 import {
   AcceptLoopModal,
+  AddressCommentsModal,
   DeleteLoopModal,
   PurgeLoopModal,
 } from "./LoopModals";
@@ -28,7 +29,7 @@ export interface LoopDetailsProps {
   onBack?: () => void;
 }
 
-type TabId = "log" | "prompt" | "plan" | "status" | "diff";
+type TabId = "log" | "prompt" | "plan" | "status" | "diff" | "review";
 
 const tabs: { id: TabId; label: string }[] = [
   { id: "log", label: "Log" },
@@ -36,6 +37,7 @@ const tabs: { id: TabId; label: string }[] = [
   { id: "plan", label: "Plan" },
   { id: "status", label: "Status" },
   { id: "diff", label: "Diff" },
+  { id: "review", label: "Review" },
 ];
 
 /**
@@ -98,6 +100,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     sendPlanFeedback,
     acceptPlan,
     discardPlan,
+    addressReviewComments,
   } = useLoop(loopId);
 
   const [activeTab, setActiveTab] = useState<TabId>("log");
@@ -121,6 +124,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [deleteModal, setDeleteModal] = useState(false);
   const [acceptModal, setAcceptModal] = useState(false);
   const [purgeModal, setPurgeModal] = useState(false);
+  const [addressCommentsModal, setAddressCommentsModal] = useState(false);
 
   // Pending prompt editing state
   const [pendingPromptText, setPendingPromptText] = useState("");
@@ -272,6 +276,19 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       onBack?.();
     }
     setPurgeModal(false);
+  }
+
+  // Handle address comments
+  async function handleAddressComments(comments: string) {
+    try {
+      const result = await addressReviewComments(comments);
+      if (!result.success) {
+        throw new Error("Failed to address comments");
+      }
+    } catch (error) {
+      console.error("Failed to address comments:", error);
+      throw error; // Re-throw so modal knows it failed
+    }
   }
 
   // Handle pending prompt save
@@ -451,15 +468,29 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
             {/* Actions card */}
             <Card title="Actions">
               <div className="space-y-2">
-                {/* Final state - only show Purge */}
+                {/* Final state - show Address Comments (if addressable) and Purge */}
                 {isFinalState(state.status) ? (
-                  <Button
-                    className="w-full"
-                    variant="danger"
-                    onClick={() => setPurgeModal(true)}
-                  >
-                    Purge Loop
-                  </Button>
+                  <>
+                    {state.reviewMode?.addressable && (
+                      <>
+                        <Button
+                          className="w-full"
+                          variant="primary"
+                          onClick={() => setAddressCommentsModal(true)}
+                        >
+                          Address Comments
+                        </Button>
+                        <hr className="border-gray-200 dark:border-gray-700" />
+                      </>
+                    )}
+                    <Button
+                      className="w-full"
+                      variant="danger"
+                      onClick={() => setPurgeModal(true)}
+                    >
+                      Purge Loop
+                    </Button>
+                  </>
                 ) : (
                   <>
                     {canAccept(state.status) && state.git && (
@@ -750,6 +781,80 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                       )}
                     </div>
                   )}
+
+                  {activeTab === "review" && (
+                    <div className="p-4 space-y-4">
+                      {loop.state.reviewMode ? (
+                        <>
+                          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">
+                              Review Mode Status
+                            </h3>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Addressable:</span>
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
+                                  {loop.state.reviewMode.addressable ? "Yes" : "No"}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Completion Action:</span>
+                                <span className="font-medium text-gray-900 dark:text-gray-100 capitalize">
+                                  {loop.state.reviewMode.completionAction}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Review Cycles:</span>
+                                <span className="font-medium text-gray-900 dark:text-gray-100">
+                                  {loop.state.reviewMode.reviewCycles}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {loop.state.reviewMode.reviewBranches.length > 0 && (
+                            <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                                Review Branches
+                              </h3>
+                              <div className="space-y-2">
+                                {loop.state.reviewMode.reviewBranches.map((branch, index) => (
+                                  <div
+                                    key={index}
+                                    className="flex items-center gap-2 text-sm font-mono text-gray-700 dark:text-gray-300"
+                                  >
+                                    <span className="text-gray-400">{index + 1}.</span>
+                                    <span>{branch}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                              About Review Mode
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              This loop can receive reviewer comments and address them iteratively.
+                              {loop.state.reviewMode.completionAction === "push"
+                                ? " Pushed loops continue adding commits to the same branch."
+                                : " Merged loops create new review branches for each cycle."}
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-center py-8">
+                          <p className="text-gray-500 dark:text-gray-400">
+                            This loop does not have review mode enabled.
+                          </p>
+                          <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
+                            Review mode is automatically enabled when a loop is pushed or merged.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -777,6 +882,15 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         isOpen={purgeModal}
         onClose={() => setPurgeModal(false)}
         onPurge={handlePurge}
+      />
+
+      {/* Address Comments modal */}
+      <AddressCommentsModal
+        isOpen={addressCommentsModal}
+        onClose={() => setAddressCommentsModal(false)}
+        onSubmit={handleAddressComments}
+        loopName={config.name}
+        reviewCycle={(state.reviewMode?.reviewCycles || 0) + 1}
       />
     </div>
   );
