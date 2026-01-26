@@ -40,8 +40,12 @@ export function AddressCommentsModal({
     setSubmitting(true);
     try {
       await onSubmit(comments);
-      // Clear comments on success
+      // Clear comments and close modal on success
       setComments("");
+      onClose();
+    } catch (error) {
+      // Keep modal open on error so user can retry
+      console.error("Failed to submit comments:", error);
     } finally {
       setSubmitting(false);
     }

@@ -497,13 +497,11 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                 loopId: result.loop?.config.id ?? null,
                 error: result.startError,
               });
-              handleCloseCreateModal();
-              return;
+              return true; // Consider this handled (modal will close)
             }
             
             // Handle success case
             if (result.loop) {
-              handleCloseCreateModal();
               // Refresh last model in case it changed
               if (request.model) {
                 setLastModel(request.model);
@@ -519,7 +517,10 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               } catch {
                 // Ignore errors saving preference
               }
+              return true; // Success - close the modal
             }
+            
+            return false; // Failed - keep modal open
           }}
           onCancel={handleCloseCreateModal}
           models={models}

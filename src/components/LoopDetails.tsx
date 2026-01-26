@@ -9,6 +9,7 @@ import { Badge, Button, Card, getStatusBadgeVariant } from "./common";
 import { LogViewer } from "./LogViewer";
 import {
   AcceptLoopModal,
+  AddressCommentsModal,
   DeleteLoopModal,
   PurgeLoopModal,
 } from "./LoopModals";
@@ -122,6 +123,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [deleteModal, setDeleteModal] = useState(false);
   const [acceptModal, setAcceptModal] = useState(false);
   const [purgeModal, setPurgeModal] = useState(false);
+  const [addressCommentsModal, setAddressCommentsModal] = useState(false);
 
   // Pending prompt editing state
   const [pendingPromptText, setPendingPromptText] = useState("");
@@ -273,6 +275,25 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       onBack?.();
     }
     setPurgeModal(false);
+  }
+
+  // Handle address comments
+  async function handleAddressComments(comments: string) {
+    try {
+      const response = await fetch(`/api/loops/${loopId}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to address comments");
+      }
+    } catch (error) {
+      console.error("Failed to address comments:", error);
+      throw error; // Re-throw so modal knows it failed
+    }
   }
 
   // Handle pending prompt save
@@ -452,15 +473,29 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
             {/* Actions card */}
             <Card title="Actions">
               <div className="space-y-2">
-                {/* Final state - only show Purge */}
+                {/* Final state - show Address Comments (if addressable) and Purge */}
                 {isFinalState(state.status) ? (
-                  <Button
-                    className="w-full"
-                    variant="danger"
-                    onClick={() => setPurgeModal(true)}
-                  >
-                    Purge Loop
-                  </Button>
+                  <>
+                    {state.reviewMode?.addressable && (
+                      <>
+                        <Button
+                          className="w-full"
+                          variant="primary"
+                          onClick={() => setAddressCommentsModal(true)}
+                        >
+                          Address Comments
+                        </Button>
+                        <hr className="border-gray-200 dark:border-gray-700" />
+                      </>
+                    )}
+                    <Button
+                      className="w-full"
+                      variant="danger"
+                      onClick={() => setPurgeModal(true)}
+                    >
+                      Purge Loop
+                    </Button>
+                  </>
                 ) : (
                   <>
                     {canAccept(state.status) && state.git && (
@@ -852,6 +887,15 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         isOpen={purgeModal}
         onClose={() => setPurgeModal(false)}
         onPurge={handlePurge}
+      />
+
+      {/* Address Comments modal */}
+      <AddressCommentsModal
+        isOpen={addressCommentsModal}
+        onClose={() => setAddressCommentsModal(false)}
+        onSubmit={handleAddressComments}
+        loopName={config.name}
+        reviewCycle={(state.reviewMode?.reviewCycles || 0) + 1}
       />
     </div>
   );
