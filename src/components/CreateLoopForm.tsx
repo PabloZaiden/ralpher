@@ -56,6 +56,8 @@ export interface CreateLoopFormProps {
     clearPlanningFolder?: boolean;
     planMode?: boolean;
   } | null;
+  /** Whether editing a draft loop (to show Update Draft button) */
+  isEditingDraft?: boolean;
 }
 
 export function CreateLoopForm({
@@ -73,6 +75,7 @@ export function CreateLoopForm({
   initialDirectory = "",
   editLoopId = null,
   initialLoopData = null,
+  isEditingDraft = false,
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
   
@@ -593,8 +596,8 @@ export function CreateLoopForm({
 
       {/* Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-        {/* Left side - Save as Draft button */}
-        {!isEditing && (
+        {/* Left side - Save as Draft / Update Draft button */}
+        {(!isEditing || isEditingDraft) && (
           <Button
             type="button"
             variant="secondary"
@@ -602,7 +605,7 @@ export function CreateLoopForm({
             disabled={isSubmitting || !name.trim() || !directory.trim() || !prompt.trim()}
             loading={isSubmitting}
           >
-            Save as Draft
+            {isEditingDraft ? "Update Draft" : "Save as Draft"}
           </Button>
         )}
         

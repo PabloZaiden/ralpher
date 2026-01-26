@@ -505,6 +505,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       {(() => {
         const editLoop = editDraftId ? loops.find((l) => l.config.id === editDraftId) : null;
         const isEditing = !!editLoop;
+        const isEditingDraft = editLoop?.state.status === "draft";
         
         // Transform Loop to initialLoopData format
         const initialLoopData = editLoop ? {
@@ -531,6 +532,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
             <CreateLoopForm
               editLoopId={isEditing ? editLoop.config.id : undefined}
               initialLoopData={initialLoopData}
+              isEditingDraft={isEditingDraft}
               onSubmit={async (request) => {
                 // If editing, update the draft
                 if (isEditing) {
