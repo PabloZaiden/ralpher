@@ -99,9 +99,9 @@ describe("Plan + Loop User Scenarios", () => {
       });
 
       // In plan mode, the git branch is NOT set up until plan is accepted
-      // So we should still be on main
+      // So we should still be on the default branch
       const currentBranch = await getCurrentBranch(ctx.workDir);
-      expect(currentBranch).toBe("main");
+      expect(currentBranch).toBe(ctx.defaultBranch);
 
       // Verify no git state is set yet (branch is created on plan acceptance)
       expect(planningLoop.state.git).toBeUndefined();

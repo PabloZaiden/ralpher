@@ -33,6 +33,8 @@ export interface TestServerContext {
   dataDir: string;
   /** Temporary working directory (simulates a project) */
   workDir: string;
+  /** Default branch for the test repo */
+  defaultBranch: string;
   /** The test server */
   server: Server<unknown>;
   /** Base URL for API calls */
@@ -267,6 +269,8 @@ export async function setupTestServer(options: SetupServerOptions = {}): Promise
   await writeFile(join(workDir, "README.md"), "# Test Project\n");
   await Bun.$`git -C ${workDir} add .`.quiet();
   await Bun.$`git -C ${workDir} commit -m "Initial commit"`.quiet();
+  const defaultBranchResult = await Bun.$`git -C ${workDir} branch --show-current`.quiet();
+  const defaultBranch = defaultBranchResult.text().trim() || "main";
 
   // Create .planning directory if requested
   if (withPlanningDir) {
@@ -284,7 +288,7 @@ export async function setupTestServer(options: SetupServerOptions = {}): Promise
     remoteDir = await mkdtemp(join(tmpdir(), "ralpher-scenario-remote-"));
     await Bun.$`git init --bare ${remoteDir}`.quiet();
     await Bun.$`git -C ${workDir} remote add origin ${remoteDir}`.quiet();
-    await Bun.$`git -C ${workDir} push -u origin main`.quiet();
+    await Bun.$`git -C ${workDir} push -u origin ${defaultBranch}`.quiet();
   }
 
   // Reset loop manager to clear any stale engines from previous tests
@@ -308,6 +312,7 @@ export async function setupTestServer(options: SetupServerOptions = {}): Promise
   return {
     dataDir,
     workDir,
+    defaultBranch,
     server,
     baseUrl,
     mockBackend,
@@ -318,9 +323,13 @@ export async function setupTestServer(options: SetupServerOptions = {}): Promise
 /**
  * Clean up a test server context.
  */
-export async function teardownTestServer(ctx: TestServerContext): Promise<void> {
+export async function teardownTestServer(ctx?: TestServerContext | null): Promise<void> {
+  if (!ctx) {
+    return;
+  }
+
   // Stop server
-  ctx.server.stop(true);
+  ctx.server?.stop(true);
 
   // Reset loop manager (clear engines map)
   loopManager.resetForTesting();
