@@ -250,13 +250,11 @@ export class LoopManager {
     // Persist state changes periodically
     this.startStatePersistence(loopId);
 
-    // Start the plan creation
-    try {
-      await engine.start();
-    } catch (error) {
+    // Start the plan creation (fire and forget - don't block the caller)
+    // The loop runs asynchronously and updates state via events/persistence
+    engine.start().catch((error) => {
       log.error(`Loop ${loopId} plan mode failed:`, String(error));
-      throw error;
-    }
+    });
   }
 
   /**
@@ -625,13 +623,12 @@ Follow the standard loop execution flow:
     // Persist state changes periodically
     this.startStatePersistence(loopId);
 
-    // Start the loop
-    try {
-      await engine.start();
-    } catch (error) {
-      log.error(`Loop ${loopId} failed:`, String(error));
-      throw error;
-    }
+    // Start the loop (fire and forget - don't block the caller)
+    // The loop runs asynchronously and updates state via events/persistence
+    engine.start().catch((error) => {
+      log.error(`Loop ${loopId} failed to start:`, String(error));
+      // Engine handles its own error state via handleError()
+    });
   }
 
   /**
@@ -1078,13 +1075,11 @@ Follow the standard loop execution flow:
         // Start state persistence
         this.startStatePersistence(loopId);
 
-        // Start execution (this will emit loop.started and set status to running)
-        try {
-          await engine.start();
-        } catch (error) {
+        // Start execution (fire and forget - don't block the caller)
+        // The loop runs asynchronously and updates state via events/persistence
+        engine.start().catch((error) => {
           log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
-          return { success: false, error: String(error) };
-        }
+        });
 
         return {
           success: true,
@@ -1142,13 +1137,11 @@ Follow the standard loop execution flow:
         // Start state persistence
         this.startStatePersistence(loopId);
 
-        // Start execution (this will emit loop.started and set status to running)
-        try {
-          await engine.start();
-        } catch (error) {
+        // Start execution (fire and forget - don't block the caller)
+        // The loop runs asynchronously and updates state via events/persistence
+        engine.start().catch((error) => {
           log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
-          return { success: false, error: String(error) };
-        }
+        });
 
         return {
           success: true,
