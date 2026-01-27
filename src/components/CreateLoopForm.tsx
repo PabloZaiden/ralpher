@@ -210,10 +210,8 @@ export function CreateLoopForm({
       request.clearPlanningFolder = true;
     }
 
-    // Add planMode if enabled (persist in draft to remember user's choice)
-    if (planMode) {
-      request.planMode = true;
-    }
+    // Always include planMode (persist in draft to remember user's choice)
+    request.planMode = planMode;
 
     // Add draft flag if saving as draft
     if (asDraft) {

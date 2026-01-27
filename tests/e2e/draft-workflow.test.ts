@@ -474,4 +474,69 @@ describe("Draft Loop E2E Workflow", () => {
     expect(fetchBody.config.planMode).toBe(true);
     expect(fetchBody.config.name).toBe("Updated Draft Name");
   });
+
+  test("plan mode checkbox can be unchecked and persists", async () => {
+    // Step 1: Create draft with plan mode enabled
+    const createResponse = await fetch(`${baseUrl}/api/loops`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Draft with Plan Mode to Uncheck",
+        directory: testWorkDir,
+        prompt: "Test task",
+        planMode: true,
+        draft: true,
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const createBody = await createResponse.json();
+    const loopId = createBody.config.id;
+
+    // Verify draft was created with planMode true
+    expect(createBody.state.status).toBe("draft");
+    expect(createBody.config.planMode).toBe(true);
+
+    // Step 2: Update the draft and uncheck planMode (set to false)
+    const updateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Updated Draft - Plan Mode Unchecked",
+        planMode: false,
+      }),
+    });
+
+    expect(updateResponse.status).toBe(200);
+    const updateBody = await updateResponse.json();
+
+    // Verify planMode is now false after update
+    expect(updateBody.config.planMode).toBe(false);
+    expect(updateBody.config.name).toBe("Updated Draft - Plan Mode Unchecked");
+
+    // Step 3: Fetch the draft again to verify persistence
+    const fetchResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+    expect(fetchResponse.status).toBe(200);
+    const fetchBody = await fetchResponse.json();
+
+    // Verify planMode=false persisted after fetching from database
+    expect(fetchBody.config.planMode).toBe(false);
+    expect(fetchBody.config.name).toBe("Updated Draft - Plan Mode Unchecked");
+
+    // Step 4: Update again without touching planMode to ensure it stays false
+    const secondUpdateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "Updated prompt only",
+      }),
+    });
+
+    expect(secondUpdateResponse.status).toBe(200);
+    const secondUpdateBody = await secondUpdateResponse.json();
+
+    // Verify planMode is still false
+    expect(secondUpdateBody.config.planMode).toBe(false);
+    expect(secondUpdateBody.config.prompt).toBe("Updated prompt only");
+  });
 });
