@@ -426,4 +426,52 @@ describe("Draft Loop E2E Workflow", () => {
     const errorBody = await startResponse.json();
     expect(errorBody.error).toBe("not_draft");
   });
+
+  test("plan mode checkbox persists when editing draft", async () => {
+    // Step 1: Create draft with plan mode enabled
+    const createResponse = await fetch(`${baseUrl}/api/loops`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Draft with Plan Mode",
+        directory: testWorkDir,
+        prompt: "Test task",
+        planMode: true,
+        draft: true,
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const createBody = await createResponse.json();
+    const loopId = createBody.config.id;
+
+    // Verify draft was created with planMode true
+    expect(createBody.state.status).toBe("draft");
+    expect(createBody.config.planMode).toBe(true);
+
+    // Step 2: Update the draft (but don't modify planMode)
+    const updateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Updated Draft Name",
+      }),
+    });
+
+    expect(updateResponse.status).toBe(200);
+    const updateBody = await updateResponse.json();
+
+    // Verify planMode is still true after update
+    expect(updateBody.config.planMode).toBe(true);
+    expect(updateBody.config.name).toBe("Updated Draft Name");
+
+    // Step 3: Fetch the draft again to verify persistence
+    const fetchResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+    expect(fetchResponse.status).toBe(200);
+    const fetchBody = await fetchResponse.json();
+
+    // Verify planMode persisted after fetching from database
+    expect(fetchBody.config.planMode).toBe(true);
+    expect(fetchBody.config.name).toBe("Updated Draft Name");
+  });
 });

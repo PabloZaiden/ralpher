@@ -28,6 +28,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "git_commit_prefix",
   "base_branch",
   "clear_planning_folder",
+  "plan_mode",
   "status",
   "current_iteration",
   "started_at",
@@ -91,6 +92,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     git_commit_prefix: config.git.commitPrefix,
     base_branch: config.baseBranch ?? null,
     clear_planning_folder: config.clearPlanningFolder ? 1 : 0,
+    plan_mode: config.planMode ? 1 : 0,
     // State fields
     status: state.status,
     current_iteration: state.currentIteration,
@@ -163,6 +165,12 @@ function rowToLoop(row: Record<string, unknown>): Loop {
   } else {
     config.clearPlanningFolder = false;
   }
+  if (row["plan_mode"] === 1) {
+    config.planMode = true;
+  } else if (row["plan_mode"] === 0) {
+    config.planMode = false;
+  }
+  // If plan_mode is null (old database), leave config.planMode undefined
 
   const state: LoopState = {
     id: row["id"] as string,
