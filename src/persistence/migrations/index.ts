@@ -164,6 +164,41 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 4,
+    name: "add_draft_status_support",
+    up: (db) => {
+      // Check if the loops table exists
+      if (!tableExists(db, "loops")) {
+        log.debug("loops table does not exist, skipping migration 4");
+        return;
+      }
+      
+      // No schema changes needed - draft status uses existing status column
+      // This migration exists for documentation purposes and to track the feature addition
+      log.info("Draft status support enabled (no schema changes required)");
+    },
+  },
+  {
+    version: 5,
+    name: "add_plan_mode_config_column",
+    up: (db) => {
+      // Check if the loops table exists
+      if (!tableExists(db, "loops")) {
+        log.debug("loops table does not exist, skipping migration 5");
+        return;
+      }
+      
+      const columns = getTableColumns(db, "loops");
+      
+      // Add plan_mode column to config (stores user's preference for plan mode)
+      // This is different from plan_mode_active which is runtime state
+      if (!columns.includes("plan_mode")) {
+        db.run("ALTER TABLE loops ADD COLUMN plan_mode INTEGER DEFAULT 0");
+        log.info("Added plan_mode column to loops table");
+      }
+    },
+  },
 ];
 
 /**

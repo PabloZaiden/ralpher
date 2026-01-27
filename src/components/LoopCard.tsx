@@ -57,6 +57,7 @@ export function LoopCard({
   const { config, state } = loop;
   const isActive = isLoopActive(state.status);
   const isPlanning = state.status === "planning";
+  const isDraft = state.status === "draft";
   const isAddressable = state.reviewMode?.addressable === true;
 
   return (
@@ -111,24 +112,26 @@ export function LoopCard({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4 text-xs sm:text-sm">
-        <div className="min-w-0">
-          <span className="text-gray-500 dark:text-gray-400 block sm:inline">Iterations:</span>
-          <span className="ml-0 sm:ml-2 font-medium text-gray-900 dark:text-gray-100 block sm:inline">
-            {state.currentIteration}
-            {config.maxIterations ? `/${config.maxIterations}` : ""}
-          </span>
+      {!isDraft && (
+        <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4 text-xs sm:text-sm">
+          <div className="min-w-0">
+            <span className="text-gray-500 dark:text-gray-400 block sm:inline">Iterations:</span>
+            <span className="ml-0 sm:ml-2 font-medium text-gray-900 dark:text-gray-100 block sm:inline">
+              {state.currentIteration}
+              {config.maxIterations ? `/${config.maxIterations}` : ""}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <span className="text-gray-500 dark:text-gray-400 block sm:inline">Last activity:</span>
+            <span className="ml-0 sm:ml-2 font-medium text-gray-900 dark:text-gray-100 block sm:inline">
+              {formatRelativeTime(state.lastActivityAt)}
+            </span>
+          </div>
         </div>
-        <div className="min-w-0">
-          <span className="text-gray-500 dark:text-gray-400 block sm:inline">Last activity:</span>
-          <span className="ml-0 sm:ml-2 font-medium text-gray-900 dark:text-gray-100 block sm:inline">
-            {formatRelativeTime(state.lastActivityAt)}
-          </span>
-        </div>
-      </div>
+      )}
 
-      {/* Git info */}
-      {state.git && (
+      {/* Git info - hide for drafts (no branch yet) */}
+      {!isDraft && state.git && (
         <div className="mb-3 sm:mb-4 text-xs sm:text-sm">
           <span className="text-gray-500 dark:text-gray-400">Branch:</span>
           <span className="ml-2 font-mono text-gray-900 dark:text-gray-100 break-all">
@@ -144,8 +147,35 @@ export function LoopCard({
 
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-200 dark:border-gray-700">
-        {/* Planning state - show Review Plan button */}
-        {isPlanning ? (
+        {/* Draft state - show Edit button */}
+        {isDraft ? (
+          <>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClick?.();
+              }}
+            >
+              Edit
+            </Button>
+            {onDelete && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="ml-auto text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
+              >
+                Delete
+              </Button>
+            )}
+          </>
+        ) : /* Planning state - show Review Plan button */
+        isPlanning ? (
           <Button
             size="sm"
             variant="primary"

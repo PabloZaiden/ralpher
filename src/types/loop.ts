@@ -44,6 +44,9 @@ export interface LoopConfig {
 
   /** Whether to clear .planning folder on start (default: false) */
   clearPlanningFolder?: boolean;
+
+  /** Whether to start in plan mode (for drafts, this indicates the intended mode) */
+  planMode?: boolean;
 }
 
 /**
@@ -205,6 +208,7 @@ export interface ConsecutiveErrorTracker {
  */
 export type LoopStatus =
   | "idle"           // Created but not started
+  | "draft"          // Saved as draft, not started (no git branch or session)
   | "planning"       // Loop is in plan creation/review mode
   | "starting"       // Initializing backend connection
   | "running"        // Actively executing an iteration

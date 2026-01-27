@@ -30,6 +30,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     loading,
     error,
     connectionStatus,
+    refresh,
     createLoop,
     deleteLoop,
     acceptLoop,
@@ -66,6 +67,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   }, []);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editDraftId, setEditDraftId] = useState<string | null>(null);
   const [deleteModal, setDeleteModal] = useState<{ open: boolean; loopId: string | null }>({
     open: false,
     loopId: null,
@@ -225,6 +227,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   // Reset model state when modal closes
   const handleCloseCreateModal = useCallback(() => {
     setShowCreateModal(false);
+    setEditDraftId(null);
     setModels([]);
     setModelsDirectory("");
     setPlanningWarning(null);
@@ -232,10 +235,17 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     setCurrentBranch("");
   }, []);
 
+  // Handle edit draft
+  const handleEditDraft = useCallback((loopId: string) => {
+    setEditDraftId(loopId);
+    setShowCreateModal(true);
+  }, []);
+
   // Handle delete
   async function handleDelete() {
     if (!deleteModal.loopId) return;
     await deleteLoop(deleteModal.loopId);
+    await refresh(); // Refresh loops to update React state
     setDeleteModal({ open: false, loopId: null });
   }
 
@@ -276,6 +286,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   }
 
   // Group loops by status
+  const draftLoops = loops.filter((loop) => loop.state.status === "draft");
   const activeLoops = loops.filter(
     (loop) =>
       loop.state.status === "running" ||
@@ -290,7 +301,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   );
   const otherLoops = loops.filter(
     (loop) =>
-      !["running", "waiting", "starting", "completed", "merged", "pushed", "deleted"].includes(
+      !["draft", "running", "waiting", "starting", "completed", "merged", "pushed", "deleted"].includes(
         loop.state.status
       )
   );
@@ -385,6 +396,27 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           </div>
         )}
 
+        {/* Drafts section */}
+        {draftLoops.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+              Drafts ({draftLoops.length})
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+              {draftLoops.map((loop) => (
+                <LoopCard
+                  key={loop.config.id}
+                  loop={loop}
+                  onClick={() => handleEditDraft(loop.config.id)}
+                  onDelete={() =>
+                    setDeleteModal({ open: true, loopId: loop.config.id })
+                  }
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Active loops section */}
         {activeLoops.length > 0 && (
           <section className="mb-8">
@@ -471,62 +503,152 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         )}
       </main>
 
-      {/* Create loop modal */}
-      <Modal
-        isOpen={showCreateModal}
-        onClose={handleCloseCreateModal}
-        title="Create New Loop"
-        description="Configure a new Ralph Loop for autonomous AI development."
-        size="lg"
-      >
-        <CreateLoopForm
-          onSubmit={async (request) => {
-            const result = await createLoop(request);
-            
-            // Handle uncommitted changes error first
-            if (result.startError) {
-              setUncommittedModal({
-                open: true,
-                loopId: result.loop?.config.id ?? null,
-                error: result.startError,
-              });
-              return true; // Consider this handled (modal will close)
-            }
-            
-            // Handle success case
-            if (result.loop) {
-              // Refresh last model in case it changed
-              if (request.model) {
-                setLastModel(request.model);
-              }
-              // Save last used directory
-              try {
-                await fetch("/api/preferences/last-directory", {
-                  method: "PUT",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ directory: request.directory }),
-                });
-                setLastDirectory(request.directory);
-              } catch {
-                // Ignore errors saving preference
-              }
-              return true; // Success - close the modal
-            }
-            
-            return false; // Failed - keep modal open
-          }}
-          onCancel={handleCloseCreateModal}
-          models={models}
-          modelsLoading={modelsLoading}
-          lastModel={lastModel}
-          onDirectoryChange={handleDirectoryChange}
-          planningWarning={planningWarning}
-          branches={branches}
-          branchesLoading={branchesLoading}
-          currentBranch={currentBranch}
-          initialDirectory={lastDirectory ?? ""}
-        />
-      </Modal>
+      {/* Create/Edit loop modal */}
+      {(() => {
+        const editLoop = editDraftId ? loops.find((l) => l.config.id === editDraftId) : null;
+        const isEditing = !!editLoop;
+        const isEditingDraft = editLoop?.state.status === "draft";
+        
+        // Transform Loop to initialLoopData format
+        const initialLoopData = editLoop ? {
+          name: editLoop.config.name,
+          directory: editLoop.config.directory,
+          prompt: editLoop.config.prompt,
+          model: editLoop.config.model,
+          maxIterations: editLoop.config.maxIterations,
+          maxConsecutiveErrors: editLoop.config.maxConsecutiveErrors,
+          activityTimeoutSeconds: editLoop.config.activityTimeoutSeconds,
+          baseBranch: editLoop.config.baseBranch,
+          clearPlanningFolder: editLoop.config.clearPlanningFolder,
+          planMode: editLoop.config.planMode ?? false,
+        } : null;
+        
+        return (
+          <Modal
+            isOpen={showCreateModal}
+            onClose={handleCloseCreateModal}
+            title={isEditing ? "Edit Draft Loop" : "Create New Loop"}
+            description={isEditing ? "Update your draft loop configuration." : "Configure a new Ralph Loop for autonomous AI development."}
+            size="lg"
+          >
+            <CreateLoopForm
+              editLoopId={isEditing ? editLoop.config.id : undefined}
+              initialLoopData={initialLoopData}
+              isEditingDraft={isEditingDraft}
+              onSubmit={async (request) => {
+                // If editing a draft
+                if (isEditing) {
+                  // If draft flag is set, this is an "Update Draft" action
+                  if (request.draft) {
+                    try {
+                      const response = await fetch(`/api/loops/${editLoop.config.id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(request),
+                      });
+                      
+                      if (!response.ok) {
+                        const error = await response.json();
+                        console.error("Failed to update draft:", error);
+                        return false;
+                      }
+                      
+                      // Refresh loops to update React state with new data
+                      await refresh();
+                      
+                      // Success - close modal
+                      return true;
+                    } catch (error) {
+                      console.error("Failed to update draft:", error);
+                      return false;
+                    }
+                  }
+                  
+                  // Otherwise, this is a "Start Loop" action - transition draft to execution
+                  try {
+                    const startResponse = await fetch(`/api/loops/${editLoop.config.id}/draft/start`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ planMode: request.planMode ?? false }),
+                    });
+                    
+                    if (!startResponse.ok) {
+                      const error = await startResponse.json();
+                      
+                      // Check for uncommitted changes error
+                      if (error.error === "uncommitted_changes") {
+                        setUncommittedModal({
+                          open: true,
+                          loopId: editLoop.config.id,
+                          error: error.message,
+                        });
+                        return true; // Close the modal, uncommitted modal will show
+                      }
+                      
+                      console.error("Failed to start draft:", error);
+                      return false;
+                    }
+                    
+                    // Refresh loops to update React state
+                    await refresh();
+                    
+                    // Success - close modal
+                    return true;
+                  } catch (error) {
+                    console.error("Failed to start draft:", error);
+                    return false;
+                  }
+                }
+                
+                // Otherwise, create a new loop
+                const result = await createLoop(request);
+                
+                // Handle uncommitted changes error first
+                if (result.startError) {
+                  setUncommittedModal({
+                    open: true,
+                    loopId: result.loop?.config.id ?? null,
+                    error: result.startError,
+                  });
+                  return true; // Consider this handled (modal will close)
+                }
+                
+                // Handle success case
+                if (result.loop) {
+                  // Refresh last model in case it changed
+                  if (request.model) {
+                    setLastModel(request.model);
+                  }
+                  // Save last used directory
+                  try {
+                    await fetch("/api/preferences/last-directory", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ directory: request.directory }),
+                    });
+                    setLastDirectory(request.directory);
+                  } catch {
+                    // Ignore errors saving preference
+                  }
+                  return true; // Success - close the modal
+                }
+                
+                return false; // Failed - keep modal open
+              }}
+              onCancel={handleCloseCreateModal}
+              models={models}
+              modelsLoading={modelsLoading}
+              lastModel={lastModel}
+              onDirectoryChange={handleDirectoryChange}
+              planningWarning={planningWarning}
+              branches={branches}
+              branchesLoading={branchesLoading}
+              currentBranch={currentBranch}
+              initialDirectory={lastDirectory ?? ""}
+            />
+          </Modal>
+        );
+      })()}
 
       {/* Delete confirmation modal */}
       <DeleteLoopModal

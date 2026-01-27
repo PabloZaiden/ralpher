@@ -23,7 +23,7 @@ export interface ModelInfo {
 
 /**
  * Request to create a new loop.
- * Note: Loops are always started immediately after creation.
+ * Note: Unless draft is true, loops are started immediately after creation.
  */
 export interface CreateLoopRequest {
   /** Human-readable name */
@@ -50,6 +50,8 @@ export interface CreateLoopRequest {
   clearPlanningFolder?: boolean;
   /** Start in plan creation mode instead of immediate execution */
   planMode?: boolean;
+  /** Save as draft without starting (no git branch or session created) */
+  draft?: boolean;
 }
 
 /**

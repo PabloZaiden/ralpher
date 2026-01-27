@@ -71,16 +71,6 @@ export function AcceptLoopModal({
           </Button>
           <Button
             variant="secondary"
-            onClick={handlePush}
-            loading={pushing}
-            disabled={accepting}
-            onMouseEnter={() => setHovered("push")}
-            onMouseLeave={() => setHovered(null)}
-          >
-            Push to Remote
-          </Button>
-          <Button
-            variant="secondary"
             onClick={handleAccept}
             loading={accepting}
             disabled={pushing}
@@ -89,10 +79,46 @@ export function AcceptLoopModal({
           >
             Accept & Merge
           </Button>
+          <Button
+            variant="secondary"
+            onClick={handlePush}
+            loading={pushing}
+            disabled={accepting}
+            onMouseEnter={() => setHovered("push")}
+            onMouseLeave={() => setHovered(null)}
+          >
+            Push to Remote
+          </Button>
         </>
       }
     >
       <div className="space-y-4">
+        <div
+          className={`p-4 rounded-lg border transition-colors ${
+            hovered === "push"
+              ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
+              : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"
+          }`}
+        >
+          <h4
+            className={`font-medium mb-1 transition-colors ${
+              hovered === "push"
+                ? "text-blue-900 dark:text-blue-100"
+                : "text-gray-900 dark:text-gray-100"
+            }`}
+          >
+            Push to Remote <i>(recommended)</i>
+          </h4>
+          <p
+            className={`text-sm transition-colors ${
+              hovered === "push"
+                ? "text-blue-700 dark:text-blue-300"
+                : "text-gray-600 dark:text-gray-400"
+            }`}
+          >
+            Push the working branch to the remote repository. You can then create a pull request for code review or continue pushing updates to an existing one.
+          </p>
+        </div>
         <div
           className={`p-4 rounded-lg border transition-colors ${
             hovered === "accept"
@@ -116,33 +142,7 @@ export function AcceptLoopModal({
                 : "text-gray-600 dark:text-gray-400"
             }`}
           >
-            Merge the changes directly into the original branch locally. The working branch will be deleted.
-          </p>
-        </div>
-        <div
-          className={`p-4 rounded-lg border transition-colors ${
-            hovered === "push"
-              ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
-              : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"
-          }`}
-        >
-          <h4
-            className={`font-medium mb-1 transition-colors ${
-              hovered === "push"
-                ? "text-blue-900 dark:text-blue-100"
-                : "text-gray-900 dark:text-gray-100"
-            }`}
-          >
-            Push to Remote
-          </h4>
-          <p
-            className={`text-sm transition-colors ${
-              hovered === "push"
-                ? "text-blue-700 dark:text-blue-300"
-                : "text-gray-600 dark:text-gray-400"
-            }`}
-          >
-            Push the working branch to the remote repository. You can then create a pull request for code review.
+            Merge the changes directly into the original branch locally. The working branch will be deleted. Only use this if you do not need a pull request for code review or if it is managed outside of this loop.
           </p>
         </div>
       </div>
