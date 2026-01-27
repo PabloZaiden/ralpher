@@ -1,6 +1,24 @@
 /**
  * WebSocket handler for Ralph Loops Management System.
- * Provides real-time event streaming via WebSocket connection.
+ * 
+ * Provides real-time event streaming via WebSocket connection at WS /api/ws.
+ * Clients can subscribe to all loop events or filter to a specific loop.
+ * 
+ * Features:
+ * - Real-time loop event streaming
+ * - Optional loop ID filtering via query parameter
+ * - Ping/pong keep-alive support
+ * - Automatic cleanup on disconnect
+ * 
+ * Event Types Streamed:
+ * - loop.created, loop.started, loop.completed, loop.stopped, loop.error
+ * - loop.iteration.start, loop.iteration.end
+ * - loop.message, loop.tool_call, loop.progress, loop.log
+ * - loop.git.commit, loop.deleted, loop.accepted, loop.pushed, loop.discarded
+ * - loop.plan.ready, loop.plan.feedback, loop.plan.accepted, loop.plan.discarded
+ * - loop.todo.updated
+ * 
+ * @module api/websocket
  */
 
 import type { ServerWebSocket } from "bun";
@@ -10,17 +28,24 @@ import type { LoopEvent } from "../types";
 
 /**
  * WebSocket client data attached to each connection.
+ * Stored in the WebSocket's data property for per-connection state.
  */
 export interface WebSocketData {
-  /** Optional loop ID to filter events */
+  /** Optional loop ID to filter events - only events for this loop are sent */
   loopId?: string;
-  /** Unsubscribe function for event emitter */
+  /** Unsubscribe function for event emitter cleanup */
   unsubscribe?: () => void;
 }
 
 /**
  * Handle WebSocket upgrade requests.
- * Extracts optional loopId query parameter for filtering.
+ * 
+ * Extracts optional loopId query parameter for event filtering.
+ * If loopId is provided, only events for that loop are streamed.
+ * 
+ * @param req - The incoming HTTP request with upgrade header
+ * @param server - The Bun server with upgrade capability
+ * @returns undefined on success, Response on failure
  */
 export function handleWebSocketUpgrade(req: Request, server: { upgrade: (req: Request, options?: { data?: WebSocketData }) => boolean }): Response | undefined {
   const url = new URL(req.url);
@@ -41,10 +66,16 @@ export function handleWebSocketUpgrade(req: Request, server: { upgrade: (req: Re
 
 /**
  * WebSocket message handlers for Bun.serve().
+ * These handlers manage the WebSocket lifecycle and event streaming.
  */
 export const websocketHandlers = {
   /**
    * Called when a WebSocket connection is opened.
+   * 
+   * Sets up event subscription and sends initial connection confirmation.
+   * The confirmation message includes the loopId filter if one was specified.
+   * 
+   * @param ws - The WebSocket connection
    */
   open(ws: ServerWebSocket<WebSocketData>) {
     const { loopId } = ws.data;
@@ -75,7 +106,12 @@ export const websocketHandlers = {
 
   /**
    * Called when a message is received from the client.
-   * Currently we don't expect client messages, but this enables future bidirectional communication.
+   * 
+   * Handles ping/pong for keep-alive. Clients should send {"type":"ping"}
+   * periodically to keep the connection alive; server responds with {"type":"pong"}.
+   * 
+   * @param ws - The WebSocket connection
+   * @param message - The message content (string or Buffer)
    */
   message(ws: ServerWebSocket<WebSocketData>, message: string | Buffer) {
     // Parse message if needed for future commands
@@ -93,6 +129,10 @@ export const websocketHandlers = {
 
   /**
    * Called when the WebSocket connection is closed.
+   * 
+   * Cleans up the event subscription to prevent memory leaks.
+   * 
+   * @param ws - The WebSocket connection
    */
   close(ws: ServerWebSocket<WebSocketData>) {
     // Unsubscribe from events
@@ -103,7 +143,12 @@ export const websocketHandlers = {
   },
 
   /**
-   * Called when an error occurs.
+   * Called when an error occurs on the WebSocket connection.
+   * 
+   * Logs the error and cleans up the event subscription.
+   * 
+   * @param ws - The WebSocket connection
+   * @param error - The error that occurred
    */
   error(ws: ServerWebSocket<WebSocketData>, error: Error) {
     log.error("WebSocket error:", error);

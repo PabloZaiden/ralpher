@@ -1,6 +1,18 @@
 /**
- * Central export for API module.
- * Combines all API routes into a single object.
+ * Central export for the API module.
+ * 
+ * Combines all API routes from individual modules into a single object
+ * that can be spread into Bun's serve() routes option.
+ * 
+ * Route Modules:
+ * - health: Server health check endpoint
+ * - loops: Loop CRUD, control, data, and review operations
+ * - models: AI model listing and user preferences
+ * - settings: Server configuration and connection management
+ * - git: Git repository information
+ * - websocket: Real-time event streaming (handled separately)
+ * 
+ * @module api
  */
 
 import { healthRoutes } from "./health";
@@ -11,8 +23,19 @@ import { gitRoutes } from "./git";
 
 /**
  * All API routes combined.
- * Can be spread into Bun's serve() routes option.
- * Note: WebSocket endpoint is handled separately in src/index.ts
+ * 
+ * Spread this object into Bun's serve() routes option to register all endpoints.
+ * The WebSocket endpoint is handled separately in src/index.ts.
+ * 
+ * @example
+ * ```typescript
+ * Bun.serve({
+ *   routes: {
+ *     ...apiRoutes,
+ *     // ... other routes
+ *   },
+ * });
+ * ```
  */
 export const apiRoutes = {
   ...healthRoutes,

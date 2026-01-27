@@ -1,6 +1,13 @@
 /**
  * Models and preferences API endpoints for Ralph Loops Management System.
- * Handles model listing and user preferences.
+ * 
+ * This module provides endpoints for:
+ * - Fetching available AI models for a directory
+ * - Managing user preferences (last used model, last used directory)
+ * 
+ * Uses the global backend manager settings to connect to the opencode backend.
+ * 
+ * @module api/models
  */
 
 import { backendManager } from "../core/backend-manager";
@@ -9,7 +16,12 @@ import { getLastModel, setLastModel, getLastDirectory, setLastDirectory } from "
 import type { ErrorResponse } from "../types/api";
 
 /**
- * Helper to create error response.
+ * Create a standardized error response.
+ * 
+ * @param error - Error code for programmatic handling
+ * @param message - Human-readable error description
+ * @param status - HTTP status code (default: 400)
+ * @returns JSON Response with error details
  */
 function errorResponse(error: string, message: string, status = 400): Response {
   const body: ErrorResponse = { error, message };
@@ -18,17 +30,22 @@ function errorResponse(error: string, message: string, status = 400): Response {
 
 /**
  * Models API routes.
+ * 
+ * Provides endpoint for fetching available AI models:
+ * - GET /api/models - Get available models for a directory
  */
 export const modelsRoutes = {
   "/api/models": {
     /**
-     * GET /api/models - Get available models
-     * Query params:
-     *   - directory: working directory (required)
+     * GET /api/models - Get available AI models.
      * 
-     * Uses the global backend manager settings to fetch models.
-     * For spawn mode: creates a temporary connection
-     * For connect mode: uses the remote server
+     * Fetches the list of available AI models from the opencode backend.
+     * Creates a temporary connection to avoid interfering with running loops.
+     * 
+     * Query Parameters:
+     * - directory (required): Working directory path for model context
+     * 
+     * @returns Array of ModelInfo objects with provider and model details
      */
     async GET(req: Request): Promise<Response> {
       const url = new URL(req.url);
@@ -75,11 +92,20 @@ export const modelsRoutes = {
 
 /**
  * Preferences API routes.
+ * 
+ * Provides endpoints for managing user preferences:
+ * - GET/PUT /api/preferences/last-model - Last used AI model
+ * - GET/PUT /api/preferences/last-directory - Last used working directory
  */
 export const preferencesRoutes = {
   "/api/preferences/last-model": {
     /**
-     * GET /api/preferences/last-model - Get last used model
+     * GET /api/preferences/last-model - Get the last used model.
+     * 
+     * Retrieves the last AI model (provider + model ID) used to create a loop.
+     * Used to pre-populate the model selector in the UI.
+     * 
+     * @returns ModelConfig object or null if none set
      */
     async GET(): Promise<Response> {
       const lastModel = await getLastModel();
@@ -87,7 +113,16 @@ export const preferencesRoutes = {
     },
 
     /**
-     * PUT /api/preferences/last-model - Set last used model
+     * PUT /api/preferences/last-model - Set the last used model.
+     * 
+     * Saves the model selection so it can be pre-populated next time.
+     * Automatically called when creating a loop with a model.
+     * 
+     * Request Body:
+     * - providerID (required): Provider ID (e.g., "anthropic")
+     * - modelID (required): Model ID (e.g., "claude-sonnet-4-20250514")
+     * 
+     * @returns Success response
      */
     async PUT(req: Request): Promise<Response> {
       try {
@@ -111,7 +146,12 @@ export const preferencesRoutes = {
 
   "/api/preferences/last-directory": {
     /**
-     * GET /api/preferences/last-directory - Get last used working directory
+     * GET /api/preferences/last-directory - Get the last used working directory.
+     * 
+     * Retrieves the last working directory used to create a loop.
+     * Used to pre-populate the directory field in the UI.
+     * 
+     * @returns Directory path string or null if none set
      */
     async GET(): Promise<Response> {
       const lastDirectory = await getLastDirectory();
@@ -119,7 +159,14 @@ export const preferencesRoutes = {
     },
 
     /**
-     * PUT /api/preferences/last-directory - Set last used working directory
+     * PUT /api/preferences/last-directory - Set the last used working directory.
+     * 
+     * Saves the working directory so it can be pre-populated next time.
+     * 
+     * Request Body:
+     * - directory (required): Absolute path to the directory
+     * 
+     * @returns Success response
      */
     async PUT(req: Request): Promise<Response> {
       try {
@@ -141,6 +188,7 @@ export const preferencesRoutes = {
 
 /**
  * All models and preferences routes combined.
+ * Can be spread into the main API routes object.
  */
 export const modelsAndPreferencesRoutes = {
   ...modelsRoutes,

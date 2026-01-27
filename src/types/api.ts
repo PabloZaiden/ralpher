@@ -1,48 +1,57 @@
 /**
  * API type definitions for Ralph Loops Management System.
+ * 
  * These types define the request and response shapes for the REST API.
+ * They are used for type safety in both the API route handlers and clients.
+ * 
+ * @module types/api
  */
 
 import type { GitConfig, Loop, ModelConfig, ReviewComment } from "./loop";
 
 /**
- * Model information returned by the API.
+ * Model information returned by the GET /api/models endpoint.
+ * Includes provider and model details with connection status.
  */
 export interface ModelInfo {
-  /** Provider ID (e.g., "anthropic", "openai") */
+  /** Provider ID (e.g., "anthropic", "openai", "bedrock") */
   providerID: string;
-  /** Provider display name */
+  /** Provider display name (e.g., "Anthropic", "OpenAI") */
   providerName: string;
-  /** Model ID (e.g., "claude-sonnet-4-20250514") */
+  /** Model ID (e.g., "claude-sonnet-4-20250514", "gpt-4o") */
   modelID: string;
-  /** Model display name */
+  /** Model display name (e.g., "Claude Sonnet 4", "GPT-4o") */
   modelName: string;
-  /** Whether the provider is connected (has valid API key) */
+  /** Whether the provider is connected (has valid API key configured) */
   connected: boolean;
 }
 
 /**
- * Request to create a new loop.
- * Note: Unless draft is true, loops are started immediately after creation.
+ * Request body for POST /api/loops endpoint.
+ * 
+ * Creates a new Ralph Loop. Loops are started immediately after creation
+ * unless `draft: true` is specified, which saves the loop for later editing.
+ * 
+ * If `planMode: true`, the loop starts in plan review mode before execution.
  */
 export interface CreateLoopRequest {
-  /** Human-readable name */
+  /** Human-readable name for the loop */
   name: string;
-  /** Absolute path to working directory */
+  /** Absolute path to the working directory (must be a git repository) */
   directory: string;
-  /** The task prompt/PRD */
+  /** The task prompt/PRD describing what the loop should accomplish */
   prompt: string;
-  /** Model configuration (optional) */
+  /** Model configuration for AI provider and model selection */
   model?: ModelConfig;
-  /** Optional iteration limit */
+  /** Maximum number of iterations before stopping (unlimited if not set) */
   maxIterations?: number;
   /** Maximum consecutive identical errors before failsafe exit (default: 10) */
   maxConsecutiveErrors?: number;
-  /** Activity timeout in seconds - time without events before treating as error (default: 180 = 3 minutes) */
+  /** Seconds without events before treating as error and retrying (default: 180, min: 60) */
   activityTimeoutSeconds?: number;
-  /** Regex for completion detection (optional, uses default) */
+  /** Regex pattern for completion detection (default: "<promise>COMPLETE</promise>$") */
   stopPattern?: string;
-  /** Git configuration (optional, uses defaults) */
+  /** Git configuration for branch and commit naming */
   git?: Partial<GitConfig>;
   /** Base branch to create the loop from (default: current branch) */
   baseBranch?: string;
@@ -55,95 +64,112 @@ export interface CreateLoopRequest {
 }
 
 /**
- * Request to update an existing loop.
+ * Request body for PATCH /api/loops/:id endpoint.
+ * All fields are optional - only provided fields are updated.
  */
 export interface UpdateLoopRequest {
-  /** Update name */
+  /** Update the loop name */
   name?: string;
-  /** Update prompt */
+  /** Update the prompt/PRD */
   prompt?: string;
-  /** Update model */
+  /** Update the model configuration */
   model?: ModelConfig;
-  /** Update max iterations */
+  /** Update the maximum iterations limit */
   maxIterations?: number;
-  /** Update max consecutive errors */
+  /** Update the max consecutive errors threshold */
   maxConsecutiveErrors?: number;
-  /** Update activity timeout in seconds */
+  /** Update the activity timeout in seconds */
   activityTimeoutSeconds?: number;
-  /** Update stop pattern */
+  /** Update the completion detection regex */
   stopPattern?: string;
-  /** Update git config */
+  /** Update git configuration (branch/commit prefixes) */
   git?: Partial<GitConfig>;
 }
 
 /**
- * Request to send feedback on a plan.
+ * Request body for POST /api/loops/:id/plan/feedback endpoint.
  */
 export interface PlanFeedbackRequest {
-  /** User's feedback/comments on the plan */
+  /** User's feedback/comments on the plan to be incorporated */
   feedback: string;
 }
 
 /**
- * Request to accept a plan and start execution.
+ * Request body for POST /api/loops/:id/plan/accept endpoint.
+ * Empty body - just triggers acceptance of the current plan.
  */
 export interface PlanAcceptRequest {
   // Empty - just triggers acceptance
 }
 
 /**
- * Request to address reviewer comments on a pushed/merged loop.
+ * Request body for POST /api/loops/:id/address-comments endpoint.
+ * Used to submit reviewer comments for the loop to address.
  */
 export interface AddressCommentsRequest {
-  /** Reviewer's comments to address */
+  /** Reviewer's comments to address (can be multi-line) */
   comments: string;
 }
 
 /**
- * Response for address comments operation.
+ * Response from POST /api/loops/:id/address-comments endpoint.
  */
 export interface AddressCommentsResponse {
+  /** Whether the operation succeeded */
   success: boolean;
+  /** The review cycle number (1-based, increments each time comments are addressed) */
   reviewCycle?: number;
+  /** The branch being worked on */
   branch?: string;
+  /** IDs of the comment records created */
   commentIds?: string[];
+  /** Error message if success is false */
   error?: string;
 }
 
 /**
- * Response for getting review comments.
+ * Response from GET /api/loops/:id/comments endpoint.
  */
 export interface GetCommentsResponse {
+  /** Whether the operation succeeded */
   success: boolean;
+  /** Array of review comments for the loop */
   comments?: ReviewComment[];
+  /** Error message if success is false */
   error?: string;
 }
 
 /**
- * Review history for a loop.
+ * Review history information for a loop.
+ * Returned by GET /api/loops/:id/review-history endpoint.
  */
 export interface ReviewHistory {
-  /** Whether loop can receive reviewer comments */
+  /** Whether the loop can still receive reviewer comments */
   addressable: boolean;
-  /** Original action that completed the loop */
+  /** How the loop was originally completed (push or merge) */
   completionAction: "push" | "merge";
-  /** Number of review cycles (times comments were addressed) */
+  /** Number of review cycles completed (times comments were addressed) */
   reviewCycles: number;
-  /** For merged loops: list of all branches created during reviews */
+  /** For merged loops: list of all branches created during review cycles */
   reviewBranches: string[];
 }
 
 /**
- * Response for review history operation.
+ * Response from GET /api/loops/:id/review-history endpoint.
  */
 export interface ReviewHistoryResponse {
+  /** Whether the operation succeeded */
   success: boolean;
+  /** The review history data */
   history?: ReviewHistory;
+  /** Error message if success is false */
   error?: string;
 }
 
 /**
- * Request to start a loop.
+ * Request body for starting a loop.
+ * Currently reserved for future options.
+ * 
  * Note: Previously supported handleUncommitted option has been removed.
  * Loops now fail to start if there are uncommitted changes.
  */
@@ -152,115 +178,143 @@ export interface StartLoopRequest {
 }
 
 /**
- * Response for successful operations.
+ * Generic success response for operations without additional data.
  */
 export interface SuccessResponse {
+  /** Always true for successful operations */
   success: boolean;
 }
 
 /**
- * Response for loop accept operation.
+ * Response from POST /api/loops/:id/accept endpoint.
  */
 export interface AcceptResponse {
+  /** Whether the merge operation succeeded */
   success: boolean;
+  /** The SHA of the merge commit created */
   mergeCommit?: string;
 }
 
 /**
- * Response for loop push operation.
+ * Response from POST /api/loops/:id/push endpoint.
  */
 export interface PushResponse {
+  /** Whether the push operation succeeded */
   success: boolean;
+  /** The name of the remote branch that was pushed */
   remoteBranch?: string;
 }
 
 /**
- * Error response for uncommitted changes.
- * This error indicates the loop cannot start because the directory has uncommitted changes.
- * User must commit or stash changes manually before starting the loop.
+ * Error response returned when directory has uncommitted changes.
+ * 
+ * This error (HTTP 409) indicates the loop cannot start because the
+ * working directory has uncommitted git changes. The user must commit
+ * or stash changes manually before starting the loop.
  */
 export interface UncommittedChangesError {
+  /** Error code for this specific error type */
   error: "uncommitted_changes";
+  /** Human-readable error description */
   message: string;
+  /** List of files with uncommitted changes */
   changedFiles: string[];
 }
 
 /**
- * Generic error response.
+ * Generic error response format used by all API endpoints.
  */
 export interface ErrorResponse {
+  /** Error code for programmatic handling (e.g., "not_found", "validation_error") */
   error: string;
+  /** Human-readable error description */
   message: string;
 }
 
 /**
- * Health check response.
+ * Response from GET /api/health endpoint.
  */
 export interface HealthResponse {
+  /** Always true when server is responding */
   healthy: boolean;
+  /** Server version string */
   version: string;
 }
 
 /**
- * File diff information.
+ * File diff information returned by GET /api/loops/:id/diff endpoint.
+ * Represents changes to a single file in the loop's working branch.
  */
 export interface FileDiff {
-  /** File path */
+  /** File path relative to repository root */
   path: string;
-  /** Change type */
+  /** Type of change made to the file */
   status: "added" | "modified" | "deleted" | "renamed";
-  /** Number of additions */
+  /** Number of lines added */
   additions: number;
-  /** Number of deletions */
+  /** Number of lines deleted */
   deletions: number;
-  /** Old path (for renames) */
+  /** Old path (only present for renames) */
   oldPath?: string;
-  /** The actual diff patch content */
+  /** The actual diff patch content in unified diff format */
   patch?: string;
 }
 
 /**
- * Log entry for loop execution.
+ * Log entry for loop execution, stored in state and emitted via WebSocket.
  */
 export interface LogEntry {
-  /** Log level */
+  /** Log level indicating the type/severity of the message */
   level: "agent" | "info" | "warn" | "error" | "debug";
-  /** Log message */
+  /** The log message content */
   message: string;
-  /** ISO timestamp */
+  /** ISO 8601 timestamp when the log was created */
   timestamp: string;
-  /** Additional data */
+  /** Additional structured data associated with the log */
   data?: Record<string, unknown>;
 }
 
 /**
- * File content response.
+ * Response from GET /api/loops/:id/plan and /api/loops/:id/status-file endpoints.
  */
 export interface FileContentResponse {
+  /** The file contents (empty string if file doesn't exist) */
   content: string;
+  /** Whether the file exists on disk */
   exists: boolean;
 }
 
 /**
- * Type for API responses that return a loop.
+ * Type alias for API responses that return a single loop.
  */
 export type LoopResponse = Loop;
 
 /**
- * Response from creating a loop.
- * On success, returns the created loop (which is immediately started).
- * On failure due to uncommitted changes, returns a 409 error response instead.
+ * Response type from POST /api/loops endpoint.
+ * 
+ * On success, returns the created loop. The loop status depends on options:
+ * - `draft: true`: status is "draft"
+ * - `planMode: true`: status is "planning"
+ * - Otherwise: status is "running" (auto-started)
+ * 
+ * On failure due to uncommitted changes, returns HTTP 409 with UncommittedChangesError.
  */
 export type CreateLoopResponse = Loop;
 
 /**
- * Type for API responses that return multiple loops.
+ * Type alias for API responses that return multiple loops.
+ * Used by GET /api/loops endpoint.
  */
 export type LoopsResponse = Loop[];
 
 /**
- * Validate a CreateLoopRequest.
- * Returns an error message if invalid, undefined if valid.
+ * Validate a CreateLoopRequest object.
+ * 
+ * Checks that all required fields are present and have valid types.
+ * Used by the POST /api/loops endpoint to validate incoming requests.
+ * 
+ * @param req - The request object to validate
+ * @returns Error message string if invalid, undefined if valid
  */
 export function validateCreateLoopRequest(req: unknown): string | undefined {
   if (typeof req !== "object" || req === null) {

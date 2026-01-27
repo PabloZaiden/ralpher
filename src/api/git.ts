@@ -1,10 +1,14 @@
 /**
  * Git API endpoints for Ralph Loops Management System.
- * Provides git information for directories.
  * 
- * Uses the CommandExecutor abstraction which works identically for both:
- * - Spawn mode: Commands run on locally-spawned opencode server via PTY+WebSocket
- * - Connect mode: Commands run on remote opencode server via PTY+WebSocket
+ * This module provides git-related endpoints for querying repository information.
+ * All git operations use the CommandExecutor abstraction which works identically
+ * for both spawn and connect modes via PTY+WebSocket.
+ * 
+ * Endpoints:
+ * - GET /api/git/branches - Get all local branches for a directory
+ * 
+ * @module api/git
  */
 
 import { backendManager } from "../core/backend-manager";
@@ -14,36 +18,55 @@ import { GitService } from "../core/git-service";
  * Branch information returned by the API.
  */
 export interface BranchInfo {
-  /** Branch name */
+  /** Branch name (e.g., "main", "feature/auth") */
   name: string;
-  /** Whether this is the current branch */
+  /** Whether this is the currently checked out branch */
   current: boolean;
 }
 
 /**
- * Response for GET /api/git/branches
+ * Response for GET /api/git/branches endpoint.
  */
 export interface BranchesResponse {
-  /** Current branch name */
+  /** Name of the currently checked out branch */
   currentBranch: string;
-  /** All local branches */
+  /** All local branches in the repository */
   branches: BranchInfo[];
 }
 
 /**
  * Get a GitService configured for the current backend mode.
  * Uses PTY+WebSocket for command execution in both spawn and connect modes.
+ * 
+ * @param directory - The directory containing the git repository
+ * @returns Configured GitService instance
  */
 async function getGitService(directory: string): Promise<GitService> {
   const executor = await backendManager.getCommandExecutorAsync(directory);
   return GitService.withExecutor(executor);
 }
 
+/**
+ * Git API routes.
+ * 
+ * Provides endpoints for git repository information:
+ * - GET /api/git/branches - List all local branches
+ */
 export const gitRoutes = {
   /**
-   * GET /api/git/branches
-   * Get all local branches for a directory.
-   * Query param: directory (required)
+   * GET /api/git/branches - Get all local branches for a directory.
+   * 
+   * Returns the list of local branches and identifies which one is current.
+   * Validates that the directory is a git repository.
+   * 
+   * Query Parameters:
+   * - directory (required): Path to the git repository
+   * 
+   * Errors:
+   * - 400: Missing directory parameter or not a git repo
+   * - 500: Git command error
+   * 
+   * @returns BranchesResponse with currentBranch and branches array
    */
   "/api/git/branches": {
     async GET(req: Request): Promise<Response> {

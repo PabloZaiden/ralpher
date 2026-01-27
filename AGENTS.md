@@ -210,6 +210,8 @@ test("hello world", () => {
 - Unit tests should be written alongside implementation, not after
 - Scenario tests should cover multiple combinations and edge cases
 - UI-only changes may rely on manual testing, but automated tests are preferred when possible
+- **100%** of the tests **MUST** pass before considering a feature complete
+- A flaky test that fails intermittently **MUST** be fixed. A lot of times, flaky tests indicate deeper issues, race conditions, or bad mock implementations.
 
 ### Test Patterns
 
