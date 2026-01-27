@@ -568,13 +568,7 @@ export class LoopEngine {
         port: settings.port,
       });
       log.trace("[LoopEngine] setupSession: About to call backend.connect");
-      await this.backend.connect({
-        mode: settings.mode,
-        hostname: settings.hostname,
-        port: settings.port,
-        password: settings.password,
-        directory: this.config.directory,
-      });
+      await this.backend.connect(backendManager.getConnectionConfig(this.config.directory));
       log.trace("[LoopEngine] setupSession: backend.connect completed");
       this.emitLog("info", "Backend connection established");
     } else {
@@ -594,8 +588,9 @@ export class LoopEngine {
     this.emitLog("info", `AI session created`, { sessionId: session.id });
 
     // Store session info - use hostname for connect mode, undefined for spawn mode
+    const protocol = settings.useHttps ? "https" : "http";
     const serverUrl = settings.mode === "connect" && settings.hostname
-      ? `http://${settings.hostname}:${settings.port ?? 4096}`
+      ? `${protocol}://${settings.hostname}:${settings.port ?? 4096}`
       : undefined;
 
     log.trace("[LoopEngine] setupSession: About to update state");
@@ -640,13 +635,7 @@ export class LoopEngine {
           hostname: settings.hostname,
           port: settings.port,
         });
-        await this.backend.connect({
-          mode: settings.mode,
-          hostname: settings.hostname,
-          port: settings.port,
-          password: settings.password,
-          directory: this.config.directory,
-        });
+        await this.backend.connect(backendManager.getConnectionConfig(this.config.directory));
         this.emitLog("info", "Backend connection re-established");
       }
       

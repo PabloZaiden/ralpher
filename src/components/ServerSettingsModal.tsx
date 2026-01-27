@@ -53,6 +53,8 @@ export function ServerSettingsModal({
   const [hostname, setHostname] = useState("localhost");
   const [port, setPort] = useState("4096");
   const [password, setPassword] = useState("");
+  const [useHttps, setUseHttps] = useState(false);
+  const [allowInsecure, setAllowInsecure] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -66,6 +68,8 @@ export function ServerSettingsModal({
       setHostname(settings.hostname ?? "localhost");
       setPort(String(settings.port ?? 4096));
       setPassword(settings.password ?? "");
+      setUseHttps(settings.useHttps ?? false);
+      setAllowInsecure(settings.allowInsecure ?? false);
       setTestResult(null);
       // Mark as dirty if we had to switch from spawn to connect due to remote-only
       setIsDirty(remoteOnly && settings.mode === "spawn");
@@ -82,6 +86,8 @@ export function ServerSettingsModal({
         hostname: hostname.trim(),
         port: parseInt(port, 10) || 4096,
         password: password.trim() || undefined,
+        useHttps,
+        allowInsecure: useHttps ? allowInsecure : undefined,
       }),
     };
 
@@ -101,6 +107,8 @@ export function ServerSettingsModal({
         hostname: hostname.trim(),
         port: parseInt(port, 10) || 4096,
         password: password.trim() || undefined,
+        useHttps,
+        allowInsecure: useHttps ? allowInsecure : undefined,
       }),
     };
 
@@ -129,6 +137,22 @@ export function ServerSettingsModal({
 
   function handlePasswordChange(value: string) {
     setPassword(value);
+    setTestResult(null);
+    setIsDirty(true);
+  }
+
+  function handleUseHttpsChange(checked: boolean) {
+    setUseHttps(checked);
+    // Reset allowInsecure if HTTPS is disabled
+    if (!checked) {
+      setAllowInsecure(false);
+    }
+    setTestResult(null);
+    setIsDirty(true);
+  }
+
+  function handleAllowInsecureChange(checked: boolean) {
+    setAllowInsecure(checked);
     setTestResult(null);
     setIsDirty(true);
   }
@@ -306,6 +330,45 @@ export function ServerSettingsModal({
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Authentication token for the OpenCode server
               </p>
+            </div>
+
+            {/* HTTPS Settings */}
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useHttps}
+                  onChange={(e) => handleUseHttpsChange(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <div>
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Use HTTPS
+                  </span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Connect using a secure HTTPS connection
+                  </p>
+                </div>
+              </label>
+
+              {useHttps && (
+                <label className="flex items-center gap-3 cursor-pointer ml-7">
+                  <input
+                    type="checkbox"
+                    checked={allowInsecure}
+                    onChange={(e) => handleAllowInsecureChange(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Allow self-signed certificates
+                    </span>
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Warning: Disables TLS certificate verification
+                    </p>
+                  </div>
+                </label>
+              )}
             </div>
 
             {/* Test Connection Button */}
