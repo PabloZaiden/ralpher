@@ -17,8 +17,6 @@ export interface AcceptLoopModalProps {
   onPush: () => Promise<void>;
 }
 
-type HoveredOption = "accept" | "push" | null;
-
 /**
  * AcceptLoopModal provides UI for finalizing a completed loop.
  * Users can choose between merging locally or pushing to remote for PR.
@@ -31,7 +29,6 @@ export function AcceptLoopModal({
 }: AcceptLoopModalProps) {
   const [accepting, setAccepting] = useState(false);
   const [pushing, setPushing] = useState(false);
-  const [hovered, setHovered] = useState<HoveredOption>(null);
 
   const isLoading = accepting || pushing;
 
@@ -61,90 +58,59 @@ export function AcceptLoopModal({
       description="Choose how to finalize this loop's changes."
       size="md"
       footer={
-        <>
-          <Button
-            variant="ghost"
-            onClick={onClose}
-            disabled={isLoading}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={handleAccept}
-            loading={accepting}
-            disabled={pushing}
-            onMouseEnter={() => setHovered("accept")}
-            onMouseLeave={() => setHovered(null)}
-          >
-            Accept & Merge
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={handlePush}
-            loading={pushing}
-            disabled={accepting}
-            onMouseEnter={() => setHovered("push")}
-            onMouseLeave={() => setHovered(null)}
-          >
-            Push to Remote
-          </Button>
-        </>
+        <Button
+          variant="ghost"
+          onClick={onClose}
+          disabled={isLoading}
+        >
+          Cancel
+        </Button>
       }
     >
-      <div className="space-y-4">
-        <div
-          className={`p-4 rounded-lg border transition-colors ${
-            hovered === "push"
-              ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
-              : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"
-          }`}
+      <div className="space-y-2">
+        <button
+          onClick={handlePush}
+          disabled={isLoading}
+          className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <h4
-            className={`font-medium mb-1 transition-colors ${
-              hovered === "push"
-                ? "text-blue-900 dark:text-blue-100"
-                : "text-gray-900 dark:text-gray-100"
-            }`}
-          >
-            Push to Remote <i>(recommended)</i>
-          </h4>
-          <p
-            className={`text-sm transition-colors ${
-              hovered === "push"
-                ? "text-blue-700 dark:text-blue-300"
-                : "text-gray-600 dark:text-gray-400"
-            }`}
-          >
-            Push the working branch to the remote repository. You can then create a pull request for code review or continue pushing updates to an existing one.
-          </p>
-        </div>
-        <div
-          className={`p-4 rounded-lg border transition-colors ${
-            hovered === "accept"
-              ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800"
-              : "bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700"
-          }`}
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+            {pushing ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
+            ) : (
+              <span className="text-blue-600 dark:text-blue-400 text-sm">↑</span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+              Push to Remote <span className="text-gray-500 dark:text-gray-400 font-normal">(recommended)</span>
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              Push the working branch to remote. Create a PR for code review or update an existing one.
+            </div>
+          </div>
+          <span className="text-gray-400 dark:text-gray-500">→</span>
+        </button>
+
+        <button
+          onClick={handleAccept}
+          disabled={isLoading}
+          className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <h4
-            className={`font-medium mb-1 transition-colors ${
-              hovered === "accept"
-                ? "text-blue-900 dark:text-blue-100"
-                : "text-gray-900 dark:text-gray-100"
-            }`}
-          >
-            Accept & Merge
-          </h4>
-          <p
-            className={`text-sm transition-colors ${
-              hovered === "accept"
-                ? "text-blue-700 dark:text-blue-300"
-                : "text-gray-600 dark:text-gray-400"
-            }`}
-          >
-            Merge the changes directly into the original branch locally. The working branch will be deleted. Only use this if you do not need a pull request for code review or if it is managed outside of this loop.
-          </p>
-        </div>
+          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+            {accepting ? (
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-green-500 border-t-transparent" />
+            ) : (
+              <span className="text-green-600 dark:text-green-400 text-sm">✓</span>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Accept & Merge</div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              Merge changes into the original branch locally. Use if you don't need a PR.
+            </div>
+          </div>
+          <span className="text-gray-400 dark:text-gray-500">→</span>
+        </button>
       </div>
     </Modal>
   );
