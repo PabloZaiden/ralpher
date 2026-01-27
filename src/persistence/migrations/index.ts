@@ -203,13 +203,7 @@ export const migrations: Migration[] = [
     version: 6,
     name: "add_review_comments_table",
     up: (db) => {
-      // Check if table already exists
-      if (tableExists(db, "review_comments")) {
-        log.debug("review_comments table already exists");
-        return;
-      }
-      
-      // Create the review_comments table
+      // Create the review_comments table (CREATE TABLE IF NOT EXISTS is idempotent)
       db.run(`
         CREATE TABLE IF NOT EXISTS review_comments (
           id TEXT PRIMARY KEY,
@@ -223,11 +217,11 @@ export const migrations: Migration[] = [
         )
       `);
       
-      // Create indexes for performance
+      // Always ensure indexes exist (CREATE INDEX IF NOT EXISTS is idempotent)
       db.run("CREATE INDEX IF NOT EXISTS idx_review_comments_loop_id ON review_comments(loop_id)");
       db.run("CREATE INDEX IF NOT EXISTS idx_review_comments_loop_cycle ON review_comments(loop_id, review_cycle)");
       
-      log.info("Created review_comments table with indexes");
+      log.info("Ensured review_comments table and indexes exist");
     },
   },
 ];
