@@ -579,7 +579,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "prompt" && (
-                    <div className="p-4 space-y-6">
+                    <div className="p-4 space-y-6 flex-1 min-h-0 overflow-auto dark-scrollbar">
                       {/* Original Task Prompt (read-only) */}
                       <div>
                         <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
@@ -672,7 +672,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "plan" && (
-                    <div className="p-4">
+                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
@@ -690,7 +690,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "status" && (
-                    <div className="p-4">
+                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
@@ -708,7 +708,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "diff" && (
-                    <div className="p-4">
+                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
@@ -789,7 +789,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "review" && (
-                    <div className="p-4 space-y-4">
+                    <div className="p-4 space-y-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
                       {loop.state.reviewMode ? (
                         <>
                           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -933,7 +933,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "actions" && (
-                    <div className="p-4">
+                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
                       <div className="max-w-md space-y-2">
                         {isFinalState(state.status) ? (
                           <>
