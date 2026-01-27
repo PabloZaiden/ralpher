@@ -161,9 +161,9 @@ export function TodoViewer({
         </div>
       ) : (
         <div className="p-2 sm:p-4 space-y-2">
-          {todos.map((todo, index) => (
+          {todos.map((todo) => (
             <div
-              key={`${todo.id}-${index}`}
+              key={todo.id}
               className={`flex items-start gap-2 sm:gap-3 p-2 rounded border-l-4 ${getStatusBorderColor(todo.status)} bg-gray-800/50`}
             >
               {/* Status Icon */}
