@@ -189,12 +189,161 @@ export const loopsCrudRoutes = {
     },
   },
 
+  "/api/loops/:id": {
+    /**
+     * GET /api/loops/:id - Get a specific loop
+     */
+    async GET(req: Request & { params: { id: string } }): Promise<Response> {
+      const loop = await loopManager.getLoop(req.params.id);
+      if (!loop) {
+        return errorResponse("not_found", "Loop not found", 404);
+      }
+      return Response.json(loop);
+    },
+
+    /**
+     * PATCH /api/loops/:id - Update a loop
+     */
+    async PATCH(req: Request & { params: { id: string } }): Promise<Response> {
+      const loop = await loopManager.getLoop(req.params.id);
+      if (!loop) {
+        return errorResponse("not_found", "Loop not found", 404);
+      }
+
+      const body = await parseBody<Record<string, unknown>>(req);
+      if (!body) {
+        return errorResponse("invalid_body", "Request body must be valid JSON");
+      }
+
+      try {
+        // Transform request body to match LoopConfig format
+        const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};
+        
+        if (body["name"] !== undefined) updates.name = body["name"] as string;
+        if (body["directory"] !== undefined) updates.directory = body["directory"] as string;
+        if (body["prompt"] !== undefined) updates.prompt = body["prompt"] as string;
+        if (body["maxIterations"] !== undefined) updates.maxIterations = body["maxIterations"] as number;
+        if (body["maxConsecutiveErrors"] !== undefined) updates.maxConsecutiveErrors = body["maxConsecutiveErrors"] as number;
+        if (body["activityTimeoutSeconds"] !== undefined) updates.activityTimeoutSeconds = body["activityTimeoutSeconds"] as number;
+        if (body["stopPattern"] !== undefined) updates.stopPattern = body["stopPattern"] as string;
+        if (body["baseBranch"] !== undefined) updates.baseBranch = body["baseBranch"] as string;
+        if (body["clearPlanningFolder"] !== undefined) updates.clearPlanningFolder = body["clearPlanningFolder"] as boolean;
+        if (body["planMode"] !== undefined) updates.planMode = body["planMode"] as boolean;
+        
+        // Handle model config
+        if (body["model"] !== undefined) {
+          const modelBody = body["model"] as Record<string, unknown>;
+          updates.model = {
+            providerID: modelBody["providerID"] as string,
+            modelID: modelBody["modelID"] as string,
+          };
+        }
+        
+        // Handle git config
+        if (body["git"] !== undefined) {
+          const gitBody = body["git"] as Record<string, unknown>;
+          updates.git = {
+            branchPrefix: gitBody["branchPrefix"] as string,
+            commitPrefix: gitBody["commitPrefix"] as string,
+          };
+        }
+
+        const updatedLoop = await loopManager.updateLoop(req.params.id, updates);
+        return Response.json(updatedLoop);
+      } catch (error) {
+        return errorResponse("update_failed", String(error), 500);
+      }
+    },
+
+    /**
+     * PUT /api/loops/:id - Update draft loop configuration (partial updates allowed)
+     */
+    async PUT(req: Request & { params: { id: string } }): Promise<Response> {
+      const loop = await loopManager.getLoop(req.params.id);
+      if (!loop) {
+        return errorResponse("not_found", "Loop not found", 404);
+      }
+
+      // Only allow PUT for draft loops
+      if (loop.state.status !== "draft") {
+        return errorResponse("not_draft", "Only draft loops can be updated via PUT", 400);
+      }
+
+      const body = await parseBody<Record<string, unknown>>(req);
+      if (!body) {
+        return errorResponse("invalid_body", "Request body must be valid JSON");
+      }
+
+      try {
+        // Transform request body to match LoopConfig format (partial updates)
+        const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};
+        
+        if (body["name"] !== undefined) updates.name = body["name"] as string;
+        if (body["directory"] !== undefined) updates.directory = body["directory"] as string;
+        if (body["prompt"] !== undefined) updates.prompt = body["prompt"] as string;
+        if (body["maxIterations"] !== undefined) updates.maxIterations = body["maxIterations"] as number;
+        if (body["maxConsecutiveErrors"] !== undefined) updates.maxConsecutiveErrors = body["maxConsecutiveErrors"] as number;
+        if (body["activityTimeoutSeconds"] !== undefined) updates.activityTimeoutSeconds = body["activityTimeoutSeconds"] as number;
+        if (body["stopPattern"] !== undefined) updates.stopPattern = body["stopPattern"] as string;
+        if (body["baseBranch"] !== undefined) updates.baseBranch = body["baseBranch"] as string;
+        if (body["clearPlanningFolder"] !== undefined) updates.clearPlanningFolder = body["clearPlanningFolder"] as boolean;
+        if (body["planMode"] !== undefined) updates.planMode = body["planMode"] as boolean;
+        
+        // Handle model config
+        if (body["model"] !== undefined) {
+          const modelBody = body["model"] as Record<string, unknown>;
+          updates.model = {
+            providerID: modelBody["providerID"] as string,
+            modelID: modelBody["modelID"] as string,
+          };
+        }
+        
+        // Handle git config
+        if (body["git"] !== undefined) {
+          const gitBody = body["git"] as Record<string, unknown>;
+          updates.git = {
+            branchPrefix: gitBody["branchPrefix"] as string,
+            commitPrefix: gitBody["commitPrefix"] as string,
+          };
+        }
+
+        const updatedLoop = await loopManager.updateLoop(req.params.id, updates);
+        return Response.json(updatedLoop);
+      } catch (error) {
+        return errorResponse("update_failed", String(error), 500);
+      }
+    },
+
+    /**
+     * DELETE /api/loops/:id - Delete a loop
+     */
+    async DELETE(req: Request & { params: { id: string } }): Promise<Response> {
+      const loop = await loopManager.getLoop(req.params.id);
+      if (!loop) {
+        return errorResponse("not_found", "Loop not found", 404);
+      }
+
+      try {
+        await loopManager.deleteLoop(req.params.id);
+        return successResponse();
+      } catch (error) {
+        return errorResponse("delete_failed", String(error), 500);
+      }
+    },
+  },
+
   "/api/loops/:id/comments": {
     /**
      * GET /api/loops/:id/comments - Get all review comments for a loop
      */
     async GET(req: Request & { params: { id: string } }): Promise<Response> {
       try {
+        // Check if loop exists
+        const loop = await loopManager.getLoop(req.params.id);
+        if (!loop) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+
         // Get comments from database
         const dbComments = getReviewComments(req.params.id);
         
@@ -687,11 +836,21 @@ export const loopsReviewRoutes = {
         const result = await loopManager.addressReviewComments(req.params.id, body.comments);
         
         if (!result.success) {
+          // Map error messages to status codes
+          const errorMsg = result.error ?? "Unknown error";
+          let status = 400;
+          
+          if (errorMsg.includes("not found")) {
+            status = 404;
+          } else if (errorMsg.includes("already running")) {
+            status = 409;
+          }
+          
           const responseBody: AddressCommentsResponse = {
             success: false,
-            error: result.error,
+            error: errorMsg,
           };
-          return Response.json(responseBody, { status: 400 });
+          return Response.json(responseBody, { status });
         }
 
         const responseBody: AddressCommentsResponse = {
@@ -702,7 +861,11 @@ export const loopsReviewRoutes = {
         };
         return Response.json(responseBody);
       } catch (error) {
-        return errorResponse("address_comments_failed", String(error), 500);
+        const responseBody: AddressCommentsResponse = {
+          success: false,
+          error: String(error),
+        };
+        return Response.json(responseBody, { status: 500 });
       }
     },
   },
