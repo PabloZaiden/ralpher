@@ -33,6 +33,8 @@ export interface LogViewerProps {
   autoScroll?: boolean;
   /** Maximum height */
   maxHeight?: string;
+  /** Whether to show debug logs (default: true) */
+  showDebugLogs?: boolean;
 }
 
 /**
@@ -111,12 +113,29 @@ export function LogViewer({
   logs = [],
   autoScroll = true,
   maxHeight = "500px",
+  showDebugLogs = true,
 }: LogViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef<boolean>(true);
 
-  // Auto-scroll to bottom when content changes
+  // Track if the user is scrolled to the bottom
   useEffect(() => {
-    if (autoScroll && containerRef.current) {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      // Consider "at bottom" if within 10px of the bottom
+      isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 10;
+    };
+
+    container.addEventListener("scroll", handleScroll);
+    return () => container.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Auto-scroll to bottom when content changes, but only if user was already at bottom
+  useEffect(() => {
+    if (autoScroll && containerRef.current && isAtBottomRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
   }, [messages, toolCalls, logs, autoScroll]);
@@ -138,6 +157,10 @@ export function LogViewer({
   });
 
   logs.forEach((log) => {
+    // Filter out debug logs if showDebugLogs is false
+    if (!showDebugLogs && log.level === "debug") {
+      return;
+    }
     entries.push({ type: "log", data: log, timestamp: log.timestamp });
   });
 

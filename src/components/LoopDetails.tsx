@@ -112,6 +112,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
+  const [showDebugLogs, setShowDebugLogs] = useState(false);
 
   // Track which tabs have unseen updates
   const [tabsWithUpdates, setTabsWithUpdates] = useState<Set<TabId>>(new Set());
@@ -599,12 +600,26 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 {/* Tab content */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                   {activeTab === "log" && (
-                    <LogViewer
-                      messages={messages}
-                      toolCalls={toolCalls}
-                      logs={logs}
-                      maxHeight="600px"
-                    />
+                    <div>
+                      <LogViewer
+                        messages={messages}
+                        toolCalls={toolCalls}
+                        logs={logs}
+                        maxHeight="600px"
+                        showDebugLogs={showDebugLogs}
+                      />
+                      <div className="p-3 border-t border-gray-200 dark:border-gray-700">
+                        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showDebugLogs}
+                            onChange={(e) => setShowDebugLogs(e.target.checked)}
+                            className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                          />
+                          <span>Show debug logs</span>
+                        </label>
+                      </div>
+                    </div>
                   )}
 
                   {activeTab === "prompt" && (
