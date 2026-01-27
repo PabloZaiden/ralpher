@@ -63,6 +63,10 @@ export async function initializeDatabase(): Promise<void> {
 
   db = new Database(dbPath);
   
+  // Enable foreign key constraints
+  // This must be set for every connection to enforce FK constraints and cascades
+  db.run("PRAGMA foreign_keys = ON");
+  
   // Enable WAL mode for better concurrency
   db.run("PRAGMA journal_mode = WAL");
   
@@ -233,3 +237,75 @@ export async function deleteAndReinitializeDatabase(): Promise<void> {
   // Reinitialize
   await initializeDatabase();
 }
+
+/**
+ * Insert a review comment into the database.
+ */
+export function insertReviewComment(comment: {
+  id: string;
+  loopId: string;
+  reviewCycle: number;
+  commentText: string;
+  createdAt: string;
+  status?: string;
+}): void {
+  const db = getDatabase();
+  db.run(
+    `INSERT INTO review_comments (id, loop_id, review_cycle, comment_text, created_at, status)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      comment.id,
+      comment.loopId,
+      comment.reviewCycle,
+      comment.commentText,
+      comment.createdAt,
+      comment.status ?? "pending",
+    ]
+  );
+}
+
+/**
+ * Get all review comments for a loop.
+ * Returns comments ordered by review_cycle DESC, created_at ASC.
+ */
+export function getReviewComments(loopId: string): Array<{
+  id: string;
+  loop_id: string;
+  review_cycle: number;
+  comment_text: string;
+  created_at: string;
+  status: string;
+  addressed_at: string | null;
+}> {
+  const db = getDatabase();
+  const comments = db.query(
+    `SELECT * FROM review_comments 
+     WHERE loop_id = ? 
+     ORDER BY review_cycle DESC, created_at ASC`
+  ).all(loopId) as Array<{
+    id: string;
+    loop_id: string;
+    review_cycle: number;
+    comment_text: string;
+    created_at: string;
+    status: string;
+    addressed_at: string | null;
+  }>;
+  
+  return comments;
+}
+
+/**
+ * Update the status of all pending comments for a specific loop and review cycle.
+ * Used to mark comments as "addressed" when a loop completes.
+ */
+export function markCommentsAsAddressed(loopId: string, reviewCycle: number, addressedAt: string): void {
+  const db = getDatabase();
+  db.run(
+    `UPDATE review_comments 
+     SET status = 'addressed', addressed_at = ?
+     WHERE loop_id = ? AND review_cycle = ? AND status = 'pending'`,
+    [addressedAt, loopId, reviewCycle]
+  );
+}
+

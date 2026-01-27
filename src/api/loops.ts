@@ -12,10 +12,10 @@ import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
 import { setLastModel } from "../persistence/preferences";
 import { updateLoopState } from "../persistence/loops";
+import { getReviewComments } from "../persistence/database";
 import { log } from "../core/logger";
 import type {
   CreateLoopRequest,
-  UpdateLoopRequest,
   AcceptResponse,
   PushResponse,
   ErrorResponse,
@@ -23,6 +23,7 @@ import type {
   AddressCommentsRequest,
   AddressCommentsResponse,
   ReviewHistoryResponse,
+  GetCommentsResponse,
 } from "../types/api";
 import { validateCreateLoopRequest } from "../types/api";
 
@@ -204,83 +205,109 @@ export const loopsCrudRoutes = {
      * PATCH /api/loops/:id - Update a loop
      */
     async PATCH(req: Request & { params: { id: string } }): Promise<Response> {
-      const body = await parseBody<UpdateLoopRequest>(req);
+      const loop = await loopManager.getLoop(req.params.id);
+      if (!loop) {
+        return errorResponse("not_found", "Loop not found", 404);
+      }
+
+      const body = await parseBody<Record<string, unknown>>(req);
       if (!body) {
         return errorResponse("invalid_body", "Request body must be valid JSON");
       }
 
       try {
-        // Transform the request to match the expected type
-        // git needs special handling since UpdateLoopRequest has Partial<GitConfig>
-        const { git, ...rest } = body;
-        const updates: Record<string, unknown> = { ...rest };
+        // Transform request body to match LoopConfig format
+        const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};
         
-        // If git is provided, we need to get the existing config and merge
-        if (git !== undefined) {
-          const existingLoop = await loopManager.getLoop(req.params.id);
-          if (existingLoop) {
-            updates["git"] = { ...existingLoop.config.git, ...git };
-          }
+        if (body["name"] !== undefined) updates.name = body["name"] as string;
+        if (body["directory"] !== undefined) updates.directory = body["directory"] as string;
+        if (body["prompt"] !== undefined) updates.prompt = body["prompt"] as string;
+        if (body["maxIterations"] !== undefined) updates.maxIterations = body["maxIterations"] as number;
+        if (body["maxConsecutiveErrors"] !== undefined) updates.maxConsecutiveErrors = body["maxConsecutiveErrors"] as number;
+        if (body["activityTimeoutSeconds"] !== undefined) updates.activityTimeoutSeconds = body["activityTimeoutSeconds"] as number;
+        if (body["stopPattern"] !== undefined) updates.stopPattern = body["stopPattern"] as string;
+        if (body["baseBranch"] !== undefined) updates.baseBranch = body["baseBranch"] as string;
+        if (body["clearPlanningFolder"] !== undefined) updates.clearPlanningFolder = body["clearPlanningFolder"] as boolean;
+        if (body["planMode"] !== undefined) updates.planMode = body["planMode"] as boolean;
+        
+        // Handle model config
+        if (body["model"] !== undefined) {
+          const modelBody = body["model"] as Record<string, unknown>;
+          updates.model = {
+            providerID: modelBody["providerID"] as string,
+            modelID: modelBody["modelID"] as string,
+          };
+        }
+        
+        // Handle git config
+        if (body["git"] !== undefined) {
+          const gitBody = body["git"] as Record<string, unknown>;
+          updates.git = {
+            branchPrefix: gitBody["branchPrefix"] as string,
+            commitPrefix: gitBody["commitPrefix"] as string,
+          };
         }
 
-        const loop = await loopManager.updateLoop(req.params.id, updates);
-        if (!loop) {
-          return errorResponse("not_found", "Loop not found", 404);
-        }
-        return Response.json(loop);
+        const updatedLoop = await loopManager.updateLoop(req.params.id, updates);
+        return Response.json(updatedLoop);
       } catch (error) {
         return errorResponse("update_failed", String(error), 500);
       }
     },
 
     /**
-     * PUT /api/loops/:id - Update a draft loop (only allowed for draft status)
+     * PUT /api/loops/:id - Update draft loop configuration (partial updates allowed)
      */
     async PUT(req: Request & { params: { id: string } }): Promise<Response> {
-      const body = await parseBody<Partial<CreateLoopRequest>>(req);
-      if (!body) {
-        return errorResponse("invalid_body", "Request body must be valid JSON");
-      }
-
-      // Load the loop
       const loop = await loopManager.getLoop(req.params.id);
       if (!loop) {
         return errorResponse("not_found", "Loop not found", 404);
       }
 
-      // Verify it's a draft
+      // Only allow PUT for draft loops
       if (loop.state.status !== "draft") {
-        return errorResponse("not_draft", "Only draft loops can be updated via PUT. Use PATCH for other loops.", 400);
+        return errorResponse("not_draft", "Only draft loops can be updated via PUT", 400);
+      }
+
+      const body = await parseBody<Record<string, unknown>>(req);
+      if (!body) {
+        return errorResponse("invalid_body", "Request body must be valid JSON");
       }
 
       try {
-        // Build updates object from body
-        const updates: Record<string, unknown> = {};
+        // Transform request body to match LoopConfig format (partial updates)
+        const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};
         
-        if (body.name !== undefined) updates["name"] = body.name;
-        if (body.directory !== undefined) updates["directory"] = body.directory;
-        if (body.prompt !== undefined) updates["prompt"] = body.prompt;
-        if (body.model !== undefined) updates["model"] = body.model;
-        if (body.maxIterations !== undefined) updates["maxIterations"] = body.maxIterations;
-        if (body.maxConsecutiveErrors !== undefined) updates["maxConsecutiveErrors"] = body.maxConsecutiveErrors;
-        if (body.activityTimeoutSeconds !== undefined) updates["activityTimeoutSeconds"] = body.activityTimeoutSeconds;
-        if (body.stopPattern !== undefined) updates["stopPattern"] = body.stopPattern;
-        if (body.baseBranch !== undefined) updates["baseBranch"] = body.baseBranch;
-        if (body.clearPlanningFolder !== undefined) updates["clearPlanningFolder"] = body.clearPlanningFolder;
-        if (body.planMode !== undefined) updates["planMode"] = body.planMode;
+        if (body["name"] !== undefined) updates.name = body["name"] as string;
+        if (body["directory"] !== undefined) updates.directory = body["directory"] as string;
+        if (body["prompt"] !== undefined) updates.prompt = body["prompt"] as string;
+        if (body["maxIterations"] !== undefined) updates.maxIterations = body["maxIterations"] as number;
+        if (body["maxConsecutiveErrors"] !== undefined) updates.maxConsecutiveErrors = body["maxConsecutiveErrors"] as number;
+        if (body["activityTimeoutSeconds"] !== undefined) updates.activityTimeoutSeconds = body["activityTimeoutSeconds"] as number;
+        if (body["stopPattern"] !== undefined) updates.stopPattern = body["stopPattern"] as string;
+        if (body["baseBranch"] !== undefined) updates.baseBranch = body["baseBranch"] as string;
+        if (body["clearPlanningFolder"] !== undefined) updates.clearPlanningFolder = body["clearPlanningFolder"] as boolean;
+        if (body["planMode"] !== undefined) updates.planMode = body["planMode"] as boolean;
         
-        // Handle git config merge
-        if (body.git !== undefined) {
-          updates["git"] = { ...loop.config.git, ...body.git };
+        // Handle model config
+        if (body["model"] !== undefined) {
+          const modelBody = body["model"] as Record<string, unknown>;
+          updates.model = {
+            providerID: modelBody["providerID"] as string,
+            modelID: modelBody["modelID"] as string,
+          };
         }
-
-        // Update timestamp
-        updates["updatedAt"] = new Date().toISOString();
+        
+        // Handle git config
+        if (body["git"] !== undefined) {
+          const gitBody = body["git"] as Record<string, unknown>;
+          updates.git = {
+            branchPrefix: gitBody["branchPrefix"] as string,
+            commitPrefix: gitBody["commitPrefix"] as string,
+          };
+        }
 
         const updatedLoop = await loopManager.updateLoop(req.params.id, updates);
-        if (!updatedLoop) {
-          return errorResponse("not_found", "Loop not found", 404);
-        }
         return Response.json(updatedLoop);
       } catch (error) {
         return errorResponse("update_failed", String(error), 500);
@@ -291,11 +318,54 @@ export const loopsCrudRoutes = {
      * DELETE /api/loops/:id - Delete a loop
      */
     async DELETE(req: Request & { params: { id: string } }): Promise<Response> {
-      const deleted = await loopManager.deleteLoop(req.params.id);
-      if (!deleted) {
+      const loop = await loopManager.getLoop(req.params.id);
+      if (!loop) {
         return errorResponse("not_found", "Loop not found", 404);
       }
-      return successResponse();
+
+      try {
+        await loopManager.deleteLoop(req.params.id);
+        return successResponse();
+      } catch (error) {
+        return errorResponse("delete_failed", String(error), 500);
+      }
+    },
+  },
+
+  "/api/loops/:id/comments": {
+    /**
+     * GET /api/loops/:id/comments - Get all review comments for a loop
+     */
+    async GET(req: Request & { params: { id: string } }): Promise<Response> {
+      try {
+        // Check if loop exists
+        const loop = await loopManager.getLoop(req.params.id);
+        if (!loop) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+
+        // Get comments from database
+        const dbComments = getReviewComments(req.params.id);
+        
+        // Convert database format to API format
+        const comments = dbComments.map((c) => ({
+          id: c.id,
+          loopId: c.loop_id,
+          reviewCycle: c.review_cycle,
+          commentText: c.comment_text,
+          createdAt: c.created_at,
+          status: c.status as "pending" | "addressed",
+          addressedAt: c.addressed_at ?? undefined,
+        }));
+        
+        const responseBody: GetCommentsResponse = {
+          success: true,
+          comments,
+        };
+        return Response.json(responseBody);
+      } catch (error) {
+        return errorResponse("get_comments_failed", String(error), 500);
+      }
     },
   },
 };
@@ -766,21 +836,36 @@ export const loopsReviewRoutes = {
         const result = await loopManager.addressReviewComments(req.params.id, body.comments);
         
         if (!result.success) {
+          // Map error messages to status codes
+          const errorMsg = result.error ?? "Unknown error";
+          let status = 400;
+          
+          if (errorMsg.includes("not found")) {
+            status = 404;
+          } else if (errorMsg.includes("already running")) {
+            status = 409;
+          }
+          
           const responseBody: AddressCommentsResponse = {
             success: false,
-            error: result.error,
+            error: errorMsg,
           };
-          return Response.json(responseBody, { status: 400 });
+          return Response.json(responseBody, { status });
         }
 
         const responseBody: AddressCommentsResponse = {
           success: true,
           reviewCycle: result.reviewCycle,
           branch: result.branch,
+          commentIds: result.commentIds,
         };
         return Response.json(responseBody);
       } catch (error) {
-        return errorResponse("address_comments_failed", String(error), 500);
+        const responseBody: AddressCommentsResponse = {
+          success: false,
+          error: String(error),
+        };
+        return Response.json(responseBody, { status: 500 });
       }
     },
   },

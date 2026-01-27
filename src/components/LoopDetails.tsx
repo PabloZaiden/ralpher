@@ -2,8 +2,9 @@
  * LoopDetails component showing full loop information with tabs.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { FileDiff, FileContentResponse } from "../types";
+import type { ReviewComment } from "../types/loop";
 import { useLoop } from "../hooks";
 import { Badge, Button, Card, getStatusBadgeVariant } from "./common";
 import { LogViewer } from "./LogViewer";
@@ -109,6 +110,9 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [diffContent, setDiffContent] = useState<FileDiff[]>([]);
   const [loadingContent, setLoadingContent] = useState(false);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
+  const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
+  const [showDebugLogs, setShowDebugLogs] = useState(false);
 
   // Track which tabs have unseen updates
   const [tabsWithUpdates, setTabsWithUpdates] = useState<Set<TabId>>(new Set());
@@ -130,6 +134,24 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [pendingPromptText, setPendingPromptText] = useState("");
   const [pendingPromptDirty, setPendingPromptDirty] = useState(false);
   const [pendingPromptSaving, setPendingPromptSaving] = useState(false);
+
+  // Function to fetch review comments
+  const fetchReviewComments = useCallback(async () => {
+    setLoadingComments(true);
+    try {
+      const response = await fetch(`/api/loops/${loopId}/comments`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.comments) {
+          setReviewComments(data.comments);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch review comments:", String(error));
+    } finally {
+      setLoadingComments(false);
+    }
+  }, [loopId]);
 
   // Initialize pending prompt text from loop state when it changes
   useEffect(() => {
@@ -220,6 +242,9 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         } else if (activeTab === "diff") {
           const content = await getDiff();
           setDiffContent(content);
+        } else if (activeTab === "review") {
+          // Fetch review comments
+          await fetchReviewComments();
         }
       } finally {
         setLoadingContent(false);
@@ -229,7 +254,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     if (activeTab !== "log" && activeTab !== "prompt") {
       loadContent();
     }
-  }, [activeTab, getPlan, getStatusFile, getDiff]);
+  }, [activeTab, getPlan, getStatusFile, getDiff, fetchReviewComments]);
 
   // Load plan content when in planning mode
   // This is needed because the tab-based loading above only works when the "plan" tab is selected,
@@ -247,6 +272,15 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     }
     loadPlanForPlanningMode();
   }, [loop?.state.status, getPlan, gitChangeCounter]);
+
+  // Refetch comments when loop state changes (comment submitted or loop completes)
+  // This ensures the review tab auto-updates without needing to switch tabs
+  useEffect(() => {
+    // Only fetch if loop has review mode and we're on the review tab
+    if (loop?.state.reviewMode && activeTab === "review") {
+      fetchReviewComments();
+    }
+  }, [loop?.state.reviewMode?.reviewCycles, loop?.state.status, activeTab, fetchReviewComments]);
 
   // Handle delete
   async function handleDelete() {
@@ -285,6 +319,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       if (!result.success) {
         throw new Error("Failed to address comments");
       }
+      // Fetch updated comments after successfully submitting
+      await fetchReviewComments();
     } catch (error) {
       console.error("Failed to address comments:", error);
       throw error; // Re-throw so modal knows it failed
@@ -564,12 +600,26 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 {/* Tab content */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                   {activeTab === "log" && (
-                    <LogViewer
-                      messages={messages}
-                      toolCalls={toolCalls}
-                      logs={logs}
-                      maxHeight="600px"
-                    />
+                    <div>
+                      <LogViewer
+                        messages={messages}
+                        toolCalls={toolCalls}
+                        logs={logs}
+                        maxHeight="600px"
+                        showDebugLogs={showDebugLogs}
+                      />
+                      <div className="p-3 border-t border-gray-200 dark:border-gray-700">
+                        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={showDebugLogs}
+                            onChange={(e) => setShowDebugLogs(e.target.checked)}
+                            className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                          />
+                          <span>Show debug logs</span>
+                        </label>
+                      </div>
+                    </div>
                   )}
 
                   {activeTab === "prompt" && (
@@ -830,6 +880,76 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                               </div>
                             </div>
                           )}
+
+                          {/* Comment History */}
+                          <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+                            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                              Comment History
+                            </h3>
+                            
+                            {loadingComments ? (
+                              <div className="text-center py-4">
+                                <span className="text-sm text-gray-500 dark:text-gray-400">
+                                  Loading comments...
+                                </span>
+                              </div>
+                            ) : reviewComments.length === 0 ? (
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                No comments yet.
+                              </p>
+                            ) : (
+                              <div className="space-y-4">
+                                {/* Group comments by review cycle */}
+                                {Object.entries(
+                                  reviewComments.reduce((acc, comment) => {
+                                    const cycleComments = acc[comment.reviewCycle] ?? [];
+                                    cycleComments.push(comment);
+                                    acc[comment.reviewCycle] = cycleComments;
+                                    return acc;
+                                  }, {} as Record<number, ReviewComment[]>)
+                                )
+                                  .sort(([cycleA], [cycleB]) => Number(cycleA) - Number(cycleB))
+                                  .map(([cycle, comments]) => (
+                                    <div key={cycle} className="border-l-2 border-gray-300 dark:border-gray-600 pl-3">
+                                      <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                        Review Cycle {cycle}
+                                      </h4>
+                                      <div className="space-y-2">
+                                        {comments.map((comment) => (
+                                          <div
+                                            key={comment.id}
+                                            className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-3"
+                                          >
+                                            <div className="flex items-start justify-between gap-2 mb-2">
+                                              <span
+                                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                                                  comment.status === "addressed"
+                                                    ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
+                                                    : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300"
+                                                }`}
+                                              >
+                                                {comment.status === "addressed" ? "Addressed" : "Pending"}
+                                              </span>
+                                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                                {new Date(comment.createdAt).toLocaleString()}
+                                              </span>
+                                            </div>
+                                            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                                              {comment.commentText}
+                                            </p>
+                                            {comment.addressedAt && (
+                                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                                                Addressed on {new Date(comment.addressedAt).toLocaleString()}
+                                              </p>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                              </div>
+                            )}
+                          </div>
 
                           <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                             <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">

@@ -26,6 +26,7 @@ import { createEventStream, type EventStream } from "../../src/utils/event-strea
 describe("Loops Control API Integration", () => {
   let testDataDir: string;
   let testWorkDir: string;
+  let testBareRepoDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
 
@@ -143,6 +144,12 @@ describe("Loops Control API Integration", () => {
     await Bun.$`git init ${testWorkDir}`.quiet();
     await Bun.$`git -C ${testWorkDir} config user.email "test@test.com"`.quiet();
     await Bun.$`git -C ${testWorkDir} config user.name "Test User"`.quiet();
+    
+    // Add a fake remote for push tests (using local file path as a valid remote)
+    testBareRepoDir = await mkdtemp(join(tmpdir(), "ralpher-api-control-test-bare-"));
+    await Bun.$`git init --bare ${testBareRepoDir}`.quiet();
+    await Bun.$`git -C ${testWorkDir} remote add origin ${testBareRepoDir}`.quiet();
+    
     await Bun.$`touch ${testWorkDir}/README.md`.quiet();
     await Bun.$`git -C ${testWorkDir} add .`.quiet();
     await Bun.$`git -C ${testWorkDir} commit -m "Initial commit"`.quiet();
@@ -178,6 +185,7 @@ describe("Loops Control API Integration", () => {
     // Cleanup temp directories
     await rm(testDataDir, { recursive: true, force: true });
     await rm(testWorkDir, { recursive: true, force: true });
+    await rm(testBareRepoDir, { recursive: true, force: true });
 
     // Clear env
     delete process.env["RALPHER_DATA_DIR"];
@@ -476,6 +484,210 @@ describe("Loops Control API Integration", () => {
         method: "DELETE",
       });
       expect(response.status).toBe(404);
+    });
+  });
+
+  describe("Review Comments API", () => {
+    test("GET /api/loops/:id/comments returns empty array for new loop", async () => {
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Comments Test Loop",
+          directory: testWorkDir,
+          prompt: "Test prompt",
+          backend: { type: "mock" },
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.success).toBe(true);
+      expect(body.comments).toEqual([]);
+    });
+
+    test("GET /api/loops/:id/comments returns 404 for non-existent loop", async () => {
+      const response = await fetch(`${baseUrl}/api/loops/non-existent/comments`);
+      expect(response.status).toBe(404);
+    });
+
+    test("POST /api/loops/:id/address-comments stores and returns comment IDs", async () => {
+      // Create a loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Address Comments Test Loop",
+          directory: testWorkDir,
+          prompt: "Test prompt",
+          backend: { type: "mock" },
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Wait for loop to complete
+      await waitForLoopCompletion(loopId);
+
+      // Push the loop to enable review mode
+      const pushResponse = await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
+      if (pushResponse.status !== 200) {
+        const pushBody = await pushResponse.json();
+        const loopResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+        const loopData = await loopResponse.json();
+        throw new Error(`Push failed with status ${pushResponse.status}: ${JSON.stringify(pushBody)}. Loop state: ${JSON.stringify(loopData.state)}`);
+      }
+      expect(pushResponse.status).toBe(200);
+
+      // Submit comments
+      const commentsText = "Please add error handling\nImprove test coverage";
+      const addressResponse = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: commentsText }),
+      });
+
+      if (addressResponse.status !== 200) {
+        const errorBody = await addressResponse.json();
+        throw new Error(`Address comments failed: ${JSON.stringify(errorBody)}`);
+      }
+      expect(addressResponse.status).toBe(200);
+      const addressBody = await addressResponse.json();
+      expect(addressBody.success).toBe(true);
+      expect(addressBody.commentIds).toBeInstanceOf(Array);
+      expect(addressBody.commentIds.length).toBeGreaterThan(0);
+
+      // Verify comments are stored
+      const commentsResponse = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
+      expect(commentsResponse.status).toBe(200);
+      const commentsBody = await commentsResponse.json();
+      expect(commentsBody.success).toBe(true);
+      expect(commentsBody.comments).toBeInstanceOf(Array);
+      expect(commentsBody.comments.length).toBeGreaterThan(0);
+      expect(commentsBody.comments[0].status).toBe("pending");
+      expect(commentsBody.comments[0].reviewCycle).toBe(1);
+    });
+
+    test("POST /api/loops/:id/address-comments returns 400 for loop not in review mode", async () => {
+      // Create a loop without review mode
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "No Review Mode Loop",
+          directory: testWorkDir,
+          prompt: "Test prompt",
+          backend: { type: "mock" },
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Wait for loop to complete
+      await waitForLoopCompletion(loopId);
+
+      // Try to address comments without enabling review mode (no push)
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Some comment" }),
+      });
+
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toContain("not addressable");
+    });
+
+    test("POST /api/loops/:id/address-comments returns 404 for non-existent loop", async () => {
+      const response = await fetch(`${baseUrl}/api/loops/non-existent/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Some comment" }),
+      });
+      expect(response.status).toBe(404);
+    });
+
+    test("GET /api/loops/:id/comments returns comments in correct order", async () => {
+      // Create a loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Ordered Comments Loop",
+          directory: testWorkDir,
+          prompt: "Test prompt",
+          backend: { type: "mock" },
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Wait for completion and push
+      await waitForLoopCompletion(loopId);
+      const pushResponse = await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
+      expect(pushResponse.status).toBe(200);
+
+      // Add comments
+      const addressResponse = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "First comment" }),
+      });
+      expect(addressResponse.status).toBe(200);
+
+      // Get comments - should be ordered correctly
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
+      expect(response.status).toBe(200);
+      const body = await response.json();
+
+      // Should have at least one comment
+      expect(body.comments.length).toBeGreaterThan(0);
+      
+      // First comment should be from cycle 1
+      expect(body.comments[0].reviewCycle).toBe(1);
+    });
+
+    test("Comments are stored with pending status initially", async () => {
+      // Create a loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Pending Status Comments Loop",
+          directory: testWorkDir,
+          prompt: "Test prompt",
+          backend: { type: "mock" },
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Wait for first completion
+      await waitForLoopCompletion(loopId);
+
+      // Push the loop
+      const pushResponse = await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
+      expect(pushResponse.status).toBe(200);
+
+      // Add comments
+      const addressResponse = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: "Test comment" }),
+      });
+      expect(addressResponse.status).toBe(200);
+
+      // Get comments - should be pending
+      const commentsResponse = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
+      const commentsBody = await commentsResponse.json();
+      expect(commentsBody.success).toBe(true);
+      expect(commentsBody.comments.length).toBeGreaterThan(0);
+      expect(commentsBody.comments[0].status).toBe("pending");
+      expect(commentsBody.comments[0].addressedAt).toBeUndefined();
     });
   });
 });

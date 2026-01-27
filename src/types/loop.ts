@@ -325,3 +325,24 @@ export function createInitialState(id: string): LoopState {
     toolCalls: [],
   };
 }
+
+/**
+ * Review comment for tracking feedback on completed loops.
+ */
+export interface ReviewComment {
+  /** Unique identifier (UUID) */
+  id: string;
+  /** Loop ID this comment belongs to */
+  loopId: string;
+  /** Which review cycle this comment was submitted in */
+  reviewCycle: number;
+  /** The comment text */
+  commentText: string;
+  /** When the comment was created (ISO timestamp) */
+  createdAt: string;
+  /** Status: "pending" (being worked on) or "addressed" (completed) */
+  status: "pending" | "addressed";
+  /** When the comment was marked as addressed (ISO timestamp, null if pending) */
+  addressedAt?: string;
+}
+
