@@ -1045,18 +1045,9 @@ Follow the standard loop execution flow:
       // Calculate the next review cycle number
       const nextReviewCycle = loop.state.reviewMode.reviewCycles + 1;
       
-      // Store the comment in the database
+      // Prepare comment data for later insertion (after validation and state updates)
       const commentId = crypto.randomUUID();
       const createdAt = new Date().toISOString();
-      
-      insertReviewComment({
-        id: commentId,
-        loopId,
-        reviewCycle: nextReviewCycle,
-        commentText: comments,
-        createdAt,
-        status: "pending",
-      });
 
       // Handle based on completion action
       if (loop.state.reviewMode.completionAction === "push") {
@@ -1076,6 +1067,16 @@ Follow the standard loop execution flow:
         loop.state.completedAt = undefined;
 
         await updateLoopState(loopId, loop.state);
+        
+        // Store the comment in the database AFTER state is successfully updated
+        insertReviewComment({
+          id: commentId,
+          loopId,
+          reviewCycle: nextReviewCycle,
+          commentText: comments,
+          createdAt,
+          status: "pending",
+        });
 
         // Construct specialized prompt for addressing comments
         const reviewPrompt = this.constructReviewPrompt(comments);
@@ -1139,6 +1140,16 @@ Follow the standard loop execution flow:
         loop.state.completedAt = undefined;
 
         await updateLoopState(loopId, loop.state);
+        
+        // Store the comment in the database AFTER state is successfully updated
+        insertReviewComment({
+          id: commentId,
+          loopId,
+          reviewCycle: nextReviewCycle,
+          commentText: comments,
+          createdAt,
+          status: "pending",
+        });
 
         // Construct specialized prompt for addressing comments
         const reviewPrompt = this.constructReviewPrompt(comments);
