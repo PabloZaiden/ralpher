@@ -55,21 +55,13 @@ export const modelsRoutes = {
         return errorResponse("missing_directory", "directory query parameter is required");
       }
 
-      const settings = backendManager.getSettings();
-      
       // Create a temporary backend to get models (don't reuse the global one)
       // This avoids interfering with any running loops
       const backend = new OpenCodeBackend();
       
       try {
         // Connect using global settings
-        await backend.connect({
-          mode: settings.mode,
-          hostname: settings.hostname,
-          port: settings.port,
-          password: settings.password,
-          directory,
-        });
+        await backend.connect(backendManager.getConnectionConfig(directory));
 
         const models = await backend.getModels(directory);
         

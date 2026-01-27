@@ -7,6 +7,7 @@ import {
   createOpencode,
   createOpencodeClient,
   type OpencodeClient,
+  type OpencodeClientConfig,
 } from "@opencode-ai/sdk/v2";
 import type {
   Session as OpenCodeSession,
@@ -41,6 +42,8 @@ export interface ConnectionInfo {
   baseUrl: string;
   /** Auth headers to use for connections */
   authHeaders: Record<string, string>;
+  /** Whether to allow insecure connections (self-signed certificates) */
+  allowInsecure?: boolean;
 }
 
 import type {
@@ -121,13 +124,18 @@ export class OpenCodeBackend {
 
   /**
    * Connect to an existing opencode server.
+   * Supports both HTTP and HTTPS, with optional self-signed certificate support.
    */
   private async connectToExisting(
     config: BackendConnectionConfig
   ): Promise<void> {
     const hostname = config.hostname ?? "127.0.0.1";
     const port = config.port ?? 4096;
-    const baseUrl = `http://${hostname}:${port}`;
+    
+    // Determine protocol: use HTTPS only if explicitly set
+    const useHttps = config.useHttps ?? false;
+    const protocol = useHttps ? "https" : "http";
+    const baseUrl = `${protocol}://${hostname}:${port}`;
 
     // Build auth headers if password provided
     const authHeaders: Record<string, string> = {};
@@ -136,11 +144,35 @@ export class OpenCodeBackend {
       authHeaders["Authorization"] = `Basic ${credentials}`;
     }
 
-    // Build client config with optional Basic auth
-    const clientConfig: Parameters<typeof createOpencodeClient>[0] = {
+    // Create custom fetch function that handles TLS options for self-signed certs
+    // Note: Bun's `typeof fetch` includes static properties like `preconnect` that 
+    // a plain function doesn't have. The SDK's type expects `typeof fetch`, but
+    // only uses it as a callable. We use a type assertion to bridge this gap.
+    const customFetch = (req: Request): Promise<Response> => {
+      // Set timeout to false to prevent request timeouts (SDK default behavior)
+      // @ts-expect-error - Bun extends Request with timeout property
+      req.timeout = false;
+      
+      // For HTTPS with self-signed certificates, use Bun's tls option
+      if (useHttps && config.allowInsecure) {
+        return fetch(req, {
+          tls: {
+            rejectUnauthorized: false,
+          },
+        } as RequestInit);
+      }
+      
+      return fetch(req);
+    };
+
+    // Build client config with optional Basic auth and custom fetch
+    // Type assertion needed: SDK expects `typeof fetch` which in Bun includes
+    // static properties, but only the callable signature is actually used
+    const clientConfig: OpencodeClientConfig & { directory?: string } = {
       baseUrl,
       directory: config.directory,
       headers: authHeaders,
+      fetch: customFetch as typeof fetch,
     };
 
     this.client = createOpencodeClient(clientConfig);
@@ -155,10 +187,11 @@ export class OpenCodeBackend {
       throw new Error(`Failed to connect to opencode at ${baseUrl}: ${JSON.stringify(result.error)}`);
     }
 
-    // Store connection info
+    // Store connection info (including allowInsecure for WebSocket connections)
     this.connectionInfo = {
       baseUrl,
       authHeaders,
+      allowInsecure: config.allowInsecure,
     };
   }
 

@@ -62,6 +62,27 @@ export type ServerEvent =
 export type AppEvent = LoopEvent | ServerEvent;
 
 /**
+ * Build a BackendConnectionConfig from ServerSettings and a directory.
+ * This is a utility function for cases where you have settings that aren't
+ * from the backendManager (e.g., testing a connection with proposed settings).
+ * 
+ * @param settings - Server settings to use
+ * @param directory - Working directory for the connection
+ * @returns A complete BackendConnectionConfig
+ */
+export function buildConnectionConfig(settings: ServerSettings, directory: string): BackendConnectionConfig {
+  return {
+    mode: settings.mode,
+    hostname: settings.hostname,
+    port: settings.port,
+    password: settings.password,
+    useHttps: settings.useHttps,
+    allowInsecure: settings.allowInsecure,
+    directory,
+  };
+}
+
+/**
  * Global backend manager.
  * Maintains a single backend connection based on server settings.
  */
@@ -105,22 +126,22 @@ class BackendManager {
 
     this.connectionError = null;
 
-    const config: BackendConnectionConfig = {
-      mode: this.settings.mode,
-      hostname: this.settings.hostname,
-      port: this.settings.port,
-      password: this.settings.password,
-      directory,
-    };
+    const config = this.getConnectionConfig(directory);
 
     try {
       await this.backend.connect(config);
+      
+      // Determine the correct protocol for the server URL
+      const port = this.settings.port ?? 4096;
+      const useHttps = this.settings.useHttps ?? false;
+      const protocol = useHttps ? "https" : "http";
+      
       this.emitEvent({
         type: "server.connected",
         mode: this.settings.mode,
         serverUrl:
           this.settings.mode === "connect"
-            ? `http://${this.settings.hostname}:${this.settings.port}`
+            ? `${protocol}://${this.settings.hostname}:${port}`
             : undefined,
         timestamp: new Date().toISOString(),
       });
@@ -194,13 +215,7 @@ class BackendManager {
     // Create a temporary backend for testing
     const testBackend = new OpenCodeBackend();
 
-    const config: BackendConnectionConfig = {
-      mode: settings.mode,
-      hostname: settings.hostname,
-      port: settings.port,
-      password: settings.password,
-      directory,
-    };
+    const config = buildConnectionConfig(settings, directory);
 
     try {
       await testBackend.connect(config);
@@ -216,13 +231,18 @@ class BackendManager {
    */
   getStatus(): ConnectionStatus {
     const connected = this.backend?.isConnected() ?? false;
+    
+    // Determine the correct protocol for the server URL
+    const port = this.settings.port ?? 4096;
+    const useHttps = this.settings.useHttps ?? false;
+    const protocol = useHttps ? "https" : "http";
 
     return {
       connected,
       mode: this.settings.mode,
       serverUrl:
         this.settings.mode === "connect" && this.settings.hostname
-          ? `http://${this.settings.hostname}:${this.settings.port ?? 4096}`
+          ? `${protocol}://${this.settings.hostname}:${port}`
           : undefined,
       error: this.connectionError ?? undefined,
     };
@@ -233,6 +253,26 @@ class BackendManager {
    */
   getSettings(): ServerSettings {
     return { ...this.settings };
+  }
+
+  /**
+   * Get a connection config for the given directory.
+   * This is the single source of truth for building BackendConnectionConfig objects.
+   * Use this method instead of manually spreading settings fields.
+   * 
+   * @param directory - The working directory for the connection
+   * @returns A complete BackendConnectionConfig ready for use with backend.connect()
+   */
+  getConnectionConfig(directory: string): BackendConnectionConfig {
+    return {
+      mode: this.settings.mode,
+      hostname: this.settings.hostname,
+      port: this.settings.port,
+      password: this.settings.password,
+      useHttps: this.settings.useHttps,
+      allowInsecure: this.settings.allowInsecure,
+      directory,
+    };
   }
 
   /**
@@ -297,6 +337,7 @@ class BackendManager {
       directory: dir,
       baseUrl: connectionInfo.baseUrl,
       authHeaders: connectionInfo.authHeaders,
+      allowInsecure: connectionInfo.allowInsecure,
     });
   }
 

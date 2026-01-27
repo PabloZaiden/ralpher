@@ -199,3 +199,125 @@ describe("OpenCodeBackend replyToQuestion", () => {
     ).rejects.toThrow("Not connected");
   });
 });
+
+describe("OpenCodeBackend HTTPS Configuration", () => {
+  test("getConnectionInfo returns null when not connected", () => {
+    const backend = new OpenCodeBackend();
+    expect(backend.getConnectionInfo()).toBe(null);
+  });
+
+  test("connect mode defaults to HTTP when useHttps is not set", async () => {
+    const backend = new OpenCodeBackend();
+    
+    // Try to connect with default settings (will fail, but we check the URL format)
+    const config = {
+      mode: "connect" as const,
+      hostname: "test-server.example.com",
+      port: 4096,
+      directory: "/tmp",
+      // useHttps not set - should default to HTTP
+    };
+
+    // This will fail because no server exists, but we can inspect the error message
+    try {
+      await backend.connect(config);
+    } catch (error) {
+      const errorStr = String(error);
+      // Error message should contain http:// URL
+      expect(errorStr).toContain("http://test-server.example.com:4096");
+    }
+    
+    expect(backend.isConnected()).toBe(false);
+  });
+
+  test("connect mode uses HTTPS when useHttps is true", async () => {
+    const backend = new OpenCodeBackend();
+    
+    const config = {
+      mode: "connect" as const,
+      hostname: "test-server.example.com",
+      port: 8443,
+      directory: "/tmp",
+      useHttps: true,
+    };
+
+    // This will fail because no server exists, but we can inspect the error message
+    try {
+      await backend.connect(config);
+    } catch (error) {
+      const errorStr = String(error);
+      // Error message should contain https:// URL
+      expect(errorStr).toContain("https://test-server.example.com:8443");
+    }
+    
+    expect(backend.isConnected()).toBe(false);
+  });
+
+  test("connect mode defaults to HTTP when useHttps is not set (even on port 443)", async () => {
+    const backend = new OpenCodeBackend();
+    
+    const config = {
+      mode: "connect" as const,
+      hostname: "test-server.example.com",
+      port: 443,
+      directory: "/tmp",
+      // useHttps not set - should default to HTTP (no port inference)
+    };
+
+    try {
+      await backend.connect(config);
+    } catch (error) {
+      const errorStr = String(error);
+      // Error message should contain http:// URL (no automatic HTTPS inference from port)
+      expect(errorStr).toContain("http://test-server.example.com:443");
+    }
+    
+    expect(backend.isConnected()).toBe(false);
+  });
+
+  test("connect mode uses HTTP when useHttps is explicitly false", async () => {
+    const backend = new OpenCodeBackend();
+    
+    const config = {
+      mode: "connect" as const,
+      hostname: "test-server.example.com",
+      port: 443,
+      directory: "/tmp",
+      useHttps: false,
+    };
+
+    try {
+      await backend.connect(config);
+    } catch (error) {
+      const errorStr = String(error);
+      // Error message should contain http:// URL
+      expect(errorStr).toContain("http://test-server.example.com:443");
+    }
+    
+    expect(backend.isConnected()).toBe(false);
+  });
+
+  test("connect mode accepts allowInsecure option for HTTPS", async () => {
+    const backend = new OpenCodeBackend();
+    
+    const config = {
+      mode: "connect" as const,
+      hostname: "test-server.example.com",
+      port: 8443,
+      directory: "/tmp",
+      useHttps: true,
+      allowInsecure: true,
+    };
+
+    // This will fail but verifies the config is accepted without error
+    try {
+      await backend.connect(config);
+    } catch (error) {
+      const errorStr = String(error);
+      // Should still attempt HTTPS connection
+      expect(errorStr).toContain("https://test-server.example.com:8443");
+    }
+    
+    expect(backend.isConnected()).toBe(false);
+  });
+});

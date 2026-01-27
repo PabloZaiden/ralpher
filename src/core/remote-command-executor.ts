@@ -27,10 +27,12 @@ export interface CommandExecutorConfig {
   client: OpencodeClient;
   /** The directory on the server */
   directory: string;
-  /** Base URL for the opencode server (e.g., "http://localhost:4096") */
+  /** Base URL for the opencode server (e.g., "http://localhost:4096" or "https://...") */
   baseUrl: string;
   /** Auth headers for connections (same as used for SDK client) */
   authHeaders: Record<string, string>;
+  /** Whether to allow insecure connections (self-signed certificates) */
+  allowInsecure?: boolean;
 }
 
 /**
@@ -45,6 +47,7 @@ export class CommandExecutorImpl implements CommandExecutor {
   private directory: string;
   private baseUrl: string;
   private authHeaders: Record<string, string>;
+  private allowInsecure: boolean;
 
   /** Queue of pending commands */
   private commandQueue: Array<{
@@ -61,6 +64,7 @@ export class CommandExecutorImpl implements CommandExecutor {
     this.directory = config.directory;
     this.baseUrl = config.baseUrl;
     this.authHeaders = config.authHeaders;
+    this.allowInsecure = config.allowInsecure ?? false;
   }
 
   /**
@@ -230,9 +234,19 @@ export class CommandExecutorImpl implements CommandExecutor {
       }, timeout);
 
       try {
-        const wsOptions: { headers?: Record<string, string> } = {};
+        // Build WebSocket options with auth headers and TLS settings
+        const wsOptions: { 
+          headers?: Record<string, string>;
+          tls?: { rejectUnauthorized: boolean };
+        } = {};
+        
         if (Object.keys(this.authHeaders).length > 0) {
           wsOptions.headers = { ...this.authHeaders };
+        }
+        
+        // For WSS connections with self-signed certificates, disable TLS verification
+        if (this.allowInsecure && wsUrl.startsWith("wss://")) {
+          wsOptions.tls = { rejectUnauthorized: false };
         }
 
         ws = new WebSocket(wsUrl, wsOptions as ConstructorParameters<typeof WebSocket>[1]);

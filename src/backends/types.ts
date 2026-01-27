@@ -17,6 +17,10 @@ export interface BackendConnectionConfig {
   password?: string;
   /** Working directory for the backend */
   directory: string;
+  /** Whether to use HTTPS for connect mode */
+  useHttps?: boolean;
+  /** Whether to allow insecure connections (self-signed certificates) */
+  allowInsecure?: boolean;
 }
 
 /**

@@ -87,6 +87,8 @@ export const settingsRoutes = {
      * - hostname: Required for connect mode
      * - port: Optional port for connect mode
      * - password: Optional password for Basic auth
+     * - useHttps: Optional, whether to use HTTPS (defaults to false)
+     * - allowInsecure: Optional, whether to allow self-signed certificates
      * 
      * Errors:
      * - 400: Invalid mode, missing hostname, or spawn disabled
@@ -126,6 +128,8 @@ export const settingsRoutes = {
           hostname: body.hostname,
           port: body.port,
           password: body.password,
+          useHttps: body.useHttps,
+          allowInsecure: body.allowInsecure,
         };
 
         await backendManager.updateSettings(settings);
@@ -167,6 +171,8 @@ export const settingsRoutes = {
      * - hostname: Required for connect mode
      * - port: Optional port for connect mode
      * - password: Optional password for Basic auth
+     * - useHttps: Optional, whether to use HTTPS
+     * - allowInsecure: Optional, whether to allow self-signed certificates
      * - directory: Optional directory to test with (defaults to cwd)
      * 
      * @returns Test result with success and message
@@ -208,6 +214,8 @@ export const settingsRoutes = {
             hostname: body.hostname,
             port: body.port,
             password: body.password,
+            useHttps: body.useHttps,
+            allowInsecure: body.allowInsecure,
           },
           directory
         );
