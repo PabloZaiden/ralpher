@@ -118,16 +118,26 @@ export function LogViewer({
   const containerRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef<boolean>(true);
 
+  // Helper function to check if scrolled to bottom
+  const isScrolledToBottom = () => {
+    const container = containerRef.current;
+    if (!container) return true;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    // Consider "at bottom" if within 10px of the bottom
+    return scrollHeight - scrollTop - clientHeight < 10;
+  };
+
   // Track if the user is scrolled to the bottom
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      // Consider "at bottom" if within 10px of the bottom
-      isAtBottomRef.current = scrollHeight - scrollTop - clientHeight < 10;
+      isAtBottomRef.current = isScrolledToBottom();
     };
+
+    // Set initial value
+    isAtBottomRef.current = isScrolledToBottom();
 
     container.addEventListener("scroll", handleScroll);
     return () => container.removeEventListener("scroll", handleScroll);
@@ -135,8 +145,18 @@ export function LogViewer({
 
   // Auto-scroll to bottom when content changes, but only if user was already at bottom
   useEffect(() => {
-    if (autoScroll && containerRef.current && isAtBottomRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    if (autoScroll && containerRef.current) {
+      // Check current scroll position before scrolling
+      const shouldScroll = isAtBottomRef.current;
+      
+      if (shouldScroll) {
+        // Use requestAnimationFrame to ensure DOM has updated
+        requestAnimationFrame(() => {
+          if (containerRef.current) {
+            containerRef.current.scrollTop = containerRef.current.scrollHeight;
+          }
+        });
+      }
     }
   }, [messages, toolCalls, logs, autoScroll, showDebugLogs]);
 
