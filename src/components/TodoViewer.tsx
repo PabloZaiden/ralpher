@@ -152,7 +152,7 @@ export function TodoViewer({
   return (
     <div
       ref={containerRef}
-      className={`bg-gray-900 text-gray-100 rounded-lg overflow-auto font-mono text-xs ${!maxHeight ? "flex-1 min-h-0" : ""}`}
+      className={`bg-gray-900 text-gray-100 rounded-lg overflow-auto font-mono text-xs dark-scrollbar ${!maxHeight ? "flex-1 min-h-0" : ""}`}
       style={maxHeight ? { maxHeight } : undefined}
     >
       {isEmpty ? (
