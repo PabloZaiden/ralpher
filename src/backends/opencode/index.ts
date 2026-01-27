@@ -781,6 +781,22 @@ export class OpenCodeBackend {
         };
       }
 
+      case "todo.updated": {
+        // TODO list updated
+        const props = event.properties;
+        if (props.sessionID !== sessionId) return null;
+        return {
+          type: "todo.updated",
+          sessionId: props.sessionID,
+          todos: (props.todos ?? []).map((todo) => ({
+            content: todo.content,
+            status: todo.status as "pending" | "in_progress" | "completed" | "cancelled",
+            priority: todo.priority as "high" | "medium" | "low",
+            id: todo.id,
+          })),
+        };
+      }
+
       default:
         // Log unhandled event types for debugging
         log.debug("[OpenCodeBackend] translateEvent: Unhandled event type", { type: event.type });

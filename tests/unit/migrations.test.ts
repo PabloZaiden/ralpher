@@ -554,3 +554,210 @@ describe("migrations - review_comments with fresh database", () => {
     expect(columns).toContain("review_cycle");
   });
 });
+
+describe("migrations - todos column (migration #7)", () => {
+  let tempDir: string;
+  let db: Database;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "ralpher-migration-todos-test-"));
+    db = new Database(join(tempDir, "test.db"));
+    
+    // Create base loops table without todos column (old database)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS loops (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        directory TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        model_provider_id TEXT,
+        model_model_id TEXT,
+        max_iterations INTEGER,
+        max_consecutive_errors INTEGER,
+        activity_timeout_seconds INTEGER,
+        stop_pattern TEXT NOT NULL,
+        git_branch_prefix TEXT NOT NULL,
+        git_commit_prefix TEXT NOT NULL,
+        base_branch TEXT,
+        status TEXT NOT NULL DEFAULT 'idle',
+        current_iteration INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT,
+        completed_at TEXT,
+        last_activity_at TEXT,
+        session_id TEXT,
+        session_server_url TEXT,
+        error_message TEXT,
+        error_iteration INTEGER,
+        error_timestamp TEXT,
+        git_original_branch TEXT,
+        git_working_branch TEXT,
+        git_commits TEXT,
+        recent_iterations TEXT,
+        logs TEXT,
+        messages TEXT,
+        tool_calls TEXT,
+        consecutive_errors TEXT,
+        pending_prompt TEXT,
+        clear_planning_folder INTEGER DEFAULT 0
+      )
+    `);
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(tempDir, { recursive: true });
+  });
+
+  test("migration creates todos column", () => {
+    // Before migration
+    const columnsBefore = getTableColumns(db, "loops");
+    expect(columnsBefore).not.toContain("todos");
+
+    // Run migrations
+    runMigrations(db);
+
+    // After migration
+    const columnsAfter = getTableColumns(db, "loops");
+    expect(columnsAfter).toContain("todos");
+  });
+
+  test("todos column is correctly added to loops table", () => {
+    runMigrations(db);
+
+    const columns = getTableColumns(db, "loops");
+    expect(columns).toContain("todos");
+  });
+
+  test("migration is idempotent - can run multiple times", () => {
+    // Run migrations twice
+    runMigrations(db);
+    expect(() => runMigrations(db)).not.toThrow();
+
+    // Column should still exist with correct structure
+    const columns = getTableColumns(db, "loops");
+    expect(columns).toContain("todos");
+  });
+
+  test("todos column accepts JSON data", () => {
+    runMigrations(db);
+
+    // Insert a test loop with todos
+    db.run(`
+      INSERT INTO loops (
+        id, name, directory, prompt, created_at, updated_at, 
+        stop_pattern, git_branch_prefix, git_commit_prefix, todos
+      ) VALUES (
+        'test-loop-1', 'Test Loop', '/tmp/test', 'test prompt', 
+        '2026-01-27T10:00:00Z', '2026-01-27T10:00:00Z',
+        'STOP', 'test/', '[Test]', 
+        '[{"id":"1","content":"Test TODO","status":"pending","priority":"medium"}]'
+      )
+    `);
+
+    // Verify the todos can be retrieved
+    const result = db.query("SELECT todos FROM loops WHERE id = 'test-loop-1'").get() as { todos: string };
+    expect(result.todos).toBeTruthy();
+    
+    // Verify it's valid JSON
+    const parsed = JSON.parse(result.todos);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed[0]).toMatchObject({
+      id: "1",
+      content: "Test TODO",
+      status: "pending",
+      priority: "medium",
+    });
+  });
+
+  test("todos column can be null", () => {
+    runMigrations(db);
+
+    // Insert a test loop without todos
+    db.run(`
+      INSERT INTO loops (
+        id, name, directory, prompt, created_at, updated_at, 
+        stop_pattern, git_branch_prefix, git_commit_prefix
+      ) VALUES (
+        'test-loop-1', 'Test Loop', '/tmp/test', 'test prompt', 
+        '2026-01-27T10:00:00Z', '2026-01-27T10:00:00Z',
+        'STOP', 'test/', '[Test]'
+      )
+    `);
+
+    // Verify todos is null by default
+    const result = db.query("SELECT todos FROM loops WHERE id = 'test-loop-1'").get() as { todos: string | null };
+    expect(result.todos).toBeNull();
+  });
+});
+
+describe("migrations - todos with fresh database", () => {
+  let tempDir: string;
+  let db: Database;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "ralpher-migration-todos-fresh-test-"));
+    db = new Database(join(tempDir, "test.db"));
+    
+    // Create full schema including todos column (fresh database)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS loops (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        directory TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        model_provider_id TEXT,
+        model_model_id TEXT,
+        max_iterations INTEGER,
+        max_consecutive_errors INTEGER,
+        activity_timeout_seconds INTEGER,
+        stop_pattern TEXT NOT NULL,
+        git_branch_prefix TEXT NOT NULL,
+        git_commit_prefix TEXT NOT NULL,
+        base_branch TEXT,
+        status TEXT NOT NULL DEFAULT 'idle',
+        current_iteration INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT,
+        completed_at TEXT,
+        last_activity_at TEXT,
+        session_id TEXT,
+        session_server_url TEXT,
+        error_message TEXT,
+        error_iteration INTEGER,
+        error_timestamp TEXT,
+        git_original_branch TEXT,
+        git_working_branch TEXT,
+        git_commits TEXT,
+        recent_iterations TEXT,
+        logs TEXT,
+        messages TEXT,
+        tool_calls TEXT,
+        consecutive_errors TEXT,
+        pending_prompt TEXT,
+        clear_planning_folder INTEGER DEFAULT 0,
+        todos TEXT
+      )
+    `);
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(tempDir, { recursive: true });
+  });
+
+  test("migration handles fresh database with todos column already present", () => {
+    // Column already exists in fresh database
+    const columnsBefore = getTableColumns(db, "loops");
+    expect(columnsBefore).toContain("todos");
+
+    // Migration should not fail
+    expect(() => runMigrations(db)).not.toThrow();
+
+    // Column should still exist
+    const columnsAfter = getTableColumns(db, "loops");
+    expect(columnsAfter).toContain("todos");
+  });
+});

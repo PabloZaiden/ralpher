@@ -1205,6 +1205,27 @@ export class LoopEngine {
               break;
             }
 
+            case "todo.updated": {
+              // Store TODOs in loop state for persistence
+              this.loop.state.todos = event.todos;
+              
+              // Emit TODO updated event with the list of todos
+              this.emitLog("debug", "TODOs updated", {
+                sessionId: event.sessionId,
+                todoCount: event.todos.length,
+              });
+              this.emit({
+                type: "loop.todo.updated",
+                loopId: this.config.id,
+                todos: event.todos,
+                timestamp: createTimestamp(),
+              });
+              
+              // Persist state to survive screen refresh/server reboot
+              await this.triggerPersistence();
+              break;
+            }
+
             case "session.status":
               // Log session status changes for debugging
               this.emitLog("debug", `Session status: ${event.status}`, {
