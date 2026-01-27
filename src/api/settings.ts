@@ -87,7 +87,7 @@ export const settingsRoutes = {
      * - hostname: Required for connect mode
      * - port: Optional port for connect mode
      * - password: Optional password for Basic auth
-     * - useHttps: Optional, whether to use HTTPS (defaults to true if port is 443)
+     * - useHttps: Optional, whether to use HTTPS (defaults to false)
      * - allowInsecure: Optional, whether to allow self-signed certificates
      * 
      * Errors:

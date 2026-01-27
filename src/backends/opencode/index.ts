@@ -132,8 +132,8 @@ export class OpenCodeBackend {
     const hostname = config.hostname ?? "127.0.0.1";
     const port = config.port ?? 4096;
     
-    // Determine protocol: use HTTPS if explicitly set or if port is 443
-    const useHttps = config.useHttps ?? (port === 443);
+    // Determine protocol: use HTTPS only if explicitly set
+    const useHttps = config.useHttps ?? false;
     const protocol = useHttps ? "https" : "http";
     const baseUrl = `${protocol}://${hostname}:${port}`;
 

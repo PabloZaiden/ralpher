@@ -133,7 +133,7 @@ class BackendManager {
       
       // Determine the correct protocol for the server URL
       const port = this.settings.port ?? 4096;
-      const useHttps = this.settings.useHttps ?? (port === 443);
+      const useHttps = this.settings.useHttps ?? false;
       const protocol = useHttps ? "https" : "http";
       
       this.emitEvent({
@@ -234,7 +234,7 @@ class BackendManager {
     
     // Determine the correct protocol for the server URL
     const port = this.settings.port ?? 4096;
-    const useHttps = this.settings.useHttps ?? (port === 443);
+    const useHttps = this.settings.useHttps ?? false;
     const protocol = useHttps ? "https" : "http";
 
     return {

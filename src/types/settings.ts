@@ -25,7 +25,7 @@ export interface ServerSettings {
   port?: number;
   /** Password for connect mode (optional, stored in plain text) */
   password?: string;
-  /** Whether to use HTTPS for connect mode (inferred from port 443 if not set) */
+  /** Whether to use HTTPS for connect mode (defaults to false if not set) */
   useHttps?: boolean;
   /** Whether to allow insecure connections (self-signed certificates) */
   allowInsecure?: boolean;
