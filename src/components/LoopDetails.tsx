@@ -551,7 +551,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                             toolCalls={toolCalls}
                             logs={logs}
                             showDebugLogs={showDebugLogs}
-                            maxHeight={undefined}
                           />
                         </div>
                         
@@ -560,7 +559,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0">
                             TODOs
                           </h3>
-                          <TodoViewer todos={todos} maxHeight={undefined} />
+                          <TodoViewer todos={todos} />
                         </div>
                       </div>
                       
