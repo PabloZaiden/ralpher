@@ -15,6 +15,16 @@ A Ralph Loop is an autonomous AI development pattern that uses an external loop 
 | **Stop Condition** | Loop terminates when AI output ends with `<promise>COMPLETE</promise>` |
 | **Git Safety** | Work isolated in branch, committed per iteration, merged on acceptance |
 
+## Installation
+
+Install the latest release binary:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pablozaiden/ralpher/main/install.sh | sh
+```
+
+This downloads the appropriate binary for your platform (Linux/macOS, x64/arm64) and installs it to `~/.local/bin/ralpher`.
+
 ## Features
 
 - **Web Dashboard**: Real-time monitoring of multiple concurrent loops
@@ -31,7 +41,7 @@ A Ralph Loop is an autonomous AI development pattern that uses an external loop 
 - Git
 - An [OpenCode](https://opencode.ai) compatible AI provider API key
 
-### Installation
+### Development Setup
 
 ```bash
 # Clone the repository
