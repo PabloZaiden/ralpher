@@ -63,6 +63,10 @@ export async function initializeDatabase(): Promise<void> {
 
   db = new Database(dbPath);
   
+  // Enable foreign key constraints
+  // This must be set for every connection to enforce FK constraints and cascades
+  db.run("PRAGMA foreign_keys = ON");
+  
   // Enable WAL mode for better concurrency
   db.run("PRAGMA journal_mode = WAL");
   
