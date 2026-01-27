@@ -70,15 +70,17 @@ function getStatusColor(status: TodoItem["status"]): string {
 }
 
 /**
- * Get the priority indicator color.
+ * Get the border color for a TODO status.
  */
-function getPriorityColor(priority: TodoItem["priority"]): string {
-  switch (priority) {
-    case "high":
-      return "border-l-red-500";
-    case "medium":
-      return "border-l-yellow-500";
-    case "low":
+function getStatusBorderColor(status: TodoItem["status"]): string {
+  switch (status) {
+    case "pending":
+      return "border-l-gray-600";
+    case "in_progress":
+      return "border-l-blue-500";
+    case "completed":
+      return "border-l-green-500";
+    case "cancelled":
       return "border-l-gray-600";
     default:
       return "border-l-gray-600";
@@ -142,7 +144,7 @@ export function TodoViewer({
           {todos.map((todo, index) => (
             <div
               key={`${todo.id}-${index}`}
-              className={`flex items-start gap-2 sm:gap-3 p-2 rounded border-l-4 ${getPriorityColor(todo.priority)} bg-gray-800/50`}
+              className={`flex items-start gap-2 sm:gap-3 p-2 rounded border-l-4 ${getStatusBorderColor(todo.status)} bg-gray-800/50`}
             >
               {/* Status Icon */}
               <span className={`flex-shrink-0 ${getStatusColor(todo.status)} text-base`}>
@@ -156,13 +158,10 @@ export function TodoViewer({
                 </div>
                 
                 {/* Status Badge */}
-                <div className="mt-1 flex items-center gap-2">
+                <div className="mt-1">
                   <Badge variant={getStatusBadge(todo.status)} size="sm">
                     {todo.status.replace("_", " ").toUpperCase()}
                   </Badge>
-                  {todo.priority === "high" && (
-                    <span className="text-xs text-red-400">HIGH PRIORITY</span>
-                  )}
                 </div>
               </div>
             </div>
