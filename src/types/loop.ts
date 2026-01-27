@@ -3,6 +3,8 @@
  * These types define the configuration and state of Ralph Loops.
  */
 
+import type { TodoItem } from "../backends/types";
+
 /**
  * Configuration for a Ralph Loop.
  * This is the persistent configuration that defines how a loop behaves.
@@ -141,6 +143,9 @@ export interface LoopState {
     /** For merged loops: list of all branches created during reviews */
     reviewBranches: string[];
   };
+
+  /** TODOs from the session (persisted for screen refresh/server reboot) */
+  todos?: TodoItem[];
 }
 
 /**

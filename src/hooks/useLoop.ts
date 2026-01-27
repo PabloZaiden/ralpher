@@ -275,12 +275,18 @@ export function useLoop(loopId: string): UseLoopResult {
           timestamp: tc.timestamp,
         })));
       }
+      
+      // Load persisted TODOs from loop state on initial load
+      // Only load if we have no todos yet (fresh page load)
+      if (data.state.todos && data.state.todos.length > 0 && todos.length === 0) {
+        setTodos(data.state.todos);
+      }
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
     }
-  }, [loopId, logs.length, messages.length, toolCalls.length]);
+  }, [loopId, logs.length, messages.length, toolCalls.length, todos.length]);
 
   // Update the loop
   const update = useCallback(

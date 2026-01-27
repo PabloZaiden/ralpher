@@ -224,6 +224,25 @@ export const migrations: Migration[] = [
       log.info("Ensured review_comments table and indexes exist");
     },
   },
+  {
+    version: 7,
+    name: "add_todos_to_loop_state",
+    up: (db) => {
+      // Check if the loops table exists
+      if (!tableExists(db, "loops")) {
+        log.debug("loops table does not exist, skipping migration 7");
+        return;
+      }
+      
+      const columns = getTableColumns(db, "loops");
+      
+      // Add todos column to store TODO items from the session
+      if (!columns.includes("todos")) {
+        db.run("ALTER TABLE loops ADD COLUMN todos TEXT");
+        log.info("Added todos column to loops table");
+      }
+    },
+  },
 ];
 
 /**
