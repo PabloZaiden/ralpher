@@ -8,6 +8,7 @@ import type { ReviewComment } from "../types/loop";
 import { useLoop } from "../hooks";
 import { Badge, Button, Card, getStatusBadgeVariant } from "./common";
 import { LogViewer } from "./LogViewer";
+import { TodoViewer } from "./TodoViewer";
 import {
   AcceptLoopModal,
   AddressCommentsModal,
@@ -88,6 +89,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     messages,
     toolCalls,
     logs,
+    todos,
     gitChangeCounter,
     accept,
     push,
@@ -601,13 +603,32 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                   {activeTab === "log" && (
                     <div>
-                      <LogViewer
-                        messages={messages}
-                        toolCalls={toolCalls}
-                        logs={logs}
-                        maxHeight="600px"
-                        showDebugLogs={showDebugLogs}
-                      />
+                      {/* Side-by-side layout for logs and TODOs */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
+                        {/* Logs section */}
+                        <div className="flex flex-col">
+                          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            Logs
+                          </h3>
+                          <LogViewer
+                            messages={messages}
+                            toolCalls={toolCalls}
+                            logs={logs}
+                            maxHeight="600px"
+                            showDebugLogs={showDebugLogs}
+                          />
+                        </div>
+                        
+                        {/* TODOs section */}
+                        <div className="flex flex-col">
+                          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                            TODOs
+                          </h3>
+                          <TodoViewer todos={todos} maxHeight="600px" />
+                        </div>
+                      </div>
+                      
+                      {/* Debug logs toggle at the bottom */}
                       <div className="p-3 border-t border-gray-200 dark:border-gray-700">
                         <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
                           <input

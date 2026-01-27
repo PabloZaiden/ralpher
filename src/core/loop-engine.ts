@@ -1205,6 +1205,21 @@ export class LoopEngine {
               break;
             }
 
+            case "todo.updated": {
+              // Emit TODO updated event with the list of todos
+              this.emitLog("debug", "TODOs updated", {
+                sessionId: event.sessionId,
+                todoCount: event.todos.length,
+              });
+              this.emit({
+                type: "loop.todo.updated",
+                loopId: this.config.id,
+                todos: event.todos,
+                timestamp: createTimestamp(),
+              });
+              break;
+            }
+
             case "session.status":
               // Log session status changes for debugging
               this.emitLog("debug", `Session status: ${event.status}`, {

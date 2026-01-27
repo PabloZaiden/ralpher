@@ -61,6 +61,10 @@ export class ConfigurableMockBackend implements LoopBackend {
   // Promise-based synchronization for prompt/subscription coordination
   private promptResolver: (() => void) | null = null;
   private promptPromise: Promise<void> | null = null;
+  
+  // Event stream push function (stored when subscribeToEvents is called)
+  private eventPush: ((event: AgentEvent) => void) | null = null;
+  private currentSessionId: string | null = null;
 
   constructor(responses: string[] = ["<promise>COMPLETE</promise>"]) {
     this.responses = responses;
@@ -73,6 +77,8 @@ export class ConfigurableMockBackend implements LoopBackend {
     this.responseIndex = 0;
     this.promptResolver = null;
     this.promptPromise = null;
+    this.eventPush = null;
+    this.currentSessionId = null;
     if (responses) {
       this.responses = responses;
     }
@@ -91,6 +97,19 @@ export class ConfigurableMockBackend implements LoopBackend {
    */
   getResponseIndex(): number {
     return this.responseIndex;
+  }
+
+  /**
+   * Emit a TODO update event (for testing TODO display feature).
+   */
+  emitTodoUpdate(todos: import("../../../src/backends/types").TodoItem[]): void {
+    if (this.eventPush && this.currentSessionId) {
+      this.eventPush({
+        type: "todo.updated",
+        sessionId: this.currentSessionId,
+        todos,
+      });
+    }
   }
 
   private getNextResponse(): string {
@@ -152,8 +171,12 @@ export class ConfigurableMockBackend implements LoopBackend {
     // Mock - no-op
   }
 
-  async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
+  async subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>> {
     const { stream, push, end } = createEventStream<AgentEvent>();
+
+    // Store the push function and session ID for emitTodoUpdate
+    this.eventPush = push;
+    this.currentSessionId = sessionId;
 
     // Create a promise that will be resolved when sendPromptAsync is called
     this.promptPromise = new Promise<void>((resolve) => {

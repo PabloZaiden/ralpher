@@ -4,6 +4,7 @@
  */
 
 import type { GitCommit, LoopConfig } from "./loop";
+import type { TodoItem } from "../backends/types";
 
 /**
  * Message data from the AI agent.
@@ -61,7 +62,8 @@ export type LoopEvent =
   | LoopPlanReadyEvent
   | LoopPlanFeedbackSentEvent
   | LoopPlanAcceptedEvent
-  | LoopPlanDiscardedEvent;
+  | LoopPlanDiscardedEvent
+  | LoopTodoUpdatedEvent;
 
 export interface LoopCreatedEvent {
   type: "loop.created";
@@ -223,6 +225,13 @@ export interface LoopPlanAcceptedEvent {
 export interface LoopPlanDiscardedEvent {
   type: "loop.plan.discarded";
   loopId: string;
+  timestamp: string;
+}
+
+export interface LoopTodoUpdatedEvent {
+  type: "loop.todo.updated";
+  loopId: string;
+  todos: TodoItem[];
   timestamp: string;
 }
 

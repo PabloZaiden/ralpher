@@ -117,6 +117,20 @@ export interface QuestionInfo {
 }
 
 /**
+ * A TODO item from an agent session.
+ */
+export interface TodoItem {
+  /** Brief description of the task */
+  content: string;
+  /** Current status of the task */
+  status: "pending" | "in_progress" | "completed" | "cancelled";
+  /** Priority level of the task */
+  priority: "high" | "medium" | "low";
+  /** Unique identifier for the todo item */
+  id: string;
+}
+
+/**
  * Events emitted by the OpenCode backend.
  */
 export type AgentEvent =
@@ -129,4 +143,5 @@ export type AgentEvent =
   | { type: "error"; message: string }
   | { type: "permission.asked"; requestId: string; sessionId: string; permission: string; patterns: string[] }
   | { type: "question.asked"; requestId: string; sessionId: string; questions: QuestionInfo[] }
-  | { type: "session.status"; sessionId: string; status: "idle" | "busy" | "retry"; attempt?: number; message?: string };
+  | { type: "session.status"; sessionId: string; status: "idle" | "busy" | "retry"; attempt?: number; message?: string }
+  | { type: "todo.updated"; sessionId: string; todos: TodoItem[] };

@@ -14,6 +14,7 @@ import type {
   ToolCallData,
   LogLevel,
 } from "../types";
+import type { TodoItem } from "../backends/types";
 import { useLoopEvents } from "./useWebSocket";
 import {
   acceptLoopApi,
@@ -67,6 +68,8 @@ export interface UseLoopResult {
   progressContent: string;
   /** Application logs from the loop engine */
   logs: LogEntry[];
+  /** TODOs from the agent session */
+  todos: TodoItem[];
   /** Counter that increments when git changes occur (use to trigger diff refresh) */
   gitChangeCounter: number;
   /** Refresh loop data */
@@ -114,6 +117,7 @@ export function useLoop(loopId: string): UseLoopResult {
   const [toolCalls, setToolCalls] = useState<ToolCallData[]>([]);
   const [progressContent, setProgressContent] = useState<string>("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [todos, setTodos] = useState<TodoItem[]>([]);
   const [gitChangeCounter, setGitChangeCounter] = useState(0);
 
   // WebSocket connection for real-time updates
@@ -204,6 +208,11 @@ export function useLoop(loopId: string): UseLoopResult {
         // These events indicate git changes that affect the diff
         setGitChangeCounter((prev) => prev + 1);
         refresh();
+        break;
+
+      case "loop.todo.updated":
+        // Update TODO list with the latest todos from the agent
+        setTodos(event.todos);
         break;
     }
   }
@@ -499,6 +508,7 @@ export function useLoop(loopId: string): UseLoopResult {
     toolCalls,
     progressContent,
     logs,
+    todos,
     gitChangeCounter,
     refresh,
     update,
