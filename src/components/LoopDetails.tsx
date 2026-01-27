@@ -603,8 +603,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                   {activeTab === "log" && (
                     <div>
-                      {/* Side-by-side layout for logs and TODOs */}
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
+                      {/* Side-by-side layout for logs and TODOs (75-25 split) */}
+                      <div className="grid grid-cols-1 lg:grid-cols-[3fr_1fr] gap-4 p-4">
                         {/* Logs section */}
                         <div className="flex flex-col">
                           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
