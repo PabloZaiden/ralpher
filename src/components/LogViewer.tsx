@@ -112,7 +112,7 @@ export function LogViewer({
   toolCalls,
   logs = [],
   autoScroll = true,
-  maxHeight = "500px",
+  maxHeight,
   showDebugLogs = true,
 }: LogViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);

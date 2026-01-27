@@ -100,7 +100,7 @@ function getTextStyle(status: TodoItem["status"]): string {
 export function TodoViewer({
   todos,
   autoScroll = true,
-  maxHeight = "500px",
+  maxHeight,
 }: TodoViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef<boolean>(true);

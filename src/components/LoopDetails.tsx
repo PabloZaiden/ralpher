@@ -540,9 +540,9 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   {activeTab === "log" && (
                     <div className="flex-1 min-h-0 flex flex-col">
                       {/* Side-by-side layout for logs and TODOs (75-25 split) */}
-                      <div className="grid grid-cols-1 lg:grid-cols-[3fr_1fr] gap-4 p-4 flex-1 min-h-0">
+                      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-4">
                         {/* Logs section */}
-                        <div className="flex flex-col min-h-0">
+                        <div className="flex-[3] min-h-[100px] lg:min-h-0 flex flex-col min-w-0">
                           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0">
                             Logs
                           </h3>
@@ -551,15 +551,16 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                             toolCalls={toolCalls}
                             logs={logs}
                             showDebugLogs={showDebugLogs}
+                            maxHeight={undefined}
                           />
                         </div>
                         
                         {/* TODOs section */}
-                        <div className="flex flex-col min-h-0">
+                        <div className="flex-1 min-h-[100px] lg:min-h-0 flex flex-col min-w-0">
                           <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0">
                             TODOs
                           </h3>
-                          <TodoViewer todos={todos} />
+                          <TodoViewer todos={todos} maxHeight={undefined} />
                         </div>
                       </div>
                       
