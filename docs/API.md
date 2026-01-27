@@ -110,11 +110,15 @@ Create a new loop.
 | `model.modelID` | string | No | Model ID (e.g., "claude-sonnet-4-20250514") |
 | `maxIterations` | number | No | Maximum iterations (unlimited if not set) |
 | `maxConsecutiveErrors` | number | No | Max errors before failsafe (default: 10) |
+| `activityTimeoutSeconds` | number | No | Seconds without events before treating as error (default: 180, min: 60) |
 | `stopPattern` | string | No | Completion regex (default: `<promise>COMPLETE</promise>$`) |
 | `git` | object | No | Git configuration |
 | `git.branchPrefix` | string | No | Branch prefix (default: "ralph/") |
 | `git.commitPrefix` | string | No | Commit message prefix (default: "[Ralph]") |
 | `baseBranch` | string | No | Base branch to create the loop from (default: current branch) |
+| `clearPlanningFolder` | boolean | No | Clear .planning folder before starting (default: false) |
+| `planMode` | boolean | No | Start in plan creation mode (default: false) |
+| `draft` | boolean | No | Save as draft without starting (default: false) |
 
 **Example Request**
 
@@ -127,7 +131,8 @@ Create a new loop.
     "providerID": "anthropic",
     "modelID": "claude-sonnet-4-20250514"
   },
-  "maxIterations": 10
+  "maxIterations": 10,
+  "activityTimeoutSeconds": 300
 }
 ```
 
@@ -135,12 +140,18 @@ Create a new loop.
 
 Returns the created loop object with status `201 Created`.
 
+- If `draft: true`, the loop is saved with status `draft` and no git branch is created
+- If `planMode: true`, the loop starts in `planning` status
+- Otherwise, the loop is started immediately and returns with status `running`
+
 **Errors**
 
 | Status | Error | Description |
 |--------|-------|-------------|
 | 400 | `validation_error` | Missing or invalid fields |
 | 400 | `invalid_body` | Request body is not valid JSON |
+| 409 | `uncommitted_changes` | Directory has uncommitted changes |
+| 500 | `start_failed` | Loop created but failed to start |
 
 #### GET /api/loops/:id
 
@@ -158,18 +169,23 @@ Returns the loop object.
 
 #### PATCH /api/loops/:id
 
-Update a loop's configuration.
+Update a loop's configuration. Can update any loop regardless of status.
 
 **Request Body**
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `name` | string | Update name |
+| `directory` | string | Update working directory |
 | `prompt` | string | Update prompt |
 | `model` | object | Update model |
 | `maxIterations` | number | Update max iterations |
 | `maxConsecutiveErrors` | number | Update max consecutive errors |
+| `activityTimeoutSeconds` | number | Update activity timeout |
 | `stopPattern` | string | Update stop pattern |
+| `baseBranch` | string | Update base branch |
+| `clearPlanningFolder` | boolean | Update clear planning folder flag |
+| `planMode` | boolean | Update plan mode flag |
 | `git` | object | Update git config (partial) |
 
 **Response**
@@ -181,6 +197,25 @@ Returns the updated loop object.
 | Status | Error | Description |
 |--------|-------|-------------|
 | 404 | `not_found` | Loop not found |
+
+#### PUT /api/loops/:id
+
+Update a draft loop's configuration. Only works for loops in `draft` status.
+
+**Request Body**
+
+Same fields as PATCH.
+
+**Response**
+
+Returns the updated loop object.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 400 | `not_draft` | Only draft loops can be updated via PUT |
 
 #### DELETE /api/loops/:id
 
@@ -204,7 +239,30 @@ Delete a loop.
 
 ### Loop Control
 
-Loops are automatically started when created. The following endpoints control loop lifecycle after creation.
+Loops are automatically started when created (unless `draft: true`). The following endpoints control loop lifecycle after creation.
+
+#### POST /api/loops/:id/draft/start
+
+Start a draft loop. Transitions the loop from `draft` status to either `planning` or `running`.
+
+**Request Body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `planMode` | boolean | Yes | If true, start in plan mode; if false, start immediately |
+
+**Response**
+
+Returns the updated loop object.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 400 | `not_draft` | Loop is not in draft status |
+| 400 | `invalid_body` | Request body must contain planMode boolean |
+| 409 | `uncommitted_changes` | Directory has uncommitted changes |
 
 #### POST /api/loops/:id/accept
 
@@ -399,6 +457,35 @@ Get the contents of `.planning/status.md` from the loop's directory.
 }
 ```
 
+#### GET /api/loops/:id/comments
+
+Get all review comments for a loop.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "comments": [
+    {
+      "id": "uuid",
+      "loopId": "loop-uuid",
+      "reviewCycle": 1,
+      "commentText": "Please fix the error handling in the auth module",
+      "createdAt": "2026-01-25T10:00:00.000Z",
+      "status": "addressed",
+      "addressedAt": "2026-01-25T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+
 ---
 
 ### Plan Mode
@@ -461,6 +548,67 @@ Discard the plan and delete the loop.
 ```json
 {
   "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+
+---
+
+### Review Comments
+
+After a loop is pushed or merged, reviewers can submit comments that the loop will address.
+
+#### POST /api/loops/:id/address-comments
+
+Start addressing reviewer comments. Creates a new review cycle and restarts the loop.
+
+**Request Body**
+
+```json
+{
+  "comments": "Please fix the type errors in the auth module and add unit tests"
+}
+```
+
+**Response**
+
+```json
+{
+  "success": true,
+  "reviewCycle": 1,
+  "branch": "ralph/my-feature",
+  "commentIds": ["uuid-1", "uuid-2"]
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 400 | `validation_error` | Comments field is required/empty |
+| 409 | `already_running` | Loop is already running |
+
+#### GET /api/loops/:id/review-history
+
+Get the review history for a loop, including past review cycles.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "history": {
+    "addressable": true,
+    "completionAction": "push",
+    "reviewCycles": 2,
+    "reviewBranches": ["ralph/my-feature-review-1", "ralph/my-feature-review-2"]
+  }
 }
 ```
 
@@ -686,6 +834,7 @@ Update server settings.
 |--------|-------|-------------|
 | 400 | `invalid_mode` | mode must be "spawn" or "connect" |
 | 400 | `missing_hostname` | hostname is required for connect mode |
+| 400 | `spawn_disabled` | Spawn mode disabled (RALPHER_REMOTE_ONLY is set) |
 
 #### GET /api/settings/server/status
 
@@ -842,6 +991,11 @@ Each event is a JSON object with a `type` field:
 | `loop.accepted` | Branch was merged |
 | `loop.pushed` | Branch was pushed to remote |
 | `loop.discarded` | Branch was deleted |
+| `loop.plan.ready` | Plan is ready for review (planning mode) |
+| `loop.plan.feedback` | Feedback was sent on plan |
+| `loop.plan.accepted` | Plan was accepted, execution starting |
+| `loop.plan.discarded` | Plan was discarded, loop deleted |
+| `loop.todo.updated` | TODO list was updated |
 
 **Keep-Alive**
 
@@ -863,6 +1017,10 @@ Send a ping message to receive a pong response:
 {"type":"loop.log","loopId":"abc-123","id":"log-1","level":"info","message":"Sending prompt to AI","timestamp":"2026-01-20T10:15:01.000Z"}
 
 {"type":"loop.tool_call","loopId":"abc-123","iteration":3,"tool":{"id":"tc-1","name":"Write","input":{"path":"/src/foo.ts"},"status":"running"},"timestamp":"2026-01-20T10:15:05.000Z"}
+
+{"type":"loop.plan.ready","loopId":"abc-123","planContent":"# Plan\n\n## Goals\n...","timestamp":"2026-01-20T10:16:00.000Z"}
+
+{"type":"loop.todo.updated","loopId":"abc-123","todos":[{"id":"1","content":"Implement feature","status":"in_progress"}],"timestamp":"2026-01-20T10:17:00.000Z"}
 ```
 
 **JavaScript Example**
@@ -898,8 +1056,9 @@ ws.onclose = () => {
 | Status | Description |
 |--------|-------------|
 | `idle` | Created but not started |
-| `starting` | Initializing backend connection |
+| `draft` | Saved as draft, not started (no git branch or session) |
 | `planning` | In plan mode, awaiting plan approval |
+| `starting` | Initializing backend connection |
 | `running` | Actively executing |
 | `waiting` | Between iterations |
 | `completed` | Stop pattern matched |
@@ -929,6 +1088,31 @@ ws.onclose = () => {
 | `error` | Error messages |
 | `debug` | Debug/verbose output |
 
+### Review Comment Status
+
+| Status | Description |
+|--------|-------------|
+| `pending` | Comment is being worked on |
+| `addressed` | Comment has been addressed |
+
+### Iteration Outcome
+
+| Outcome | Description |
+|---------|-------------|
+| `continue` | Iteration complete, loop continues |
+| `complete` | Stop pattern matched, loop complete |
+| `error` | Error occurred during iteration |
+| `plan_ready` | Plan created and ready for review (planning mode) |
+
+### TODO Item
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Unique identifier |
+| `content` | string | TODO item description |
+| `status` | string | "pending", "in_progress", or "completed" |
+| `priority` | string | "high", "medium", or "low" |
+
 ---
 
 ## Examples
@@ -951,6 +1135,62 @@ curl -X POST http://localhost:3000/api/loops \
 
 # Watch events via WebSocket (use wscat or similar)
 wscat -c ws://localhost:3000/api/ws?loopId=abc-123
+```
+
+### Create a Draft Loop
+
+Draft loops are saved without starting. You can edit them before starting.
+
+```bash
+# Create a draft loop
+curl -X POST http://localhost:3000/api/loops \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Add user authentication",
+    "directory": "/path/to/project",
+    "prompt": "Implement JWT-based authentication",
+    "draft": true
+  }'
+
+# Response: {"config":{"id":"abc-123",...},"state":{"status":"draft",...}}
+
+# Later, update the draft
+curl -X PUT http://localhost:3000/api/loops/abc-123 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Implement JWT-based authentication with refresh tokens"
+  }'
+
+# Start the draft
+curl -X POST http://localhost:3000/api/loops/abc-123/draft/start \
+  -H "Content-Type: application/json" \
+  -d '{"planMode": false}'
+```
+
+### Create a Loop with Plan Mode
+
+Plan mode lets you review and refine the plan before execution.
+
+```bash
+# Create a loop in plan mode
+curl -X POST http://localhost:3000/api/loops \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Refactor auth module",
+    "directory": "/path/to/project",
+    "prompt": "Refactor the authentication module to use async/await",
+    "planMode": true
+  }'
+
+# Response: {"config":{"id":"abc-123",...},"state":{"status":"planning",...}}
+
+# Send feedback on the plan
+curl -X POST http://localhost:3000/api/loops/abc-123/plan/feedback \
+  -H "Content-Type: application/json" \
+  -d '{"feedback": "Also consider adding error handling for token expiration"}'
+
+# Accept the plan and start execution
+curl -X POST http://localhost:3000/api/loops/abc-123/plan/accept
 ```
 
 ### Handle Uncommitted Changes
@@ -986,4 +1226,24 @@ curl -X PUT http://localhost:3000/api/loops/abc-123/pending-prompt \
 # After loop completes, review and accept
 curl -X POST http://localhost:3000/api/loops/abc-123/accept
 # Response: {"success":true,"mergeCommit":"def456..."}
+```
+
+### Address Reviewer Comments
+
+After pushing a loop, you can address reviewer comments:
+
+```bash
+# Push the loop first
+curl -X POST http://localhost:3000/api/loops/abc-123/push
+# Response: {"success":true,"remoteBranch":"ralph/my-feature"}
+
+# Later, address reviewer comments
+curl -X POST http://localhost:3000/api/loops/abc-123/address-comments \
+  -H "Content-Type: application/json" \
+  -d '{"comments": "Please fix the type errors and add error handling"}'
+# Response: {"success":true,"reviewCycle":1,"branch":"ralph/my-feature"}
+
+# Get review history
+curl http://localhost:3000/api/loops/abc-123/review-history
+# Response: {"success":true,"history":{"addressable":true,"completionAction":"push","reviewCycles":1,"reviewBranches":[]}}
 ```

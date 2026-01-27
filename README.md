@@ -4,7 +4,7 @@ A full-stack web application for managing **Ralph Loops** - an autonomous AI dev
 
 ## What is a Ralph Loop?
 
-A Ralph Loop (named after the "Ralph Wiggum technique") is an autonomous AI development pattern that uses an external loop to repeatedly feed prompts to an AI agent. The agent works on a task until a specific completion condition is met. Each iteration starts with a fresh context window, relying on the filesystem (via `.planning/` documents) for state persistence.
+A Ralph Loop is an autonomous AI development pattern that uses an external loop to repeatedly feed prompts to an AI agent. The agent works on a task until a specific completion condition is met. Each iteration starts with a fresh context window, relying on the filesystem (via `.planning/` documents) for state persistence.
 
 ### Key Principles
 
@@ -249,19 +249,6 @@ See [AGENTS.md](AGENTS.md) for detailed coding guidelines.
 2. Add route to the appropriate routes object
 3. Export from `src/api/index.ts`
 4. Add tests in `tests/api/`
-
-## The Ralph Wiggum Technique
-
-The pattern works by:
-
-1. **Starting**: Creates a git branch and sends the initial prompt
-2. **Iterating**: AI responds, makes changes, and outputs status
-3. **Committing**: After each iteration, changes are committed
-4. **Checking**: If output ends with `<promise>COMPLETE</promise>`, stop
-5. **Continuing**: Otherwise, send a continuation prompt with fresh context
-6. **Accepting**: User reviews and merges the branch
-
-This solves context rot because each iteration starts fresh, reading state from `.planning/` files instead of relying on conversation history.
 
 ## License
 

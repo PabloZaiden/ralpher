@@ -1,10 +1,18 @@
 /**
  * Loops API endpoints for Ralph Loops Management System.
- * Handles CRUD operations and loop control (start, stop, accept, discard).
+ * 
+ * This module provides comprehensive CRUD operations and lifecycle control for Ralph Loops:
+ * - CRUD: Create, read, update, and delete loops
+ * - Control: Accept, push, discard, and purge completed loops
+ * - Plan Mode: Create, review, and accept plans before execution
+ * - Review: Address reviewer comments on pushed/merged loops
+ * - Data: Access loop diffs, plans, and status files
  * 
  * Uses the CommandExecutor abstraction which works identically for both:
  * - Spawn mode: Commands run on locally-spawned opencode server via PTY+WebSocket
  * - Connect mode: Commands run on remote opencode server via PTY+WebSocket
+ * 
+ * @module api/loops
  */
 
 import { loopManager } from "../core/loop-manager";
@@ -28,7 +36,11 @@ import type {
 import { validateCreateLoopRequest } from "../types/api";
 
 /**
- * Helper to parse JSON body safely.
+ * Safely parse JSON body from a request.
+ * Returns null if the body is not valid JSON.
+ * 
+ * @param req - The incoming HTTP request
+ * @returns Parsed body or null if parsing fails
  */
 async function parseBody<T>(req: Request): Promise<T | null> {
   try {
@@ -39,7 +51,12 @@ async function parseBody<T>(req: Request): Promise<T | null> {
 }
 
 /**
- * Helper to create error response.
+ * Create a standardized error response.
+ * 
+ * @param error - Error code for programmatic handling
+ * @param message - Human-readable error description
+ * @param status - HTTP status code (default: 400)
+ * @returns JSON Response with error details
  */
 function errorResponse(error: string, message: string, status = 400): Response {
   const body: ErrorResponse = { error, message };
@@ -47,7 +64,10 @@ function errorResponse(error: string, message: string, status = 400): Response {
 }
 
 /**
- * Helper to create success response.
+ * Create a standardized success response.
+ * 
+ * @param data - Additional data to include in the response
+ * @returns JSON Response with success: true and any additional data
  */
 function successResponse(data: Record<string, unknown> = {}): Response {
   return Response.json({ success: true, ...data });
@@ -55,11 +75,25 @@ function successResponse(data: Record<string, unknown> = {}): Response {
 
 /**
  * Loops CRUD routes.
+ * 
+ * Provides endpoints for creating, reading, updating, and deleting loops:
+ * - GET /api/loops - List all loops
+ * - POST /api/loops - Create a new loop (auto-starts unless draft mode)
+ * - GET /api/loops/:id - Get a specific loop
+ * - PATCH /api/loops/:id - Update any loop's configuration
+ * - PUT /api/loops/:id - Update a draft loop's configuration
+ * - DELETE /api/loops/:id - Delete a loop
+ * - GET /api/loops/:id/comments - Get all review comments for a loop
  */
 export const loopsCrudRoutes = {
   "/api/loops": {
     /**
-     * GET /api/loops - List all loops
+     * GET /api/loops - List all loops.
+     * 
+     * Returns all loops with their configurations and current states.
+     * Loops are returned regardless of status (idle, running, completed, etc.).
+     * 
+     * @returns Array of Loop objects with config and state
      */
     async GET(): Promise<Response> {
       const loops = await loopManager.getAllLoops();
@@ -67,7 +101,32 @@ export const loopsCrudRoutes = {
     },
 
     /**
-     * POST /api/loops - Create a new loop
+     * POST /api/loops - Create a new loop.
+     * 
+     * Creates a new Ralph Loop with the specified configuration. The loop is
+     * automatically started unless `draft: true` is specified.
+     * 
+     * Request Body Fields:
+     * - name (required): Human-readable name
+     * - directory (required): Absolute path to working directory
+     * - prompt (required): Task prompt/PRD
+     * - model: { providerID, modelID } for AI model selection
+     * - maxIterations: Maximum iterations (unlimited if not set)
+     * - maxConsecutiveErrors: Max identical errors before failsafe (default: 10)
+     * - activityTimeoutSeconds: Seconds without events before error (default: 180, min: 60)
+     * - stopPattern: Regex for completion detection
+     * - git: { branchPrefix, commitPrefix } for git integration
+     * - baseBranch: Base branch to create loop from
+     * - clearPlanningFolder: Clear .planning folder before starting
+     * - planMode: Start in plan creation mode
+     * - draft: Save as draft without starting
+     * 
+     * Errors:
+     * - 400: Validation error or invalid JSON body
+     * - 409: Directory has uncommitted changes
+     * - 500: Loop created but failed to start
+     * 
+     * @returns Created Loop object with 201 status
      */
     async POST(req: Request): Promise<Response> {
       const body = await parseBody<CreateLoopRequest>(req);
@@ -191,7 +250,11 @@ export const loopsCrudRoutes = {
 
   "/api/loops/:id": {
     /**
-     * GET /api/loops/:id - Get a specific loop
+     * GET /api/loops/:id - Get a specific loop by ID.
+     * 
+     * Returns the full loop object including configuration and current state.
+     * 
+     * @returns Loop object or 404 if not found
      */
     async GET(req: Request & { params: { id: string } }): Promise<Response> {
       const loop = await loopManager.getLoop(req.params.id);
@@ -202,7 +265,16 @@ export const loopsCrudRoutes = {
     },
 
     /**
-     * PATCH /api/loops/:id - Update a loop
+     * PATCH /api/loops/:id - Update a loop's configuration.
+     * 
+     * Updates the specified fields of a loop's configuration. Can be used
+     * on any loop regardless of status. Partial updates are supported.
+     * 
+     * Updatable fields: name, directory, prompt, model, maxIterations,
+     * maxConsecutiveErrors, activityTimeoutSeconds, stopPattern, baseBranch,
+     * clearPlanningFolder, planMode, git
+     * 
+     * @returns Updated Loop object or 404 if not found
      */
     async PATCH(req: Request & { params: { id: string } }): Promise<Response> {
       const loop = await loopManager.getLoop(req.params.id);
@@ -256,7 +328,13 @@ export const loopsCrudRoutes = {
     },
 
     /**
-     * PUT /api/loops/:id - Update draft loop configuration (partial updates allowed)
+     * PUT /api/loops/:id - Update a draft loop's configuration.
+     * 
+     * Updates the specified fields of a draft loop's configuration.
+     * Only works for loops in `draft` status. Use PATCH for other statuses.
+     * Partial updates are supported.
+     * 
+     * @returns Updated Loop object, 404 if not found, or 400 if not a draft
      */
     async PUT(req: Request & { params: { id: string } }): Promise<Response> {
       const loop = await loopManager.getLoop(req.params.id);
@@ -315,7 +393,12 @@ export const loopsCrudRoutes = {
     },
 
     /**
-     * DELETE /api/loops/:id - Delete a loop
+     * DELETE /api/loops/:id - Delete a loop.
+     * 
+     * Deletes a loop and its associated resources. For loops with git branches,
+     * use discard or purge endpoints instead for proper cleanup.
+     * 
+     * @returns Success response or 404 if not found
      */
     async DELETE(req: Request & { params: { id: string } }): Promise<Response> {
       const loop = await loopManager.getLoop(req.params.id);
@@ -334,7 +417,12 @@ export const loopsCrudRoutes = {
 
   "/api/loops/:id/comments": {
     /**
-     * GET /api/loops/:id/comments - Get all review comments for a loop
+     * GET /api/loops/:id/comments - Get all review comments for a loop.
+     * 
+     * Returns all review comments submitted for a loop across all review cycles.
+     * Comments include their status (pending/addressed) and timestamps.
+     * 
+     * @returns GetCommentsResponse with array of ReviewComment objects
      */
     async GET(req: Request & { params: { id: string } }): Promise<Response> {
       try {
@@ -371,13 +459,37 @@ export const loopsCrudRoutes = {
 };
 
 /**
- * Loops control routes (accept, discard, push, etc.).
- * Note: Loops are automatically started during creation - there are no start/stop API endpoints.
+ * Loops control routes (accept, discard, push, draft/start, plan, pending-prompt).
+ * 
+ * Note: Loops are automatically started during creation (unless draft mode is used).
+ * These endpoints control loop lifecycle after creation:
+ * - POST /api/loops/:id/draft/start - Start a draft loop
+ * - POST /api/loops/:id/accept - Accept and merge a completed loop
+ * - POST /api/loops/:id/push - Push branch to remote for PR workflow
+ * - POST /api/loops/:id/discard - Discard and delete git branch
+ * - POST /api/loops/:id/purge - Permanently delete from storage
+ * - PUT/DELETE /api/loops/:id/pending-prompt - Modify next iteration prompt
+ * - POST /api/loops/:id/plan/feedback - Send feedback on plan
+ * - POST /api/loops/:id/plan/accept - Accept plan and start execution
+ * - POST /api/loops/:id/plan/discard - Discard plan and delete loop
  */
 export const loopsControlRoutes = {
   "/api/loops/:id/draft/start": {
     /**
-     * POST /api/loops/:id/draft/start - Start a draft loop (plan mode or immediate execution)
+     * POST /api/loops/:id/draft/start - Start a draft loop.
+     * 
+     * Transitions a draft loop to either planning mode or immediate execution.
+     * Performs preflight checks for uncommitted changes before starting.
+     * 
+     * Request Body:
+     * - planMode (required): If true, start in plan mode; if false, start immediately
+     * 
+     * Errors:
+     * - 400: Loop is not in draft status or invalid body
+     * - 404: Loop not found
+     * - 409: Directory has uncommitted changes
+     * 
+     * @returns Updated Loop object
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
       const body = await parseBody<{ planMode: boolean }>(req);
@@ -467,7 +579,13 @@ export const loopsControlRoutes = {
 
   "/api/loops/:id/accept": {
     /**
-     * POST /api/loops/:id/accept - Accept and merge a completed loop
+     * POST /api/loops/:id/accept - Accept and merge a completed loop.
+     * 
+     * Merges the loop's working branch into the original branch.
+     * Only works for loops in completed/stopped/max_iterations/failed status.
+     * After merge, the loop status changes to `merged`.
+     * 
+     * @returns AcceptResponse with success and mergeCommit SHA
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
       const result = await loopManager.acceptLoop(req.params.id);
@@ -489,7 +607,13 @@ export const loopsControlRoutes = {
 
   "/api/loops/:id/push": {
     /**
-     * POST /api/loops/:id/push - Push a completed loop's branch to remote
+     * POST /api/loops/:id/push - Push a completed loop's branch to remote.
+     * 
+     * Pushes the loop's working branch to the remote repository for PR workflow.
+     * Only works for loops in completed/stopped/max_iterations/failed status.
+     * After push, the loop status changes to `pushed` and can receive review comments.
+     * 
+     * @returns PushResponse with success and remoteBranch name
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
       const result = await loopManager.pushLoop(req.params.id);
@@ -511,7 +635,12 @@ export const loopsControlRoutes = {
 
   "/api/loops/:id/discard": {
     /**
-     * POST /api/loops/:id/discard - Discard a loop (delete git branch)
+     * POST /api/loops/:id/discard - Discard a loop and delete its git branch.
+     * 
+     * Deletes the loop's working branch and marks the loop as deleted.
+     * After discard, the loop can be purged to permanently remove it.
+     * 
+     * @returns Success response
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
       const result = await loopManager.discardLoop(req.params.id);
@@ -529,7 +658,12 @@ export const loopsControlRoutes = {
 
   "/api/loops/:id/purge": {
     /**
-     * POST /api/loops/:id/purge - Permanently delete a merged or deleted loop
+     * POST /api/loops/:id/purge - Permanently delete a loop from storage.
+     * 
+     * Removes the loop from the database entirely. Only works for loops
+     * in final states (merged, pushed, deleted).
+     * 
+     * @returns Success response
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
       const result = await loopManager.purgeLoop(req.params.id);
@@ -547,7 +681,16 @@ export const loopsControlRoutes = {
 
   "/api/loops/:id/pending-prompt": {
     /**
-     * PUT /api/loops/:id/pending-prompt - Set the pending prompt for next iteration
+     * PUT /api/loops/:id/pending-prompt - Set the pending prompt for next iteration.
+     * 
+     * Sets a custom prompt that will be used for the next iteration only.
+     * The prompt replaces the default config.prompt for one iteration.
+     * Only works for running loops.
+     * 
+     * Request Body:
+     * - prompt (required): The prompt text for the next iteration
+     * 
+     * @returns Success response
      */
     async PUT(req: Request & { params: { id: string } }): Promise<Response> {
       const body = await parseBody<{ prompt: string }>(req);
@@ -575,7 +718,12 @@ export const loopsControlRoutes = {
     },
 
     /**
-     * DELETE /api/loops/:id/pending-prompt - Clear the pending prompt
+     * DELETE /api/loops/:id/pending-prompt - Clear the pending prompt.
+     * 
+     * Removes the pending prompt so the next iteration uses the default
+     * config.prompt instead. Only works for running loops.
+     * 
+     * @returns Success response
      */
     async DELETE(req: Request & { params: { id: string } }): Promise<Response> {
       const result = await loopManager.clearPendingPrompt(req.params.id);
@@ -596,7 +744,15 @@ export const loopsControlRoutes = {
 
   "/api/loops/:id/plan/feedback": {
     /**
-     * POST /api/loops/:id/plan/feedback - Send feedback to refine the plan
+     * POST /api/loops/:id/plan/feedback - Send feedback to refine the plan.
+     * 
+     * Sends user feedback to the AI to refine the plan during planning phase.
+     * Increments the feedback round counter. Only works for loops in planning status.
+     * 
+     * Request Body:
+     * - feedback (required): User's feedback/comments on the plan
+     * 
+     * @returns Success response
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
       const body = await parseBody<{ feedback: string }>(req);
@@ -626,7 +782,13 @@ export const loopsControlRoutes = {
 
   "/api/loops/:id/plan/accept": {
     /**
-     * POST /api/loops/:id/plan/accept - Accept the plan and start execution
+     * POST /api/loops/:id/plan/accept - Accept the plan and start execution.
+     * 
+     * Accepts the current plan and transitions the loop from planning status
+     * to running. The loop will begin executing the accepted plan.
+     * Only works for loops in planning status.
+     * 
+     * @returns Success response
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
       try {
@@ -647,7 +809,12 @@ export const loopsControlRoutes = {
 
   "/api/loops/:id/plan/discard": {
     /**
-     * POST /api/loops/:id/plan/discard - Discard the plan and delete the loop
+     * POST /api/loops/:id/plan/discard - Discard the plan and delete the loop.
+     * 
+     * Discards the plan and deletes the loop entirely. This is a shortcut
+     * for discarding during plan review without executing anything.
+     * 
+     * @returns Success response
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
       try {
@@ -664,12 +831,23 @@ export const loopsControlRoutes = {
 };
 
 /**
- * Loops data routes (messages, logs, diff, plan, status-file).
+ * Loops data routes (diff, plan, status-file, check-planning-dir).
+ * 
+ * Provides read access to loop data and files:
+ * - GET /api/loops/:id/diff - Get git diff for loop changes
+ * - GET /api/loops/:id/plan - Get .planning/plan.md content
+ * - GET /api/loops/:id/status-file - Get .planning/status.md content
+ * - GET /api/check-planning-dir - Check if .planning directory exists
  */
 export const loopsDataRoutes = {
   "/api/loops/:id/diff": {
     /**
-     * GET /api/loops/:id/diff - Get git diff for a loop
+     * GET /api/loops/:id/diff - Get git diff for a loop's changes.
+     * 
+     * Returns file diffs comparing the loop's working branch to the original branch.
+     * Each diff includes path, status, additions, deletions, and patch content.
+     * 
+     * @returns Array of FileDiff objects
      */
     async GET(req: Request & { params: { id: string } }): Promise<Response> {
       const loop = await loopManager.getLoop(req.params.id);
@@ -699,7 +877,12 @@ export const loopsDataRoutes = {
 
   "/api/loops/:id/plan": {
     /**
-     * GET /api/loops/:id/plan - Get plan.md content
+     * GET /api/loops/:id/plan - Get .planning/plan.md content.
+     * 
+     * Reads the plan.md file from the loop's .planning directory.
+     * Returns the file content and whether the file exists.
+     * 
+     * @returns FileContentResponse with content and exists flag
      */
     async GET(req: Request & { params: { id: string } }): Promise<Response> {
       const loop = await loopManager.getLoop(req.params.id);
@@ -728,7 +911,12 @@ export const loopsDataRoutes = {
 
   "/api/loops/:id/status-file": {
     /**
-     * GET /api/loops/:id/status-file - Get status.md content
+     * GET /api/loops/:id/status-file - Get .planning/status.md content.
+     * 
+     * Reads the status.md file from the loop's .planning directory.
+     * Returns the file content and whether the file exists.
+     * 
+     * @returns FileContentResponse with content and exists flag
      */
     async GET(req: Request & { params: { id: string } }): Promise<Response> {
       const loop = await loopManager.getLoop(req.params.id);
@@ -757,7 +945,15 @@ export const loopsDataRoutes = {
 
   "/api/check-planning-dir": {
     /**
-     * GET /api/check-planning-dir?directory=<path> - Check if .planning directory exists and has files
+     * GET /api/check-planning-dir - Check if .planning directory exists.
+     * 
+     * Checks if a directory has a .planning folder and lists its contents.
+     * Useful for validating a project before creating a loop.
+     * 
+     * Query Parameters:
+     * - directory (required): Absolute path to check
+     * 
+     * @returns Object with exists, hasFiles, files array, and optional warning
      */
     async GET(req: Request): Promise<Response> {
       const url = new URL(req.url);
@@ -811,11 +1007,24 @@ export const loopsDataRoutes = {
 
 /**
  * Loops review routes - handle review comments after push/merge.
+ * 
+ * These endpoints allow addressing reviewer feedback on completed loops:
+ * - POST /api/loops/:id/address-comments - Start addressing reviewer comments
+ * - GET /api/loops/:id/review-history - Get review history for a loop
  */
 export const loopsReviewRoutes = {
   "/api/loops/:id/address-comments": {
     /**
-     * POST /api/loops/:id/address-comments - Address reviewer comments
+     * POST /api/loops/:id/address-comments - Start addressing reviewer comments.
+     * 
+     * Creates a new review cycle and restarts the loop to address the provided
+     * reviewer comments. The loop will work on addressing the feedback.
+     * Only works for loops in pushed or merged status that aren't already running.
+     * 
+     * Request Body:
+     * - comments (required): Reviewer's comments to address
+     * 
+     * @returns AddressCommentsResponse with reviewCycle, branch, and commentIds
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
       const body = await parseBody<AddressCommentsRequest>(req);
@@ -872,7 +1081,12 @@ export const loopsReviewRoutes = {
 
   "/api/loops/:id/review-history": {
     /**
-     * GET /api/loops/:id/review-history - Get review history for a loop
+     * GET /api/loops/:id/review-history - Get review history for a loop.
+     * 
+     * Returns the review history including addressability, completion action,
+     * number of review cycles, and list of review branches created.
+     * 
+     * @returns ReviewHistoryResponse with history object
      */
     async GET(req: Request & { params: { id: string } }): Promise<Response> {
       try {

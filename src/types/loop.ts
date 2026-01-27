@@ -1,44 +1,53 @@
 /**
  * Loop type definitions for Ralph Loops Management System.
- * These types define the configuration and state of Ralph Loops.
+ * 
+ * These types define the configuration and runtime state of Ralph Loops.
+ * A Loop consists of:
+ * - LoopConfig: Persistent configuration (name, prompt, settings)
+ * - LoopState: Runtime state (status, iteration count, git state)
+ * 
+ * @module types/loop
  */
 
 import type { TodoItem } from "../backends/types";
 
 /**
  * Configuration for a Ralph Loop.
+ * 
  * This is the persistent configuration that defines how a loop behaves.
+ * Created when a loop is first created and can be updated while the loop
+ * is in draft status or between iterations.
  */
 export interface LoopConfig {
-  /** Unique identifier (UUID) */
+  /** Unique identifier (UUID v4) */
   id: string;
-  /** Human-readable name */
+  /** Human-readable name for display */
   name: string;
-  /** Absolute path to working directory */
+  /** Absolute path to the working directory (must be a git repository) */
   directory: string;
-  /** The task prompt/PRD */
+  /** The task prompt/PRD describing what the loop should accomplish */
   prompt: string;
-  /** ISO timestamp of creation */
+  /** ISO 8601 timestamp of when the loop was created */
   createdAt: string;
-  /** ISO timestamp of last update */
+  /** ISO 8601 timestamp of the last configuration update */
   updatedAt: string;
 
-  /** Model configuration (optional - inherits from backend config) */
+  /** Model configuration for AI provider and model selection */
   model?: ModelConfig;
 
-  /** Optional iteration limit (default: unlimited) */
+  /** Maximum iterations before stopping (default: unlimited) */
   maxIterations?: number;
 
   /** Maximum consecutive identical errors before failsafe exit (default: 10) */
   maxConsecutiveErrors?: number;
 
-  /** Activity timeout in seconds - time without events before treating as error and retrying (default: 180 = 3 minutes) */
+  /** Seconds without events before treating as error and retrying (default: 180) */
   activityTimeoutSeconds?: number;
 
-  /** Regex for completion detection. Default: "<promise>COMPLETE</promise>$" */
+  /** Regex pattern for completion detection. Default: "<promise>COMPLETE</promise>$" */
   stopPattern: string;
 
-  /** Git integration settings */
+  /** Git integration settings for branch and commit naming */
   git: GitConfig;
 
   /** Base branch to create the loop from (if different from current when started) */
@@ -52,245 +61,263 @@ export interface LoopConfig {
 }
 
 /**
- * Model configuration for AI provider.
+ * Model configuration for AI provider selection.
+ * Used to specify which AI model should execute the loop.
  */
 export interface ModelConfig {
-  /** Provider ID (e.g., "anthropic") */
+  /** Provider ID (e.g., "anthropic", "openai", "bedrock") */
   providerID: string;
-  /** Model ID (e.g., "claude-3-5-sonnet-20241022") */
+  /** Model ID (e.g., "claude-sonnet-4-20250514", "gpt-4o") */
   modelID: string;
 }
 
 /**
  * Git integration configuration.
- * Git is always enabled for loops.
+ * 
+ * Git is always enabled for loops. These settings control how branches
+ * and commits are named for the loop's work.
  */
 export interface GitConfig {
-  /** Branch name prefix. Default: "ralph/" */
+  /** Branch name prefix. Default: "ralph/" (e.g., "ralph/add-auth") */
   branchPrefix: string;
-  /** Commit message prefix. Default: "[Ralph]" */
+  /** Commit message prefix. Default: "[Ralph]" (e.g., "[Ralph] Add auth endpoint") */
   commitPrefix: string;
 }
 
 /**
  * Runtime state of a Ralph Loop.
+ * 
+ * This tracks the current execution state and is updated as the loop runs.
+ * State is persisted to the database and can be restored on server restart.
  */
 export interface LoopState {
-  /** Same as config ID */
+  /** Same as config ID (for convenience) */
   id: string;
-  /** Current status */
+  /** Current execution status */
   status: LoopStatus;
-  /** Current iteration count */
+  /** Number of completed iterations */
   currentIteration: number;
-  /** When loop was started (ISO timestamp) */
+  /** ISO 8601 timestamp when loop was started */
   startedAt?: string;
-  /** When loop finished (ISO timestamp) */
+  /** ISO 8601 timestamp when loop finished (completed, stopped, or failed) */
   completedAt?: string;
-  /** Last event timestamp (ISO) */
+  /** ISO 8601 timestamp of the last event received */
   lastActivityAt?: string;
 
-  /** Backend session info */
+  /** Backend session information for the active connection */
   session?: SessionInfo;
 
-  /** Error tracking */
+  /** Error information if the loop failed */
   error?: LoopError;
 
-  /** Git state */
+  /** Git state tracking branches and commits */
   git?: GitState;
 
-  /** Iteration history (last N for display) */
+  /** Recent iteration summaries for display (last N iterations) */
   recentIterations: IterationSummary[];
 
-  /** Application logs (persisted for page refresh) */
+  /** Application logs persisted for page refresh */
   logs?: LoopLogEntry[];
 
-  /** Messages from current iteration (persisted for page refresh) */
+  /** Messages from current iteration persisted for page refresh */
   messages?: PersistedMessage[];
 
-  /** Tool calls from current iteration (persisted for page refresh) */
+  /** Tool calls from current iteration persisted for page refresh */
   toolCalls?: PersistedToolCall[];
 
   /** Consecutive error tracking for failsafe exit */
   consecutiveErrors?: ConsecutiveErrorTracker;
 
-  /** Pending prompt for the next iteration (if set, overrides config.prompt for next iteration only) */
+  /** Pending prompt that overrides config.prompt for the next iteration only */
   pendingPrompt?: string;
 
-  /** Plan mode state (when loop is in planning status) */
+  /** Plan mode state (active when status is "planning") */
   planMode?: {
-    /** Whether plan mode is active */
+    /** Whether plan mode is currently active */
     active: boolean;
-    /** The session ID from plan creation (to reuse) */
+    /** Session ID from plan creation (reused for execution) */
     planSessionId?: string;
     /** Server URL from plan creation */
     planServerUrl?: string;
-    /** Number of feedback rounds */
+    /** Number of feedback rounds completed */
     feedbackRounds: number;
-    /** Plan content (cached for display) */
+    /** Plan content cached for display */
     planContent?: string;
     /** Whether .planning folder was already cleared (prevents re-clearing) */
     planningFolderCleared: boolean;
   };
 
-  /** Review mode state (for addressing reviewer comments after push/merge) */
+  /** Review mode state for addressing comments after push/merge */
   reviewMode?: {
-    /** Whether loop can receive reviewer comments */
+    /** Whether the loop can receive reviewer comments */
     addressable: boolean;
-    /** Original action that completed the loop */
+    /** How the loop was originally completed */
     completionAction: "push" | "merge";
-    /** Number of review cycles (times comments were addressed) */
+    /** Number of review cycles completed */
     reviewCycles: number;
-    /** For merged loops: list of all branches created during reviews */
+    /** List of branches created during review cycles (for merged loops) */
     reviewBranches: string[];
   };
 
-  /** TODOs from the session (persisted for screen refresh/server reboot) */
+  /** TODOs from the session persisted for screen refresh */
   todos?: TodoItem[];
 }
 
 /**
  * A persisted log entry in the loop state.
+ * Stored in the database and emitted via WebSocket as loop.log events.
  */
 export interface LoopLogEntry {
-  /** Unique ID for the log entry */
+  /** Unique ID for the log entry (used for updates and deduplication) */
   id: string;
-  /** Log level */
+  /** Log level indicating the type/severity */
   level: "agent" | "info" | "warn" | "error" | "debug";
-  /** Log message */
+  /** The log message content */
   message: string;
-  /** Optional additional details */
+  /** Optional additional structured details */
   details?: Record<string, unknown>;
-  /** ISO timestamp */
+  /** ISO 8601 timestamp when the log was created */
   timestamp: string;
 }
 
 /**
- * A persisted message in the loop state.
- * Mirrors MessageData from events.ts for persistence.
+ * A persisted AI message in the loop state.
+ * Mirrors MessageData from events.ts for database persistence.
  */
 export interface PersistedMessage {
-  /** Message ID */
+  /** Unique message ID */
   id: string;
-  /** Role (user or assistant) */
+  /** Role: "user" for prompts, "assistant" for AI responses */
   role: "user" | "assistant";
-  /** Message content */
+  /** The message content */
   content: string;
-  /** ISO timestamp */
+  /** ISO 8601 timestamp when the message was created */
   timestamp: string;
 }
 
 /**
  * A persisted tool call in the loop state.
- * Mirrors ToolCallData from events.ts for persistence.
+ * Mirrors ToolCallData from events.ts for database persistence.
  */
 export interface PersistedToolCall {
-  /** Tool call ID */
+  /** Unique tool call ID */
   id: string;
-  /** Tool name */
+  /** Tool name (e.g., "Write", "Bash", "Glob") */
   name: string;
-  /** Tool input */
+  /** Tool input parameters */
   input: unknown;
-  /** Tool output (if completed) */
+  /** Tool output/result (if completed) */
   output?: unknown;
-  /** Status */
+  /** Current status of the tool call */
   status: "pending" | "running" | "completed" | "failed";
-  /** Timestamp when the tool call was created/updated */
+  /** ISO 8601 timestamp when the tool call was created or last updated */
   timestamp: string;
 }
 
 /**
  * Tracks consecutive identical errors for failsafe exit.
+ * 
+ * If the same error occurs consecutively more than maxConsecutiveErrors times,
+ * the loop is stopped to prevent infinite error loops.
  */
 export interface ConsecutiveErrorTracker {
-  /** Last error message seen */
+  /** The last error message that was seen */
   lastErrorMessage: string;
-  /** Count of consecutive identical errors */
+  /** How many times this error has occurred consecutively */
   count: number;
 }
 
 /**
  * Possible statuses for a Ralph Loop.
+ * 
+ * Lifecycle: draft -> idle -> starting -> running <-> waiting -> completed/stopped/failed
+ * Final states: merged, pushed, deleted (can be purged)
  */
 export type LoopStatus =
-  | "idle"           // Created but not started
+  | "idle"           // Created but not started (transitional)
   | "draft"          // Saved as draft, not started (no git branch or session)
-  | "planning"       // Loop is in plan creation/review mode
-  | "starting"       // Initializing backend connection
+  | "planning"       // Loop is in plan creation/review mode, awaiting approval
+  | "starting"       // Initializing backend connection and git branch
   | "running"        // Actively executing an iteration
-  | "waiting"        // Between iterations
+  | "waiting"        // Between iterations, preparing for next
   | "completed"      // Successfully completed (stop pattern matched)
-  | "stopped"        // Manually stopped
-  | "failed"         // Error occurred
-  | "max_iterations" // Hit iteration limit
+  | "stopped"        // Manually stopped by user
+  | "failed"         // Unrecoverable error occurred
+  | "max_iterations" // Hit the maximum iteration limit
   | "merged"         // Changes merged into original branch (final state)
-  | "pushed"         // Branch pushed to remote (final state)
+  | "pushed"         // Branch pushed to remote (final state, can receive reviews)
   | "deleted";       // Marked for deletion (final state, awaiting purge)
 
 /**
  * Backend session information.
+ * Tracks the connection to the opencode backend.
  */
 export interface SessionInfo {
-  /** Backend session ID */
+  /** Backend session ID for the conversation */
   id: string;
-  /** Backend server URL */
+  /** Backend server URL (for display and reconnection) */
   serverUrl?: string;
 }
 
 /**
  * Error information for a loop.
+ * Stored when a loop enters failed status.
  */
 export interface LoopError {
-  /** Error message */
+  /** Human-readable error message */
   message: string;
-  /** Iteration where error occurred */
+  /** Iteration number where the error occurred */
   iteration: number;
-  /** ISO timestamp */
+  /** ISO 8601 timestamp when the error occurred */
   timestamp: string;
 }
 
 /**
  * Git state for a loop.
+ * Tracks the branches and commits created by the loop.
  */
 export interface GitState {
-  /** Branch we started from */
+  /** The branch the loop was created from */
   originalBranch: string;
-  /** Branch we created for this loop */
+  /** The branch created for this loop's work */
   workingBranch: string;
-  /** Commits made during loop */
+  /** Commits made during loop execution */
   commits: GitCommit[];
 }
 
 /**
  * Git commit information.
+ * Recorded each time the loop creates a commit.
  */
 export interface GitCommit {
-  /** Iteration number */
+  /** Iteration number when the commit was made */
   iteration: number;
-  /** Commit SHA */
+  /** Full commit SHA */
   sha: string;
   /** Commit message */
   message: string;
-  /** ISO timestamp */
+  /** ISO 8601 timestamp when the commit was created */
   timestamp: string;
-  /** Number of files changed */
+  /** Number of files changed in this commit */
   filesChanged: number;
 }
 
 /**
  * Summary of a single iteration.
+ * Stored in recentIterations for quick access and display.
  */
 export interface IterationSummary {
-  /** Iteration number */
+  /** Iteration number (1-based) */
   iteration: number;
-  /** When iteration started (ISO timestamp) */
+  /** ISO 8601 timestamp when iteration started */
   startedAt: string;
-  /** When iteration completed (ISO timestamp) */
+  /** ISO 8601 timestamp when iteration completed */
   completedAt: string;
-  /** Number of messages in this iteration */
+  /** Number of messages exchanged in this iteration */
   messageCount: number;
-  /** Number of tool calls in this iteration */
+  /** Number of tool calls made in this iteration */
   toolCallCount: number;
-  /** Outcome of the iteration */
+  /** How the iteration ended */
   outcome: "continue" | "complete" | "error" | "plan_ready";
 }
 
