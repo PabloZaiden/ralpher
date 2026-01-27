@@ -199,6 +199,37 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 6,
+    name: "add_review_comments_table",
+    up: (db) => {
+      // Check if table already exists
+      if (tableExists(db, "review_comments")) {
+        log.debug("review_comments table already exists");
+        return;
+      }
+      
+      // Create the review_comments table
+      db.run(`
+        CREATE TABLE IF NOT EXISTS review_comments (
+          id TEXT PRIMARY KEY,
+          loop_id TEXT NOT NULL,
+          review_cycle INTEGER NOT NULL,
+          comment_text TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          status TEXT DEFAULT 'pending',
+          addressed_at TEXT,
+          FOREIGN KEY (loop_id) REFERENCES loops(id) ON DELETE CASCADE
+        )
+      `);
+      
+      // Create indexes for performance
+      db.run("CREATE INDEX IF NOT EXISTS idx_review_comments_loop_id ON review_comments(loop_id)");
+      db.run("CREATE INDEX IF NOT EXISTS idx_review_comments_loop_cycle ON review_comments(loop_id, review_cycle)");
+      
+      log.info("Created review_comments table with indexes");
+    },
+  },
 ];
 
 /**

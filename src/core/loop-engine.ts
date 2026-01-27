@@ -30,6 +30,7 @@ import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 import { log } from "./logger";
 import { sanitizeBranchName } from "../utils";
+import { markCommentsAsAddressed } from "../persistence/database";
 
 /**
  * Generate a git-safe branch name from a loop name and timestamp.
@@ -712,6 +713,21 @@ export class LoopEngine {
             completedAt: createTimestamp(),
             consecutiveErrors: undefined,
           });
+
+          // Auto-mark any pending comments as addressed if this is a review cycle
+          if (this.loop.state.reviewMode && this.loop.state.reviewMode.reviewCycles > 0) {
+            try {
+              const addressedAt = new Date().toISOString();
+              markCommentsAsAddressed(
+                this.config.id,
+                this.loop.state.reviewMode.reviewCycles,
+                addressedAt
+              );
+              log.debug(`Marked comments as addressed for loop ${this.config.id}, cycle ${this.loop.state.reviewMode.reviewCycles}`);
+            } catch (error) {
+              log.error(`Failed to mark comments as addressed: ${String(error)}`);
+            }
+          }
 
           this.emit({
             type: "loop.completed",

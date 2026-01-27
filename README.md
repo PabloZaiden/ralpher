@@ -165,10 +165,15 @@ Each review cycle creates a new branch from the base branch. Perfect for post-me
 #### Review History
 
 - View the "Review" tab in loop details to see:
+  - **Comment History**: All submitted review comments grouped by cycle, showing:
+    - Comment text and submission timestamp
+    - Status badge: "Pending" (currently being worked on) or "Addressed" (completed)
+    - When each comment was addressed (for completed comments)
   - Number of review cycles completed
   - List of review branches created
   - Whether the loop is currently addressable
-- Review mode tracks all branches and cycles for full audit history
+- Review mode tracks all branches, cycles, and comments for full audit history
+- Comments are automatically marked as "addressed" when the loop completes the review cycle
 
 #### Ending Review Mode
 

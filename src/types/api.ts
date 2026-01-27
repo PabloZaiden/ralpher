@@ -3,7 +3,7 @@
  * These types define the request and response shapes for the REST API.
  */
 
-import type { GitConfig, Loop, ModelConfig } from "./loop";
+import type { GitConfig, Loop, ModelConfig, ReviewComment } from "./loop";
 
 /**
  * Model information returned by the API.
@@ -106,6 +106,16 @@ export interface AddressCommentsResponse {
   success: boolean;
   reviewCycle?: number;
   branch?: string;
+  commentIds?: string[];
+  error?: string;
+}
+
+/**
+ * Response for getting review comments.
+ */
+export interface GetCommentsResponse {
+  success: boolean;
+  comments?: ReviewComment[];
   error?: string;
 }
 

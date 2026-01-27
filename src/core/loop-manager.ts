@@ -19,6 +19,7 @@ import {
   listLoops,
   updateLoopState,
 } from "../persistence/loops";
+import { insertReviewComment } from "../persistence/database";
 import { backendManager } from "./backend-manager";
 import { GitService } from "./git-service";
 import { LoopEngine } from "./loop-engine";
@@ -1003,11 +1004,12 @@ Follow the standard loop execution flow:
    * Address reviewer comments on a pushed/merged loop.
    * For pushed loops: resumes on the same branch.
    * For merged loops: creates a new review branch.
+   * Comments are stored in the database for tracking.
    */
   async addressReviewComments(
     loopId: string,
     comments: string
-  ): Promise<{ success: boolean; error?: string; reviewCycle?: number; branch?: string }> {
+  ): Promise<{ success: boolean; error?: string; reviewCycle?: number; branch?: string; commentIds?: string[] }> {
     const loop = await loadLoop(loopId);
     if (!loop) {
       return { success: false, error: "Loop not found" };
@@ -1039,6 +1041,22 @@ Follow the standard loop execution flow:
 
       // Get backend instance
       const backend = backendManager.getBackend();
+
+      // Calculate the next review cycle number
+      const nextReviewCycle = loop.state.reviewMode.reviewCycles + 1;
+      
+      // Store the comment in the database
+      const commentId = crypto.randomUUID();
+      const createdAt = new Date().toISOString();
+      
+      insertReviewComment({
+        id: commentId,
+        loopId,
+        reviewCycle: nextReviewCycle,
+        commentText: comments,
+        createdAt,
+        status: "pending",
+      });
 
       // Handle based on completion action
       if (loop.state.reviewMode.completionAction === "push") {
@@ -1092,6 +1110,7 @@ Follow the standard loop execution flow:
           success: true,
           reviewCycle: loop.state.reviewMode.reviewCycles,
           branch: loop.state.git.workingBranch,
+          commentIds: [commentId],
         };
 
       } else {
@@ -1154,6 +1173,7 @@ Follow the standard loop execution flow:
           success: true,
           reviewCycle: loop.state.reviewMode.reviewCycles,
           branch: reviewBranchName,
+          commentIds: [commentId],
         };
       }
     } catch (error) {

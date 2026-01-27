@@ -241,3 +241,316 @@ describe("migrations - fresh database", () => {
     expect(columnsAfter).toContain("clear_planning_folder");
   });
 });
+
+describe("migrations - review_comments table (migration #6)", () => {
+  let tempDir: string;
+  let db: Database;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "ralpher-migration-comments-test-"));
+    db = new Database(join(tempDir, "test.db"));
+    
+    // Create base loops table without review_comments table (old database)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS loops (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        directory TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        model_provider_id TEXT,
+        model_model_id TEXT,
+        max_iterations INTEGER,
+        max_consecutive_errors INTEGER,
+        activity_timeout_seconds INTEGER,
+        stop_pattern TEXT NOT NULL,
+        git_branch_prefix TEXT NOT NULL,
+        git_commit_prefix TEXT NOT NULL,
+        base_branch TEXT,
+        status TEXT NOT NULL DEFAULT 'idle',
+        current_iteration INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT,
+        completed_at TEXT,
+        last_activity_at TEXT,
+        session_id TEXT,
+        session_server_url TEXT,
+        error_message TEXT,
+        error_iteration INTEGER,
+        error_timestamp TEXT,
+        git_original_branch TEXT,
+        git_working_branch TEXT,
+        git_commits TEXT,
+        recent_iterations TEXT,
+        logs TEXT,
+        messages TEXT,
+        tool_calls TEXT,
+        consecutive_errors TEXT,
+        pending_prompt TEXT,
+        clear_planning_folder INTEGER DEFAULT 0
+      )
+    `);
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(tempDir, { recursive: true });
+  });
+
+  test("migration creates review_comments table", () => {
+    // Before migration
+    expect(tableExists(db, "review_comments")).toBe(false);
+
+    // Run migrations
+    runMigrations(db);
+
+    // After migration
+    expect(tableExists(db, "review_comments")).toBe(true);
+  });
+
+  test("review_comments table has correct columns", () => {
+    runMigrations(db);
+
+    const columns = getTableColumns(db, "review_comments");
+    expect(columns).toContain("id");
+    expect(columns).toContain("loop_id");
+    expect(columns).toContain("review_cycle");
+    expect(columns).toContain("comment_text");
+    expect(columns).toContain("created_at");
+    expect(columns).toContain("status");
+    expect(columns).toContain("addressed_at");
+  });
+
+  test("review_comments table has indexes", () => {
+    runMigrations(db);
+
+    // Check for indexes
+    const indexes = db.query(`
+      SELECT name FROM sqlite_master 
+      WHERE type = 'index' 
+      AND tbl_name = 'review_comments'
+      AND name LIKE 'idx_%'
+    `).all() as Array<{ name: string }>;
+
+    const indexNames = indexes.map(idx => idx.name);
+    expect(indexNames).toContain("idx_review_comments_loop_id");
+    expect(indexNames).toContain("idx_review_comments_loop_cycle");
+  });
+
+  test("foreign key constraint from review_comments to loops works", () => {
+    runMigrations(db);
+
+    // Enable foreign keys
+    db.run("PRAGMA foreign_keys = ON");
+
+    // Insert a test loop
+    db.run(`
+      INSERT INTO loops (
+        id, name, directory, prompt, created_at, updated_at, 
+        stop_pattern, git_branch_prefix, git_commit_prefix
+      ) VALUES (
+        'test-loop-1', 'Test Loop', '/tmp/test', 'test prompt', 
+        '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z',
+        'STOP', 'review/', '[Review]'
+      )
+    `);
+
+    // Insert a comment for this loop - should succeed
+    expect(() => {
+      db.run(`
+        INSERT INTO review_comments (
+          id, loop_id, review_cycle, comment_text, created_at, status
+        ) VALUES (
+          'comment-1', 'test-loop-1', 1, 'Test comment', '2026-01-26T10:05:00Z', 'pending'
+        )
+      `);
+    }).not.toThrow();
+
+    // Try to insert a comment for non-existent loop - should fail
+    expect(() => {
+      db.run(`
+        INSERT INTO review_comments (
+          id, loop_id, review_cycle, comment_text, created_at, status
+        ) VALUES (
+          'comment-2', 'non-existent-loop', 1, 'Test comment', '2026-01-26T10:05:00Z', 'pending'
+        )
+      `);
+    }).toThrow();
+  });
+
+  test("cascade delete removes comments when loop is deleted", () => {
+    runMigrations(db);
+
+    // Enable foreign keys
+    db.run("PRAGMA foreign_keys = ON");
+
+    // Insert a test loop
+    db.run(`
+      INSERT INTO loops (
+        id, name, directory, prompt, created_at, updated_at, 
+        stop_pattern, git_branch_prefix, git_commit_prefix
+      ) VALUES (
+        'test-loop-1', 'Test Loop', '/tmp/test', 'test prompt', 
+        '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z',
+        'STOP', 'review/', '[Review]'
+      )
+    `);
+
+    // Insert comments for this loop
+    db.run(`
+      INSERT INTO review_comments (
+        id, loop_id, review_cycle, comment_text, created_at, status
+      ) VALUES (
+        'comment-1', 'test-loop-1', 1, 'Comment 1', '2026-01-26T10:05:00Z', 'pending'
+      )
+    `);
+    db.run(`
+      INSERT INTO review_comments (
+        id, loop_id, review_cycle, comment_text, created_at, status
+      ) VALUES (
+        'comment-2', 'test-loop-1', 1, 'Comment 2', '2026-01-26T10:06:00Z', 'pending'
+      )
+    `);
+
+    // Verify comments exist
+    const commentsBefore = db.query("SELECT COUNT(*) as count FROM review_comments WHERE loop_id = 'test-loop-1'").get() as { count: number };
+    expect(commentsBefore.count).toBe(2);
+
+    // Delete the loop
+    db.run("DELETE FROM loops WHERE id = 'test-loop-1'");
+
+    // Verify comments are cascade deleted
+    const commentsAfter = db.query("SELECT COUNT(*) as count FROM review_comments WHERE loop_id = 'test-loop-1'").get() as { count: number };
+    expect(commentsAfter.count).toBe(0);
+  });
+
+  test("migration is idempotent - can run multiple times", () => {
+    // Run migrations twice
+    runMigrations(db);
+    expect(() => runMigrations(db)).not.toThrow();
+
+    // Table should still exist with correct structure
+    expect(tableExists(db, "review_comments")).toBe(true);
+    const columns = getTableColumns(db, "review_comments");
+    expect(columns).toContain("id");
+    expect(columns).toContain("loop_id");
+    expect(columns).toContain("review_cycle");
+  });
+
+  test("default status value is 'pending'", () => {
+    runMigrations(db);
+    db.run("PRAGMA foreign_keys = ON");
+
+    // Insert a test loop
+    db.run(`
+      INSERT INTO loops (
+        id, name, directory, prompt, created_at, updated_at, 
+        stop_pattern, git_branch_prefix, git_commit_prefix
+      ) VALUES (
+        'test-loop-1', 'Test Loop', '/tmp/test', 'test prompt', 
+        '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z',
+        'STOP', 'review/', '[Review]'
+      )
+    `);
+
+    // Insert comment without specifying status
+    db.run(`
+      INSERT INTO review_comments (
+        id, loop_id, review_cycle, comment_text, created_at
+      ) VALUES (
+        'comment-1', 'test-loop-1', 1, 'Test comment', '2026-01-26T10:05:00Z'
+      )
+    `);
+
+    // Verify default status is 'pending'
+    const comment = db.query("SELECT status FROM review_comments WHERE id = 'comment-1'").get() as { status: string };
+    expect(comment.status).toBe("pending");
+  });
+});
+
+describe("migrations - review_comments with fresh database", () => {
+  let tempDir: string;
+  let db: Database;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "ralpher-migration-comments-fresh-test-"));
+    db = new Database(join(tempDir, "test.db"));
+    
+    // Create full schema including review_comments (fresh database)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS loops (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        directory TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        model_provider_id TEXT,
+        model_model_id TEXT,
+        max_iterations INTEGER,
+        max_consecutive_errors INTEGER,
+        activity_timeout_seconds INTEGER,
+        stop_pattern TEXT NOT NULL,
+        git_branch_prefix TEXT NOT NULL,
+        git_commit_prefix TEXT NOT NULL,
+        base_branch TEXT,
+        status TEXT NOT NULL DEFAULT 'idle',
+        current_iteration INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT,
+        completed_at TEXT,
+        last_activity_at TEXT,
+        session_id TEXT,
+        session_server_url TEXT,
+        error_message TEXT,
+        error_iteration INTEGER,
+        error_timestamp TEXT,
+        git_original_branch TEXT,
+        git_working_branch TEXT,
+        git_commits TEXT,
+        recent_iterations TEXT,
+        logs TEXT,
+        messages TEXT,
+        tool_calls TEXT,
+        consecutive_errors TEXT,
+        pending_prompt TEXT,
+        clear_planning_folder INTEGER DEFAULT 0
+      )
+    `);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS review_comments (
+        id TEXT PRIMARY KEY,
+        loop_id TEXT NOT NULL,
+        review_cycle INTEGER NOT NULL,
+        comment_text TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        addressed_at TEXT,
+        FOREIGN KEY (loop_id) REFERENCES loops(id) ON DELETE CASCADE
+      )
+    `);
+
+    db.run(`CREATE INDEX IF NOT EXISTS idx_review_comments_loop_id ON review_comments(loop_id)`);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_review_comments_loop_cycle ON review_comments(loop_id, review_cycle)`);
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(tempDir, { recursive: true });
+  });
+
+  test("migration handles fresh database with review_comments already present", () => {
+    // Table already exists in fresh database
+    expect(tableExists(db, "review_comments")).toBe(true);
+
+    // Migration should not fail
+    expect(() => runMigrations(db)).not.toThrow();
+
+    // Table should still exist
+    expect(tableExists(db, "review_comments")).toBe(true);
+    const columns = getTableColumns(db, "review_comments");
+    expect(columns).toContain("id");
+    expect(columns).toContain("loop_id");
+    expect(columns).toContain("review_cycle");
+  });
+});
