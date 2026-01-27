@@ -138,7 +138,7 @@ export function LogViewer({
     if (autoScroll && containerRef.current && isAtBottomRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [messages, toolCalls, logs, autoScroll]);
+  }, [messages, toolCalls, logs, autoScroll, showDebugLogs]);
 
   // Combine and sort entries by timestamp
   const entries: Array<
