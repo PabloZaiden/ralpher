@@ -2,7 +2,7 @@
  * LoopDetails component showing full loop information with tabs.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import type { FileDiff, FileContentResponse } from "../types";
 import type { ReviewComment } from "../types/loop";
 import { useLoop } from "../hooks";
@@ -134,6 +134,24 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [pendingPromptDirty, setPendingPromptDirty] = useState(false);
   const [pendingPromptSaving, setPendingPromptSaving] = useState(false);
 
+  // Function to fetch review comments
+  const fetchReviewComments = useCallback(async () => {
+    setLoadingComments(true);
+    try {
+      const response = await fetch(`/api/loops/${loopId}/comments`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.comments) {
+          setReviewComments(data.comments);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch review comments:", String(error));
+    } finally {
+      setLoadingComments(false);
+    }
+  }, [loopId]);
+
   // Initialize pending prompt text from loop state when it changes
   useEffect(() => {
     if (loop?.state.pendingPrompt !== undefined) {
@@ -225,20 +243,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
           setDiffContent(content);
         } else if (activeTab === "review") {
           // Fetch review comments
-          setLoadingComments(true);
-          try {
-            const response = await fetch(`/api/loops/${loopId}/comments`);
-            if (response.ok) {
-              const data = await response.json();
-              if (data.success && data.comments) {
-                setReviewComments(data.comments);
-              }
-            }
-          } catch (error) {
-            console.error("Failed to fetch review comments:", String(error));
-          } finally {
-            setLoadingComments(false);
-          }
+          await fetchReviewComments();
         }
       } finally {
         setLoadingContent(false);
@@ -248,7 +253,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     if (activeTab !== "log" && activeTab !== "prompt") {
       loadContent();
     }
-  }, [activeTab, getPlan, getStatusFile, getDiff, loopId]);
+  }, [activeTab, getPlan, getStatusFile, getDiff, fetchReviewComments]);
 
   // Load plan content when in planning mode
   // This is needed because the tab-based loading above only works when the "plan" tab is selected,
@@ -266,6 +271,15 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     }
     loadPlanForPlanningMode();
   }, [loop?.state.status, getPlan, gitChangeCounter]);
+
+  // Refetch comments when loop state changes (comment submitted or loop completes)
+  // This ensures the review tab auto-updates without needing to switch tabs
+  useEffect(() => {
+    // Only fetch if loop has review mode and we're on the review tab
+    if (loop?.state.reviewMode && activeTab === "review") {
+      fetchReviewComments();
+    }
+  }, [loop?.state.reviewMode?.reviewCycles, loop?.state.status, activeTab, fetchReviewComments]);
 
   // Handle delete
   async function handleDelete() {
@@ -304,6 +318,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       if (!result.success) {
         throw new Error("Failed to address comments");
       }
+      // Fetch updated comments after successfully submitting
+      await fetchReviewComments();
     } catch (error) {
       console.error("Failed to address comments:", error);
       throw error; // Re-throw so modal knows it failed
@@ -877,7 +893,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                                     return acc;
                                   }, {} as Record<number, ReviewComment[]>)
                                 )
-                                  .sort(([cycleA], [cycleB]) => Number(cycleB) - Number(cycleA))
+                                  .sort(([cycleA], [cycleB]) => Number(cycleA) - Number(cycleB))
                                   .map(([cycle, comments]) => (
                                     <div key={cycle} className="border-l-2 border-gray-300 dark:border-gray-600 pl-3">
                                       <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
