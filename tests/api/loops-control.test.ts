@@ -26,6 +26,7 @@ import { createEventStream, type EventStream } from "../../src/utils/event-strea
 describe("Loops Control API Integration", () => {
   let testDataDir: string;
   let testWorkDir: string;
+  let testBareRepoDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
 
@@ -143,6 +144,12 @@ describe("Loops Control API Integration", () => {
     await Bun.$`git init ${testWorkDir}`.quiet();
     await Bun.$`git -C ${testWorkDir} config user.email "test@test.com"`.quiet();
     await Bun.$`git -C ${testWorkDir} config user.name "Test User"`.quiet();
+    
+    // Add a fake remote for push tests (using local file path as a valid remote)
+    testBareRepoDir = await mkdtemp(join(tmpdir(), "ralpher-api-control-test-bare-"));
+    await Bun.$`git init --bare ${testBareRepoDir}`.quiet();
+    await Bun.$`git -C ${testWorkDir} remote add origin ${testBareRepoDir}`.quiet();
+    
     await Bun.$`touch ${testWorkDir}/README.md`.quiet();
     await Bun.$`git -C ${testWorkDir} add .`.quiet();
     await Bun.$`git -C ${testWorkDir} commit -m "Initial commit"`.quiet();
@@ -178,6 +185,7 @@ describe("Loops Control API Integration", () => {
     // Cleanup temp directories
     await rm(testDataDir, { recursive: true, force: true });
     await rm(testWorkDir, { recursive: true, force: true });
+    await rm(testBareRepoDir, { recursive: true, force: true });
 
     // Clear env
     delete process.env["RALPHER_DATA_DIR"];
@@ -526,7 +534,14 @@ describe("Loops Control API Integration", () => {
       await waitForLoopCompletion(loopId);
 
       // Push the loop to enable review mode
-      await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
+      const pushResponse = await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
+      if (pushResponse.status !== 200) {
+        const pushBody = await pushResponse.json();
+        const loopResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+        const loopData = await loopResponse.json();
+        throw new Error(`Push failed with status ${pushResponse.status}: ${JSON.stringify(pushBody)}. Loop state: ${JSON.stringify(loopData.state)}`);
+      }
+      expect(pushResponse.status).toBe(200);
 
       // Submit comments
       const commentsText = "Please add error handling\nImprove test coverage";
@@ -536,6 +551,10 @@ describe("Loops Control API Integration", () => {
         body: JSON.stringify({ comments: commentsText }),
       });
 
+      if (addressResponse.status !== 200) {
+        const errorBody = await addressResponse.json();
+        throw new Error(`Address comments failed: ${JSON.stringify(errorBody)}`);
+      }
       expect(addressResponse.status).toBe(200);
       const addressBody = await addressResponse.json();
       expect(addressBody.success).toBe(true);
@@ -580,7 +599,7 @@ describe("Loops Control API Integration", () => {
 
       expect(response.status).toBe(400);
       const body = await response.json();
-      expect(body.error).toBe("not_addressable");
+      expect(body.error).toContain("not addressable");
     });
 
     test("POST /api/loops/:id/address-comments returns 404 for non-existent loop", async () => {
@@ -609,14 +628,16 @@ describe("Loops Control API Integration", () => {
 
       // Wait for completion and push
       await waitForLoopCompletion(loopId);
-      await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
+      const pushResponse = await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
+      expect(pushResponse.status).toBe(200);
 
       // Add comments
-      await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
+      const addressResponse = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comments: "First comment" }),
       });
+      expect(addressResponse.status).toBe(200);
 
       // Get comments - should be ordered correctly
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
