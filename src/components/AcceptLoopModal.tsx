@@ -71,16 +71,6 @@ export function AcceptLoopModal({
           </Button>
           <Button
             variant="secondary"
-            onClick={handlePush}
-            loading={pushing}
-            disabled={accepting}
-            onMouseEnter={() => setHovered("push")}
-            onMouseLeave={() => setHovered(null)}
-          >
-            Push to Remote
-          </Button>
-          <Button
-            variant="secondary"
             onClick={handleAccept}
             loading={accepting}
             disabled={pushing}
@@ -88,6 +78,16 @@ export function AcceptLoopModal({
             onMouseLeave={() => setHovered(null)}
           >
             Accept & Merge
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={handlePush}
+            loading={pushing}
+            disabled={accepting}
+            onMouseEnter={() => setHovered("push")}
+            onMouseLeave={() => setHovered(null)}
+          >
+            Push to Remote
           </Button>
         </>
       }
@@ -107,7 +107,7 @@ export function AcceptLoopModal({
                 : "text-gray-900 dark:text-gray-100"
             }`}
           >
-            Push to Remote
+            Push to Remote <i>(recommended)</i>
           </h4>
           <p
             className={`text-sm transition-colors ${
