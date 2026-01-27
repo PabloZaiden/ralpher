@@ -539,4 +539,69 @@ describe("Draft Loop E2E Workflow", () => {
     expect(secondUpdateBody.config.planMode).toBe(false);
     expect(secondUpdateBody.config.prompt).toBe("Updated prompt only");
   });
+
+  test("clearPlanningFolder checkbox can be unchecked and persists", async () => {
+    // Step 1: Create draft with clearPlanningFolder enabled
+    const createResponse = await fetch(`${baseUrl}/api/loops`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Draft with Clear Planning Folder to Uncheck",
+        directory: testWorkDir,
+        prompt: "Test task",
+        clearPlanningFolder: true,
+        draft: true,
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const createBody = await createResponse.json();
+    const loopId = createBody.config.id;
+
+    // Verify draft was created with clearPlanningFolder true
+    expect(createBody.state.status).toBe("draft");
+    expect(createBody.config.clearPlanningFolder).toBe(true);
+
+    // Step 2: Update the draft and uncheck clearPlanningFolder (set to false)
+    const updateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Updated Draft - Clear Planning Folder Unchecked",
+        clearPlanningFolder: false,
+      }),
+    });
+
+    expect(updateResponse.status).toBe(200);
+    const updateBody = await updateResponse.json();
+
+    // Verify clearPlanningFolder is now false after update
+    expect(updateBody.config.clearPlanningFolder).toBe(false);
+    expect(updateBody.config.name).toBe("Updated Draft - Clear Planning Folder Unchecked");
+
+    // Step 3: Fetch the draft again to verify persistence
+    const fetchResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+    expect(fetchResponse.status).toBe(200);
+    const fetchBody = await fetchResponse.json();
+
+    // Verify clearPlanningFolder=false persisted after fetching from database
+    expect(fetchBody.config.clearPlanningFolder).toBe(false);
+    expect(fetchBody.config.name).toBe("Updated Draft - Clear Planning Folder Unchecked");
+
+    // Step 4: Update again without touching clearPlanningFolder to ensure it stays false
+    const secondUpdateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "Updated prompt only",
+      }),
+    });
+
+    expect(secondUpdateResponse.status).toBe(200);
+    const secondUpdateBody = await secondUpdateResponse.json();
+
+    // Verify clearPlanningFolder is still false
+    expect(secondUpdateBody.config.clearPlanningFolder).toBe(false);
+    expect(secondUpdateBody.config.prompt).toBe("Updated prompt only");
+  });
 });

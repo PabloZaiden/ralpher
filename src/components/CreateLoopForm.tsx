@@ -205,10 +205,8 @@ export function CreateLoopForm({
       request.baseBranch = selectedBranch;
     }
 
-    // Add clearPlanningFolder if enabled
-    if (clearPlanningFolder) {
-      request.clearPlanningFolder = true;
-    }
+    // Always include clearPlanningFolder (persist in draft to remember user's choice)
+    request.clearPlanningFolder = clearPlanningFolder;
 
     // Always include planMode (persist in draft to remember user's choice)
     request.planMode = planMode;
