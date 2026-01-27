@@ -192,8 +192,8 @@ export function LogViewer({
   return (
     <div
       ref={containerRef}
-      className="bg-gray-900 text-gray-100 rounded-lg overflow-auto font-mono text-xs sm:text-sm"
-      style={{ maxHeight }}
+      className={`bg-gray-900 text-gray-100 rounded-lg overflow-auto font-mono text-xs sm:text-sm ${!maxHeight ? "flex-1 min-h-0" : ""}`}
+      style={maxHeight ? { maxHeight } : undefined}
     >
       {isEmpty ? (
         <div className="flex items-center justify-center h-32 text-gray-500 text-xs sm:text-sm">

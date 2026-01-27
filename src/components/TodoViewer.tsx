@@ -152,33 +152,33 @@ export function TodoViewer({
   return (
     <div
       ref={containerRef}
-      className="bg-gray-900 text-gray-100 rounded-lg overflow-auto font-mono text-xs sm:text-sm"
-      style={{ maxHeight }}
+      className={`bg-gray-900 text-gray-100 rounded-lg overflow-auto font-mono text-xs ${!maxHeight ? "flex-1 min-h-0" : ""}`}
+      style={maxHeight ? { maxHeight } : undefined}
     >
       {isEmpty ? (
-        <div className="flex items-center justify-center h-32 text-gray-500 text-xs sm:text-sm">
+        <div className="flex items-center justify-center h-32 text-gray-500 text-xs">
           No TODOs yet.
         </div>
       ) : (
-        <div className="p-2 sm:p-4 space-y-2">
+        <div className="p-2 space-y-1.5">
           {todos.map((todo) => (
             <div
               key={todo.id}
-              className={`flex items-start gap-2 sm:gap-3 p-2 rounded border-l-4 ${getStatusBorderColor(todo.status)} bg-gray-800/50`}
+              className={`flex items-start gap-2 p-1.5 rounded border-l-2 ${getStatusBorderColor(todo.status)} bg-gray-800/50`}
             >
               {/* Status Icon */}
-              <span className={`flex-shrink-0 ${getStatusColor(todo.status)} text-base`}>
+              <span className={`flex-shrink-0 ${getStatusColor(todo.status)} text-xs`}>
                 {getStatusIcon(todo.status)}
               </span>
 
               {/* Content */}
               <div className="flex-1 min-w-0">
-                <div className={`whitespace-pre-wrap break-words ${getTextStyle(todo.status)}`}>
+                <div className={`whitespace-pre-wrap break-words text-xs leading-tight ${getTextStyle(todo.status)}`}>
                   {todo.content}
                 </div>
                 
                 {/* Status Badge */}
-                <div className="mt-1">
+                <div className="mt-0.5">
                   <Badge variant={getStatusBadge(todo.status)} size="sm">
                     {todo.status.replace("_", " ").toUpperCase()}
                   </Badge>
