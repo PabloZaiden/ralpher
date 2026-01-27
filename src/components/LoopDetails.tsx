@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type { FileDiff, FileContentResponse } from "../types";
 import type { ReviewComment } from "../types/loop";
 import { useLoop } from "../hooks";
-import { Badge, Button, Card, getStatusBadgeVariant } from "./common";
+import { Badge, Button, getStatusBadgeVariant } from "./common";
 import { LogViewer } from "./LogViewer";
 import { TodoViewer } from "./TodoViewer";
 import {
@@ -31,7 +31,7 @@ export interface LoopDetailsProps {
   onBack?: () => void;
 }
 
-type TabId = "log" | "prompt" | "plan" | "status" | "diff" | "review";
+type TabId = "log" | "prompt" | "plan" | "status" | "diff" | "review" | "actions";
 
 const tabs: { id: TabId; label: string }[] = [
   { id: "log", label: "Log" },
@@ -40,6 +40,7 @@ const tabs: { id: TabId; label: string }[] = [
   { id: "status", label: "Status" },
   { id: "diff", label: "Diff" },
   { id: "review", label: "Review" },
+  { id: "actions", label: "Actions" },
 ];
 
 /**
@@ -125,6 +126,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const prevLogsCount = useRef(0);
   const prevPlanContent = useRef<string | null>(null);
   const prevStatusContent = useRef<string | null>(null);
+  const prevActionsState = useRef<string | null>(null);
 
   // Modals
   const [deleteModal, setDeleteModal] = useState(false);
@@ -229,6 +231,22 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     }
     prevStatusContent.current = currentContent;
   }, [statusContent?.content, activeTab]);
+
+  // Detect changes in available actions
+  useEffect(() => {
+    if (!loop) return;
+    
+    // Create a string representation of the current actions state
+    const isFinal = isFinalState(loop.state.status);
+    const hasAddressable = loop.state.reviewMode?.addressable ?? false;
+    const hasAccept = canAccept(loop.state.status) && !!loop.state.git;
+    const currentActionsState = `${isFinal}-${hasAddressable}-${hasAccept}-${loop.state.status}`;
+    
+    if (prevActionsState.current !== null && currentActionsState !== prevActionsState.current && activeTab !== "actions") {
+      setTabsWithUpdates((prev) => new Set(prev).add("actions"));
+    }
+    prevActionsState.current = currentActionsState;
+  }, [loop?.state.status, loop?.state.reviewMode?.addressable, loop?.state.git, activeTab, loop]);
 
   // Load content when tab changes
   useEffect(() => {
@@ -385,37 +403,33 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const isActive = isLoopActive(state.status);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-        <div className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-            <Button variant="ghost" size="sm" onClick={onBack} className="self-start">
+    <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
+      {/* Header - compact single line */}
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+        <div className="px-4 sm:px-6 lg:px-8 py-2">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={onBack}>
               ← Back
             </Button>
-            <div className="flex-1 min-w-0">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100 truncate">
-                  {config.name}
-                </h1>
-                <div className="flex items-center gap-2 sm:gap-3">
-                  <Badge variant={getStatusBadgeVariant(state.status)} size="md">
-                    {getStatusLabel(state.status)}
-                  </Badge>
-                  {isActive && (
-                    <span className="relative flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500" />
-                    </span>
-                  )}
-                </div>
-              </div>
-              <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400 font-mono truncate">
-                {config.directory}
-              </p>
-            </div>
+            <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
+              {config.name}
+            </h1>
+            <Badge variant={getStatusBadgeVariant(state.status)} size="sm">
+              {getStatusLabel(state.status)}
+            </Badge>
+            {isActive && (
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+              </span>
+            )}
+            <span className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate hidden sm:inline">
+              {config.directory}
+            </span>
+            {/* Spacer */}
+            <div className="flex-1" />
             {/* WebSocket Status */}
-            <div className="flex items-center gap-2 text-xs sm:text-sm self-start sm:self-auto">
+            <div className="flex items-center gap-1.5 text-xs">
               <span
                 className={`h-2 w-2 rounded-full flex-shrink-0 ${
                   connectionStatus === "open"
@@ -433,129 +447,51 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         </div>
       </header>
 
-      <main className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+      {/* Compact info bar with Stats and Git */}
+      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 lg:px-8 py-1.5 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+          {/* Statistics */}
+          <span className="text-gray-500 dark:text-gray-400">
+            Iteration: <span className="font-medium text-gray-900 dark:text-gray-100">{state.currentIteration}{config.maxIterations ? ` / ${config.maxIterations}` : ""}</span>
+          </span>
+          <span className="text-gray-500 dark:text-gray-400">
+            Started: <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.startedAt)}</span>
+          </span>
+          <span className="text-gray-500 dark:text-gray-400">
+            Last: <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.lastActivityAt)}</span>
+          </span>
+          {state.completedAt && (
+            <span className="text-gray-500 dark:text-gray-400">
+              Completed: <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.completedAt)}</span>
+            </span>
+          )}
+          
+          {/* Git info - no pipe separator */}
+          {state.git && (
+            <>
+              <span className="text-gray-500 dark:text-gray-400">
+                Branch: <span className="font-mono font-medium text-gray-900 dark:text-gray-100">{state.git.originalBranch}</span>
+                <span className="text-gray-400 dark:text-gray-500"> → </span>
+                <span className="font-mono font-medium text-gray-900 dark:text-gray-100">{state.git.workingBranch}</span>
+              </span>
+              <span className="text-gray-500 dark:text-gray-400">
+                Commits: <span className="font-medium text-gray-900 dark:text-gray-100">{state.git.commits.length}</span>
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      <main className="px-4 sm:px-6 lg:px-8 py-3 flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Error display */}
         {error && (
-          <div className="mb-6 rounded-md bg-red-50 dark:bg-red-900/20 p-4">
+          <div className="mb-3 rounded-md bg-red-50 dark:bg-red-900/20 p-3 flex-shrink-0">
             <p className="text-sm text-red-800 dark:text-red-300">{error}</p>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-6">
-          {/* Left column - Stats and actions */}
-          <div className="lg:col-span-1 space-y-4 sm:space-y-6">
-            {/* Stats card */}
-            <Card title="Statistics">
-              <dl className="space-y-2 sm:space-y-3 text-xs sm:text-sm">
-                <div className="flex justify-between">
-                  <dt className="text-gray-500 dark:text-gray-400">Iteration</dt>
-                  <dd className="font-medium text-gray-900 dark:text-gray-100">
-                    {state.currentIteration}
-                    {config.maxIterations ? ` / ${config.maxIterations}` : ""}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-gray-500 dark:text-gray-400">Started</dt>
-                  <dd className="font-medium text-gray-900 dark:text-gray-100 text-right">
-                    {formatDateTime(state.startedAt)}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-gray-500 dark:text-gray-400">Last activity</dt>
-                  <dd className="font-medium text-gray-900 dark:text-gray-100 text-right">
-                    {formatDateTime(state.lastActivityAt)}
-                  </dd>
-                </div>
-                {state.completedAt && (
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500 dark:text-gray-400">Completed</dt>
-                    <dd className="font-medium text-gray-900 dark:text-gray-100 text-right">
-                      {formatDateTime(state.completedAt)}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </Card>
-
-            {/* Git info card */}
-            {state.git && (
-              <Card title="Git">
-                <dl className="space-y-2 sm:space-y-3 text-xs sm:text-sm">
-                  <div>
-                    <dt className="text-gray-500 dark:text-gray-400">Original branch</dt>
-                    <dd className="font-mono text-gray-900 dark:text-gray-100 break-all">
-                      {state.git.originalBranch}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-gray-500 dark:text-gray-400">Working branch</dt>
-                    <dd className="font-mono text-gray-900 dark:text-gray-100 break-all">
-                      {state.git.workingBranch}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-gray-500 dark:text-gray-400">Commits</dt>
-                    <dd className="font-medium text-gray-900 dark:text-gray-100">
-                      {state.git.commits.length}
-                    </dd>
-                  </div>
-                </dl>
-              </Card>
-            )}
-
-            {/* Actions card */}
-            <Card title="Actions">
-              <div className="space-y-2">
-                {/* Final state - show Address Comments (if addressable) and Purge */}
-                {isFinalState(state.status) ? (
-                  <>
-                    {state.reviewMode?.addressable && (
-                      <>
-                        <Button
-                          className="w-full"
-                          variant="primary"
-                          onClick={() => setAddressCommentsModal(true)}
-                        >
-                          Address Comments
-                        </Button>
-                        <hr className="border-gray-200 dark:border-gray-700" />
-                      </>
-                    )}
-                    <Button
-                      className="w-full"
-                      variant="danger"
-                      onClick={() => setPurgeModal(true)}
-                    >
-                      Purge Loop
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    {canAccept(state.status) && state.git && (
-                      <Button
-                        className="w-full"
-                        variant="primary"
-                        onClick={() => setAcceptModal(true)}
-                      >
-                        Accept
-                      </Button>
-                    )}
-                    <hr className="border-gray-200 dark:border-gray-700" />
-                    <Button
-                      className="w-full"
-                      variant="danger"
-                      onClick={() => setDeleteModal(true)}
-                    >
-                      Delete Loop
-                    </Button>
-                  </>
-                )}
-              </div>
-            </Card>
-          </div>
-
-          {/* Right column - Tabs content */}
-          <div className="lg:col-span-4 xl:col-span-5">
+        {/* Full width content area */}
+        <div className="flex-1 min-h-0 flex flex-col">
             {state.status === "planning" ? (
               <PlanReviewPanel
                 loop={loop}
@@ -575,16 +511,16 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 logs={logs}
               />
             ) : (
-              <>
+              <div className="flex flex-col flex-1 min-h-0">
                 {/* Tab navigation */}
-                <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4 overflow-x-auto">
+                <div className="flex border-b border-gray-200 dark:border-gray-700 mb-3 overflow-x-auto flex-shrink-0">
                   {tabs.map((tab) => {
                     const hasUpdate = tabsWithUpdates.has(tab.id);
                     return (
                       <button
                         key={tab.id}
                         onClick={() => handleTabChange(tab.id)}
-                        className={`relative px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                        className={`relative px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                           activeTab === tab.id
                             ? "border-blue-500 text-blue-600 dark:text-blue-400"
                             : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
@@ -592,7 +528,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                       >
                         {tab.label}
                         {hasUpdate && activeTab !== tab.id && (
-                          <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-blue-500" />
+                          <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-blue-500" />
                         )}
                       </button>
                     );
@@ -600,36 +536,35 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 </div>
 
                 {/* Tab content */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex-1 min-h-0 flex flex-col">
                   {activeTab === "log" && (
-                    <div>
+                    <div className="flex-1 min-h-0 flex flex-col">
                       {/* Side-by-side layout for logs and TODOs (75-25 split) */}
-                      <div className="grid grid-cols-1 lg:grid-cols-[3fr_1fr] gap-4 p-4">
+                      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-4">
                         {/* Logs section */}
-                        <div className="flex flex-col">
-                          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex-[3] min-h-[100px] lg:min-h-0 flex flex-col min-w-0">
+                          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0">
                             Logs
                           </h3>
                           <LogViewer
                             messages={messages}
                             toolCalls={toolCalls}
                             logs={logs}
-                            maxHeight="600px"
                             showDebugLogs={showDebugLogs}
                           />
                         </div>
                         
                         {/* TODOs section */}
-                        <div className="flex flex-col">
-                          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                        <div className="flex-1 min-h-[100px] lg:min-h-0 flex flex-col min-w-0">
+                          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0">
                             TODOs
                           </h3>
-                          <TodoViewer todos={todos} maxHeight="600px" />
+                          <TodoViewer todos={todos} />
                         </div>
                       </div>
                       
                       {/* Debug logs toggle at the bottom */}
-                      <div className="p-3 border-t border-gray-200 dark:border-gray-700">
+                      <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
                         <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
                           <input
                             type="checkbox"
@@ -644,7 +579,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "prompt" && (
-                    <div className="p-4 space-y-6">
+                    <div className="p-4 space-y-6 flex-1 min-h-0 overflow-auto dark-scrollbar">
                       {/* Original Task Prompt (read-only) */}
                       <div>
                         <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
@@ -737,7 +672,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "plan" && (
-                    <div className="p-4">
+                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
@@ -755,7 +690,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "status" && (
-                    <div className="p-4">
+                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
@@ -773,7 +708,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "diff" && (
-                    <div className="p-4">
+                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
@@ -854,7 +789,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "review" && (
-                    <div className="p-4 space-y-4">
+                    <div className="p-4 space-y-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
                       {loop.state.reviewMode ? (
                         <>
                           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -996,10 +931,79 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                       )}
                     </div>
                   )}
+
+                  {activeTab === "actions" && (
+                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
+                      <div className="max-w-md space-y-2">
+                        {isFinalState(state.status) ? (
+                          <>
+                            {state.reviewMode?.addressable && (
+                              <button
+                                onClick={() => setAddressCommentsModal(true)}
+                                className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+                              >
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                                  <span className="text-blue-600 dark:text-blue-400 text-sm">💬</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Address Comments</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">Submit comments for the next review cycle</div>
+                                </div>
+                                <span className="text-gray-400 dark:text-gray-500">→</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setPurgeModal(true)}
+                              className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+                            >
+                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                                <span className="text-red-600 dark:text-red-400 text-sm">🗑</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Purge Loop</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">Delete this loop and all associated data</div>
+                              </div>
+                              <span className="text-gray-400 dark:text-gray-500">→</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {canAccept(state.status) && state.git && (
+                              <button
+                                onClick={() => setAcceptModal(true)}
+                                className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+                              >
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                  <span className="text-green-600 dark:text-green-400 text-sm">✓</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Accept</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">Accept changes and merge or push to remote</div>
+                                </div>
+                                <span className="text-gray-400 dark:text-gray-500">→</span>
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setDeleteModal(true)}
+                              className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+                            >
+                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                                <span className="text-red-600 dark:text-red-400 text-sm">✗</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Delete Loop</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">Cancel and delete this loop</div>
+                              </div>
+                              <span className="text-gray-400 dark:text-gray-500">→</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </>
+              </div>
             )}
-          </div>
         </div>
       </main>
 

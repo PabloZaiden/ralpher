@@ -83,7 +83,7 @@ export function PlanReviewPanel({
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
       {/* Tab navigation */}
       <div className="flex border-b border-gray-200 dark:border-gray-700">
         {tabs.map((tab) => (
