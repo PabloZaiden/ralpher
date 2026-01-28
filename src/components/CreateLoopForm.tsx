@@ -99,11 +99,11 @@ export function CreateLoopForm({
 
   // Reset selected branch when current branch changes (directory changed)
   useEffect(() => {
-    // Default to current branch when it changes
-    if (currentBranch) {
+    // Default to current branch when it changes (only for new loop)
+    if (currentBranch && !isEditing) {
       setSelectedBranch(currentBranch);
     }
-  }, [currentBranch]);
+  }, [currentBranch, isEditing]);
 
   // Set initial model when lastModel, models, or initialLoopData change
   useEffect(() => {

@@ -503,8 +503,8 @@ export class LoopEngine {
       }
     }
 
-    // If a base branch was specified, checkout that branch first
-    if (this.config.baseBranch) {
+    // If a base branch was specified, checkout that branch first (unless it's a working branch)
+    if (this.config.baseBranch && !this.config.baseBranch.startsWith(this.config.git.branchPrefix)) {
       const currentBranch = await this.git.getCurrentBranch(directory);
       if (currentBranch !== this.config.baseBranch) {
         this.emitLog("info", `Switching to base branch: ${this.config.baseBranch}`);
@@ -519,9 +519,18 @@ export class LoopEngine {
     if (this.loop.state.git?.originalBranch) {
       originalBranch = this.loop.state.git.originalBranch;
       this.emitLog("info", `Preserving existing original branch: ${originalBranch}`);
+    } else if (this.config.baseBranch) {
+      originalBranch = this.config.baseBranch;
+      this.emitLog("info", `Using configured base branch: ${originalBranch}`);
     } else {
       originalBranch = await this.git.getCurrentBranch(directory);
       this.emitLog("info", `Current branch: ${originalBranch}`);
+    }
+
+    if (originalBranch.startsWith(this.config.git.branchPrefix) && !this.loop.state.git?.originalBranch) {
+      this.emitLog("warn", `Base branch is a working branch (${originalBranch}); preserving base branch but continuing`, {
+        originalBranch,
+      });
     }
 
     // Pull latest changes from the base branch to minimize merge conflicts

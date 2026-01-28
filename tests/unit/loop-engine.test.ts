@@ -54,7 +54,7 @@ describe("StopPatternDetector", () => {
   });
 });
 
-describe("LoopEngine", () => {
+  describe("LoopEngine", () => {
   let testDir: string;
   let mockBackend: LoopBackend;
   let emitter: SimpleEventEmitter<LoopEvent>;
@@ -577,8 +577,8 @@ describe("LoopEngine", () => {
     expect(engine.state.recentIterations[4]!.outcome).toBe("continue");
   }, 10000);
 
-  test("records iteration summaries", async () => {
-    const loop = createTestLoop({ maxIterations: 3 });
+    test("records iteration summaries", async () => {
+      const loop = createTestLoop({ maxIterations: 3 });
     mockBackend = createMockBackend([
       "First",
       "Second",
@@ -597,8 +597,49 @@ describe("LoopEngine", () => {
     expect(engine.state.recentIterations.length).toBe(3);
     expect(engine.state.recentIterations[0]!.iteration).toBe(1);
     expect(engine.state.recentIterations[0]!.outcome).toBe("continue");
-    expect(engine.state.recentIterations[2]!.outcome).toBe("complete");
-  });
+      expect(engine.state.recentIterations[2]!.outcome).toBe("complete");
+    });
+
+    test("setupGitBranch preserves originalBranch even on working branch", async () => {
+      const loop = createTestLoop({ maxIterations: 1 });
+      mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
+
+      await Bun.$`git checkout -b ralph/working`.cwd(testDir).quiet();
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      expect(engine.state.status).toBe("completed");
+      expect(engine.state.git?.originalBranch).toBe("ralph/working");
+    }, 10000);
+
+    test("setupGitBranch preserves existing originalBranch", async () => {
+      const loop = createTestLoop({ maxIterations: 1 });
+      loop.state.git = {
+        originalBranch: "main",
+        workingBranch: "ralph/existing",
+        commits: [],
+      };
+      mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      expect(engine.state.status).toBe("completed");
+      expect(engine.state.git?.originalBranch).toBe("main");
+    }, 10000);
 
   test("setPendingPrompt updates state", async () => {
     const loop = createTestLoop({ maxIterations: 1 });

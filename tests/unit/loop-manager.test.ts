@@ -9,6 +9,7 @@ import { join } from "path";
 import { LoopManager } from "../../src/core/loop-manager";
 import { SimpleEventEmitter } from "../../src/core/event-emitter";
 import type { LoopEvent } from "../../src/types/events";
+import { updateLoopState } from "../../src/persistence/loops";
 
 describe("LoopManager", () => {
   let testDataDir: string;
@@ -133,6 +134,45 @@ describe("LoopManager", () => {
       expect(updated!.config.prompt).toBe("Updated prompt");
     });
 
+    test("rejects baseBranch update when git state exists", async () => {
+      const loop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Test",
+      });
+
+      await updateLoopState(loop.config.id, {
+        ...loop.state,
+        git: {
+          originalBranch: "main",
+          workingBranch: "ralph/test",
+          commits: [],
+        },
+      });
+
+      await expect(
+        manager.updateLoop(loop.config.id, {
+          baseBranch: "develop",
+        })
+      ).rejects.toMatchObject({
+        code: "BASE_BRANCH_IMMUTABLE",
+        status: 409,
+      });
+    });
+
+    test("allows baseBranch update when git state is undefined", async () => {
+      const loop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Test",
+      });
+
+      const updated = await manager.updateLoop(loop.config.id, {
+        baseBranch: "develop",
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated!.config.baseBranch).toBe("develop");
+    });
+  
     test("returns null for non-existent loop", async () => {
       const updated = await manager.updateLoop("non-existent", { prompt: "Test" });
       expect(updated).toBeNull();

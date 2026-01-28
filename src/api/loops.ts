@@ -323,7 +323,15 @@ export const loopsCrudRoutes = {
         const updatedLoop = await loopManager.updateLoop(req.params.id, updates);
         return Response.json(updatedLoop);
       } catch (error) {
-        return errorResponse("update_failed", String(error), 500);
+        const errorMessage = String(error);
+        if (error instanceof Error) {
+          const code = (error as Error & { code?: string }).code;
+          const status = (error as Error & { status?: number }).status;
+          if (code === "BASE_BRANCH_IMMUTABLE") {
+            return errorResponse("base_branch_immutable", errorMessage, status ?? 409);
+          }
+        }
+        return errorResponse("update_failed", errorMessage, 500);
       }
     },
 
@@ -388,7 +396,15 @@ export const loopsCrudRoutes = {
         const updatedLoop = await loopManager.updateLoop(req.params.id, updates);
         return Response.json(updatedLoop);
       } catch (error) {
-        return errorResponse("update_failed", String(error), 500);
+        const errorMessage = String(error);
+        if (error instanceof Error) {
+          const code = (error as Error & { code?: string }).code;
+          const status = (error as Error & { status?: number }).status;
+          if (code === "BASE_BRANCH_IMMUTABLE") {
+            return errorResponse("base_branch_immutable", errorMessage, status ?? 409);
+          }
+        }
+        return errorResponse("update_failed", errorMessage, 500);
       }
     },
 
