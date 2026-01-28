@@ -28,17 +28,26 @@ import type { Loop } from "../../../src/types/loop";
 
 /**
  * Helper to create a plan mode mock backend.
- * Plan mode has two phases:
- * 1. Planning phase: Returns PLAN_READY to indicate plan is ready for review
- * 2. Execution phase: Normal iteration responses
+ * Plan mode has three phases:
+ * 1. Name generation: Returns a loop name
+ * 2. Planning phase: Returns PLAN_READY to indicate plan is ready for review
+ * 3. Execution phase: Normal iteration responses
  */
 function createPlanModeMockResponses(options: {
   planIterations?: number;
   executionResponses?: string[];
+  loopName?: string;
 }): string[] {
-  const { planIterations = 1, executionResponses = ["<promise>COMPLETE</promise>"] } = options;
+  const { 
+    planIterations = 1, 
+    executionResponses = ["<promise>COMPLETE</promise>"],
+    loopName = "test-loop-name",
+  } = options;
 
   const responses: string[] = [];
+
+  // Name generation response (consumed when loop is created)
+  responses.push(loopName);
 
   // Planning phase responses (PLAN_READY after each iteration)
   for (let i = 0; i < planIterations; i++) {
@@ -218,7 +227,7 @@ describe("Plan + Loop User Scenarios", () => {
       beforeAll(async () => {
         ctx = await setupTestServer({
           mockResponses: createPlanModeMockResponses({
-            planIterations: 2, // Increased to handle extra response consumption
+            planIterations: 1,
             executionResponses: [
               "Working on iteration 1...",
               "Working on iteration 2...",
@@ -304,7 +313,7 @@ describe("Plan + Loop User Scenarios", () => {
       beforeAll(async () => {
         ctx = await setupTestServer({
           mockResponses: createPlanModeMockResponses({
-            planIterations: 2, // Increased to handle extra response consumption
+            planIterations: 1,
             executionResponses: [
               "Working...",
               "Done! <promise>COMPLETE</promise>",
@@ -365,7 +374,7 @@ describe("Plan + Loop User Scenarios", () => {
       beforeAll(async () => {
         ctx = await setupTestServer({
           mockResponses: createPlanModeMockResponses({
-            planIterations: 2, // Increased to handle extra response consumption
+            planIterations: 1,
             executionResponses: [
               "Working...",
               "Done! <promise>COMPLETE</promise>",
