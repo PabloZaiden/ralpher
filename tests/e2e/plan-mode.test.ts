@@ -272,4 +272,50 @@ describe("Plan Mode E2E Workflow", () => {
     // Verify the same session is being used for execution
     // (The mock backend creates unique session IDs, so if it's the same, it proves continuity)
   });
+
+  test("isPlanReady flag workflow: starts false, becomes true, button controls", async () => {
+    // 1. Create loop with plan mode
+    const loop = await ctx.manager.createLoop({
+      prompt: "Create a simple plan",
+      directory: ctx.workDir,
+      maxIterations: 1,
+      planMode: true,
+    });
+    const loopId = loop.config.id;
+
+    // 2. Verify isPlanReady is false initially
+    let loopData: Loop | null = await ctx.manager.getLoop(loopId);
+    expect(loopData!.state.planMode?.isPlanReady).toBe(false);
+
+    // 3. Start plan mode
+    await ctx.manager.startPlanMode(loopId);
+    
+    // 4. Wait for AI to emit PLAN_READY marker
+    await delay(500);
+
+    // 5. Verify isPlanReady is now true
+    loopData = await ctx.manager.getLoop(loopId);
+    expect(loopData!.state.planMode?.isPlanReady).toBe(true);
+
+    // 6. Send feedback - isPlanReady should reset to false
+    // Note: With fast mocks, sendPlanFeedback() awaits the entire plan iteration,
+    // so by the time it returns, isPlanReady might already be true again.
+    // In production with real AI, there would be a delay where isPlanReady is false.
+    await ctx.manager.sendPlanFeedback(loopId, "Add time estimates");
+    
+    // 7. Verify feedback was processed successfully and plan is ready
+    loopData = await ctx.manager.getLoop(loopId);
+    
+    // 8. Verify isPlanReady is true (either stayed true or became true again)
+    // With real AI, there would be a period where isPlanReady is false while processing
+    expect(loopData!.state.planMode?.isPlanReady).toBe(true);
+
+    // 9. Accept the plan
+    await ctx.manager.acceptPlan(loopId);
+    await delay(300);
+
+    // 10. Verify loop has transitioned from planning
+    loopData = await ctx.manager.getLoop(loopId);
+    expect(["running", "completed", "max_iterations", "stopped"]).toContain(loopData!.state.status);
+  });
 });

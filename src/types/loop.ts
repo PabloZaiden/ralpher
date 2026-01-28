@@ -145,6 +145,8 @@ export interface LoopState {
     planContent?: string;
     /** Whether .planning folder was already cleared (prevents re-clearing) */
     planningFolderCleared: boolean;
+    /** Whether the plan is ready (PLAN_READY marker detected) */
+    isPlanReady?: boolean;
   };
 
   /** Review mode state for addressing comments after push/merge */

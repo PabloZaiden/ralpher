@@ -1252,6 +1252,10 @@ export class LoopEngine {
         if (isInPlanMode && planReadyPattern.test(responseContent)) {
           this.emitLog("info", "PLAN_READY marker detected - plan is ready for review");
           outcome = "plan_ready";
+          // Set isPlanReady flag in state
+          if (this.state.planMode) {
+            this.state.planMode.isPlanReady = true;
+          }
         } else if (this.stopDetector.matches(responseContent)) {
           this.emitLog("info", "Stop pattern matched - task is complete");
           outcome = "complete";

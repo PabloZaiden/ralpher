@@ -500,6 +500,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
               <PlanReviewPanel
                 loop={loop}
                 planContent={planContent?.content ?? ""}
+                isPlanReady={loop.state.planMode?.isPlanReady ?? false}
                 onSendFeedback={async (feedback) => {
                   await sendPlanFeedback(feedback);
                 }}

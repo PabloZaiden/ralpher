@@ -468,6 +468,36 @@ export async function waitForLoopStatus(
 }
 
 /**
+ * Wait for a plan to be ready (isPlanReady = true).
+ */
+export async function waitForPlanReady(
+  baseUrl: string,
+  loopId: string,
+  timeoutMs = 15000
+): Promise<Loop> {
+  const startTime = Date.now();
+  let lastIsPlanReady: boolean | undefined;
+  let lastLoop: Loop | null = null;
+
+  while (Date.now() - startTime < timeoutMs) {
+    const { status, body } = await getLoopViaAPI(baseUrl, loopId);
+    if (status === 200) {
+      const loop = body as Loop;
+      lastLoop = loop;
+      lastIsPlanReady = loop.state.planMode?.isPlanReady;
+      if (lastIsPlanReady === true) {
+        return loop;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  throw new Error(
+    `Loop ${loopId} plan did not become ready within ${timeoutMs}ms. Last isPlanReady: ${lastIsPlanReady}, status: ${lastLoop?.state.status}`
+  );
+}
+
+/**
  * Accept a loop via the API.
  */
 export async function acceptLoopViaAPI(
