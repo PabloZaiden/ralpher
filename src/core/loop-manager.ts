@@ -557,12 +557,18 @@ Follow the standard loop execution flow:
     }
 
     const pendingGitState = this.engines.get(loopId)?.state.git;
-    if (updates.baseBranch && (loop.state.git?.originalBranch || pendingGitState?.originalBranch)) {
+    if (updates.baseBranch !== undefined && (loop.state.git?.originalBranch || pendingGitState?.originalBranch)) {
       log.warn(`Rejected baseBranch update for loop ${loopId} after git setup`);
-      return null;
+      const error = new Error("Base branch cannot be updated after git setup.") as Error & {
+        code: string;
+        status: number;
+      };
+      error.code = "BASE_BRANCH_IMMUTABLE";
+      error.status = 409;
+      throw error;
     }
 
-    if (updates.baseBranch && loop.state.status === "draft") {
+    if (updates.baseBranch !== undefined && loop.state.status === "draft") {
       log.info(`Updating baseBranch for draft loop ${loopId}`);
     }
 

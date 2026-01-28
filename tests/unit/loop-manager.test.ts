@@ -149,11 +149,14 @@ describe("LoopManager", () => {
         },
       });
 
-      const updated = await manager.updateLoop(loop.config.id, {
-        baseBranch: "develop",
+      await expect(
+        manager.updateLoop(loop.config.id, {
+          baseBranch: "develop",
+        })
+      ).rejects.toMatchObject({
+        code: "BASE_BRANCH_IMMUTABLE",
+        status: 409,
       });
-
-      expect(updated).toBeNull();
     });
 
     test("allows baseBranch update when git state is undefined", async () => {
