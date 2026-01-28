@@ -12,6 +12,7 @@ import { apiRoutes } from "../../src/api";
 import { ensureDataDirectories } from "../../src/persistence/paths";
 import { backendManager } from "../../src/core/backend-manager";
 import { TestCommandExecutor } from "../mocks/mock-executor";
+import packageJson from "../../package.json";
 import type { LoopBackend } from "../../src/core/loop-engine";
 import type {
   AgentSession,
@@ -177,7 +178,7 @@ describe("Loops CRUD API Integration", () => {
 
       const body = await response.json();
       expect(body.healthy).toBe(true);
-      expect(body.version).toBe("1.0.0");
+      expect(body.version).toBe(packageJson.version);
     });
   });
 

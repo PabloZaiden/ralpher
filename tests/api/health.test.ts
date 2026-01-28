@@ -4,6 +4,7 @@
 
 import { test, expect, describe } from "bun:test";
 import { healthRoutes } from "../../src/api/health";
+import packageJson from "../../package.json";
 
 describe("GET /api/health", () => {
   test("returns healthy status", async () => {
@@ -14,7 +15,7 @@ describe("GET /api/health", () => {
     const body = await response.json();
     expect(body.healthy).toBe(true);
     expect(typeof body.version).toBe("string");
-    expect(body.version).toBe("1.0.0");
+    expect(body.version).toBe(packageJson.version);
   });
 
   test("response has correct content-type", async () => {

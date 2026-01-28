@@ -1,7 +1,7 @@
 {
   "name": "@pablozaiden/ralpher",
   "description": "Ralpher is a web and rest service used to control and manage Ralph Loops in opencode",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "type": "module",
   "scripts": {
     "dev": "bun --hot src/index.ts",

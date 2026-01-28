@@ -3,7 +3,7 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
-import type { UncommittedChangesError, ModelInfo } from "../types";
+import type { UncommittedChangesError, ModelInfo, HealthResponse } from "../types";
 import type { BranchInfo } from "./CreateLoopForm";
 import { useLoops, useServerSettings } from "../hooks";
 import { Button, Modal } from "./common";
@@ -53,6 +53,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   } = useServerSettings();
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
+  const [version, setVersion] = useState<string | null>(null);
 
   // Fetch app config on mount to get remote-only status
   useEffect(() => {
@@ -63,6 +64,18 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       })
       .catch(() => {
         // Ignore errors, default to false
+      });
+  }, []);
+
+  // Fetch version on mount
+  useEffect(() => {
+    fetch("/api/health")
+      .then((res) => res.json())
+      .then((data: HealthResponse) => {
+        setVersion(data.version);
+      })
+      .catch(() => {
+        // Ignore errors
       });
   }, []);
 
@@ -315,6 +328,11 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
             <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
               <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
                 Ralpher
+                {version && (
+                  <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                    v{version}
+                  </span>
+                )}
               </h1>
               {/* Server Settings */}
               <ConnectionStatusBar
