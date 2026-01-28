@@ -359,6 +359,11 @@ export class LoopManager {
       throw new Error(`Loop is not in planning status: ${engine.state.status}`);
     }
 
+    // Wait for any ongoing iteration to complete before modifying state
+    // This prevents race conditions where feedback resets isPlanReady while
+    // an iteration is still in progress (e.g., during git commit)
+    await engine.waitForLoopIdle();
+
     // Increment feedback rounds and reset isPlanReady
     if (engine.state.planMode) {
       engine.state.planMode.feedbackRounds += 1;

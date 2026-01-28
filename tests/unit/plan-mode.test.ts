@@ -6,7 +6,7 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
-import { setupTestContext, teardownTestContext, delay } from "../setup";
+import { setupTestContext, teardownTestContext, waitForPlanReady, waitForLoopStatus } from "../setup";
 import type { TestContext } from "../setup";
 
 // Helper to check if a file exists
@@ -52,8 +52,8 @@ describe("Plan Mode - Clear Planning Folder", () => {
     // Start plan mode (this is when clearing happens)
     await ctx.manager.startPlanMode(loopId);
 
-    // Wait a bit for the plan creation to start
-    await delay(200);
+    // Wait for plan to be ready (polling instead of fixed delay)
+    await waitForPlanReady(ctx.manager, loopId);
 
     // Get the loop state
     const loopData = await ctx.manager.getLoop(loopId);
@@ -86,9 +86,9 @@ describe("Plan Mode - Clear Planning Folder", () => {
     });
     const loopId = loop.config.id;
 
-    // Start plan mode
+    // Start plan mode and wait for plan to be ready
     await ctx.manager.startPlanMode(loopId);
-    await delay(200);
+    await waitForPlanReady(ctx.manager, loopId);
 
     // Verify folder was NOT cleared
     expect(await exists(join(planningDir, "existing-plan.md"))).toBe(true);
@@ -113,11 +113,9 @@ describe("Plan Mode - Clear Planning Folder", () => {
     });
     const loopId = loop.config.id;
 
-    // Start plan mode
+    // Start plan mode and wait for plan to be ready
     await ctx.manager.startPlanMode(loopId);
-
-    // Wait for mock backend to create plan
-    await delay(500);
+    await waitForPlanReady(ctx.manager, loopId);
 
     // Create a plan file (simulating AI creating it)
     await writeFile(join(planningDir, "plan.md"), "# My Plan\n\nTask 1: Do something");
@@ -127,12 +125,14 @@ describe("Plan Mode - Clear Planning Folder", () => {
 
     // Accept the plan (should transition to running without clearing folder)
     await ctx.manager.acceptPlan(loopId);
-    await delay(200);
+    
+    // Wait for transition from planning
+    await waitForLoopStatus(ctx.manager, loopId, ["running", "completed", "max_iterations", "stopped"]);
 
     // Verify plan file still exists (was NOT cleared on start)
     expect(await exists(join(planningDir, "plan.md"))).toBe(true);
 
-    // Verify the loop transitioned from planning (could be running or already completed)
+    // Verify the loop transitioned from planning
     const loopData = await ctx.manager.getLoop(loopId);
     expect(["running", "completed", "max_iterations", "stopped"]).toContain(loopData!.state.status);
   });
@@ -148,9 +148,9 @@ describe("Plan Mode - Clear Planning Folder", () => {
     });
     const loopId = loop.config.id;
 
-    // Start plan mode
+    // Start plan mode and wait for plan to be ready
     await ctx.manager.startPlanMode(loopId);
-    await delay(500);
+    await waitForPlanReady(ctx.manager, loopId);
 
     // Simulate plan creation
     const planningDir = join(ctx.workDir, ".planning");
@@ -159,18 +159,20 @@ describe("Plan Mode - Clear Planning Folder", () => {
 
     // Accept and wait for it to start running
     await ctx.manager.acceptPlan(loopId);
-    await delay(300);
+    await waitForLoopStatus(ctx.manager, loopId, ["running", "completed", "max_iterations", "stopped"]);
 
     // Stop the loop
     await ctx.manager.stopLoop(loopId);
-    await delay(200);
+    await waitForLoopStatus(ctx.manager, loopId, ["stopped", "completed", "max_iterations"]);
 
     // Verify plan still exists
     expect(await exists(join(planningDir, "plan.md"))).toBe(true);
 
     // Restart the loop
     await ctx.manager.startLoop(loopId);
-    await delay(300);
+    
+    // Brief wait for restart to process
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Verify plan still exists (folder not cleared again)
     expect(await exists(join(planningDir, "plan.md"))).toBe(true);
@@ -211,12 +213,10 @@ describe("Plan Mode - State Transitions", () => {
     });
     const loopId = loop.config.id;
 
-    await delay(100);
-
-    const loopData = await ctx.manager.getLoop(loopId);
-    expect(loopData).toBeDefined();
-    expect(loopData!.state.status).toBe("planning");
-    expect(loopData!.state.planMode?.active).toBe(true);
+    // Wait for loop to be in planning status
+    const loopData = await waitForLoopStatus(ctx.manager, loopId, ["planning"]);
+    expect(loopData.state.status).toBe("planning");
+    expect(loopData.state.planMode?.active).toBe(true);
   });
 
   test("transitions from planning to running on accept", async () => {
@@ -228,9 +228,9 @@ describe("Plan Mode - State Transitions", () => {
     });
     const loopId = loop.config.id;
 
-    // Start plan mode
+    // Start plan mode and wait for plan to be ready
     await ctx.manager.startPlanMode(loopId);
-    await delay(200);
+    await waitForPlanReady(ctx.manager, loopId);
 
     // Verify initial status
     let loopData = await ctx.manager.getLoop(loopId);
@@ -238,10 +238,9 @@ describe("Plan Mode - State Transitions", () => {
 
     // Accept the plan
     await ctx.manager.acceptPlan(loopId);
-    await delay(200);
-
-    // Verify transition from planning (could be running or already completed due to mock)
-    loopData = await ctx.manager.getLoop(loopId);
+    
+    // Wait for transition from planning
+    loopData = await waitForLoopStatus(ctx.manager, loopId, ["running", "completed", "max_iterations", "stopped"]);
     expect(["running", "completed", "max_iterations", "stopped"]).toContain(loopData!.state.status);
     
     // Clean up - stop the loop
@@ -257,24 +256,22 @@ describe("Plan Mode - State Transitions", () => {
     });
     const loopId = loop.config.id;
 
-    // Start plan mode
+    // Start plan mode and wait for plan to be ready
     await ctx.manager.startPlanMode(loopId);
-    await delay(200);
+    await waitForPlanReady(ctx.manager, loopId);
 
     // Initial feedback rounds should be 0
     let loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.planMode?.feedbackRounds).toBe(0);
 
-    // Send first feedback
+    // Send first feedback (awaits iteration completion)
     await ctx.manager.sendPlanFeedback(loopId, "Please add more details");
-    await delay(200);
 
     loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.planMode?.feedbackRounds).toBe(1);
 
     // Send second feedback
     await ctx.manager.sendPlanFeedback(loopId, "Add time estimates");
-    await delay(200);
 
     loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.planMode?.feedbackRounds).toBe(2);
@@ -289,7 +286,8 @@ describe("Plan Mode - State Transitions", () => {
     });
     const loopId = loop.config.id;
 
-    await delay(200);
+    // Wait for loop to be in planning status
+    await waitForLoopStatus(ctx.manager, loopId, ["planning"]);
 
     // Verify loop exists
     let loopData = await ctx.manager.getLoop(loopId);
@@ -297,11 +295,10 @@ describe("Plan Mode - State Transitions", () => {
 
     // Discard the plan
     await ctx.manager.discardPlan(loopId);
-    await delay(200);
-
-    // Verify loop is deleted (should return deleted status, not null)
-    loopData = await ctx.manager.getLoop(loopId);
-    expect(loopData!.state.status).toBe("deleted");
+    
+    // Wait for loop to be deleted
+    loopData = await waitForLoopStatus(ctx.manager, loopId, ["deleted"]);
+    expect(loopData.state.status).toBe("deleted");
   });
 
   test("reuses session from plan creation when starting execution", async () => {
@@ -313,9 +310,9 @@ describe("Plan Mode - State Transitions", () => {
     });
     const loopId = loop.config.id;
 
-    // Start plan mode
+    // Start plan mode and wait for plan to be ready
     await ctx.manager.startPlanMode(loopId);
-    await delay(200);
+    await waitForPlanReady(ctx.manager, loopId);
 
     // Get the plan session info from state.session (where it's stored during planning)
     let loopData = await ctx.manager.getLoop(loopId);
@@ -324,7 +321,9 @@ describe("Plan Mode - State Transitions", () => {
 
     // Accept the plan
     await ctx.manager.acceptPlan(loopId);
-    await delay(200);
+    
+    // Wait for transition from planning
+    await waitForLoopStatus(ctx.manager, loopId, ["running", "completed", "max_iterations", "stopped"]);
 
     // Verify the session is still the same (session continuity)
     // After acceptance, it should be copied to planMode.planSessionId for persistence
@@ -380,10 +379,7 @@ describe("Plan Mode - isPlanReady Flag", () => {
     await ctx.manager.startPlanMode(loopId);
     
     // Wait for the mock backend to emit PLAN_READY
-    await delay(500);
-
-    // Verify isPlanReady is now true
-    const loopData = await ctx.manager.getLoop(loopId);
+    const loopData = await waitForPlanReady(ctx.manager, loopId);
     expect(loopData!.state.planMode?.isPlanReady).toBe(true);
   });
 
@@ -398,24 +394,20 @@ describe("Plan Mode - isPlanReady Flag", () => {
 
     // Start plan mode and wait for PLAN_READY
     await ctx.manager.startPlanMode(loopId);
-    await delay(1000); // Longer delay
-
-    // Verify plan is ready
-    let loopData = await ctx.manager.getLoop(loopId);
-    expect(loopData!.state.planMode?.isPlanReady).toBe(true);
+    let loopData = await waitForPlanReady(ctx.manager, loopId);
+    expect(loopData.state.planMode?.isPlanReady).toBe(true);
 
     // Send feedback - this resets isPlanReady to false internally,
     // but with fast mocks the new plan might be ready by the time this returns
     await ctx.manager.sendPlanFeedback(loopId, "Please add more details");
     
-    // After feedback, the plan should eventually be ready again
-    // (with fast mocks it might still be true, or might have briefly been false)
-    loopData = await ctx.manager.getLoop(loopId);
+    // After feedback, wait for the plan to be ready again
+    loopData = await waitForPlanReady(ctx.manager, loopId);
     
     // The important thing is that after feedback, we can still accept the plan
     // and feedback rounds should have incremented
-    expect(loopData!.state.planMode?.feedbackRounds).toBe(1);
-    expect(loopData!.state.planMode?.isPlanReady).toBe(true);
+    expect(loopData.state.planMode?.feedbackRounds).toBe(1);
+    expect(loopData.state.planMode?.isPlanReady).toBe(true);
   });
 
   test("isPlanReady persists in database across restarts", async () => {
@@ -429,20 +421,18 @@ describe("Plan Mode - isPlanReady Flag", () => {
 
     // Start plan mode and wait for PLAN_READY
     await ctx.manager.startPlanMode(loopId);
-    await delay(500);
-
-    // Verify isPlanReady is true
-    let loopData = await ctx.manager.getLoop(loopId);
-    expect(loopData!.state.planMode?.isPlanReady).toBe(true);
+    let loopData = await waitForPlanReady(ctx.manager, loopId);
+    expect(loopData.state.planMode?.isPlanReady).toBe(true);
 
     // Stop the loop
     await ctx.manager.stopLoop(loopId);
-    await delay(200);
+    await waitForLoopStatus(ctx.manager, loopId, ["stopped", "paused"]);
 
     // Retrieve the loop from database (simulating restart)
-    loopData = await ctx.manager.getLoop(loopId);
+    const retrievedLoop = await ctx.manager.getLoop(loopId);
     
     // Verify isPlanReady is still true
-    expect(loopData!.state.planMode?.isPlanReady).toBe(true);
+    expect(retrievedLoop).not.toBeNull();
+    expect(retrievedLoop!.state.planMode?.isPlanReady).toBe(true);
   });
 });

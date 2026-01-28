@@ -225,3 +225,79 @@ export function getEvents<T extends LoopEvent["type"]>(
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Poll until a loop reaches expected status (via LoopManager).
+ */
+export async function waitForLoopStatus(
+  manager: LoopManager,
+  loopId: string,
+  expectedStatuses: string[],
+  timeoutMs = 10000
+): Promise<import("../src/types").Loop> {
+  const startTime = Date.now();
+  let lastStatus = "unknown";
+  while (Date.now() - startTime < timeoutMs) {
+    const loop = await manager.getLoop(loopId);
+    if (loop) {
+      lastStatus = loop.state?.status ?? "unknown";
+      if (expectedStatuses.includes(lastStatus)) {
+        return loop;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(
+    `Loop ${loopId} did not reach status [${expectedStatuses.join(", ")}] within ${timeoutMs}ms. Last: ${lastStatus}`
+  );
+}
+
+/**
+ * Poll until isPlanReady becomes true (via LoopManager).
+ */
+export async function waitForPlanReady(
+  manager: LoopManager,
+  loopId: string,
+  timeoutMs = 10000
+): Promise<import("../src/types").Loop> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    const loop = await manager.getLoop(loopId);
+    if (loop?.state.planMode?.isPlanReady === true) {
+      return loop;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const finalLoop = await manager.getLoop(loopId);
+  throw new Error(
+    `Plan did not become ready within ${timeoutMs}ms. isPlanReady: ${finalLoop?.state.planMode?.isPlanReady}, status: ${finalLoop?.state.status}`
+  );
+}
+
+/**
+ * Poll until file no longer exists.
+ */
+export async function waitForFileDeleted(filePath: string, timeoutMs = 5000): Promise<void> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    if (!(await Bun.file(filePath).exists())) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`File ${filePath} was not deleted within ${timeoutMs}ms`);
+}
+
+/**
+ * Poll until file exists.
+ */
+export async function waitForFileExists(filePath: string, timeoutMs = 5000): Promise<void> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    if (await Bun.file(filePath).exists()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`File ${filePath} did not appear within ${timeoutMs}ms`);
+}

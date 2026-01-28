@@ -249,9 +249,6 @@ describe("Draft Loop E2E Workflow", () => {
     );
     expect(completed).toBe(true);
 
-    // Wait a bit for git setup to complete
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
     // Verify final configuration is correct and git branch was created
     const finalResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
     const finalBody = await finalResponse.json();
@@ -336,9 +333,6 @@ describe("Draft Loop E2E Workflow", () => {
       30000
     );
     expect(completed).toBe(true);
-
-    // Wait a bit for git setup to complete
-    await new Promise((resolve) => setTimeout(resolve, 500));
 
     // Verify final configuration matches edits
     const finalResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);

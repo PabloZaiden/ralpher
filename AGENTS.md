@@ -250,6 +250,43 @@ const currentBranch = (await Bun.$`git -C ${workDir} branch --show-current`.text
 await Bun.$`git -C ${workDir} push origin ${currentBranch}`.quiet();
 ```
 
+### Avoiding Flaky Tests with Polling
+
+**CRITICAL:** Never use fixed delays (`delay()`, `setTimeout`) to wait for async operations in tests. Fixed delays are inherently flaky because execution time varies across environments.
+
+Instead, use polling helpers that wait for a specific condition to be met:
+
+```typescript
+// WRONG - flaky, timing-dependent
+await delay(500);
+const loop = await manager.getLoop(loopId);
+expect(loop.state.status).toBe("completed");
+
+// CORRECT - polls until condition is met
+const loop = await waitForLoopStatus(manager, loopId, ["completed"]);
+expect(loop.state.status).toBe("completed");
+```
+
+**Available polling helpers in `tests/setup.ts`:**
+
+- `waitForLoopStatus(manager, loopId, expectedStatuses[], timeoutMs?)` - Wait for loop to reach status
+- `waitForPlanReady(manager, loopId, timeoutMs?)` - Wait for plan's `isPlanReady` to be true
+- `waitForFileDeleted(filePath, timeoutMs?)` - Wait for file to be deleted
+- `waitForFileExists(filePath, timeoutMs?)` - Wait for file to appear
+- `waitForEvent(events, eventType, timeoutMs?)` - Wait for specific event to be emitted
+
+**For HTTP API tests**, use helpers from `tests/integration/user-scenarios/helpers.ts`:
+
+- `waitForLoopStatus(baseUrl, loopId, expectedStatus, timeoutMs?)` - HTTP-based status polling
+- `waitForPlanReady(baseUrl, loopId, timeoutMs?)` - HTTP-based plan ready polling
+
+**Guidelines:**
+
+1. Polling helpers should have reasonable timeouts (10s default) with informative error messages
+2. Poll interval should be short (50ms) to minimize test duration
+3. Error messages should include the last observed state for debugging
+4. If you need to wait for a condition, create a new polling helper rather than using `delay()`
+
 ## General Guidelines
 
 - Git operations are allowed. The system manages git branches, commits, and merges for Ralph Loops.
