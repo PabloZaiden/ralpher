@@ -117,6 +117,10 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [loadingComments, setLoadingComments] = useState(false);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
 
+  // Collapse/expand state for Logs and TODOs sections
+  const [logsCollapsed, setLogsCollapsed] = useState(false);
+  const [todosCollapsed, setTodosCollapsed] = useState(false);
+
   // Track which tabs have unseen updates
   const [tabsWithUpdates, setTabsWithUpdates] = useState<Set<TabId>>(new Set());
   
@@ -542,24 +546,44 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                       {/* Side-by-side layout for logs and TODOs (75-25 split) */}
                       <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-4">
                         {/* Logs section */}
-                        <div className="flex-[3] min-h-[100px] lg:min-h-0 flex flex-col min-w-0">
-                          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0">
-                            Logs
-                          </h3>
-                          <LogViewer
-                            messages={messages}
-                            toolCalls={toolCalls}
-                            logs={logs}
-                            showDebugLogs={showDebugLogs}
-                          />
+                        <div className={`min-h-[100px] lg:min-h-0 flex flex-col min-w-0 ${
+                          logsCollapsed ? 'hidden' : todosCollapsed ? 'flex-1' : 'flex-[3]'
+                        }`}>
+                          <button
+                            onClick={() => setLogsCollapsed(!logsCollapsed)}
+                            className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0 flex items-center gap-2 hover:text-gray-900 dark:hover:text-gray-100 transition-colors text-left"
+                            aria-expanded={!logsCollapsed}
+                            aria-controls="logs-viewer"
+                          >
+                            <span className="text-xs">{logsCollapsed ? "▶" : "▼"}</span>
+                            <span>Logs</span>
+                          </button>
+                          {!logsCollapsed && (
+                            <LogViewer
+                              messages={messages}
+                              toolCalls={toolCalls}
+                              logs={logs}
+                              showDebugLogs={showDebugLogs}
+                            />
+                          )}
                         </div>
                         
                         {/* TODOs section */}
-                        <div className="flex-1 min-h-[100px] lg:min-h-0 flex flex-col min-w-0">
-                          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0">
-                            TODOs
-                          </h3>
-                          <TodoViewer todos={todos} />
+                        <div className={`min-h-[100px] lg:min-h-0 flex flex-col min-w-0 ${
+                          todosCollapsed ? 'hidden' : logsCollapsed ? 'flex-1' : 'flex-1'
+                        }`}>
+                          <button
+                            onClick={() => setTodosCollapsed(!todosCollapsed)}
+                            className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0 flex items-center gap-2 hover:text-gray-900 dark:hover:text-gray-100 transition-colors text-left"
+                            aria-expanded={!todosCollapsed}
+                            aria-controls="todos-viewer"
+                          >
+                            <span className="text-xs">{todosCollapsed ? "▶" : "▼"}</span>
+                            <span>TODOs</span>
+                          </button>
+                          {!todosCollapsed && (
+                            <TodoViewer todos={todos} />
+                          )}
                         </div>
                       </div>
                       
