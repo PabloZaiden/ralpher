@@ -41,7 +41,6 @@ describe("Plan Mode - Clear Planning Folder", () => {
 
     // Create loop with plan mode + clear folder
     const loop = await ctx.manager.createLoop({
-      name: "Test Plan Mode Clear",
       prompt: "Create a simple plan",
       directory: ctx.workDir,
       maxIterations: 1,
@@ -79,7 +78,6 @@ describe("Plan Mode - Clear Planning Folder", () => {
 
     // Create loop without clear option
     const loop = await ctx.manager.createLoop({
-      name: "Test No Clear",
       prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
@@ -107,7 +105,6 @@ describe("Plan Mode - Clear Planning Folder", () => {
     await writeFile(join(planningDir, "old-file.md"), "Old content");
 
     const loop = await ctx.manager.createLoop({
-      name: "Test Plan Persistence",
       prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
@@ -143,7 +140,6 @@ describe("Plan Mode - Clear Planning Folder", () => {
   test("planningFolderCleared persists across restart", async () => {
     // Create loop, clear folder, mark as cleared
     const loop = await ctx.manager.createLoop({
-      name: "Test Persistence",
       prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
@@ -208,7 +204,6 @@ describe("Plan Mode - State Transitions", () => {
 
   test("creates loop in planning status when planMode is true", async () => {
     const loop = await ctx.manager.createLoop({
-      name: "Test Planning Status",
       prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
@@ -226,7 +221,6 @@ describe("Plan Mode - State Transitions", () => {
 
   test("transitions from planning to running on accept", async () => {
     const loop = await ctx.manager.createLoop({
-      name: "Test Accept Transition",
       prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
@@ -256,7 +250,6 @@ describe("Plan Mode - State Transitions", () => {
 
   test("increments feedback rounds on each feedback", async () => {
     const loop = await ctx.manager.createLoop({
-      name: "Test Feedback Rounds",
       prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
@@ -289,7 +282,6 @@ describe("Plan Mode - State Transitions", () => {
 
   test("deletes loop on discard", async () => {
     const loop = await ctx.manager.createLoop({
-      name: "Test Discard",
       prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
@@ -314,7 +306,6 @@ describe("Plan Mode - State Transitions", () => {
 
   test("reuses session from plan creation when starting execution", async () => {
     const loop = await ctx.manager.createLoop({
-      name: "Test Session Continuity",
       prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,

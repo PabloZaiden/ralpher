@@ -53,13 +53,11 @@ describe("LoopManager", () => {
   describe("createLoop", () => {
     test("creates a new loop with defaults", async () => {
       const loop = await manager.createLoop({
-        name: "Test Loop",
         directory: testWorkDir,
         prompt: "Do something",
       });
 
       expect(loop.config.id).toBeDefined();
-      expect(loop.config.name).toBe("Test Loop");
       expect(loop.config.directory).toBe(testWorkDir);
       expect(loop.config.prompt).toBe("Do something");
       // Backend is now global, not per-loop config
@@ -73,7 +71,6 @@ describe("LoopManager", () => {
 
     test("creates a loop with custom options", async () => {
       const loop = await manager.createLoop({
-        name: "Custom Loop",
         directory: testWorkDir,
         prompt: "Custom task",
         // Backend options removed - now global
@@ -88,7 +85,6 @@ describe("LoopManager", () => {
   describe("getLoop", () => {
     test("returns a loop by ID", async () => {
       const created = await manager.createLoop({
-        name: "Get Test",
         directory: testWorkDir,
         prompt: "Test",
       });
@@ -96,7 +92,6 @@ describe("LoopManager", () => {
       const fetched = await manager.getLoop(created.config.id);
 
       expect(fetched).not.toBeNull();
-      expect(fetched!.config.name).toBe("Get Test");
     });
 
     test("returns null for non-existent loop", async () => {
@@ -108,13 +103,11 @@ describe("LoopManager", () => {
   describe("getAllLoops", () => {
     test("returns all loops", async () => {
       await manager.createLoop({
-        name: "Loop 1",
         directory: testWorkDir,
         prompt: "Test 1",
       });
 
       await manager.createLoop({
-        name: "Loop 2",
         directory: testWorkDir,
         prompt: "Test 2",
       });
@@ -128,23 +121,20 @@ describe("LoopManager", () => {
   describe("updateLoop", () => {
     test("updates loop configuration", async () => {
       const loop = await manager.createLoop({
-        name: "Original Name",
         directory: testWorkDir,
         prompt: "Original prompt",
       });
 
       const updated = await manager.updateLoop(loop.config.id, {
-        name: "Updated Name",
         prompt: "Updated prompt",
       });
 
       expect(updated).not.toBeNull();
-      expect(updated!.config.name).toBe("Updated Name");
       expect(updated!.config.prompt).toBe("Updated prompt");
     });
 
     test("returns null for non-existent loop", async () => {
-      const updated = await manager.updateLoop("non-existent", { name: "Test" });
+      const updated = await manager.updateLoop("non-existent", { prompt: "Test" });
       expect(updated).toBeNull();
     });
   });
@@ -152,7 +142,6 @@ describe("LoopManager", () => {
   describe("deleteLoop", () => {
     test("soft-deletes a loop (marks as deleted)", async () => {
       const loop = await manager.createLoop({
-        name: "To Delete",
         directory: testWorkDir,
         prompt: "Test",
       });
@@ -172,7 +161,6 @@ describe("LoopManager", () => {
 
     test("purges a deleted loop", async () => {
       const loop = await manager.createLoop({
-        name: "To Purge",
         directory: testWorkDir,
         prompt: "Test",
       });
@@ -191,7 +179,6 @@ describe("LoopManager", () => {
 
     test("cannot purge a non-deleted/non-merged loop", async () => {
       const loop = await manager.createLoop({
-        name: "Cannot Purge",
         directory: testWorkDir,
         prompt: "Test",
       });
@@ -210,7 +197,6 @@ describe("LoopManager", () => {
   describe("isRunning", () => {
     test("returns false for non-running loop", async () => {
       const loop = await manager.createLoop({
-        name: "Not Running",
         directory: testWorkDir,
         prompt: "Test",
       });
@@ -222,7 +208,6 @@ describe("LoopManager", () => {
   describe("clearPlanningFolder option", () => {
     test("creates a loop with clearPlanningFolder = true", async () => {
       const loop = await manager.createLoop({
-        name: "Clear Planning Loop",
         directory: testWorkDir,
         prompt: "Task with clearing",
         clearPlanningFolder: true,
@@ -233,7 +218,6 @@ describe("LoopManager", () => {
 
     test("creates a loop with clearPlanningFolder = false", async () => {
       const loop = await manager.createLoop({
-        name: "Keep Planning Loop",
         directory: testWorkDir,
         prompt: "Task without clearing",
         clearPlanningFolder: false,
@@ -244,7 +228,6 @@ describe("LoopManager", () => {
 
     test("creates a loop with clearPlanningFolder defaulting to false", async () => {
       const loop = await manager.createLoop({
-        name: "Default Planning Loop",
         directory: testWorkDir,
         prompt: "Task with default",
       });
@@ -255,7 +238,6 @@ describe("LoopManager", () => {
 
     test("clearPlanningFolder is persisted correctly", async () => {
       const created = await manager.createLoop({
-        name: "Persisted Clear Planning",
         directory: testWorkDir,
         prompt: "Test persistence",
         clearPlanningFolder: true,

@@ -21,10 +21,13 @@ describe("Git Workflow", () => {
   beforeEach(async () => {
     ctx = await setupTestContext({
       useMockBackend: true,
-      mockResponses: [
-        "Working on iteration 1...",
-        "Done! <promise>COMPLETE</promise>",
-      ],
+      mockResponses: Array(30).fill(null).map((_, i) => {
+        // Cycle through: name, iteration, complete
+        const mod = i % 3;
+        if (mod === 0) return "branch-id-loop";  // Name generation response
+        if (mod === 1) return "Working on iteration 1...";
+        return "Done! <promise>COMPLETE</promise>";
+      }),
       initGit: true, // Initialize git in work directory
     });
   });
@@ -36,7 +39,6 @@ describe("Git Workflow", () => {
   describe("Branch Creation", () => {
     test("creates a branch when starting a loop with git enabled", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Git Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
       });
@@ -64,7 +66,6 @@ describe("Git Workflow", () => {
 
     test("uses custom branch prefix", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Custom Prefix Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
         gitBranchPrefix: "feature/",
@@ -79,7 +80,6 @@ describe("Git Workflow", () => {
 
     test("branch name includes loop name and timestamp", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Branch ID Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
       });
@@ -107,6 +107,7 @@ describe("Git Workflow", () => {
         useMockBackend: true,
         initGit: true,
         mockResponses: [
+          "test-loop-name",  // Name generation response
           "Iteration 1...",
           "Iteration 2...",
           "<promise>COMPLETE</promise>",
@@ -114,7 +115,6 @@ describe("Git Workflow", () => {
       });
 
       const loop = await ctx.manager.createLoop({
-        name: "Commit Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
       });
@@ -140,7 +140,6 @@ describe("Git Workflow", () => {
 
     test("uses custom commit prefix", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Custom Commit Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
         gitCommitPrefix: "[CustomPrefix]",
@@ -158,7 +157,6 @@ describe("Git Workflow", () => {
       await Bun.$`git add .`.cwd(ctx.workDir).quiet();
 
       const loop = await ctx.manager.createLoop({
-        name: "Uncommitted Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
       });
@@ -178,7 +176,6 @@ describe("Git Workflow", () => {
   describe("Accept Loop (Merge Branch)", () => {
     test("merges branch on accept", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Accept Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
       });
@@ -219,7 +216,6 @@ describe("Git Workflow", () => {
 
     test("returns error when accepting non-completed loop", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Not Completed Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
       });
@@ -234,7 +230,6 @@ describe("Git Workflow", () => {
   describe("Discard Loop (Delete Branch)", () => {
     test("deletes branch on discard", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Discard Loop",
         directory: ctx.workDir,
         prompt: "Make changes",
       });

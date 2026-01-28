@@ -23,11 +23,12 @@ describe("Plan Mode E2E Workflow", () => {
       initGit: true,
       // Need multiple PLAN_READY responses for feedback tests, followed by COMPLETE for acceptance
       mockResponses: [
-        "<promise>PLAN_READY</promise>",  // Initial plan creation
-        "<promise>PLAN_READY</promise>",  // After first feedback
-        "<promise>PLAN_READY</promise>",  // After second feedback
-        "<promise>PLAN_READY</promise>",  // After third feedback
-        "<promise>COMPLETE</promise>",    // After acceptance (execution complete)
+        "test-loop-name",                     // Name generation
+        "<promise>PLAN_READY</promise>",     // Initial plan creation
+        "<promise>PLAN_READY</promise>",     // After first feedback
+        "<promise>PLAN_READY</promise>",     // After second feedback
+        "<promise>PLAN_READY</promise>",     // After third feedback
+        "<promise>COMPLETE</promise>",       // After acceptance (execution complete)
       ],
     });
   });
@@ -42,7 +43,6 @@ describe("Plan Mode E2E Workflow", () => {
 
     // 1. Create loop with plan mode
     const loop = await ctx.manager.createLoop({
-      name: "E2E Plan Mode Test",
       prompt: "Create a simple implementation plan",
       directory: ctx.workDir,
       maxIterations: 2,
@@ -108,7 +108,6 @@ describe("Plan Mode E2E Workflow", () => {
   test("discard plan workflow", async () => {
     // 1. Create loop with plan mode
     const loop = await ctx.manager.createLoop({
-      name: "Test Discard Workflow",
       prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
@@ -146,7 +145,6 @@ describe("Plan Mode E2E Workflow", () => {
   test("multiple feedback rounds", async () => {
     // 1. Create loop
     const loop = await ctx.manager.createLoop({
-      name: "Test Multiple Feedback",
       prompt: "Create a detailed plan",
       directory: ctx.workDir,
       maxIterations: 1,
@@ -197,7 +195,6 @@ describe("Plan Mode E2E Workflow", () => {
 
     // Create loop with clearPlanningFolder enabled
     const loop = await ctx.manager.createLoop({
-      name: "Test Clear and Preserve",
       prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
@@ -237,7 +234,6 @@ describe("Plan Mode E2E Workflow", () => {
   test("session continuity from planning to execution", async () => {
     // Create loop with plan mode
     const loop = await ctx.manager.createLoop({
-      name: "Test Session Continuity",
       prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,

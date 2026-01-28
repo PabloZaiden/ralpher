@@ -41,7 +41,6 @@ describe("Review Cycle User Scenarios", () => {
     test("pushed loop can receive and address reviewer comments", async () => {
       // Create and complete initial loop
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Push Review Test",
         directory: ctx.workDir,
         prompt: "Implement a feature",
       });
@@ -125,7 +124,6 @@ describe("Review Cycle User Scenarios", () => {
     test("pushed loop handles 3+ review cycles on same branch", async () => {
       // Create and complete initial loop
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Multi Review Push Test",
         directory: ctx.workDir,
         prompt: "Build a complex feature",
       });
@@ -209,7 +207,6 @@ describe("Review Cycle User Scenarios", () => {
 
       // Create and complete initial loop
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Merge Review Test",
         directory: ctx.workDir,
         prompt: "Implement a feature",
       });
@@ -294,7 +291,6 @@ describe("Review Cycle User Scenarios", () => {
 
       // Create and complete initial loop
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Multi Merge Review Test",
         directory: ctx.workDir,
         prompt: "Complex feature",
       });
@@ -370,7 +366,6 @@ describe("Review Cycle User Scenarios", () => {
     test("cannot address comments on non-addressable loop", async () => {
       // Create loop but don't push or merge
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Non Addressable Test",
         directory: ctx.workDir,
         prompt: "Do something",
       });
@@ -391,7 +386,6 @@ describe("Review Cycle User Scenarios", () => {
     test("cannot address comments with empty comment string", async () => {
       // Create and push loop
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Empty Comment Test",
         directory: ctx.workDir,
         prompt: "Do something",
       });
@@ -416,7 +410,6 @@ describe("Review Cycle User Scenarios", () => {
     test("review history returns correct info for non-addressable loop", async () => {
       // Create loop but don't push or merge
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "History Test",
         directory: ctx.workDir,
         prompt: "Do something",
       });
@@ -458,7 +451,6 @@ describe("Review Cycle User Scenarios", () => {
 
       // Create and complete initial loop
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Await Start Test",
         directory: ctx.workDir,
         prompt: "Implement a feature",
       });

@@ -153,7 +153,7 @@ describe("LoopEngine", () => {
   function createTestLoop(overrides?: Partial<LoopConfig>): Loop {
     const config: LoopConfig = {
       id: "test-loop-123",
-      name: "Test Loop",
+      name: "test-loop",
       directory: testDir,
       prompt: "Do something",
       createdAt: new Date().toISOString(),

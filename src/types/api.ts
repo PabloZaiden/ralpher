@@ -33,10 +33,10 @@ export interface ModelInfo {
  * unless `draft: true` is specified, which saves the loop for later editing.
  * 
  * If `planMode: true`, the loop starts in plan review mode before execution.
+ * 
+ * The loop name is automatically generated from the prompt using AI.
  */
 export interface CreateLoopRequest {
-  /** Human-readable name for the loop */
-  name: string;
   /** Absolute path to the working directory (must be a git repository) */
   directory: string;
   /** The task prompt/PRD describing what the loop should accomplish */
@@ -322,10 +322,6 @@ export function validateCreateLoopRequest(req: unknown): string | undefined {
   }
 
   const body = req as Record<string, unknown>;
-
-  if (typeof body["name"] !== "string" || (body["name"] as string).trim() === "") {
-    return "name is required and must be a non-empty string";
-  }
 
   if (typeof body["directory"] !== "string" || (body["directory"] as string).trim() === "") {
     return "directory is required and must be a non-empty string";

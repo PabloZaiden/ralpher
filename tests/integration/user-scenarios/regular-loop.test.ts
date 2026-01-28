@@ -31,11 +31,14 @@ describe("Regular Loop User Scenarios", () => {
 
     beforeAll(async () => {
       ctx = await setupTestServer({
-        mockResponses: [
-          "Working on iteration 1...",
-          "Working on iteration 2...",
-          "Done! <promise>COMPLETE</promise>",
-        ],
+        mockResponses: Array(20).fill(null).map((_, i) => {
+          // Cycle through: name, iter1, iter2, complete
+          const mod = i % 4;
+          if (mod === 0) return `test-loop-name-${Math.floor(i / 4)}`;
+          if (mod === 1) return "Working on iteration 1...";
+          if (mod === 2) return "Working on iteration 2...";
+          return "Done! <promise>COMPLETE</promise>";
+        }),
         withPlanningDir: true,
       });
     });
@@ -51,7 +54,6 @@ describe("Regular Loop User Scenarios", () => {
 
       // Create loop via API (simulating UI "Create Loop" button)
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Test Loop No Clear",
         directory: ctx.workDir,
         prompt: "Implement a feature",
         clearPlanningFolder: false,
@@ -60,7 +62,6 @@ describe("Regular Loop User Scenarios", () => {
       expect(status).toBe(201);
       const loop = body as Loop;
       expect(loop.config.id).toBeDefined();
-      expect(loop.config.name).toBe("Test Loop No Clear");
       expect(loop.config.clearPlanningFolder).toBe(false);
 
       // Wait for loop to complete (3 iterations: 2 continue + 1 complete)
@@ -85,6 +86,7 @@ describe("Regular Loop User Scenarios", () => {
     test("creates loop based on main branch with clearing .planning folder", async () => {
       // Reset mock backend for this test
       ctx.mockBackend.reset([
+        "test-loop-name",  // Name generation response
         "Working on iteration 1...",
         "Working on iteration 2...",
         "Done! <promise>COMPLETE</promise>",
@@ -102,7 +104,6 @@ describe("Regular Loop User Scenarios", () => {
 
       // Create loop via API with clearPlanningFolder=true
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Test Loop With Clear",
         directory: ctx.workDir,
         prompt: "Implement a feature",
         clearPlanningFolder: true,
@@ -142,6 +143,7 @@ describe("Regular Loop User Scenarios", () => {
     beforeAll(async () => {
       ctx = await setupTestServer({
         mockResponses: [
+          "test-loop-name",  // Name generation response
           "Working on iteration 1, still more to do...",
           "Working on iteration 2, getting closer...",
           "All done! <promise>COMPLETE</promise>",
@@ -157,7 +159,6 @@ describe("Regular Loop User Scenarios", () => {
     test("runs 2 iterations without completion, then 1 iteration that completes", async () => {
       // Create loop
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Iteration Test Loop",
         directory: ctx.workDir,
         prompt: "Complete a multi-step task",
       });
@@ -234,7 +235,6 @@ describe("Regular Loop User Scenarios", () => {
 
       // Create and wait for loop completion
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Accept Merge Test",
         directory: ctx.workDir,
         prompt: "Make some changes",
       });
@@ -300,7 +300,6 @@ describe("Regular Loop User Scenarios", () => {
 
       // Create and wait for loop completion
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Accept Push Test",
         directory: ctx.workDir,
         prompt: "Make some changes",
       });
@@ -355,7 +354,6 @@ describe("Regular Loop User Scenarios", () => {
 
       // Create and wait for loop completion
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Discard Test",
         directory: ctx.workDir,
         prompt: "Make some changes",
       });
@@ -410,7 +408,6 @@ describe("Regular Loop User Scenarios", () => {
 
       // Try to create a loop
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Uncommitted Test",
         directory: ctx.workDir,
         prompt: "This should fail",
       });
@@ -447,7 +444,6 @@ describe("Regular Loop User Scenarios", () => {
       ]);
 
       const { status: createStatus, body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Not Completed Test",
         directory: ctx.workDir,
         prompt: "Long running task",
       });

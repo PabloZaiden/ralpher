@@ -26,13 +26,12 @@ import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
 import { log } from "./logger";
 import { sanitizeBranchName } from "../utils";
+import { generateLoopName } from "../utils/name-generator";
 
 /**
  * Options for creating a new loop.
  */
 export interface CreateLoopOptions {
-  /** Human-readable name */
-  name: string;
   /** Absolute path to working directory */
   directory: string;
   /** The task prompt/PRD */
@@ -107,14 +106,55 @@ export class LoopManager {
 
   /**
    * Create a new loop.
+   * The loop name is automatically generated from the prompt using opencode.
    */
   async createLoop(options: CreateLoopOptions): Promise<Loop> {
     const id = crypto.randomUUID();
     const now = createTimestamp();
 
+    // Generate loop name from prompt using opencode
+    let generatedName: string;
+    try {
+      // Get backend from global manager
+      const backend = backendManager.getBackend();
+      
+      // Create a temporary session for name generation
+      const tempSession = await backend.createSession({
+        title: "Loop Name Generation",
+        directory: options.directory,
+      });
+      
+      try {
+        // Generate the name
+        generatedName = await generateLoopName({
+          prompt: options.prompt,
+          backend,
+          sessionId: tempSession.id,
+          timeoutMs: 10000,
+        });
+        
+        log.info(`Generated loop name: ${generatedName}`);
+      } finally {
+        // Clean up temporary session
+        try {
+          await backend.abortSession(tempSession.id);
+        } catch (cleanupError) {
+          log.warn(`Failed to clean up temporary session: ${String(cleanupError)}`);
+        }
+      }
+    } catch (error) {
+      // If name generation fails, use timestamp-based fallback
+      log.warn(`Failed to generate loop name: ${String(error)}, using fallback`);
+      const timestamp = new Date().toISOString()
+        .replace(/[T:.]/g, "-")
+        .replace(/Z$/, "")
+        .slice(0, 19);
+      generatedName = `loop-${timestamp}`;
+    }
+
     const config: LoopConfig = {
       id,
-      name: options.name,
+      name: generatedName,
       directory: options.directory,
       prompt: options.prompt,
       createdAt: now,

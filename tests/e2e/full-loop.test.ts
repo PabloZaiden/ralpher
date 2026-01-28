@@ -21,6 +21,7 @@ describe("Full Loop Workflow", () => {
       useMockBackend: true,
       initGit: true,
       mockResponses: [
+        "test-loop-name",  // Name generation response
         "Working on iteration 1...",
         "Working on iteration 2...",
         "Done! <promise>COMPLETE</promise>",
@@ -35,13 +36,11 @@ describe("Full Loop Workflow", () => {
   describe("Loop Creation", () => {
     test("creates a loop via manager with correct defaults", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Test Loop",
         directory: ctx.workDir,
         prompt: "Implement a feature",
       });
 
       expect(loop.config.id).toBeDefined();
-      expect(loop.config.name).toBe("Test Loop");
       expect(loop.config.directory).toBe(ctx.workDir);
       expect(loop.config.prompt).toBe("Implement a feature");
       // Backend is now global, not per-loop
@@ -55,7 +54,6 @@ describe("Full Loop Workflow", () => {
 
     test("creates a loop with custom options", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Custom Loop",
         directory: ctx.workDir,
         prompt: "Custom task",
         // Backend options removed - now global
@@ -68,7 +66,6 @@ describe("Full Loop Workflow", () => {
 
     test("persists loop to disk", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Persisted Loop",
         directory: ctx.workDir,
         prompt: "Test persistence",
       });
@@ -76,14 +73,12 @@ describe("Full Loop Workflow", () => {
       // Get the loop back from the manager
       const fetched = await ctx.manager.getLoop(loop.config.id);
       expect(fetched).not.toBeNull();
-      expect(fetched!.config.name).toBe("Persisted Loop");
     });
   });
 
   describe("Loop Execution", () => {
     test("starts loop and runs through iterations until completion", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Execute Loop",
         directory: ctx.workDir,
         prompt: "Do the work",
       });
@@ -130,7 +125,6 @@ describe("Full Loop Workflow", () => {
       });
 
       const loop = await ctx.manager.createLoop({
-        name: "Limited Loop",
         directory: ctx.workDir,
         prompt: "Work forever",
         maxIterations: 2,
@@ -163,7 +157,6 @@ describe("Full Loop Workflow", () => {
       });
 
       const loop = await ctx.manager.createLoop({
-        name: "Stoppable Loop",
         directory: ctx.workDir,
         prompt: "Do work",
       });
@@ -196,7 +189,6 @@ describe("Full Loop Workflow", () => {
       });
 
       const loop = await ctx.manager.createLoop({
-        name: "Error Loop",
         directory: ctx.workDir,
         prompt: "Cause error",
         // Set maxConsecutiveErrors to 1 so it fails after first error
@@ -217,19 +209,16 @@ describe("Full Loop Workflow", () => {
   describe("Loop CRUD Operations", () => {
     test("lists all loops", async () => {
       await ctx.manager.createLoop({
-        name: "Loop 1",
         directory: ctx.workDir,
         prompt: "Task 1",
       });
 
       await ctx.manager.createLoop({
-        name: "Loop 2",
         directory: ctx.workDir,
         prompt: "Task 2",
       });
 
       await ctx.manager.createLoop({
-        name: "Loop 3",
         directory: ctx.workDir,
         prompt: "Task 3",
       });
@@ -240,28 +229,24 @@ describe("Full Loop Workflow", () => {
 
     test("updates loop configuration", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Original",
         directory: ctx.workDir,
         prompt: "Original prompt",
       });
 
       const updated = await ctx.manager.updateLoop(loop.config.id, {
-        name: "Updated Name",
         prompt: "Updated prompt",
       });
 
       expect(updated).not.toBeNull();
-      expect(updated!.config.name).toBe("Updated Name");
       expect(updated!.config.prompt).toBe("Updated prompt");
 
       // Verify persistence
       const fetched = await ctx.manager.getLoop(loop.config.id);
-      expect(fetched!.config.name).toBe("Updated Name");
+      expect(fetched).not.toBeNull();
     });
 
     test("soft-deletes a loop (marks as deleted)", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "To Delete",
         directory: ctx.workDir,
         prompt: "Delete me",
       });
@@ -280,7 +265,6 @@ describe("Full Loop Workflow", () => {
 
     test("purges a deleted loop", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "To Purge",
         directory: ctx.workDir,
         prompt: "Purge me",
       });
@@ -301,7 +285,7 @@ describe("Full Loop Workflow", () => {
       const fetched = await ctx.manager.getLoop("non-existent");
       expect(fetched).toBeNull();
 
-      const updated = await ctx.manager.updateLoop("non-existent", { name: "Test" });
+      const updated = await ctx.manager.updateLoop("non-existent", { prompt: "Test" });
       expect(updated).toBeNull();
 
       const deleted = await ctx.manager.deleteLoop("non-existent");
@@ -312,7 +296,6 @@ describe("Full Loop Workflow", () => {
   describe("Loop State Tracking", () => {
     test("tracks running state correctly", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Track State",
         directory: ctx.workDir,
         prompt: "Track me",
       });
@@ -334,7 +317,6 @@ describe("Full Loop Workflow", () => {
 
     test("records iteration summaries", async () => {
       const loop = await ctx.manager.createLoop({
-        name: "Summary Loop",
         directory: ctx.workDir,
         prompt: "Track iterations",
       });

@@ -98,11 +98,12 @@ List all loops.
 
 Create a new loop.
 
+Loop names are **automatically generated** from the prompt using AI. The `name` field is not accepted in the request body.
+
 **Request Body**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | Yes | Human-readable name |
 | `directory` | string | Yes | Absolute path to working directory |
 | `prompt` | string | Yes | Task prompt/PRD |
 | `model` | object | No | Model selection |
@@ -124,7 +125,6 @@ Create a new loop.
 
 ```json
 {
-  "name": "Add dark mode",
   "directory": "/Users/me/projects/myapp",
   "prompt": "Implement a dark mode toggle in the settings page. Use CSS variables for theming.",
   "model": {
@@ -136,9 +136,11 @@ Create a new loop.
 }
 ```
 
+**Note:** The loop name will be automatically generated from the prompt (e.g., "implement-dark-mode-toggle"). Names are sanitized to kebab-case format, max 50 characters. If generation fails, a timestamp-based fallback name is used (e.g., "loop-2026-01-27-143022").
+
 **Response**
 
-Returns the created loop object with status `201 Created`.
+Returns the created loop object with status `201 Created`. The response includes the auto-generated loop name in `config.name`.
 
 - If `draft: true`, the loop is saved with status `draft` and no git branch is created
 - If `planMode: true`, the loop starts in `planning` status
@@ -175,7 +177,7 @@ Update a loop's configuration. Can update any loop regardless of status.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Update name |
+| `name` | string | Manually update name (optional, names are auto-generated on creation) |
 | `directory` | string | Update working directory |
 | `prompt` | string | Update prompt |
 | `model` | object | Update model |
@@ -1122,11 +1124,10 @@ ws.onclose = () => {
 Loops are automatically started upon creation. The API will reject creation if there are uncommitted changes.
 
 ```bash
-# Create a loop (starts automatically)
+# Create a loop (starts automatically, name is auto-generated)
 curl -X POST http://localhost:3000/api/loops \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Add user authentication",
     "directory": "/path/to/project",
     "prompt": "Implement JWT-based authentication with login and signup endpoints"
   }'
@@ -1142,11 +1143,10 @@ wscat -c ws://localhost:3000/api/ws?loopId=abc-123
 Draft loops are saved without starting. You can edit them before starting.
 
 ```bash
-# Create a draft loop
+# Create a draft loop (name is auto-generated)
 curl -X POST http://localhost:3000/api/loops \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Add user authentication",
     "directory": "/path/to/project",
     "prompt": "Implement JWT-based authentication",
     "draft": true
@@ -1172,11 +1172,10 @@ curl -X POST http://localhost:3000/api/loops/abc-123/draft/start \
 Plan mode lets you review and refine the plan before execution.
 
 ```bash
-# Create a loop in plan mode
+# Create a loop in plan mode (name is auto-generated)
 curl -X POST http://localhost:3000/api/loops \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Refactor auth module",
     "directory": "/path/to/project",
     "prompt": "Refactor the authentication module to use async/await",
     "planMode": true
@@ -1202,7 +1201,6 @@ Uncommitted changes are checked at loop creation time:
 curl -X POST http://localhost:3000/api/loops \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "My Loop",
     "directory": "/path/to/dirty/project",
     "prompt": "Do something"
   }'

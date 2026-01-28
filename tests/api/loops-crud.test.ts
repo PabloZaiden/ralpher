@@ -180,12 +180,11 @@ describe("Loops CRUD API Integration", () => {
   });
 
   describe("POST /api/loops", () => {
-    test("creates a new loop with required fields", async () => {
+    test("creates a new loop with required fields and auto-generates name", async () => {
       const response = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Test Loop",
           directory: testWorkDir,
           prompt: "Build something",
         }),
@@ -193,7 +192,6 @@ describe("Loops CRUD API Integration", () => {
 
       expect(response.status).toBe(201);
       const body = await response.json();
-      expect(body.config.name).toBe("Test Loop");
       expect(body.config.directory).toBe(testWorkDir);
       expect(body.config.prompt).toBe("Build something");
       expect(body.config.id).toBeDefined();
@@ -206,7 +204,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Custom Loop",
           directory: testWorkDir,
           prompt: "Custom task",
           maxIterations: 10,
@@ -238,7 +235,7 @@ describe("Loops CRUD API Integration", () => {
       const response = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "Missing fields" }),
+        body: JSON.stringify({ prompt: "Missing directory" }),
       });
 
       expect(response.status).toBe(400);
@@ -246,21 +243,20 @@ describe("Loops CRUD API Integration", () => {
       expect(body.error).toBe("validation_error");
     });
 
-    test("returns 400 for empty name", async () => {
+    test("returns 400 for empty prompt", async () => {
       const response = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "",
           directory: testWorkDir,
-          prompt: "Test",
+          prompt: "",
         }),
       });
 
       expect(response.status).toBe(400);
       const body = await response.json();
       expect(body.error).toBe("validation_error");
-      expect(body.message).toContain("name");
+      expect(body.message).toContain("prompt");
     });
   });
 
@@ -283,7 +279,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Get Test Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
         }),
@@ -297,7 +292,6 @@ describe("Loops CRUD API Integration", () => {
 
       const body = await response.json();
       expect(body.config.id).toBe(loopId);
-      expect(body.config.name).toBe("Get Test Loop");
     });
 
     test("returns 404 for non-existent loop", async () => {
@@ -316,7 +310,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Original Name",
           directory: testWorkDir,
           prompt: "Original prompt",
         }),
@@ -332,14 +325,12 @@ describe("Loops CRUD API Integration", () => {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Updated Name",
           prompt: "Updated prompt",
         }),
       });
       expect(response.status).toBe(200);
 
       const body = await response.json();
-      expect(body.config.name).toBe("Updated Name");
       expect(body.config.prompt).toBe("Updated prompt");
     });
 
@@ -358,7 +349,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Test Loop",
           directory: testWorkDir,
           prompt: "Test",
         }),
@@ -386,7 +376,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Delete Test Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
         }),
@@ -416,7 +405,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "To Purge",
           directory: testWorkDir,
           prompt: "Purge me",
         }),
@@ -455,7 +443,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Clear Planning Test",
           directory: testWorkDir,
           prompt: "Task with clearing",
           clearPlanningFolder: true,
@@ -472,7 +459,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Keep Planning Test",
           directory: testWorkDir,
           prompt: "Task without clearing",
           clearPlanningFolder: false,
@@ -489,7 +475,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Default Planning Test",
           directory: testWorkDir,
           prompt: "Task with default",
         }),
@@ -507,7 +492,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Get Clear Planning Test",
           directory: testWorkDir,
           prompt: "Test",
           clearPlanningFolder: true,
@@ -534,7 +518,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Draft Loop",
           directory: testWorkDir,
           prompt: "Draft task",
           draft: true,
@@ -553,7 +536,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Normal Loop",
           directory: testWorkDir,
           prompt: "Normal task",
           draft: false,
@@ -572,7 +554,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Draft to Update",
           directory: testWorkDir,
           prompt: "Original prompt",
           draft: true,
@@ -586,14 +567,12 @@ describe("Loops CRUD API Integration", () => {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Updated Draft",
           prompt: "Updated prompt",
         }),
       });
 
       expect(updateResponse.status).toBe(200);
       const updateBody = await updateResponse.json();
-      expect(updateBody.config.name).toBe("Updated Draft");
       expect(updateBody.config.prompt).toBe("Updated prompt");
       expect(updateBody.state.status).toBe("draft");
     });
@@ -604,7 +583,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Regular Loop",
           directory: testWorkDir,
           prompt: "Task",
         }),
@@ -620,7 +598,6 @@ describe("Loops CRUD API Integration", () => {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Should Fail",
         }),
       });
 
@@ -635,7 +612,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Draft to Start",
           directory: testWorkDir,
           prompt: "Task",
           draft: true,
@@ -673,7 +649,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Draft to Plan",
           directory: testWorkDir,
           prompt: "Task",
           draft: true,
@@ -702,7 +677,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Regular Loop",
           directory: testWorkDir,
           prompt: "Task",
         }),
@@ -730,7 +704,6 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Draft to Delete",
           directory: testWorkDir,
           prompt: "Task",
           draft: true,
