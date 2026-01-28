@@ -435,4 +435,54 @@ describe("Plan Mode - isPlanReady Flag", () => {
     expect(retrievedLoop).not.toBeNull();
     expect(retrievedLoop!.state.planMode?.isPlanReady).toBe(true);
   });
+
+});
+
+describe("Plan Mode - Rejection Paths", () => {
+  let ctx: TestContext;
+
+  beforeEach(async () => {
+    ctx = await setupTestContext({ 
+      initGit: true,
+      // Use a mock that returns incomplete plan content (no PLAN_READY marker)
+      // This simulates the AI still generating the plan
+      mockResponses: [
+        "# Plan\n\nStill thinking about what to do...",  // First response - no PLAN_READY
+        "# Plan\n\nStill thinking...",  // More incomplete responses
+      ],
+    });
+  });
+
+  afterEach(async () => {
+    await teardownTestContext(ctx);
+  });
+
+  test("rejects plan acceptance when isPlanReady is false", async () => {
+    const loop = await ctx.manager.createLoop({
+      prompt: "Create a simple plan",
+      directory: ctx.workDir,
+      maxIterations: 5,  // Allow multiple iterations
+      planMode: true,
+    });
+    const loopId = loop.config.id;
+
+    // Verify isPlanReady is false initially
+    let loopData = await ctx.manager.getLoop(loopId);
+    expect(loopData!.state.planMode?.isPlanReady).toBe(false);
+
+    // Start plan mode - the mock will NOT return PLAN_READY marker
+    await ctx.manager.startPlanMode(loopId);
+
+    // Wait for the first iteration to complete (loop should still be in planning)
+    await waitForLoopStatus(ctx.manager, loopId, ["planning", "max_iterations", "stopped"]);
+
+    // Verify isPlanReady is still false (no PLAN_READY marker was detected)
+    loopData = await ctx.manager.getLoop(loopId);
+    expect(loopData!.state.planMode?.isPlanReady).toBe(false);
+
+    // Try to accept the plan while isPlanReady is false - should throw
+    await expect(ctx.manager.acceptPlan(loopId)).rejects.toThrow(
+      "Plan is not ready yet"
+    );
+  });
 });
