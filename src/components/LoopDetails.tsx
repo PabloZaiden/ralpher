@@ -560,6 +560,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                           </button>
                           {!logsCollapsed && (
                             <LogViewer
+                              id="logs-viewer"
                               messages={messages}
                               toolCalls={toolCalls}
                               logs={logs}
@@ -582,7 +583,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                             <span>TODOs</span>
                           </button>
                           {!todosCollapsed && (
-                            <TodoViewer todos={todos} />
+                            <TodoViewer id="todos-viewer" todos={todos} />
                           )}
                         </div>
                       </div>

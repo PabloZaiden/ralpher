@@ -13,6 +13,8 @@ export interface TodoViewerProps {
   autoScroll?: boolean;
   /** Maximum height */
   maxHeight?: string;
+  /** ID for the root element (for accessibility) */
+  id?: string;
 }
 
 /**
@@ -101,6 +103,7 @@ export function TodoViewer({
   todos,
   autoScroll = true,
   maxHeight,
+  id,
 }: TodoViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -121,6 +124,7 @@ export function TodoViewer({
   return (
     <div
       ref={containerRef}
+      id={id}
       className={`bg-gray-900 text-gray-100 rounded-lg overflow-auto font-mono text-xs dark-scrollbar ${!maxHeight ? "flex-1 min-h-0" : ""}`}
       style={maxHeight ? { maxHeight } : undefined}
     >

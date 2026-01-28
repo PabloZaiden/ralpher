@@ -35,6 +35,8 @@ export interface LogViewerProps {
   maxHeight?: string;
   /** Whether to show debug logs (default: true) */
   showDebugLogs?: boolean;
+  /** ID for the root element (for accessibility) */
+  id?: string;
 }
 
 /**
@@ -114,6 +116,7 @@ export function LogViewer({
   autoScroll = true,
   maxHeight,
   showDebugLogs = true,
+  id,
 }: LogViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -161,6 +164,7 @@ export function LogViewer({
   return (
     <div
       ref={containerRef}
+      id={id}
       className={`bg-gray-900 text-gray-100 rounded-lg overflow-auto font-mono text-xs sm:text-sm dark-scrollbar ${!maxHeight ? "flex-1 min-h-0" : ""}`}
       style={maxHeight ? { maxHeight } : undefined}
     >
