@@ -556,6 +556,16 @@ Follow the standard loop execution flow:
       }
     }
 
+    const pendingGitState = this.engines.get(loopId)?.state.git;
+    if (updates.baseBranch && (loop.state.git?.originalBranch || pendingGitState?.originalBranch)) {
+      log.warn(`Rejected baseBranch update for loop ${loopId} after git setup`);
+      return null;
+    }
+
+    if (updates.baseBranch && loop.state.status === "draft") {
+      log.info(`Updating baseBranch for draft loop ${loopId}`);
+    }
+
     // Apply updates
     const updatedConfig: LoopConfig = {
       ...loop.config,
