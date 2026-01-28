@@ -570,7 +570,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                         
                         {/* TODOs section */}
                         <div className={`min-h-[100px] lg:min-h-0 flex flex-col min-w-0 ${
-                          todosCollapsed ? 'hidden' : logsCollapsed ? 'flex-1' : 'flex-1'
+                          todosCollapsed ? 'hidden' : 'flex-1'
                         }`}>
                           <button
                             onClick={() => setTodosCollapsed(!todosCollapsed)}
