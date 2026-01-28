@@ -546,8 +546,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                       {/* Side-by-side layout for logs and TODOs (75-25 split) */}
                       <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-4">
                         {/* Logs section */}
-                        <div className={`min-h-[100px] lg:min-h-0 flex flex-col min-w-0 ${
-                          logsCollapsed ? 'flex-shrink-0' : todosCollapsed ? 'flex-1' : 'flex-[3]'
+                        <div className={`flex flex-col min-w-0 ${
+                          logsCollapsed ? 'flex-shrink-0' : `min-h-[100px] lg:min-h-0 ${todosCollapsed ? 'flex-1' : 'flex-[3]'}`
                         }`}>
                           <button
                             onClick={() => setLogsCollapsed(!logsCollapsed)}
@@ -570,8 +570,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                         </div>
                         
                         {/* TODOs section */}
-                        <div className={`min-h-[100px] lg:min-h-0 flex flex-col min-w-0 ${
-                          todosCollapsed ? 'flex-shrink-0' : logsCollapsed ? 'flex-1' : 'flex-1'
+                        <div className={`flex flex-col min-w-0 ${
+                          todosCollapsed ? 'flex-shrink-0' : `min-h-[100px] lg:min-h-0 ${logsCollapsed ? 'flex-1' : 'flex-1'}`
                         }`}>
                           <button
                             onClick={() => setTodosCollapsed(!todosCollapsed)}
