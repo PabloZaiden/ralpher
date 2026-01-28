@@ -13,10 +13,10 @@
 import type { HealthResponse } from "../types/api";
 
 /**
- * Application version string.
- * TODO: Read from package.json in production.
+ * Application version string read from package.json.
  */
-const VERSION = "1.0.0";
+import packageJson from "../../package.json";
+const VERSION = packageJson.version;
 
 /**
  * Health check route handler.
