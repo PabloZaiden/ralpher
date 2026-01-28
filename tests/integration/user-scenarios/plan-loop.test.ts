@@ -11,6 +11,7 @@ import {
   teardownTestServer,
   createLoopViaAPI,
   waitForLoopStatus,
+  waitForPlanReady,
   acceptLoopViaAPI,
   pushLoopViaAPI,
   discardLoopViaAPI,
@@ -28,17 +29,26 @@ import type { Loop } from "../../../src/types/loop";
 
 /**
  * Helper to create a plan mode mock backend.
- * Plan mode has two phases:
- * 1. Planning phase: Returns PLAN_READY to indicate plan is ready for review
- * 2. Execution phase: Normal iteration responses
+ * Plan mode has three phases:
+ * 1. Name generation: Returns a loop name
+ * 2. Planning phase: Returns PLAN_READY to indicate plan is ready for review
+ * 3. Execution phase: Normal iteration responses
  */
 function createPlanModeMockResponses(options: {
   planIterations?: number;
   executionResponses?: string[];
+  loopName?: string;
 }): string[] {
-  const { planIterations = 1, executionResponses = ["<promise>COMPLETE</promise>"] } = options;
+  const { 
+    planIterations = 1, 
+    executionResponses = ["<promise>COMPLETE</promise>"],
+    loopName = "test-loop-name",
+  } = options;
 
   const responses: string[] = [];
+
+  // Name generation response (consumed when loop is created)
+  responses.push(loopName);
 
   // Planning phase responses (PLAN_READY after each iteration)
   for (let i = 0; i < planIterations; i++) {
@@ -251,6 +261,9 @@ describe("Plan + Loop User Scenarios", () => {
           planMode: { active: true, feedbackRounds: 0 },
         });
 
+        // Wait for plan to be ready before accepting
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
+
         // Accept the plan immediately (no feedback)
         const { status, body: acceptPlanBody } = await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
         expect(status).toBe(200);
@@ -326,6 +339,9 @@ describe("Plan + Loop User Scenarios", () => {
         // Wait for planning status
         await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
 
+        // Wait for plan to be ready before accepting
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
+
         // Accept the plan immediately
         await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
 
@@ -385,6 +401,9 @@ describe("Plan + Loop User Scenarios", () => {
         // Wait for planning status
         await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
 
+        // Wait for plan to be ready before accepting
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
+
         // Accept the plan
         await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
 
@@ -417,7 +436,7 @@ describe("Plan + Loop User Scenarios", () => {
       beforeAll(async () => {
         ctx = await setupTestServer({
           mockResponses: createPlanModeMockResponses({
-            planIterations: 3, // Initial plan + 2 feedback rounds
+            planIterations: 5, // Extra buffer: Initial plan + 2 feedback rounds + extra for safety
             executionResponses: [
               "Working on iteration 1...",
               "Working on iteration 2...",
@@ -450,6 +469,9 @@ describe("Plan + Loop User Scenarios", () => {
           planMode: { active: true, feedbackRounds: 0 },
         });
 
+        // Wait for initial plan to be ready before sending feedback
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
+
         // Send first feedback
         const { status: fb1Status } = await sendPlanFeedbackViaAPI(
           ctx.baseUrl,
@@ -458,8 +480,8 @@ describe("Plan + Loop User Scenarios", () => {
         );
         expect(fb1Status).toBe(200);
 
-        // Wait for planning status again (after processing feedback)
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Wait for plan to be ready again after feedback
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
         const afterFb1 = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
         assertLoopState(afterFb1, {
           status: "planning",
@@ -474,8 +496,8 @@ describe("Plan + Loop User Scenarios", () => {
         );
         expect(fb2Status).toBe(200);
 
-        // Wait for planning status again
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Wait for plan to be ready again after feedback
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
         const afterFb2 = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
         assertLoopState(afterFb2, {
           status: "planning",
@@ -520,7 +542,7 @@ describe("Plan + Loop User Scenarios", () => {
       beforeAll(async () => {
         ctx = await setupTestServer({
           mockResponses: createPlanModeMockResponses({
-            planIterations: 3,
+            planIterations: 5,
             executionResponses: [
               "Working...",
               "Done! <promise>COMPLETE</promise>",
@@ -547,13 +569,16 @@ describe("Plan + Loop User Scenarios", () => {
         // Wait for planning
         await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
 
+        // Wait for initial plan to be ready before sending feedback
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
+
         // Send 2 feedbacks
         await sendPlanFeedbackViaAPI(ctx.baseUrl, loop.config.id, "Feedback 1");
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
         await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
 
         await sendPlanFeedbackViaAPI(ctx.baseUrl, loop.config.id, "Feedback 2");
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
         const afterFeedback = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
         expect(afterFeedback.state.planMode?.feedbackRounds).toBe(2);
 
@@ -587,7 +612,7 @@ describe("Plan + Loop User Scenarios", () => {
       beforeAll(async () => {
         ctx = await setupTestServer({
           mockResponses: createPlanModeMockResponses({
-            planIterations: 3,
+            planIterations: 5,
             executionResponses: [
               "Working...",
               "Done! <promise>COMPLETE</promise>",
@@ -615,13 +640,16 @@ describe("Plan + Loop User Scenarios", () => {
         // Wait for planning
         await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
 
+        // Wait for initial plan to be ready before sending feedback
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
+
         // Send 2 feedbacks
         await sendPlanFeedbackViaAPI(ctx.baseUrl, loop.config.id, "Feedback 1");
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
         await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
 
         await sendPlanFeedbackViaAPI(ctx.baseUrl, loop.config.id, "Feedback 2");
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await waitForPlanReady(ctx.baseUrl, loop.config.id);
 
         // Accept plan
         await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);

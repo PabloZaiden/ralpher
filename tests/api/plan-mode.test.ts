@@ -24,91 +24,175 @@ import type {
 } from "../../src/backends/types";
 import { createEventStream, type EventStream } from "../../src/utils/event-stream";
 
+/**
+ * Resettable mock backend for plan mode testing.
+ * Uses per-session response tracking to handle multiple loops correctly.
+ * 
+ * Name generation uses sendPrompt (synchronous), while the main loop uses
+ * subscribeToEvents + sendPromptAsync. To handle this correctly:
+ * - sendPrompt always returns "test-loop-name" for name generation
+ * - subscribeToEvents uses the per-session response sequence for planning/execution
+ */
+class PlanModeMockBackend implements LoopBackend {
+  private connected = false;
+  private pendingPrompt = false;
+  private sessions = new Map<string, AgentSession>();
+  // Track response index per session (for subscribeToEvents only)
+  private sessionResponseIndex = new Map<string, number>();
+
+  reset(): void {
+    this.sessionResponseIndex.clear();
+    this.pendingPrompt = false;
+  }
+
+  private getNextStreamResponse(sessionId: string): string {
+    const idx = this.sessionResponseIndex.get(sessionId) ?? 0;
+    this.sessionResponseIndex.set(sessionId, idx + 1);
+    
+    // Response sequence per session for streaming (subscribeToEvents):
+    // 0-8: PLAN_READY for planning phase (multiple feedback rounds possible)
+    // 9+: COMPLETE for execution phase
+    if (idx < 9) {
+      return "<promise>PLAN_READY</promise>"; // Planning phase
+    }
+    return "<promise>COMPLETE</promise>"; // Execution phase
+  }
+
+  async connect(_config: BackendConnectionConfig): Promise<void> {
+    this.connected = true;
+  }
+
+  async disconnect(): Promise<void> {
+    this.connected = false;
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  async createSession(options: CreateSessionOptions): Promise<AgentSession> {
+    const session: AgentSession = {
+      id: `session-${Date.now()}-${Math.random()}`,
+      title: options.title,
+      createdAt: new Date().toISOString(),
+    };
+    this.sessions.set(session.id, session);
+    // Initialize response index for this session
+    this.sessionResponseIndex.set(session.id, 0);
+    return session;
+  }
+
+  async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
+    // sendPrompt is used for name generation - always return a name
+    return {
+      id: `msg-${Date.now()}`,
+      content: "test-loop-name",
+      parts: [{ type: "text", text: "test-loop-name" }],
+    };
+  }
+
+  async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
+    this.pendingPrompt = true;
+  }
+
+  async abortSession(_sessionId: string): Promise<void> {
+    // Not used in tests
+  }
+
+  async subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>> {
+    const { stream, push, end } = createEventStream<AgentEvent>();
+    const self = this;
+
+    (async () => {
+      let attempts = 0;
+      while (!self.pendingPrompt && attempts < 100) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        attempts++;
+      }
+      self.pendingPrompt = false;
+
+      // Get response based on current phase for this session
+      const response = self.getNextStreamResponse(sessionId);
+      push({ type: "message.start", messageId: `msg-${Date.now()}` });
+      push({ type: "message.delta", content: response });
+      push({ type: "message.complete", content: response });
+      end();
+    })();
+
+    return stream;
+  }
+
+  async replyToPermission(_requestId: string, _response: string): Promise<void> {
+    // Not used in tests
+  }
+
+  async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
+    // Not used in tests
+  }
+}
+
 describe("Plan Mode API Integration", () => {
   let testDataDir: string;
   let testWorkDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
+  let mockBackend: PlanModeMockBackend;
 
   // Helper to check if file exists
   async function exists(path: string): Promise<boolean> {
     return Bun.file(path).exists();
   }
 
-  // Create a mock backend for plan mode testing
-  function createMockBackend(): LoopBackend {
-    let connected = false;
-    let pendingPrompt = false;
-    const sessions = new Map<string, AgentSession>();
+  // Poll until loop reaches expected status
+  async function waitForStatus(
+    loopId: string,
+    expectedStatuses: string[],
+    timeoutMs = 10000
+  ): Promise<Record<string, unknown>> {
+    const startTime = Date.now();
+    let lastStatus = "unknown";
+    while (Date.now() - startTime < timeoutMs) {
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      if (response.ok) {
+        const loop = await response.json();
+        lastStatus = loop.state?.status ?? "unknown";
+        if (expectedStatuses.includes(lastStatus)) {
+          return loop;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(
+      `Loop ${loopId} did not reach status [${expectedStatuses.join(", ")}] within ${timeoutMs}ms. Last: ${lastStatus}`
+    );
+  }
 
-    return {
-      async connect(_config: BackendConnectionConfig): Promise<void> {
-        connected = true;
-      },
+  // Poll until isPlanReady becomes true
+  async function waitForPlanReady(loopId: string, timeoutMs = 10000): Promise<Record<string, unknown>> {
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      if (response.ok) {
+        const loop = await response.json();
+        if (loop.state?.planMode?.isPlanReady === true) {
+          return loop;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`Plan for loop ${loopId} did not become ready within ${timeoutMs}ms`);
+  }
 
-      async disconnect(): Promise<void> {
-        connected = false;
-      },
-
-      isConnected(): boolean {
-        return connected;
-      },
-
-      async createSession(options: CreateSessionOptions): Promise<AgentSession> {
-        const session: AgentSession = {
-          id: `session-${Date.now()}-${Math.random()}`,
-          title: options.title,
-          createdAt: new Date().toISOString(),
-        };
-        sessions.set(session.id, session);
-        return session;
-      },
-
-      async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
-        // For plan mode, return PLAN_READY marker
-        return {
-          id: `msg-${Date.now()}`,
-          content: "<promise>PLAN_READY</promise>",
-          parts: [{ type: "text", text: "<promise>PLAN_READY</promise>" }],
-        };
-      },
-
-      async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
-        pendingPrompt = true;
-      },
-
-      async abortSession(_sessionId: string): Promise<void> {
-        // Not used in tests
-      },
-
-      async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
-        const { stream, push, end } = createEventStream<AgentEvent>();
-
-        (async () => {
-          let attempts = 0;
-          while (!pendingPrompt && attempts < 100) {
-            await new Promise((resolve) => setTimeout(resolve, 10));
-            attempts++;
-          }
-          pendingPrompt = false;
-
-          push({ type: "message.start", messageId: `msg-${Date.now()}` });
-          push({ type: "message.delta", content: "<promise>PLAN_READY</promise>" });
-          push({ type: "message.complete", content: "<promise>PLAN_READY</promise>" });
-          end();
-        })();
-
-        return stream;
-      },
-
-      async replyToPermission(_requestId: string, _response: string): Promise<void> {
-        // Not used in tests
-      },
-
-      async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
-        // Not used in tests
-      },
-    };
+  // Poll until file no longer exists
+  async function waitForFileDeleted(filePath: string, timeoutMs = 5000): Promise<void> {
+    const startTime = Date.now();
+    while (Date.now() - startTime < timeoutMs) {
+      if (!(await exists(filePath))) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`File ${filePath} was not deleted within ${timeoutMs}ms`);
   }
 
   beforeAll(async () => {
@@ -128,8 +212,9 @@ describe("Plan Mode API Integration", () => {
     await Bun.$`git -C ${testWorkDir} add .`.quiet();
     await Bun.$`git -C ${testWorkDir} commit -m "Initial commit"`.quiet();
 
-    // Set up backend manager
-    backendManager.setBackendForTesting(createMockBackend());
+    // Set up backend manager with class-based mock
+    mockBackend = new PlanModeMockBackend();
+    backendManager.setBackendForTesting(mockBackend);
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
 
     // Start test server
@@ -216,8 +301,8 @@ describe("Plan Mode API Integration", () => {
       expect(response.ok).toBe(true);
       const data = await response.json();
 
-      // Wait a bit for clearing to happen
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      // Wait for file to be cleared
+      await waitForFileDeleted(join(planningDir, "old-plan.md"));
 
       // Verify file was cleared
       expect(await exists(join(planningDir, "old-plan.md"))).toBe(false);
@@ -260,7 +345,7 @@ describe("Plan Mode API Integration", () => {
       });
 
       const response = await createResponse.json(); const id = response.config.id;
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForPlanReady(id);
 
       // Get initial feedback rounds
       let getResponse = await fetch(`${baseUrl}/api/loops/${id}`);
@@ -277,7 +362,7 @@ describe("Plan Mode API Integration", () => {
       });
 
       expect(feedbackResponse.status).toBe(200);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForPlanReady(id);
 
       // Verify feedback rounds incremented
       getResponse = await fetch(`${baseUrl}/api/loops/${id}`);
@@ -340,7 +425,7 @@ describe("Plan Mode API Integration", () => {
       });
 
       const response = await createResponse.json(); const id = response.config.id;
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForPlanReady(id);
 
       // Verify in planning status
       let getResponse = await fetch(`${baseUrl}/api/loops/${id}`);
@@ -353,11 +438,9 @@ describe("Plan Mode API Integration", () => {
       });
 
       expect(acceptResponse.status).toBe(200);
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      // Verify transitioned from planning (could be running or already completed due to mock)
-      getResponse = await fetch(`${baseUrl}/api/loops/${id}`);
-      loop = await getResponse.json();
+      
+      // Wait for status transition from planning
+      loop = await waitForStatus(id, ["running", "completed", "max_iterations", "stopped"]);
       expect(["running", "completed", "max_iterations", "stopped"]).toContain(loop.state.status);
     });
 
@@ -380,14 +463,21 @@ describe("Plan Mode API Integration", () => {
       });
 
       const response = await createResponse.json(); const id = response.config.id;
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await waitForPlanReady(id);
 
-      // Create a plan file
+      // Create a plan file and commit it (required before git branch setup)
       await writeFile(join(planningDir, "plan.md"), "# My Plan");
+      await Bun.$`git -C ${testWorkDir} add .`.quiet();
+      await Bun.$`git -C ${testWorkDir} commit -m "Add plan file"`.quiet();
 
       // Accept the plan
-      await fetch(`${baseUrl}/api/loops/${id}/plan/accept`, { method: "POST" });
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      const acceptResponse = await fetch(`${baseUrl}/api/loops/${id}/plan/accept`, { method: "POST" });
+      if (acceptResponse.status !== 200) {
+        const body = await acceptResponse.json();
+        throw new Error(`Accept failed with ${acceptResponse.status}: ${JSON.stringify(body)}`);
+      }
+      
+      await waitForStatus(id, ["running", "completed", "max_iterations", "stopped"]);
 
       // Verify plan still exists
       expect(await exists(join(planningDir, "plan.md"))).toBe(true);
@@ -450,7 +540,7 @@ describe("Plan Mode API Integration", () => {
       const response = await createResponse.json();
       expect(response.config).toBeDefined();
       const id = response.config.id;
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await waitForPlanReady(id);
 
       // Verify loop exists
       let getResponse = await fetch(`${baseUrl}/api/loops/${id}`);
@@ -462,7 +552,7 @@ describe("Plan Mode API Integration", () => {
       });
 
       expect(discardResponse.status).toBe(200);
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await waitForStatus(id, ["deleted"]);
 
       // Verify loop is marked as deleted (soft delete)
       getResponse = await fetch(`${baseUrl}/api/loops/${id}`);

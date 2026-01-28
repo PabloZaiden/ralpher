@@ -212,6 +212,20 @@ export class LoopEngine {
   }
 
   /**
+   * Wait for any ongoing loop iteration to complete.
+   * Used to ensure state modifications happen between iterations.
+   */
+  async waitForLoopIdle(timeoutMs = 30000): Promise<void> {
+    const startTime = Date.now();
+    while (this.isLoopRunning) {
+      if (Date.now() - startTime > timeoutMs) {
+        throw new Error(`Timed out waiting for loop to become idle after ${timeoutMs}ms`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+
+  /**
    * Start the loop execution.
    * This sets up the git branch and backend session.
    */
@@ -745,12 +759,14 @@ export class LoopEngine {
 
           // Update plan mode state with the plan content
           if (this.loop.state.planMode) {
+            log.trace(`[LoopEngine] runLoop: Before updateState, isPlanReady:`, this.loop.state.planMode.isPlanReady);
             this.updateState({
               planMode: {
                 ...this.loop.state.planMode,
                 planContent,
               },
             });
+            log.trace(`[LoopEngine] runLoop: After updateState, isPlanReady:`, this.loop.state.planMode?.isPlanReady);
           }
 
           // Emit plan ready event
@@ -1252,6 +1268,11 @@ export class LoopEngine {
         if (isInPlanMode && planReadyPattern.test(responseContent)) {
           this.emitLog("info", "PLAN_READY marker detected - plan is ready for review");
           outcome = "plan_ready";
+          // Set isPlanReady flag in state
+          if (this.state.planMode) {
+            this.state.planMode.isPlanReady = true;
+            log.trace(`[LoopEngine] runIteration: Set isPlanReady = true, planMode:`, JSON.stringify(this.state.planMode));
+          }
         } else if (this.stopDetector.matches(responseContent)) {
           this.emitLog("info", "Stop pattern matched - task is complete");
           outcome = "complete";

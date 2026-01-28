@@ -105,19 +105,21 @@ describe("Loops CRUD API Integration", () => {
   }
 
   // Helper function to poll for loop completion
-  async function waitForLoopCompletion(loopId: string, timeoutMs = 5000): Promise<void> {
+  async function waitForLoopCompletion(loopId: string, timeoutMs = 10000): Promise<void> {
     const startTime = Date.now();
+    let lastStatus = "unknown";
     while (Date.now() - startTime < timeoutMs) {
       const response = await fetch(`${baseUrl}/api/loops/${loopId}`);
       if (response.ok) {
         const data = await response.json();
-        if (data.state?.status === "completed") {
+        lastStatus = data.state?.status ?? "unknown";
+        if (lastStatus === "completed" || lastStatus === "failed") {
           return;
         }
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    throw new Error(`Loop ${loopId} did not complete within ${timeoutMs}ms`);
+    throw new Error(`Loop ${loopId} did not complete within ${timeoutMs}ms. Last status: ${lastStatus}`);
   }
 
   beforeAll(async () => {

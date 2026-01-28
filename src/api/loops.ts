@@ -802,6 +802,9 @@ export const loopsControlRoutes = {
         if (errorMsg.includes("not in planning status")) {
           return errorResponse("not_planning", errorMsg, 400);
         }
+        if (errorMsg.includes("Plan is not ready yet")) {
+          return errorResponse("plan_not_ready", errorMsg, 400);
+        }
         return errorResponse("accept_failed", errorMsg, 500);
       }
     },

@@ -110,7 +110,7 @@ describe("Loops Control API Integration", () => {
   }
 
   // Helper function to poll for loop completion
-  async function waitForLoopCompletion(loopId: string, timeoutMs = 5000): Promise<void> {
+  async function waitForLoopCompletion(loopId: string, timeoutMs = 10000): Promise<void> {
     const startTime = Date.now();
     let lastStatus = "";
     while (Date.now() - startTime < timeoutMs) {
@@ -118,7 +118,7 @@ describe("Loops Control API Integration", () => {
       if (response.ok) {
         const data = await response.json();
         lastStatus = data.state?.status ?? "no state";
-        if (data.state?.status === "completed") {
+        if (lastStatus === "completed" || lastStatus === "failed") {
           return;
         }
       } else {

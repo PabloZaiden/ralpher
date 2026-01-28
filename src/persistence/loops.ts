@@ -54,6 +54,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "plan_feedback_rounds",
   "plan_content",
   "planning_folder_cleared",
+  "plan_is_ready",
   "review_mode",
   "todos",
 ]);
@@ -120,6 +121,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     plan_feedback_rounds: state.planMode?.feedbackRounds ?? 0,
     plan_content: state.planMode?.planContent ?? null,
     planning_folder_cleared: state.planMode?.planningFolderCleared ? 1 : 0,
+    plan_is_ready: state.planMode?.isPlanReady ? 1 : 0,
     review_mode: state.reviewMode ? JSON.stringify(state.reviewMode) : null,
     todos: state.todos ? JSON.stringify(state.todos) : null,
   };
@@ -238,6 +240,7 @@ function rowToLoop(row: Record<string, unknown>): Loop {
       feedbackRounds: (row["plan_feedback_rounds"] as number) ?? 0,
       planContent: row["plan_content"] as string | undefined,
       planningFolderCleared: row["planning_folder_cleared"] === 1,
+      isPlanReady: row["plan_is_ready"] === 1,
     };
   }
   // Reconstruct reviewMode from JSON

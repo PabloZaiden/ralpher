@@ -189,6 +189,7 @@ export class LoopManager {
         active: true,
         feedbackRounds: 0,
         planningFolderCleared: false,
+        isPlanReady: false,
       };
     }
     
@@ -358,9 +359,15 @@ export class LoopManager {
       throw new Error(`Loop is not in planning status: ${engine.state.status}`);
     }
 
-    // Increment feedback rounds
+    // Wait for any ongoing iteration to complete before modifying state
+    // This prevents race conditions where feedback resets isPlanReady while
+    // an iteration is still in progress (e.g., during git commit)
+    await engine.waitForLoopIdle();
+
+    // Increment feedback rounds and reset isPlanReady
     if (engine.state.planMode) {
       engine.state.planMode.feedbackRounds += 1;
+      engine.state.planMode.isPlanReady = false;
     }
 
     // Persist state update
@@ -399,6 +406,11 @@ export class LoopManager {
     // Verify loop is in planning status
     if (engine.state.status !== "planning") {
       throw new Error(`Loop is not in planning status: ${engine.state.status}`);
+    }
+
+    // Verify plan is ready
+    if (!engine.state.planMode?.isPlanReady) {
+      throw new Error("Plan is not ready yet. Wait for the AI to finish generating the plan.");
     }
 
     // Store the plan session info before transitioning

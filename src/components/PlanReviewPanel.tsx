@@ -12,6 +12,8 @@ export interface PlanReviewPanelProps {
   loop: Loop;
   /** Plan content to display */
   planContent: string;
+  /** Whether the plan is ready for acceptance */
+  isPlanReady: boolean;
   /** Callback to send feedback */
   onSendFeedback: (feedback: string) => Promise<void>;
   /** Callback to accept the plan */
@@ -31,6 +33,7 @@ type PlanTab = "plan" | "log";
 export function PlanReviewPanel({
   loop,
   planContent,
+  isPlanReady,
   onSendFeedback,
   onAcceptPlan,
   onDiscardPlan,
@@ -90,7 +93,7 @@ export function PlanReviewPanel({
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`relative px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`relative px-2 sm:px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.id
                 ? "border-blue-500 text-blue-600 dark:text-blue-400"
                 : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
@@ -120,9 +123,24 @@ export function PlanReviewPanel({
           <div className="p-6">
             <div className="prose prose-sm dark:prose-invert max-w-none">
               {planContent ? (
-                <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
-                  {planContent}
-                </pre>
+                !isPlanReady ? (
+                  <div className="relative">
+                    <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap opacity-60">
+                      {planContent}
+                    </pre>
+                    <div className="absolute top-4 right-4 flex items-center gap-3 text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 px-3 py-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
+                      <span className="relative flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500" />
+                      </span>
+                      <span className="text-sm font-medium">AI is still writing...</span>
+                    </div>
+                  </div>
+                ) : (
+                  <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
+                    {planContent}
+                  </pre>
+                )
               ) : (
                 <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400">
                   <span className="relative flex h-3 w-3">
@@ -177,7 +195,7 @@ export function PlanReviewPanel({
         <div className="flex gap-4">
           <Button
             onClick={handleAcceptPlan}
-            disabled={isSubmitting || !planContent}
+            disabled={isSubmitting || !isPlanReady || !planContent?.trim()}
             variant="primary"
           >
             {isSubmitting ? "Accepting..." : "Accept Plan & Start Loop"}

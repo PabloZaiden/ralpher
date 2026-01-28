@@ -243,6 +243,25 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 8,
+    name: "add_plan_is_ready_flag",
+    up: (db) => {
+      // Check if the loops table exists
+      if (!tableExists(db, "loops")) {
+        log.debug("loops table does not exist, skipping migration 8");
+        return;
+      }
+      
+      const columns = getTableColumns(db, "loops");
+      
+      // Add plan_is_ready column to track when plan is ready for acceptance
+      if (!columns.includes("plan_is_ready")) {
+        db.run("ALTER TABLE loops ADD COLUMN plan_is_ready INTEGER DEFAULT 0");
+        log.info("Added plan_is_ready column to loops table");
+      }
+    },
+  },
 ];
 
 /**
