@@ -59,7 +59,7 @@ describe("Persistence", () => {
       const testLoop = {
         config: {
           id: "test-loop-123",
-          name: "Test Loop",
+          name: "test-loop",
           directory: "/tmp/test",
           prompt: "Do something",
           createdAt: new Date().toISOString(),
@@ -79,7 +79,6 @@ describe("Persistence", () => {
       const loaded = await loadLoop("test-loop-123");
 
       expect(loaded).not.toBeNull();
-      expect(loaded!.config.name).toBe("Test Loop");
       expect(loaded!.state.status).toBe("idle");
     });
 
@@ -102,7 +101,7 @@ describe("Persistence", () => {
       const testLoop = {
         config: {
           id: "delete-me",
-          name: "Delete Me",
+          name: "delete-me",
           directory: "/tmp/test",
           prompt: "Test",
           createdAt: new Date().toISOString(),
@@ -136,7 +135,7 @@ describe("Persistence", () => {
       const loop1 = {
         config: {
           id: "loop-1",
-          name: "Loop 1",
+          name: "loop-1",
           directory: "/tmp/1",
           prompt: "Test 1",
           createdAt: "2024-01-01T00:00:00Z",
@@ -155,7 +154,7 @@ describe("Persistence", () => {
       const loop2 = {
         config: {
           id: "loop-2",
-          name: "Loop 2",
+          name: "loop-2",
           directory: "/tmp/2",
           prompt: "Test 2",
           createdAt: "2024-01-02T00:00:00Z",

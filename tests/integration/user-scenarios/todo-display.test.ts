@@ -38,7 +38,6 @@ describe("TODO Display User Scenarios", () => {
     test("receives and stores TODO updates during loop execution", async () => {
       // Create a loop
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Test Loop with TODOs",
         directory: ctx.workDir,
         prompt: "Write a function",
         clearPlanningFolder: false,
@@ -96,7 +95,6 @@ describe("TODO Display User Scenarios", () => {
 
       // Create a loop
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Test Loop Status Changes",
         directory: ctx.workDir,
         prompt: "Implement feature",
         clearPlanningFolder: false,
@@ -157,9 +155,8 @@ describe("TODO Display User Scenarios", () => {
 
       // Create a loop
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Test Loop Empty TODOs",
         directory: ctx.workDir,
-        prompt: "Simple task",
+        prompt: "Do something simple",
         clearPlanningFolder: false,
       });
 
@@ -192,7 +189,6 @@ describe("TODO Display User Scenarios", () => {
 
       // Create a loop
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Test Loop Multiple Updates",
         directory: ctx.workDir,
         prompt: "Complex task",
         clearPlanningFolder: false,

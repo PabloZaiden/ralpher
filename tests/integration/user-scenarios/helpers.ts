@@ -403,7 +403,6 @@ export async function teardownTestServer(ctx?: TestServerContext | null): Promis
 export async function createLoopViaAPI(
   baseUrl: string,
   options: {
-    name: string;
     directory: string;
     prompt: string;
     maxIterations?: number;

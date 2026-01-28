@@ -173,7 +173,6 @@ describe("Plan Mode API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Test Plan Mode",
           prompt: "Create a plan",
           directory: testWorkDir,
           maxIterations: 1,
@@ -206,7 +205,6 @@ describe("Plan Mode API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Test Clear Folder",
           prompt: "Create a plan",
           directory: testWorkDir,
           maxIterations: 1,
@@ -254,7 +252,6 @@ describe("Plan Mode API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Test Feedback",
           prompt: "Create a plan",
           directory: testWorkDir,
           maxIterations: 1,
@@ -294,7 +291,6 @@ describe("Plan Mode API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Normal Loop",
           prompt: "Do something",
           directory: testWorkDir,
           maxIterations: 1,
@@ -336,7 +332,6 @@ describe("Plan Mode API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Test Accept",
           prompt: "Create a plan",
           directory: testWorkDir,
           maxIterations: 1,
@@ -375,7 +370,6 @@ describe("Plan Mode API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Test No Clear on Accept",
           prompt: "Create a plan",
           directory: testWorkDir,
           planningFolderPath: ".planning-test2",
@@ -413,7 +407,6 @@ describe("Plan Mode API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Normal Loop",
           prompt: "Do something",
           directory: testWorkDir,
           maxIterations: 1,
@@ -446,7 +439,6 @@ describe("Plan Mode API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Test Discard",
           prompt: "Create a plan",
           directory: testWorkDir,
           maxIterations: 1,

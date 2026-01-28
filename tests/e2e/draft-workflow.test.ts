@@ -178,7 +178,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Initial Draft",
         directory: testWorkDir,
         prompt: "Initial task",
         draft: true,
@@ -189,7 +188,6 @@ describe("Draft Loop E2E Workflow", () => {
     const createBody = await createResponse.json();
     const loopId = createBody.config.id;
     expect(createBody.state.status).toBe("draft");
-    expect(createBody.config.name).toBe("Initial Draft");
     expect(createBody.config.prompt).toBe("Initial task");
 
     // Verify no git branch created yet
@@ -200,7 +198,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Edited Draft V1",
         prompt: "Updated task v1",
       }),
     });
@@ -208,7 +205,6 @@ describe("Draft Loop E2E Workflow", () => {
     expect(firstEditResponse.status).toBe(200);
     const firstEditBody = await firstEditResponse.json();
     expect(firstEditBody.state.status).toBe("draft");
-    expect(firstEditBody.config.name).toBe("Edited Draft V1");
     expect(firstEditBody.config.prompt).toBe("Updated task v1");
 
     // Step 3: Second edit - update prompt and add config
@@ -216,7 +212,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Final Draft Name",
         prompt: "Final task description",
         maxIterations: 5,
         maxConsecutiveErrors: 3,
@@ -226,7 +221,6 @@ describe("Draft Loop E2E Workflow", () => {
     expect(secondEditResponse.status).toBe(200);
     const secondEditBody = await secondEditResponse.json();
     expect(secondEditBody.state.status).toBe("draft");
-    expect(secondEditBody.config.name).toBe("Final Draft Name");
     expect(secondEditBody.config.prompt).toBe("Final task description");
     expect(secondEditBody.config.maxIterations).toBe(5);
     expect(secondEditBody.config.maxConsecutiveErrors).toBe(3);
@@ -261,7 +255,6 @@ describe("Draft Loop E2E Workflow", () => {
     // Verify final configuration is correct and git branch was created
     const finalResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
     const finalBody = await finalResponse.json();
-    expect(finalBody.config.name).toBe("Final Draft Name");
     expect(finalBody.config.prompt).toBe("Final task description");
     expect(finalBody.config.maxIterations).toBe(5);
     
@@ -277,7 +270,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Plan Mode Draft",
         directory: testWorkDir,
         prompt: "Create a plan for feature X",
         planMode: true,
@@ -313,7 +305,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Feature X Planning Loop",
         clearPlanningFolder: true,
         activityTimeoutSeconds: 120,
       }),
@@ -321,7 +312,6 @@ describe("Draft Loop E2E Workflow", () => {
 
     expect(secondEditResponse.status).toBe(200);
     const secondEditBody = await secondEditResponse.json();
-    expect(secondEditBody.config.name).toBe("Feature X Planning Loop");
     expect(secondEditBody.config.clearPlanningFolder).toBe(true);
     expect(secondEditBody.config.activityTimeoutSeconds).toBe(120);
 
@@ -353,7 +343,6 @@ describe("Draft Loop E2E Workflow", () => {
     // Verify final configuration matches edits
     const finalResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
     const finalBody = await finalResponse.json();
-    expect(finalBody.config.name).toBe("Feature X Planning Loop");
     expect(finalBody.config.clearPlanningFolder).toBe(true);
     
     // In mock test environment, git setup may not complete if loop finishes too quickly
@@ -367,7 +356,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Quick Draft",
         directory: testWorkDir,
         prompt: "Quick task",
         draft: true,
@@ -393,7 +381,6 @@ describe("Draft Loop E2E Workflow", () => {
     expect(startBody.state.status).not.toBe("draft");
 
     // Verify configuration unchanged
-    expect(startBody.config.name).toBe("Quick Draft");
     expect(startBody.config.prompt).toBe("Quick task");
   });
 
@@ -403,7 +390,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Regular Loop",
         directory: testWorkDir,
         prompt: "Task",
       }),
@@ -433,7 +419,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Draft with Plan Mode",
         directory: testWorkDir,
         prompt: "Test task",
         planMode: true,
@@ -454,7 +439,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Updated Draft Name",
       }),
     });
 
@@ -463,7 +447,6 @@ describe("Draft Loop E2E Workflow", () => {
 
     // Verify planMode is still true after update
     expect(updateBody.config.planMode).toBe(true);
-    expect(updateBody.config.name).toBe("Updated Draft Name");
 
     // Step 3: Fetch the draft again to verify persistence
     const fetchResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
@@ -472,7 +455,6 @@ describe("Draft Loop E2E Workflow", () => {
 
     // Verify planMode persisted after fetching from database
     expect(fetchBody.config.planMode).toBe(true);
-    expect(fetchBody.config.name).toBe("Updated Draft Name");
   });
 
   test("plan mode checkbox can be unchecked and persists", async () => {
@@ -481,7 +463,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Draft with Plan Mode to Uncheck",
         directory: testWorkDir,
         prompt: "Test task",
         planMode: true,
@@ -502,7 +483,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Updated Draft - Plan Mode Unchecked",
         planMode: false,
       }),
     });
@@ -512,7 +492,6 @@ describe("Draft Loop E2E Workflow", () => {
 
     // Verify planMode is now false after update
     expect(updateBody.config.planMode).toBe(false);
-    expect(updateBody.config.name).toBe("Updated Draft - Plan Mode Unchecked");
 
     // Step 3: Fetch the draft again to verify persistence
     const fetchResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
@@ -521,7 +500,6 @@ describe("Draft Loop E2E Workflow", () => {
 
     // Verify planMode=false persisted after fetching from database
     expect(fetchBody.config.planMode).toBe(false);
-    expect(fetchBody.config.name).toBe("Updated Draft - Plan Mode Unchecked");
 
     // Step 4: Update again without touching planMode to ensure it stays false
     const secondUpdateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
@@ -546,7 +524,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Draft with Clear Planning Folder to Uncheck",
         directory: testWorkDir,
         prompt: "Test task",
         clearPlanningFolder: true,
@@ -567,7 +544,6 @@ describe("Draft Loop E2E Workflow", () => {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "Updated Draft - Clear Planning Folder Unchecked",
         clearPlanningFolder: false,
       }),
     });
@@ -577,7 +553,6 @@ describe("Draft Loop E2E Workflow", () => {
 
     // Verify clearPlanningFolder is now false after update
     expect(updateBody.config.clearPlanningFolder).toBe(false);
-    expect(updateBody.config.name).toBe("Updated Draft - Clear Planning Folder Unchecked");
 
     // Step 3: Fetch the draft again to verify persistence
     const fetchResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
@@ -586,7 +561,6 @@ describe("Draft Loop E2E Workflow", () => {
 
     // Verify clearPlanningFolder=false persisted after fetching from database
     expect(fetchBody.config.clearPlanningFolder).toBe(false);
-    expect(fetchBody.config.name).toBe("Updated Draft - Clear Planning Folder Unchecked");
 
     // Step 4: Update again without touching clearPlanningFolder to ensure it stays false
     const secondUpdateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {

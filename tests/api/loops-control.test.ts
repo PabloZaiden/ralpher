@@ -211,7 +211,6 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Discard No Branch Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
           planMode: true,
@@ -251,11 +250,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Diff No Git Branch Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
-          planMode: true,
-          backend: { type: "mock" },
         }),
       });
       const createBody = await createResponse.json();
@@ -275,10 +271,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Plan Test Loop",
           directory: testWorkDir,
-          prompt: "Test prompt",
-          backend: { type: "mock" },
+          prompt: "Test",
         }),
       });
       const createBody = await createResponse.json();
@@ -311,10 +305,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Empty Plan Loop",
           directory: emptyWorkDir,
-          prompt: "Test prompt",
-          backend: { type: "mock" },
+          prompt: "Test",
         }),
       });
       const createBody = await createResponse.json();
@@ -337,10 +329,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Status Test Loop",
           directory: testWorkDir,
-          prompt: "Test prompt",
-          backend: { type: "mock" },
+          prompt: "Test",
         }),
       });
       const createBody = await createResponse.json();
@@ -367,10 +357,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Pending Prompt Test (Completed)",
           directory: testWorkDir,
           prompt: "Test prompt",
-          backend: { type: "mock" },
         }),
       });
       const createBody = await createResponse.json();
@@ -396,10 +384,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Pending Prompt Test (No Body)",
           directory: testWorkDir,
           prompt: "Test prompt",
-          backend: { type: "mock" },
         }),
       });
       const createBody = await createResponse.json();
@@ -422,10 +408,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Pending Prompt Test (Empty)",
           directory: testWorkDir,
           prompt: "Test prompt",
-          backend: { type: "mock" },
         }),
       });
       const createBody = await createResponse.json();
@@ -449,10 +433,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Pending Prompt Delete Test (Completed)",
           directory: testWorkDir,
           prompt: "Test prompt",
-          backend: { type: "mock" },
         }),
       });
       const createBody = await createResponse.json();
@@ -493,10 +475,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Comments Test Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
-          backend: { type: "mock" },
         }),
       });
       const createBody = await createResponse.json();
@@ -521,10 +501,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Address Comments Test Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
-          backend: { type: "mock" },
         }),
       });
       const createBody = await createResponse.json();
@@ -578,10 +556,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "No Review Mode Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
-          backend: { type: "mock" },
         }),
       });
       const createBody = await createResponse.json();
@@ -617,10 +593,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Ordered Comments Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
-          backend: { type: "mock" },
         }),
       });
       const createBody = await createResponse.json();
@@ -657,10 +631,8 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Pending Status Comments Loop",
           directory: testWorkDir,
           prompt: "Test prompt",
-          backend: { type: "mock" },
         }),
       });
       const createBody = await createResponse.json();

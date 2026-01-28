@@ -76,7 +76,6 @@ describe("Plan + Loop User Scenarios", () => {
     test("creates loop in planning status with planMode: true", async () => {
       // Create loop with plan mode via API (simulating UI "Create with Plan" option)
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Plan Mode Test",
         directory: ctx.workDir,
         prompt: "Create a comprehensive plan first",
         planMode: true,
@@ -136,7 +135,6 @@ describe("Plan + Loop User Scenarios", () => {
 
       // Create loop with both plan mode and clear planning folder
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Plan Mode Clear Test",
         directory: ctx.workDir,
         prompt: "Create a plan from scratch",
         planMode: true,
@@ -181,7 +179,6 @@ describe("Plan + Loop User Scenarios", () => {
 
       // Create loop with plan mode
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Discard Plan Test",
         directory: ctx.workDir,
         prompt: "Create a plan to discard",
         planMode: true,
@@ -241,7 +238,6 @@ describe("Plan + Loop User Scenarios", () => {
 
         // Create loop with plan mode
         const { body } = await createLoopViaAPI(ctx.baseUrl, {
-          name: "No Feedback Accept Test",
           directory: ctx.workDir,
           prompt: "Create a plan and execute it",
           planMode: true,
@@ -321,7 +317,6 @@ describe("Plan + Loop User Scenarios", () => {
       test("accepts plan without feedback, runs iterations, then pushes to remote", async () => {
         // Create loop with plan mode
         const { body } = await createLoopViaAPI(ctx.baseUrl, {
-          name: "No Feedback Push Test",
           directory: ctx.workDir,
           prompt: "Create a plan and push it",
           planMode: true,
@@ -381,7 +376,6 @@ describe("Plan + Loop User Scenarios", () => {
 
         // Create loop with plan mode
         const { body } = await createLoopViaAPI(ctx.baseUrl, {
-          name: "No Feedback Discard Test",
           directory: ctx.workDir,
           prompt: "Create a plan and discard it",
           planMode: true,
@@ -443,7 +437,6 @@ describe("Plan + Loop User Scenarios", () => {
 
         // Create loop with plan mode
         const { body } = await createLoopViaAPI(ctx.baseUrl, {
-          name: "Feedback Accept Test",
           directory: ctx.workDir,
           prompt: "Create a plan with feedback",
           planMode: true,
@@ -545,7 +538,6 @@ describe("Plan + Loop User Scenarios", () => {
       test("provides feedback 2 times, accepts plan, runs iterations, then pushes", async () => {
         // Create loop with plan mode
         const { body } = await createLoopViaAPI(ctx.baseUrl, {
-          name: "Feedback Push Test",
           directory: ctx.workDir,
           prompt: "Create a plan with feedback to push",
           planMode: true,
@@ -614,7 +606,6 @@ describe("Plan + Loop User Scenarios", () => {
 
         // Create loop with plan mode
         const { body } = await createLoopViaAPI(ctx.baseUrl, {
-          name: "Feedback Discard Test",
           directory: ctx.workDir,
           prompt: "Create a plan with feedback to discard",
           planMode: true,
@@ -673,7 +664,6 @@ describe("Plan + Loop User Scenarios", () => {
       ctx.mockBackend.reset(["<promise>COMPLETE</promise>"]);
 
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Non-Plan Loop",
         directory: ctx.workDir,
         prompt: "Normal loop",
         planMode: false,
@@ -702,7 +692,6 @@ describe("Plan + Loop User Scenarios", () => {
       ctx.mockBackend.reset(["<promise>COMPLETE</promise>"]);
 
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Non-Plan Loop 2",
         directory: ctx.workDir,
         prompt: "Normal loop",
         planMode: false,
@@ -731,7 +720,6 @@ describe("Plan + Loop User Scenarios", () => {
       ctx.mockBackend.reset(createPlanModeMockResponses({ planIterations: 1 }));
 
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
-        name: "Empty Feedback Test",
         directory: ctx.workDir,
         prompt: "Test plan",
         planMode: true,

@@ -45,7 +45,6 @@ export interface CreateLoopFormProps {
   editLoopId?: string | null;
   /** Initial loop data for editing */
   initialLoopData?: {
-    name: string;
     directory: string;
     prompt: string;
     model?: { providerID: string; modelID: string };
@@ -79,7 +78,6 @@ export function CreateLoopForm({
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
   
-  const [name, setName] = useState(initialLoopData?.name ?? "Continue working on the plan");
   const [directory, setDirectory] = useState(initialLoopData?.directory ?? initialDirectory);
   const [prompt, setPrompt] = useState(initialLoopData?.prompt ?? "Do everything that's pending in the plan");
   const [maxIterations, setMaxIterations] = useState<string>(initialLoopData?.maxIterations?.toString() ?? "");
@@ -156,14 +154,13 @@ export function CreateLoopForm({
   async function handleSubmit(e: FormEvent, asDraft = false) {
     e.preventDefault();
 
-    if (!name.trim() || !directory.trim() || !prompt.trim()) {
+    if (!directory.trim() || !prompt.trim()) {
       return;
     }
 
     setSubmitting(true);
 
     const request: CreateLoopRequest = {
-      name: name.trim(),
       directory: directory.trim(),
       prompt: prompt.trim(),
       // Backend settings are now global (not per-loop)
@@ -269,25 +266,6 @@ export function CreateLoopForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Name */}
-      <div>
-        <label
-          htmlFor="name"
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          Name <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          id="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Continue working on the plan"
-          required
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
-        />
-      </div>
-
       {/* Directory */}
       <div>
         <label
@@ -598,7 +576,7 @@ export function CreateLoopForm({
             type="button"
             variant="secondary"
             onClick={(e) => handleSubmit(e, true)}
-            disabled={isSubmitting || !name.trim() || !directory.trim() || !prompt.trim()}
+            disabled={isSubmitting || !directory.trim() || !prompt.trim()}
             loading={isSubmitting}
           >
             {isEditingDraft ? "Update Draft" : "Save as Draft"}

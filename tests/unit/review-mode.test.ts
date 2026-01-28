@@ -20,7 +20,6 @@ describe("Review Mode", () => {
       try {
         // Create and complete a loop
         const loop = await ctx.manager.createLoop({
-          name: "Test Loop",
           directory: ctx.workDir,
           prompt: "Make changes",
         });
@@ -65,7 +64,6 @@ describe("Review Mode", () => {
       try {
         // Create and complete a loop
         const loop = await ctx.manager.createLoop({
-          name: "Test Loop",
           directory: ctx.workDir,
           prompt: "Make changes",
         });
@@ -109,7 +107,6 @@ describe("Review Mode", () => {
 
         // Create and complete a loop
         const loop = await ctx.manager.createLoop({
-          name: "Test Loop",
           directory: ctx.workDir,
           prompt: "Make changes",
         });
@@ -149,7 +146,6 @@ describe("Review Mode", () => {
       try {
         // Create, complete, and accept a loop
         const loop = await ctx.manager.createLoop({
-          name: "Test Loop",
           directory: ctx.workDir,
           prompt: "Make changes",
         });
@@ -186,7 +182,6 @@ describe("Review Mode", () => {
       try {
         // Create a loop but don't accept/push it
         const loop = await ctx.manager.createLoop({
-          name: "Test Loop",
           directory: ctx.workDir,
           prompt: "Make changes",
         });
@@ -215,7 +210,6 @@ describe("Review Mode", () => {
       try {
         // Create, complete, and accept a loop
         const loop = await ctx.manager.createLoop({
-          name: "Test Loop",
           directory: ctx.workDir,
           prompt: "Make changes",
         });
@@ -248,7 +242,6 @@ describe("Review Mode", () => {
       try {
         // Create, complete, and accept a loop
         const loop = await ctx.manager.createLoop({
-          name: "Test Loop",
           directory: ctx.workDir,
           prompt: "Make changes",
         });
@@ -283,7 +276,6 @@ describe("Review Mode", () => {
       try {
         // Create a loop but don't accept/push it
         const loop = await ctx.manager.createLoop({
-          name: "Test Loop",
           directory: ctx.workDir,
           prompt: "Make changes",
         });

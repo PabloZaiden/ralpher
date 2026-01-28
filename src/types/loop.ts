@@ -21,7 +21,7 @@ import type { TodoItem } from "../backends/types";
 export interface LoopConfig {
   /** Unique identifier (UUID v4) */
   id: string;
-  /** Human-readable name for display */
+  /** Human-readable loop name (auto-generated from prompt) */
   name: string;
   /** Absolute path to the working directory (must be a git repository) */
   directory: string;

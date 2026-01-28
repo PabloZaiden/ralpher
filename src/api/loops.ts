@@ -106,8 +106,9 @@ export const loopsCrudRoutes = {
      * Creates a new Ralph Loop with the specified configuration. The loop is
      * automatically started unless `draft: true` is specified.
      * 
+     * The loop name is automatically generated from the prompt using AI.
+     * 
      * Request Body Fields:
-     * - name (required): Human-readable name
      * - directory (required): Absolute path to working directory
      * - prompt (required): Task prompt/PRD
      * - model: { providerID, modelID } for AI model selection
@@ -173,7 +174,6 @@ export const loopsCrudRoutes = {
 
       try {
         const loop = await loopManager.createLoop({
-          name: body.name,
           directory: body.directory,
           prompt: body.prompt,
           modelProviderID: body.model?.providerID,
