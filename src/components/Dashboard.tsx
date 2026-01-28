@@ -3,7 +3,7 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
-import type { UncommittedChangesError, ModelInfo } from "../types";
+import type { UncommittedChangesError, ModelInfo, HealthResponse } from "../types";
 import type { BranchInfo } from "./CreateLoopForm";
 import { useLoops, useServerSettings } from "../hooks";
 import { Button, Modal } from "./common";
@@ -71,7 +71,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   useEffect(() => {
     fetch("/api/health")
       .then((res) => res.json())
-      .then((data: { version: string }) => {
+      .then((data: HealthResponse) => {
         setVersion(data.version);
       })
       .catch(() => {
