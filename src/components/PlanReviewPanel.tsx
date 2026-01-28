@@ -195,7 +195,7 @@ export function PlanReviewPanel({
         <div className="flex gap-4">
           <Button
             onClick={handleAcceptPlan}
-            disabled={isSubmitting || !isPlanReady}
+            disabled={isSubmitting || !isPlanReady || !planContent?.trim()}
             variant="primary"
           >
             {isSubmitting ? "Accepting..." : "Accept Plan & Start Loop"}
