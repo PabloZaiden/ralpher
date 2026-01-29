@@ -975,7 +975,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                       <div className="max-w-md space-y-2">
                         {isFinalState(state.status) ? (
                           <>
-                            {state.reviewMode?.addressable && (
+                            {state.reviewMode?.addressable && state.status !== "deleted" && (
                               <button
                                 onClick={() => setAddressCommentsModal(true)}
                                 className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
