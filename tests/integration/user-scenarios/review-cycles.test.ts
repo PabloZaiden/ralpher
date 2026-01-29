@@ -348,6 +348,115 @@ describe("Review Cycle User Scenarios", () => {
     });
   });
 
+  describe("Comment History Persistence", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: [
+          // Initial work
+          "Initial work! <promise>COMPLETE</promise>",
+          // Review cycle 1
+          "Round 1 done! <promise>COMPLETE</promise>",
+          // Review cycle 2
+          "Round 2 done! <promise>COMPLETE</promise>",
+        ],
+        withPlanningDir: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("comments are preserved across multiple merge cycles", async () => {
+      // This test verifies the bug fix for comment history not being preserved.
+      // The bug was: INSERT OR REPLACE on loops table triggered ON DELETE CASCADE
+      // which deleted all comments whenever loop state was updated.
+
+      // Create and complete initial loop
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        directory: ctx.workDir,
+        prompt: "Build a feature",
+      });
+      const loop = body as Loop;
+
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+
+      // Accept (merge) the initial work
+      await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
+
+      // Submit first round of feedback
+      const comment1Text = "Please add error handling for edge cases";
+      const address1Response = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: comment1Text }),
+      });
+      expect(address1Response.status).toBe(200);
+      const address1Result = await address1Response.json();
+      expect(address1Result.reviewCycle).toBe(1);
+      expect(address1Result.commentIds).toHaveLength(1);
+      const comment1Id = address1Result.commentIds[0];
+
+      // Wait for first review cycle to complete and merge
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
+
+      // Verify first comment is still in history after merge
+      let commentsResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/comments`);
+      let commentsResult = await commentsResponse.json();
+      expect(commentsResult.success).toBe(true);
+      expect(commentsResult.comments).toHaveLength(1);
+      expect(commentsResult.comments[0].id).toBe(comment1Id);
+      expect(commentsResult.comments[0].commentText).toBe(comment1Text);
+      expect(commentsResult.comments[0].reviewCycle).toBe(1);
+
+      // Submit second round of feedback
+      const comment2Text = "Please also add unit tests for the new code";
+      const address2Response = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ comments: comment2Text }),
+      });
+      expect(address2Response.status).toBe(200);
+      const address2Result = await address2Response.json();
+      expect(address2Result.reviewCycle).toBe(2);
+      expect(address2Result.commentIds).toHaveLength(1);
+      const comment2Id = address2Result.commentIds[0];
+
+      // Wait for second review cycle to complete and merge
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "merged");
+
+      // CRITICAL: Both comments should still be in history after all merges
+      commentsResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/comments`);
+      commentsResult = await commentsResponse.json();
+      expect(commentsResult.success).toBe(true);
+      expect(commentsResult.comments).toHaveLength(2);
+
+      // Comments are ordered by review_cycle DESC, so newest first
+      const comment2 = commentsResult.comments.find((c: { id: string }) => c.id === comment2Id);
+      const comment1 = commentsResult.comments.find((c: { id: string }) => c.id === comment1Id);
+      
+      expect(comment1).toBeDefined();
+      expect(comment1.commentText).toBe(comment1Text);
+      expect(comment1.reviewCycle).toBe(1);
+      
+      expect(comment2).toBeDefined();
+      expect(comment2.commentText).toBe(comment2Text);
+      expect(comment2.reviewCycle).toBe(2);
+
+      // Verify review history also shows correct cycle count
+      const historyResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/review-history`);
+      const history = await historyResponse.json();
+      expect(history.history.reviewCycles).toBe(2);
+    });
+  });
+
   describe("Review Mode Edge Cases", () => {
     let ctx: TestServerContext;
 

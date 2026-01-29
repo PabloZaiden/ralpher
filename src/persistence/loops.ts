@@ -354,18 +354,20 @@ export async function updateLoopState(loopId: string, state: LoopState): Promise
     loop.state = state;
     
     const newRow = loopToRow(loop);
-    const columns = Object.keys(newRow);
+    const columns = Object.keys(newRow).filter(col => col !== "id");
     // Validate column names to prevent SQL injection
     validateColumnNames(columns);
     
-    const placeholders = columns.map(() => "?").join(", ");
-    const values = Object.values(newRow) as (string | number | null | Uint8Array)[];
+    // Use UPDATE instead of INSERT OR REPLACE to avoid triggering ON DELETE CASCADE
+    // which would delete related records in review_comments table
+    const setClause = columns.map(col => `${col} = ?`).join(", ");
+    const values = columns.map(col => newRow[col as keyof typeof newRow]) as (string | number | null | Uint8Array)[];
+    values.push(loopId); // Add id for WHERE clause
     
-    const insertStmt = db.prepare(`
-      INSERT OR REPLACE INTO loops (${columns.join(", ")})
-      VALUES (${placeholders})
+    const updateStmt = db.prepare(`
+      UPDATE loops SET ${setClause} WHERE id = ?
     `);
-    insertStmt.run(...values);
+    updateStmt.run(...values);
     
     return true;
   });
@@ -394,18 +396,20 @@ export async function updateLoopConfig(loopId: string, config: LoopConfig): Prom
     loop.config = config;
     
     const newRow = loopToRow(loop);
-    const columns = Object.keys(newRow);
+    const columns = Object.keys(newRow).filter(col => col !== "id");
     // Validate column names to prevent SQL injection
     validateColumnNames(columns);
     
-    const placeholders = columns.map(() => "?").join(", ");
-    const values = Object.values(newRow) as (string | number | null | Uint8Array)[];
+    // Use UPDATE instead of INSERT OR REPLACE to avoid triggering ON DELETE CASCADE
+    // which would delete related records in review_comments table
+    const setClause = columns.map(col => `${col} = ?`).join(", ");
+    const values = columns.map(col => newRow[col as keyof typeof newRow]) as (string | number | null | Uint8Array)[];
+    values.push(loopId); // Add id for WHERE clause
     
-    const insertStmt = db.prepare(`
-      INSERT OR REPLACE INTO loops (${columns.join(", ")})
-      VALUES (${placeholders})
+    const updateStmt = db.prepare(`
+      UPDATE loops SET ${setClause} WHERE id = ?
     `);
-    insertStmt.run(...values);
+    updateStmt.run(...values);
     
     return true;
   });
