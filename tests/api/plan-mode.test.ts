@@ -377,7 +377,10 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const response = await createResponse.json(); const id = response.config.id;
+      expect(createResponse.status).toBe(201);
+      const response = await createResponse.json();
+      expect(response.config).toBeDefined();
+      const id = response.config.id;
       await waitForPlanReady(id);
 
       // Get initial feedback rounds
@@ -416,7 +419,10 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const response = await createResponse.json(); const id = response.config.id;
+      expect(createResponse.status).toBe(201);
+      const response = await createResponse.json();
+      expect(response.config).toBeDefined();
+      const id = response.config.id;
 
       // Try to send feedback (should fail)
       const feedbackResponse = await fetch(`${baseUrl}/api/loops/${id}/plan/feedback`, {
@@ -457,7 +463,10 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const response = await createResponse.json(); const id = response.config.id;
+      expect(createResponse.status).toBe(201);
+      const response = await createResponse.json();
+      expect(response.config).toBeDefined();
+      const id = response.config.id;
       await waitForPlanReady(id);
 
       // Verify in planning status
@@ -504,7 +513,10 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const response = await createResponse.json(); const id = response.config.id;
+      expect(createResponse.status).toBe(201);
+      const response = await createResponse.json();
+      expect(response.config).toBeDefined();
+      const id = response.config.id;
       await waitForPlanReady(id);
 
       // Create a plan file and commit it to the base branch.
@@ -548,7 +560,10 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const response = await createResponse.json(); const id = response.config.id;
+      expect(createResponse.status).toBe(201);
+      const response = await createResponse.json();
+      expect(response.config).toBeDefined();
+      const id = response.config.id;
 
       // Try to accept (should fail)
       const acceptResponse = await fetch(`${baseUrl}/api/loops/${id}/plan/accept`, {
