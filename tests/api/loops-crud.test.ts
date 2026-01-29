@@ -729,4 +729,111 @@ describe("Loops CRUD API Integration", () => {
       expect(getBody.state.status).toBe("deleted");
     });
   });
+
+  describe("POST /api/loops/:id/mark-merged", () => {
+    test("returns 404 for non-existent loop", async () => {
+      const response = await fetch(`${baseUrl}/api/loops/non-existent-id/mark-merged`, {
+        method: "POST",
+      });
+      expect(response.status).toBe(404);
+
+      const body = await response.json();
+      expect(body.error).toBe("not_found");
+    });
+
+    test("returns 400 for loop not in final state", async () => {
+      // Create a draft loop (not in final state)
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          directory: testWorkDir,
+          prompt: "Test mark merged",
+          draft: true,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Try to mark as merged
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/mark-merged`, {
+        method: "POST",
+      });
+      expect(response.status).toBe(400);
+
+      const body = await response.json();
+      expect(body.error).toBe("mark_merged_failed");
+      expect(body.message).toContain("Cannot mark loop as merged");
+    });
+
+    test("returns 400 for loop without git state", async () => {
+      // Create a loop, complete it, but ensure it has no git state
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          directory: testWorkDir,
+          prompt: "Test no git",
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Wait for completion
+      await waitForLoopCompletion(loopId);
+
+      // Manually update loop to completed without git state
+      // This simulates a loop that was completed without git integration
+      const { updateLoopState, loadLoop } = await import("../../src/persistence/loops");
+      const loop = await loadLoop(loopId);
+      if (loop) {
+        await updateLoopState(loopId, {
+          ...loop.state,
+          git: undefined, // Remove git state
+        });
+      }
+
+      // Try to mark as merged
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/mark-merged`, {
+        method: "POST",
+      });
+      expect(response.status).toBe(400);
+
+      const body = await response.json();
+      expect(body.error).toBe("mark_merged_failed");
+      expect(body.message).toContain("No git branch");
+    });
+
+    test("marks a completed loop as merged and sets status to deleted", async () => {
+      // Create and complete a loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          directory: testWorkDir,
+          prompt: "Test mark merged",
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Wait for completion
+      await waitForLoopCompletion(loopId);
+
+      // Mark as merged
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/mark-merged`, {
+        method: "POST",
+      });
+      expect(response.status).toBe(200);
+
+      const body = await response.json();
+      expect(body.success).toBe(true);
+
+      // Verify loop status is now deleted
+      const getResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      expect(getResponse.status).toBe(200);
+      const getBody = await getResponse.json();
+      expect(getBody.state.status).toBe("deleted");
+    });
+  });
 });

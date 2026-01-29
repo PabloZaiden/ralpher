@@ -100,6 +100,54 @@ export function PurgeLoopModal({
 }
 
 // ============================================================================
+// Mark Merged Modal
+// ============================================================================
+
+export interface MarkMergedModalProps {
+  /** Whether the modal is open */
+  isOpen: boolean;
+  /** Callback when modal should close */
+  onClose: () => void;
+  /** Callback to mark the loop as merged */
+  onMarkMerged: () => Promise<void>;
+}
+
+/**
+ * Modal for confirming "mark as merged" action.
+ * Used when a loop's branch was merged externally (e.g., via GitHub PR)
+ * and the user wants to sync their local environment with the merged changes.
+ */
+export function MarkMergedModal({
+  isOpen,
+  onClose,
+  onMarkMerged,
+}: MarkMergedModalProps) {
+  const [loading, setLoading] = useState(false);
+
+  async function handleConfirm() {
+    setLoading(true);
+    try {
+      await onMarkMerged();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <ConfirmModal
+      isOpen={isOpen}
+      onClose={onClose}
+      onConfirm={handleConfirm}
+      title="Mark as Merged"
+      message="This action will switch your repository back to the original branch, pull the latest changes from remote, and delete the loop's working branch. Use this when the branch was merged externally (e.g., via a GitHub PR). Any local uncommitted changes on the working branch will be discarded."
+      confirmLabel="Mark as Merged"
+      loading={loading}
+      variant="primary"
+    />
+  );
+}
+
+// ============================================================================
 // Uncommitted Changes Modal
 // ============================================================================
 

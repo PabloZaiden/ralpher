@@ -102,6 +102,28 @@ export async function purgeLoopApi(loopId: string): Promise<boolean> {
 }
 
 /**
+ * Mark a loop as merged and sync with remote via the API.
+ * 
+ * Switches the repository back to the original branch, pulls latest changes
+ * from the remote, deletes the working branch, and marks the loop as deleted.
+ * 
+ * This is useful when a loop's branch was merged externally (e.g., via GitHub PR)
+ * and the user wants to sync their local environment with the merged changes.
+ */
+export async function markMergedApi(loopId: string): Promise<boolean> {
+  const response = await fetch(`/api/loops/${loopId}/mark-merged`, {
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || "Failed to mark loop as merged");
+  }
+
+  return true;
+}
+
+/**
  * Set a pending prompt for a loop via the API.
  */
 export async function setPendingPromptApi(

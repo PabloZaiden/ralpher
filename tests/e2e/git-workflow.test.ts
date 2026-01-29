@@ -260,4 +260,96 @@ describe("Git Workflow", () => {
       expect(countEvents(ctx.events, "loop.discarded")).toBe(1);
     });
   });
+
+  describe("Mark as Merged", () => {
+    test("switches to original branch, deletes working branch, and marks as deleted", async () => {
+      const loop = await ctx.manager.createLoop({
+        directory: ctx.workDir,
+        prompt: "Make changes",
+      });
+
+      const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
+
+      await ctx.manager.startLoop(loop.config.id);
+      await waitForEvent(ctx.events, "loop.completed");
+
+      // Get the working branch name from in-memory engine
+      const loopAfterComplete = await ctx.manager.getLoop(loop.config.id);
+      const workingBranch = loopAfterComplete!.state.git!.workingBranch;
+
+      // Mark as merged
+      const result = await ctx.manager.markMerged(loop.config.id);
+
+      expect(result.success).toBe(true);
+
+      // Verify we're back on original branch
+      const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
+      expect(currentBranch).toBe(originalBranch);
+
+      // Verify working branch was deleted
+      const branchExists = await ctx.git.branchExists(ctx.workDir, workingBranch);
+      expect(branchExists).toBe(false);
+
+      // Verify loop status is now deleted
+      const finalLoop = await ctx.manager.getLoop(loop.config.id);
+      expect(finalLoop!.state.status).toBe("deleted");
+
+      // Verify event was emitted
+      expect(countEvents(ctx.events, "loop.deleted")).toBeGreaterThanOrEqual(1);
+    });
+
+    test("works for pushed loops", async () => {
+      const loop = await ctx.manager.createLoop({
+        directory: ctx.workDir,
+        prompt: "Make changes",
+      });
+
+      const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
+
+      await ctx.manager.startLoop(loop.config.id);
+      await waitForEvent(ctx.events, "loop.completed");
+
+      // Get the working branch name
+      const loopAfterComplete = await ctx.manager.getLoop(loop.config.id);
+      const workingBranch = loopAfterComplete!.state.git!.workingBranch;
+
+      // Push the loop (simulates pushing to remote, but no actual remote exists)
+      // For this test, we manually set status to pushed since there's no remote
+      const { updateLoopState } = await import("../../src/persistence/loops");
+      await updateLoopState(loop.config.id, {
+        ...loopAfterComplete!.state,
+        status: "pushed",
+      });
+
+      // Mark as merged
+      const result = await ctx.manager.markMerged(loop.config.id);
+
+      expect(result.success).toBe(true);
+
+      // Verify we're back on original branch
+      const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
+      expect(currentBranch).toBe(originalBranch);
+
+      // Verify working branch was deleted
+      const branchExists = await ctx.git.branchExists(ctx.workDir, workingBranch);
+      expect(branchExists).toBe(false);
+
+      // Verify loop status is deleted
+      const finalLoop = await ctx.manager.getLoop(loop.config.id);
+      expect(finalLoop!.state.status).toBe("deleted");
+    });
+
+    test("returns error when loop is not in final state", async () => {
+      const loop = await ctx.manager.createLoop({
+        directory: ctx.workDir,
+        prompt: "Make changes",
+      });
+
+      // Try to mark as merged without running the loop
+      const result = await ctx.manager.markMerged(loop.config.id);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Cannot mark loop as merged");
+    });
+  });
 });

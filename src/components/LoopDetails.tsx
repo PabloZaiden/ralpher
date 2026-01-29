@@ -14,6 +14,7 @@ import {
   AddressCommentsModal,
   DeleteLoopModal,
   PurgeLoopModal,
+  MarkMergedModal,
 } from "./LoopModals";
 import { PlanReviewPanel } from "./PlanReviewPanel";
 import {
@@ -96,6 +97,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     push,
     remove,
     purge,
+    markMerged,
     setPendingPrompt,
     clearPendingPrompt,
     getDiff,
@@ -136,6 +138,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [deleteModal, setDeleteModal] = useState(false);
   const [acceptModal, setAcceptModal] = useState(false);
   const [purgeModal, setPurgeModal] = useState(false);
+  const [markMergedModal, setMarkMergedModal] = useState(false);
   const [addressCommentsModal, setAddressCommentsModal] = useState(false);
 
   // Pending prompt editing state
@@ -334,6 +337,15 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       onBack?.();
     }
     setPurgeModal(false);
+  }
+
+  // Handle mark as merged
+  async function handleMarkMerged() {
+    const success = await markMerged();
+    if (success) {
+      onBack?.();
+    }
+    setMarkMergedModal(false);
   }
 
   // Handle address comments
@@ -978,6 +990,21 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                                 <span className="text-gray-400 dark:text-gray-500">→</span>
                               </button>
                             )}
+                            {state.git && (
+                              <button
+                                onClick={() => setMarkMergedModal(true)}
+                                className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+                              >
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                  <span className="text-green-600 dark:text-green-400 text-sm">⤵</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Mark as Merged</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">Switch to base branch, pull changes, and clean up</div>
+                                </div>
+                                <span className="text-gray-400 dark:text-gray-500">→</span>
+                              </button>
+                            )}
                             <button
                               onClick={() => setPurgeModal(true)}
                               className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
@@ -1054,6 +1081,13 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         isOpen={purgeModal}
         onClose={() => setPurgeModal(false)}
         onPurge={handlePurge}
+      />
+
+      {/* Mark as Merged confirmation modal */}
+      <MarkMergedModal
+        isOpen={markMergedModal}
+        onClose={() => setMarkMergedModal(false)}
+        onMarkMerged={handleMarkMerged}
       />
 
       {/* Address Comments modal */}
