@@ -475,7 +475,7 @@ export const loopsCrudRoutes = {
 };
 
 /**
- * Loops control routes (accept, discard, push, draft/start, plan, pending-prompt).
+ * Loops control routes (accept, discard, push, draft/start, plan, pending-prompt, mark-merged).
  * 
  * Note: Loops are automatically started during creation (unless draft mode is used).
  * These endpoints control loop lifecycle after creation:
@@ -484,6 +484,7 @@ export const loopsCrudRoutes = {
  * - POST /api/loops/:id/push - Push branch to remote for PR workflow
  * - POST /api/loops/:id/discard - Discard and delete git branch
  * - POST /api/loops/:id/purge - Permanently delete from storage
+ * - POST /api/loops/:id/mark-merged - Mark as merged and sync with remote
  * - PUT/DELETE /api/loops/:id/pending-prompt - Modify next iteration prompt
  * - POST /api/loops/:id/plan/feedback - Send feedback on plan
  * - POST /api/loops/:id/plan/accept - Accept plan and start execution
@@ -689,6 +690,34 @@ export const loopsControlRoutes = {
           return errorResponse("not_found", "Loop not found", 404);
         }
         return errorResponse("purge_failed", result.error ?? "Unknown error", 400);
+      }
+
+      return successResponse();
+    },
+  },
+
+  "/api/loops/:id/mark-merged": {
+    /**
+     * POST /api/loops/:id/mark-merged - Mark a loop as merged and sync with remote.
+     * 
+     * Switches the repository back to the original branch, pulls latest changes
+     * from the remote, deletes the working branch, and marks the loop as deleted.
+     * 
+     * This is useful when a loop's branch was merged externally (e.g., via GitHub PR)
+     * and the user wants to sync their local environment with the merged changes.
+     * 
+     * Only works for loops in final states (pushed, merged, completed, max_iterations, deleted).
+     * 
+     * @returns Success response
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      const result = await loopManager.markMerged(req.params.id);
+
+      if (!result.success) {
+        if (result.error?.includes("not found")) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        return errorResponse("mark_merged_failed", result.error ?? "Unknown error", 400);
       }
 
       return successResponse();

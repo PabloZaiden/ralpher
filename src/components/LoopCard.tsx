@@ -188,9 +188,9 @@ export function LoopCard({
             Review Plan
           </Button>
         ) : isFinalState(state.status) ? (
-          /* Final state - show Address Comments (if addressable) or Purge */
+          /* Final state - show Address Comments (if addressable and not deleted) or Purge */
           <>
-            {isAddressable && onAddressComments && (
+            {isAddressable && state.status !== "deleted" && onAddressComments && (
               <Button
                 size="sm"
                 variant="secondary"

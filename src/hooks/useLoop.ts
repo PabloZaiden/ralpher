@@ -22,6 +22,7 @@ import {
   discardLoopApi,
   deleteLoopApi,
   purgeLoopApi,
+  markMergedApi,
   setPendingPromptApi,
   clearPendingPromptApi,
   sendPlanFeedbackApi,
@@ -86,6 +87,8 @@ export interface UseLoopResult {
   discard: () => Promise<boolean>;
   /** Purge the loop (permanently delete - only for merged/pushed/deleted loops) */
   purge: () => Promise<boolean>;
+  /** Mark a loop as merged and sync with remote (only for final-state loops) */
+  markMerged: () => Promise<boolean>;
   /** Set a pending prompt for the next iteration (only works when loop is running) */
   setPendingPrompt: (prompt: string) => Promise<boolean>;
   /** Clear the pending prompt (only works when loop is running) */
@@ -372,6 +375,18 @@ export function useLoop(loopId: string): UseLoopResult {
     }
   }, [loopId]);
 
+  // Mark a loop as merged and sync with remote
+  const markMerged = useCallback(async (): Promise<boolean> => {
+    try {
+      await markMergedApi(loopId);
+      setLoop(null);
+      return true;
+    } catch (err) {
+      setError(String(err));
+      return false;
+    }
+  }, [loopId]);
+
   // Set a pending prompt for the next iteration
   const setPendingPrompt = useCallback(
     async (prompt: string): Promise<boolean> => {
@@ -523,6 +538,7 @@ export function useLoop(loopId: string): UseLoopResult {
     push,
     discard,
     purge,
+    markMerged,
     setPendingPrompt,
     clearPendingPrompt,
     getDiff,

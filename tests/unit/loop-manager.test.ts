@@ -234,6 +234,56 @@ describe("LoopManager", () => {
     });
   });
 
+  describe("markMerged", () => {
+    test("requires loop to be in final state", async () => {
+      // Create a loop in idle state (not a final state)
+      const loop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Test",
+      });
+
+      const result = await manager.markMerged(loop.config.id);
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Cannot mark loop as merged");
+      expect(result.error).toContain("idle");
+    });
+
+    test("requires loop to have git state", async () => {
+      // Create a loop and set it to a final state without git
+      const loop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Test",
+      });
+
+      // Manually update the state to a final state without git
+      await updateLoopState(loop.config.id, {
+        ...loop.state,
+        status: "completed",
+        // No git state
+      });
+
+      const result = await manager.markMerged(loop.config.id);
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("No git branch");
+    });
+
+    test("returns error for non-existent loop", async () => {
+      const result = await manager.markMerged("non-existent-id");
+      
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("not found");
+    });
+
+    // Note: Success case for markMerged requires real git operations and is tested
+    // in e2e/git-workflow.test.ts which verifies:
+    // - Loop status becomes "deleted"
+    // - Working branch is deleted
+    // - Repository switches to original branch
+    // - loop.deleted event is emitted
+  });
+
   describe("isRunning", () => {
     test("returns false for non-running loop", async () => {
       const loop = await manager.createLoop({

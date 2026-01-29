@@ -22,6 +22,9 @@ const port = parseInt(process.env["RALPHER_PORT"] ?? "3000", 10);
 
 const server = serve<WebSocketData>({
   port,
+  // Increase idle timeout from default 10s to 120s for long-running operations
+  // like git push/pull/fetch that happen over the network
+  idleTimeout: 120,
   routes: {
     // API routes
     ...apiRoutes,

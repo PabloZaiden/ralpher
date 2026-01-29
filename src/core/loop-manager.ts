@@ -638,10 +638,14 @@ Follow the standard loop execution flow:
     }
 
     // Update status to 'deleted' (soft delete - final state)
+    // Also clear reviewMode.addressable so the loop cannot be addressed again
     log.debug(`[LoopManager] deleteLoop: Updating status to deleted for loop ${loopId}`);
     const updatedState = {
       ...loop.state,
       status: "deleted" as const,
+      reviewMode: loop.state.reviewMode
+        ? { ...loop.state.reviewMode, addressable: false }
+        : undefined,
     };
     await updateLoopState(loopId, updatedState);
     log.debug(`[LoopManager] deleteLoop: Status updated to deleted for loop ${loopId}`);
@@ -1053,6 +1057,100 @@ Follow the standard loop execution flow:
     }
 
     return { success: true };
+  }
+
+  /**
+   * Mark a loop as merged (externally merged via PR).
+   * Switches back to the original branch, pulls latest changes, and deletes the working branch.
+   * Used when the loop's branch was merged externally (e.g., via GitHub PR) and the user
+   * wants to sync their local environment.
+   * 
+   * Only works for loops in final states: pushed, merged, completed, max_iterations, deleted.
+   */
+  async markMerged(loopId: string): Promise<{ success: boolean; error?: string }> {
+    // Use getLoop to get the most up-to-date status (in-memory or from persistence)
+    const loop = await this.getLoop(loopId);
+    if (!loop) {
+      return { success: false, error: "Loop not found" };
+    }
+
+    // Only allow for loops in final states
+    const allowedStatuses = ["pushed", "merged", "completed", "max_iterations", "deleted"];
+    if (!allowedStatuses.includes(loop.state.status)) {
+      return { 
+        success: false, 
+        error: `Cannot mark loop as merged in status: ${loop.state.status}. Only finished loops can be marked as merged.` 
+      };
+    }
+
+    // Load from persistence to get the canonical git state
+    // (in-memory state may have stale or different data)
+    // Note: We check persistedLoop first, and only fall back to in-memory state
+    // if persistence load failed completely (loop not in DB yet)
+    const persistedLoop = await loadLoop(loopId);
+    const gitState = persistedLoop ? persistedLoop.state.git : loop.state.git;
+    
+    // Must have git state (branch was created)
+    if (!gitState) {
+      return { success: false, error: "No git branch was created for this loop" };
+    }
+
+    try {
+      // Get the appropriate command executor for the current mode
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const git = GitService.withExecutor(executor);
+
+      // First, reset any uncommitted changes on the working branch
+      await git.resetHard(loop.config.directory);
+
+      // Checkout original branch
+      await git.checkoutBranch(
+        loop.config.directory,
+        gitState.originalBranch
+      );
+
+      // Pull latest changes from remote (this handles failures gracefully)
+      const pullSucceeded = await git.pull(loop.config.directory, gitState.originalBranch);
+      if (pullSucceeded) {
+        log.info(`[LoopManager] markMerged: Pulled latest changes for loop ${loopId}`);
+      } else {
+        log.info(`[LoopManager] markMerged: Pull skipped or failed for loop ${loopId} (non-fatal)`);
+      }
+
+      // Delete the working branch
+      try {
+        await git.deleteBranch(loop.config.directory, gitState.workingBranch);
+        log.debug(`[LoopManager] markMerged: Deleted working branch for loop ${loopId}`);
+      } catch (error) {
+        // Log but don't fail - branch might already be deleted
+        log.warn(`[LoopManager] markMerged: Failed to delete branch: ${String(error)}`);
+      }
+
+      // Update status to 'deleted' (final cleanup state)
+      // Also clear reviewMode.addressable so the loop cannot be addressed again
+      const updatedState = {
+        ...loop.state,
+        status: "deleted" as const,
+        reviewMode: loop.state.reviewMode
+          ? { ...loop.state.reviewMode, addressable: false }
+          : undefined,
+      };
+      await updateLoopState(loopId, updatedState);
+
+      // Remove engine from in-memory map if present
+      this.engines.delete(loopId);
+
+      // Emit deleted event for consistency
+      this.emitter.emit({
+        type: "loop.deleted",
+        loopId,
+        timestamp: createTimestamp(),
+      });
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
   }
 
   /**
