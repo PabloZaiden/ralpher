@@ -276,33 +276,12 @@ describe("LoopManager", () => {
       expect(result.error).toContain("not found");
     });
 
-    test("sets loop status to deleted on success (with mocked git)", async () => {
-      // Create a loop and set it to a final state with mock git state
-      const loop = await manager.createLoop({
-        directory: testWorkDir,
-        prompt: "Test",
-      });
-
-      // Manually update to a final state with git info
-      await updateLoopState(loop.config.id, {
-        ...loop.state,
-        status: "pushed",
-        git: {
-          originalBranch: "main",
-          workingBranch: "ralph/test-branch",
-          commits: [],
-        },
-      });
-
-      // Note: This test will likely fail because git operations would fail
-      // without proper git setup. We test the preconditions here.
-      // Full e2e testing is done in e2e/git-workflow.test.ts
-      
-      // For now, just verify the state was set correctly before marking
-      const updatedLoop = await manager.getLoop(loop.config.id);
-      expect(updatedLoop?.state.status).toBe("pushed");
-      expect(updatedLoop?.state.git?.originalBranch).toBe("main");
-    });
+    // Note: Success case for markMerged requires real git operations and is tested
+    // in e2e/git-workflow.test.ts which verifies:
+    // - Loop status becomes "deleted"
+    // - Working branch is deleted
+    // - Repository switches to original branch
+    // - loop.deleted event is emitted
   });
 
   describe("isRunning", () => {
