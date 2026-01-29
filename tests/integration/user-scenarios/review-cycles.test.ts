@@ -475,6 +475,11 @@ describe("Review Cycle User Scenarios", () => {
     // Clean up any active loops after each test to prevent blocking subsequent tests
     afterEach(async () => {
       const { listLoops, updateLoopState, loadLoop } = await import("../../../src/persistence/loops");
+      const { loopManager } = await import("../../../src/core/loop-manager");
+      
+      // Clear all running engines first to prevent interference with subsequent tests
+      loopManager.resetForTesting();
+      
       const loops = await listLoops();
       const activeStatuses = ["idle", "planning", "starting", "running", "waiting"];
       
