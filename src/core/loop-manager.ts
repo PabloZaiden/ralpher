@@ -638,10 +638,14 @@ Follow the standard loop execution flow:
     }
 
     // Update status to 'deleted' (soft delete - final state)
+    // Also clear reviewMode.addressable so the loop cannot be addressed again
     log.debug(`[LoopManager] deleteLoop: Updating status to deleted for loop ${loopId}`);
     const updatedState = {
       ...loop.state,
       status: "deleted" as const,
+      reviewMode: loop.state.reviewMode
+        ? { ...loop.state.reviewMode, addressable: false }
+        : undefined,
     };
     await updateLoopState(loopId, updatedState);
     log.debug(`[LoopManager] deleteLoop: Status updated to deleted for loop ${loopId}`);
@@ -1123,9 +1127,13 @@ Follow the standard loop execution flow:
       }
 
       // Update status to 'deleted' (final cleanup state)
+      // Also clear reviewMode.addressable so the loop cannot be addressed again
       const updatedState = {
         ...loop.state,
         status: "deleted" as const,
+        reviewMode: loop.state.reviewMode
+          ? { ...loop.state.reviewMode, addressable: false }
+          : undefined,
       };
       await updateLoopState(loopId, updatedState);
 
