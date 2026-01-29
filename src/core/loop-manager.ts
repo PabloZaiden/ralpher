@@ -427,6 +427,10 @@ export class LoopManager {
       throw new Error("Plan is not ready yet. Wait for the AI to finish generating the plan.");
     }
 
+    // Wait for any ongoing planning iteration to complete before proceeding.
+    // This prevents race conditions where we modify state while the iteration is still running.
+    await engine.waitForLoopIdle();
+
     // Store the plan session info before transitioning
     const planSessionId = engine.state.session?.id;
     const planServerUrl = engine.state.session?.serverUrl;
@@ -439,10 +443,12 @@ export class LoopManager {
     }
 
     // Update state to transition from planning to running
-    // Mark plan mode as no longer active but preserve the flag that folder was cleared
+    // Mark plan mode as no longer active but preserve all existing planMode fields
+    // (especially isPlanReady and planContent which may have been set by the planning iteration)
     const updatedState: Partial<LoopState> = {
       status: "running",
       planMode: {
+        ...engine.state.planMode,
         active: false,
         planSessionId,
         planServerUrl,

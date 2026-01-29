@@ -11,6 +11,8 @@ import { serve, type Server } from "bun";
 import { apiRoutes } from "../../src/api";
 import { ensureDataDirectories } from "../../src/persistence/paths";
 import { backendManager } from "../../src/core/backend-manager";
+import { loopManager } from "../../src/core/loop-manager";
+import { closeDatabase } from "../../src/persistence/database";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 import type { LoopBackend } from "../../src/core/loop-engine";
 import type {
@@ -179,8 +181,14 @@ describe("Loops Control API Integration", () => {
     // Stop server
     server.stop();
 
+    // Reset loop manager (stop any running loops)
+    loopManager.resetForTesting();
+
     // Reset backend manager
     backendManager.resetForTesting();
+
+    // Close database before deleting files
+    closeDatabase();
 
     // Cleanup temp directories
     await rm(testDataDir, { recursive: true, force: true });
@@ -245,16 +253,20 @@ describe("Loops Control API Integration", () => {
       expect(response.status).toBe(404);
     });
 
-    test("returns 400 for loop without git branch (plan mode)", async () => {
+    test("returns 400 for loop without git branch (draft mode)", async () => {
+      // Create a draft loop - no git branch is created until the loop is started
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           directory: testWorkDir,
           prompt: "Test prompt",
+          draft: true,
         }),
       });
       const createBody = await createResponse.json();
+      expect(createResponse.status).toBe(201);
+      expect(createBody.config).toBeDefined();
       const loopId = createBody.config.id;
 
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/diff`);
@@ -267,15 +279,30 @@ describe("Loops Control API Integration", () => {
 
   describe("GET /api/loops/:id/plan", () => {
     test("returns plan.md content", async () => {
+      // Create a fresh workdir with .planning to avoid pollution from other tests
+      const planTestDir = await mkdtemp(join(tmpdir(), "ralpher-plan-test-"));
+      await Bun.$`git init ${planTestDir}`.quiet();
+      await Bun.$`git -C ${planTestDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${planTestDir} config user.name "Test User"`.quiet();
+      await writeFile(join(planTestDir, "README.md"), "# Test");
+      await mkdir(join(planTestDir, ".planning"), { recursive: true });
+      await writeFile(join(planTestDir, ".planning/plan.md"), "# Test Plan\n\nThis is a test plan.");
+      await Bun.$`git -C ${planTestDir} add .`.quiet();
+      await Bun.$`git -C ${planTestDir} commit -m "Initial commit"`.quiet();
+
+      // Use draft mode to avoid starting the loop in the background
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          directory: planTestDir,
           prompt: "Test",
+          draft: true,
         }),
       });
+      expect(createResponse.status).toBe(201);
       const createBody = await createResponse.json();
+      expect(createBody.config).toBeDefined();
       const loopId = createBody.config.id;
 
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/plan`);
@@ -284,6 +311,8 @@ describe("Loops Control API Integration", () => {
       const body = await response.json();
       expect(body.exists).toBe(true);
       expect(body.content).toContain("# Test Plan");
+
+      await rm(planTestDir, { recursive: true, force: true });
     });
 
     test("returns 404 for non-existent loop", async () => {
@@ -301,15 +330,19 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${emptyWorkDir} add .`.quiet();
       await Bun.$`git -C ${emptyWorkDir} commit -m "Initial commit"`.quiet();
 
+      // Use draft mode to avoid starting the loop in the background
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           directory: emptyWorkDir,
           prompt: "Test",
+          draft: true,
         }),
       });
+      expect(createResponse.status).toBe(201);
       const createBody = await createResponse.json();
+      expect(createBody.config).toBeDefined();
       const loopId = createBody.config.id;
 
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/plan`);
@@ -325,15 +358,30 @@ describe("Loops Control API Integration", () => {
 
   describe("GET /api/loops/:id/status-file", () => {
     test("returns status.md content", async () => {
+      // Create a fresh workdir with .planning to avoid pollution from other tests
+      const statusTestDir = await mkdtemp(join(tmpdir(), "ralpher-status-test-"));
+      await Bun.$`git init ${statusTestDir}`.quiet();
+      await Bun.$`git -C ${statusTestDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${statusTestDir} config user.name "Test User"`.quiet();
+      await writeFile(join(statusTestDir, "README.md"), "# Test");
+      await mkdir(join(statusTestDir, ".planning"), { recursive: true });
+      await writeFile(join(statusTestDir, ".planning/status.md"), "# Status\n\nIn progress.");
+      await Bun.$`git -C ${statusTestDir} add .`.quiet();
+      await Bun.$`git -C ${statusTestDir} commit -m "Initial commit"`.quiet();
+
+      // Use draft mode to avoid starting the loop in the background
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          directory: statusTestDir,
           prompt: "Test",
+          draft: true,
         }),
       });
+      expect(createResponse.status).toBe(201);
       const createBody = await createResponse.json();
+      expect(createBody.config).toBeDefined();
       const loopId = createBody.config.id;
 
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/status-file`);
@@ -342,6 +390,8 @@ describe("Loops Control API Integration", () => {
       const body = await response.json();
       expect(body.exists).toBe(true);
       expect(body.content).toContain("# Status");
+
+      await rm(statusTestDir, { recursive: true, force: true });
     });
 
     test("returns 404 for non-existent loop", async () => {
