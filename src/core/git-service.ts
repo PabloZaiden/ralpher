@@ -8,6 +8,23 @@ import type { CommandExecutor } from "./command-executor";
 import { log } from "./logger";
 
 /**
+ * Error thrown when the current branch doesn't match the expected branch.
+ * Used for branch safety verification before git operations.
+ */
+export class BranchMismatchError extends Error {
+  readonly code = "BRANCH_MISMATCH";
+  readonly currentBranch: string;
+  readonly expectedBranch: string;
+
+  constructor(currentBranch: string, expectedBranch: string) {
+    super(`Branch mismatch: expected '${expectedBranch}' but on '${currentBranch}'`);
+    this.name = "BranchMismatchError";
+    this.currentBranch = currentBranch;
+    this.expectedBranch = expectedBranch;
+  }
+}
+
+/**
  * Result of a git command execution.
  */
 export interface GitCommandResult {
@@ -15,6 +32,68 @@ export interface GitCommandResult {
   stdout: string;
   stderr: string;
   exitCode: number;
+}
+
+/**
+ * Result of verifying the current branch.
+ */
+export interface BranchVerificationResult {
+  /** Whether the current branch matches the expected branch */
+  matches: boolean;
+  /** The current branch name */
+  currentBranch: string;
+  /** The expected branch name */
+  expectedBranch: string;
+}
+
+/**
+ * Options for ensureBranch() method.
+ */
+export interface EnsureBranchOptions {
+  /** If true, checkout the expected branch if mismatch (default: false) */
+  autoCheckout?: boolean;
+}
+
+/**
+ * Result of ensuring the correct branch.
+ */
+export interface EnsureBranchResult {
+  /** Whether the repo was already on the expected branch */
+  wasOnExpectedBranch: boolean;
+  /** The current branch name (before any checkout) */
+  currentBranch: string;
+  /** The expected branch name */
+  expectedBranch: string;
+  /** True if auto-checkout was performed */
+  checkedOut?: boolean;
+}
+
+/**
+ * Options for commit operation with branch verification.
+ */
+export interface CommitOptions {
+  /** Expected branch to verify before committing. If set and mismatch, will auto-checkout. */
+  expectedBranch?: string;
+}
+
+/**
+ * Options for resetHard operation with branch verification.
+ */
+export interface ResetHardOptions {
+  /**
+   * Expected branch to verify before resetting.
+   * If set and there is a mismatch, resetHard will directly checkout the expected branch
+   * without performing the additional safety checks used by other operations.
+   */
+  expectedBranch?: string;
+}
+
+/**
+ * Options for stash operations with branch verification.
+ */
+export interface StashOptions {
+  /** Expected branch to verify before stashing. If set and mismatch, will auto-checkout. */
+  expectedBranch?: string;
 }
 
 /**
@@ -180,6 +259,91 @@ export class GitService {
   }
 
   /**
+   * Verify that the current branch matches the expected branch.
+   * This is a read-only check that doesn't modify the repository.
+   * 
+   * @param directory - The git repository directory
+   * @param expectedBranch - The expected branch name
+   * @returns BranchVerificationResult with match status and branch names
+   */
+  async verifyBranch(directory: string, expectedBranch: string): Promise<BranchVerificationResult> {
+    const currentBranch = await this.getCurrentBranch(directory);
+    const matches = currentBranch === expectedBranch;
+    
+    if (!matches) {
+      log.trace(`[GitService] Branch verification failed: expected '${expectedBranch}' but on '${currentBranch}'`);
+    } else {
+      log.trace(`[GitService] Branch verification passed: on '${currentBranch}'`);
+    }
+    
+    return {
+      matches,
+      currentBranch,
+      expectedBranch,
+    };
+  }
+
+  /**
+   * Ensure the repository is on the expected branch.
+   * If not on the expected branch:
+   * - With autoCheckout: true, will checkout the expected branch
+   * - With autoCheckout: false (default), will throw BranchMismatchError
+   * 
+   * This method checks for uncommitted changes before attempting checkout
+   * to avoid leaving the repository in a bad state.
+   * 
+   * @param directory - The git repository directory
+   * @param expectedBranch - The expected branch name
+   * @param options - Options for auto-checkout behavior
+   * @returns EnsureBranchResult with verification and checkout status
+   * @throws BranchMismatchError if not on expected branch and autoCheckout is false
+   * @throws Error if checkout fails (e.g., uncommitted changes)
+   */
+  async ensureBranch(
+    directory: string,
+    expectedBranch: string,
+    options: EnsureBranchOptions = {}
+  ): Promise<EnsureBranchResult> {
+    const { autoCheckout = false } = options;
+    
+    const verification = await this.verifyBranch(directory, expectedBranch);
+    
+    if (verification.matches) {
+      return {
+        wasOnExpectedBranch: true,
+        currentBranch: verification.currentBranch,
+        expectedBranch: verification.expectedBranch,
+        checkedOut: false,
+      };
+    }
+    
+    // Branch mismatch - handle based on autoCheckout option
+    if (!autoCheckout) {
+      throw new BranchMismatchError(verification.currentBranch, expectedBranch);
+    }
+    
+    // Auto-checkout requested - check for uncommitted changes first
+    const hasChanges = await this.hasUncommittedChanges(directory);
+    if (hasChanges) {
+      throw new Error(
+        `Cannot auto-checkout to '${expectedBranch}': uncommitted changes exist. ` +
+        `Currently on '${verification.currentBranch}'.`
+      );
+    }
+    
+    // Perform checkout
+    log.info(`[GitService] Auto-checkout: switching from '${verification.currentBranch}' to '${expectedBranch}'`);
+    await this.checkoutBranch(directory, expectedBranch);
+    
+    return {
+      wasOnExpectedBranch: false,
+      currentBranch: verification.currentBranch,
+      expectedBranch,
+      checkedOut: true,
+    };
+  }
+
+  /**
    * Check if there are uncommitted changes (staged or unstaged).
    */
   async hasUncommittedChanges(directory: string): Promise<boolean> {
@@ -283,8 +447,20 @@ export class GitService {
   /**
    * Commit staged changes.
    * Returns the commit SHA.
+   * 
+   * @param directory - The git repository directory
+   * @param message - The commit message
+   * @param options - Optional commit options including branch verification
    */
-  async commit(directory: string, message: string): Promise<CommitInfo> {
+  async commit(directory: string, message: string, options: CommitOptions = {}): Promise<CommitInfo> {
+    // Verify branch if expectedBranch is provided (with auto-checkout)
+    if (options.expectedBranch) {
+      const result = await this.ensureBranch(directory, options.expectedBranch, { autoCheckout: true });
+      if (result.checkedOut) {
+        log.info(`[GitService] commit: Auto-recovered to branch '${options.expectedBranch}' before commit`);
+      }
+    }
+
     // First, stage all changes
     await this.stageAll(directory);
 
@@ -335,8 +511,19 @@ export class GitService {
 
   /**
    * Stash current changes.
+   * 
+   * @param directory - The git repository directory
+   * @param options - Optional stash options including branch verification
    */
-  async stash(directory: string): Promise<void> {
+  async stash(directory: string, options: StashOptions = {}): Promise<void> {
+    // Verify branch if expectedBranch is provided (with auto-checkout)
+    if (options.expectedBranch) {
+      const result = await this.ensureBranch(directory, options.expectedBranch, { autoCheckout: true });
+      if (result.checkedOut) {
+        log.info(`[GitService] stash: Auto-recovered to branch '${options.expectedBranch}' before stash`);
+      }
+    }
+
     const result = await this.runGitCommand(directory, ["stash", "push", "-u"]);
     if (!result.success) {
       throw new Error(`Failed to stash changes: ${result.stderr}`);
@@ -345,8 +532,19 @@ export class GitService {
 
   /**
    * Pop the most recent stash.
+   * 
+   * @param directory - The git repository directory
+   * @param options - Optional stash options including branch verification
    */
-  async stashPop(directory: string): Promise<void> {
+  async stashPop(directory: string, options: StashOptions = {}): Promise<void> {
+    // Verify branch if expectedBranch is provided (with auto-checkout)
+    if (options.expectedBranch) {
+      const result = await this.ensureBranch(directory, options.expectedBranch, { autoCheckout: true });
+      if (result.checkedOut) {
+        log.info(`[GitService] stashPop: Auto-recovered to branch '${options.expectedBranch}' before stash pop`);
+      }
+    }
+
     const result = await this.runGitCommand(directory, ["stash", "pop"]);
     if (!result.success) {
       throw new Error(`Failed to pop stash: ${result.stderr}`);
@@ -356,8 +554,26 @@ export class GitService {
   /**
    * Hard reset to discard all uncommitted changes and untracked files.
    * This is a destructive operation!
+   * 
+   * @param directory - The git repository directory
+   * @param options - Optional reset options including branch verification
    */
-  async resetHard(directory: string): Promise<void> {
+  async resetHard(directory: string, options: ResetHardOptions = {}): Promise<void> {
+    // Verify branch if expectedBranch is provided
+    // Note: For resetHard, we use force checkout (-f) to switch branches even with uncommitted changes.
+    // Since resetHard is meant to discard all changes anyway, force checkout is appropriate.
+    // Regular checkout would fail if tracked files have conflicting uncommitted changes.
+    if (options.expectedBranch) {
+      const verification = await this.verifyBranch(directory, options.expectedBranch);
+      if (!verification.matches) {
+        log.info(`[GitService] resetHard: Force switching from '${verification.currentBranch}' to '${options.expectedBranch}' before reset`);
+        const checkoutResult = await this.runGitCommand(directory, ["checkout", "-f", options.expectedBranch]);
+        if (!checkoutResult.success) {
+          throw new Error(`Failed to force checkout branch ${options.expectedBranch}: ${checkoutResult.stderr}`);
+        }
+      }
+    }
+
     // Reset tracked files
     const resetResult = await this.runGitCommand(directory, ["reset", "--hard"]);
     if (!resetResult.success) {

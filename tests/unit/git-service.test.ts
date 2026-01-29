@@ -6,7 +6,7 @@ import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { GitService } from "../../src/core/git-service";
+import { GitService, BranchMismatchError } from "../../src/core/git-service";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 
 describe("GitService", () => {
@@ -632,6 +632,214 @@ describe("GitService", () => {
       } finally {
         await rm(remoteDir, { recursive: true });
       }
+    });
+  });
+
+  describe("verifyBranch", () => {
+    test("returns matches: true when on expected branch", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+      const result = await git.verifyBranch(testDir, currentBranch);
+      
+      expect(result.matches).toBe(true);
+      expect(result.currentBranch).toBe(currentBranch);
+      expect(result.expectedBranch).toBe(currentBranch);
+    });
+
+    test("returns matches: false when on different branch", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "other-branch");
+      
+      const result = await git.verifyBranch(testDir, originalBranch);
+      
+      expect(result.matches).toBe(false);
+      expect(result.currentBranch).toBe("other-branch");
+      expect(result.expectedBranch).toBe(originalBranch);
+    });
+  });
+
+  describe("ensureBranch", () => {
+    test("returns wasOnExpectedBranch: true when already on expected branch", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+      const result = await git.ensureBranch(testDir, currentBranch);
+      
+      expect(result.wasOnExpectedBranch).toBe(true);
+      expect(result.currentBranch).toBe(currentBranch);
+      expect(result.expectedBranch).toBe(currentBranch);
+      expect(result.checkedOut).toBe(false);
+    });
+
+    test("throws BranchMismatchError when on different branch without autoCheckout", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "other-branch");
+      
+      try {
+        await git.ensureBranch(testDir, originalBranch);
+        expect(true).toBe(false); // Should not reach here
+      } catch (error) {
+        expect(error).toBeInstanceOf(BranchMismatchError);
+        const branchError = error as BranchMismatchError;
+        expect(branchError.code).toBe("BRANCH_MISMATCH");
+        expect(branchError.currentBranch).toBe("other-branch");
+        expect(branchError.expectedBranch).toBe(originalBranch);
+      }
+    });
+
+    test("auto-checkouts to expected branch when autoCheckout is true", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "other-branch");
+      
+      // Should be on other-branch now
+      expect(await git.getCurrentBranch(testDir)).toBe("other-branch");
+      
+      const result = await git.ensureBranch(testDir, originalBranch, { autoCheckout: true });
+      
+      expect(result.wasOnExpectedBranch).toBe(false);
+      expect(result.currentBranch).toBe("other-branch");
+      expect(result.expectedBranch).toBe(originalBranch);
+      expect(result.checkedOut).toBe(true);
+      
+      // Should now be on the original branch
+      expect(await git.getCurrentBranch(testDir)).toBe(originalBranch);
+    });
+
+    test("throws error when autoCheckout fails due to uncommitted changes", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      await git.createBranch(testDir, "other-branch");
+      
+      // Create uncommitted changes
+      await writeFile(join(testDir, "uncommitted.txt"), "uncommitted\n");
+      
+      try {
+        await git.ensureBranch(testDir, originalBranch, { autoCheckout: true });
+        expect(true).toBe(false); // Should not reach here
+      } catch (error) {
+        expect(String(error)).toContain("uncommitted changes exist");
+      }
+    });
+  });
+
+  describe("BranchMismatchError", () => {
+    test("has correct properties", () => {
+      const error = new BranchMismatchError("current-branch", "expected-branch");
+      
+      expect(error.name).toBe("BranchMismatchError");
+      expect(error.code).toBe("BRANCH_MISMATCH");
+      expect(error.currentBranch).toBe("current-branch");
+      expect(error.expectedBranch).toBe("expected-branch");
+      expect(error.message).toBe("Branch mismatch: expected 'expected-branch' but on 'current-branch'");
+    });
+  });
+
+  describe("commit with expectedBranch", () => {
+    test("commits successfully when on expected branch", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+      await writeFile(join(testDir, "new-file.txt"), "new content\n");
+      
+      const commitInfo = await git.commit(testDir, "Test commit", {
+        expectedBranch: currentBranch,
+      });
+      
+      expect(commitInfo.sha).toBeDefined();
+      expect(commitInfo.filesChanged).toBe(1);
+    });
+
+    test("auto-checkouts to expected branch when working tree is clean", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      
+      // Create and switch to another branch
+      await git.createBranch(testDir, "other-branch");
+      
+      // Now we're on other-branch with clean working tree
+      // Verify we can auto-checkout to original (even though no changes to commit)
+      // We'll test ensureBranch directly since commit requires changes
+      const result = await git.ensureBranch(testDir, originalBranch, { autoCheckout: true });
+      
+      expect(result.wasOnExpectedBranch).toBe(false);
+      expect(result.checkedOut).toBe(true);
+      expect(await git.getCurrentBranch(testDir)).toBe(originalBranch);
+    });
+    
+    test("fails to auto-recover when uncommitted changes exist on wrong branch", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      
+      // Create and switch to another branch
+      await git.createBranch(testDir, "other-branch-2");
+      
+      // Create uncommitted changes on the wrong branch
+      await writeFile(join(testDir, "uncommitted.txt"), "uncommitted content\n");
+      
+      // Try to commit with expectedBranch pointing to original - should fail
+      await expect(
+        git.commit(testDir, "Test commit", { expectedBranch: originalBranch })
+      ).rejects.toThrow(/Cannot auto-checkout.*uncommitted changes exist/);
+      
+      // Verify we're still on the wrong branch
+      expect(await git.getCurrentBranch(testDir)).toBe("other-branch-2");
+    });
+  });
+
+  describe("resetHard with expectedBranch", () => {
+    test("resets successfully when on expected branch", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+      await writeFile(join(testDir, "new-file.txt"), "new content\n");
+      
+      await git.resetHard(testDir, { expectedBranch: currentBranch });
+      
+      const hasChanges = await git.hasUncommittedChanges(testDir);
+      expect(hasChanges).toBe(false);
+    });
+
+    test("switches to expected branch before reset when on wrong branch", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      
+      // Create another branch with a file
+      await git.createBranch(testDir, "other-branch");
+      await writeFile(join(testDir, "other-file.txt"), "other content\n");
+      await git.commit(testDir, "Other commit");
+      
+      // Create uncommitted changes
+      await writeFile(join(testDir, "uncommitted.txt"), "uncommitted\n");
+      
+      // Reset with expectedBranch pointing to original
+      // This should switch to original branch (discarding changes) then reset
+      await git.resetHard(testDir, { expectedBranch: originalBranch });
+      
+      // Should now be on original branch with clean state
+      expect(await git.getCurrentBranch(testDir)).toBe(originalBranch);
+      const hasChanges = await git.hasUncommittedChanges(testDir);
+      expect(hasChanges).toBe(false);
+    });
+
+    test("handles conflicting tracked file changes when switching branches", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      
+      // Create a tracked file on original branch
+      await writeFile(join(testDir, "shared-file.txt"), "original content\n");
+      await git.commit(testDir, "Add shared file");
+      
+      // Create another branch and modify the tracked file
+      await git.createBranch(testDir, "feature-branch");
+      await writeFile(join(testDir, "shared-file.txt"), "feature content\n");
+      await git.commit(testDir, "Modify shared file on feature branch");
+      
+      // Now modify the same tracked file WITHOUT committing
+      // This creates a scenario where regular git checkout would fail
+      await writeFile(join(testDir, "shared-file.txt"), "uncommitted changes that conflict\n");
+      
+      // Verify we have uncommitted changes to a tracked file
+      expect(await git.hasUncommittedChanges(testDir)).toBe(true);
+      
+      // Reset with expectedBranch pointing to original - this previously would fail
+      // because regular checkout fails when tracked files have conflicting changes
+      await git.resetHard(testDir, { expectedBranch: originalBranch });
+      
+      // Should now be on original branch with clean state
+      expect(await git.getCurrentBranch(testDir)).toBe(originalBranch);
+      expect(await git.hasUncommittedChanges(testDir)).toBe(false);
+      
+      // Verify the file contains the original branch content
+      const content = await Bun.file(join(testDir, "shared-file.txt")).text();
+      expect(content).toBe("original content\n");
     });
   });
 });

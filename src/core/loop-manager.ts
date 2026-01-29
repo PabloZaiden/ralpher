@@ -970,7 +970,9 @@ Follow the standard loop execution flow:
       const git = GitService.withExecutor(executor);
 
       // First, reset any uncommitted changes on the working branch
-      await git.resetHard(loop.config.directory);
+      await git.resetHard(loop.config.directory, {
+        expectedBranch: loop.state.git.workingBranch,
+      });
 
       // Checkout original branch
       await git.checkoutBranch(
@@ -979,7 +981,9 @@ Follow the standard loop execution flow:
       );
 
       // Reset original branch to clean state too (in case of any issues)
-      await git.resetHard(loop.config.directory);
+      await git.resetHard(loop.config.directory, {
+        expectedBranch: loop.state.git.originalBranch,
+      });
 
       // Delete the working branch
       await git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
@@ -1101,7 +1105,9 @@ Follow the standard loop execution flow:
       const git = GitService.withExecutor(executor);
 
       // First, reset any uncommitted changes on the working branch
-      await git.resetHard(loop.config.directory);
+      await git.resetHard(loop.config.directory, {
+        expectedBranch: gitState.workingBranch,
+      });
 
       // Checkout original branch
       await git.checkoutBranch(
