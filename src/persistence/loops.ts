@@ -334,6 +334,50 @@ export async function loopExists(loopId: string): Promise<boolean> {
 }
 
 /**
+ * Active loop statuses that should block new loops on the same directory.
+ * These are non-terminal, non-draft states where the loop is actively
+ * using or about to use the working directory.
+ */
+const ACTIVE_LOOP_STATUSES = [
+  "idle",      // Created but not started (transitional)
+  "planning",  // Loop is in plan creation/review mode
+  "starting",  // Initializing backend connection and git branch
+  "running",   // Actively executing an iteration
+  "waiting",   // Between iterations, preparing for next
+];
+
+/**
+ * Get an active (non-draft, non-terminal) loop for a specific directory.
+ * 
+ * Active loops are those in states: idle, planning, starting, running, waiting.
+ * Draft and terminal states (completed, stopped, failed, max_iterations, merged, pushed, deleted)
+ * are not considered active.
+ * 
+ * @param directory - The absolute path to the working directory
+ * @returns The active loop if one exists, null otherwise
+ */
+export async function getActiveLoopByDirectory(directory: string): Promise<Loop | null> {
+  const db = getDatabase();
+  
+  // Build placeholders for the IN clause
+  const placeholders = ACTIVE_LOOP_STATUSES.map(() => "?").join(", ");
+  
+  const stmt = db.prepare(`
+    SELECT * FROM loops 
+    WHERE directory = ? AND status IN (${placeholders})
+    LIMIT 1
+  `);
+  
+  const row = stmt.get(directory, ...ACTIVE_LOOP_STATUSES) as Record<string, unknown> | null;
+  
+  if (!row) {
+    return null;
+  }
+  
+  return rowToLoop(row);
+}
+
+/**
  * Update only the state portion of a loop.
  * Uses a transaction to ensure atomicity of SELECT + UPDATE.
  */

@@ -3,7 +3,7 @@
  * Tests use actual HTTP requests to a test server.
  */
 
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { test, expect, describe, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -198,6 +198,34 @@ describe("Loops Control API Integration", () => {
     // Clear env
     delete process.env["RALPHER_DATA_DIR"];
   });
+
+  // Clean up any active loops before and after each test to prevent blocking
+  const cleanupActiveLoops = async () => {
+    const { listLoops, updateLoopState, loadLoop } = await import("../../src/persistence/loops");
+    
+    // Clear all running engines first
+    loopManager.resetForTesting();
+    
+    const loops = await listLoops();
+    const activeStatuses = ["idle", "planning", "starting", "running", "waiting"];
+    
+    for (const loop of loops) {
+      if (activeStatuses.includes(loop.state.status)) {
+        // Load full loop to get current state
+        const fullLoop = await loadLoop(loop.config.id);
+        if (fullLoop) {
+          // Mark as deleted to make it a terminal state
+          await updateLoopState(loop.config.id, {
+            ...fullLoop.state,
+            status: "deleted",
+          });
+        }
+      }
+    }
+  };
+
+  beforeEach(cleanupActiveLoops);
+  afterEach(cleanupActiveLoops);
 
   describe("POST /api/loops/:id/accept", () => {
     // Note: Loops are auto-started on creation by default, but they can still
@@ -402,104 +430,156 @@ describe("Loops Control API Integration", () => {
 
   describe("Pending Prompt API", () => {
     test("PUT /api/loops/:id/pending-prompt returns 409 when loop is not running", async () => {
-      // Create a loop - it will auto-start and complete immediately with mock backend
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Test prompt",
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
+      // Use unique directory to avoid conflicts
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-pending-prompt-test-"));
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+      
+      try {
+        // Create a loop - it will auto-start and complete immediately with mock backend
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Test prompt",
+          }),
+        });
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
 
-      // Wait for the loop to complete
-      await waitForLoopCompletion(loopId);
+        // Wait for the loop to complete
+        await waitForLoopCompletion(loopId);
 
-      // Try to set pending prompt on completed loop
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: "New prompt" }),
-      });
+        // Try to set pending prompt on completed loop
+        const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: "New prompt" }),
+        });
 
-      expect(response.status).toBe(409);
-      const body = await response.json();
-      expect(body.error).toBe("not_running");
+        expect(response.status).toBe(409);
+        const body = await response.json();
+        expect(body.error).toBe("not_running");
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+      }
     });
 
     test("PUT /api/loops/:id/pending-prompt requires prompt in body", async () => {
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Test prompt",
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
+      // Use unique directory to avoid conflicts
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-pending-body-test-"));
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+      
+      try {
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Test prompt",
+          }),
+        });
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
 
-      // Try without prompt
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
+        // Try without prompt
+        const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
 
-      expect(response.status).toBe(400);
-      const body = await response.json();
-      expect(body.error).toBe("invalid_body");
+        expect(response.status).toBe(400);
+        const body = await response.json();
+        expect(body.error).toBe("invalid_body");
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+      }
     });
 
     test("PUT /api/loops/:id/pending-prompt rejects empty prompt", async () => {
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Test prompt",
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
+      // Use unique directory to avoid conflicts
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-pending-empty-test-"));
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+      
+      try {
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Test prompt",
+          }),
+        });
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
 
-      // Try with empty prompt
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: "   " }),
-      });
+        // Try with empty prompt
+        const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt: "   " }),
+        });
 
-      expect(response.status).toBe(400);
-      const body = await response.json();
-      expect(body.error).toBe("validation_error");
+        expect(response.status).toBe(400);
+        const body = await response.json();
+        expect(body.error).toBe("validation_error");
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+      }
     });
 
     test("DELETE /api/loops/:id/pending-prompt returns 409 when loop is not running", async () => {
-      // Create a loop - it will auto-start and complete immediately with mock backend
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Test prompt",
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
+      // Use unique directory to avoid conflicts
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-pending-del-test-"));
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+      
+      try {
+        // Create a loop - it will auto-start and complete immediately with mock backend
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Test prompt",
+          }),
+        });
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
 
-      // Wait for the loop to complete
-      await waitForLoopCompletion(loopId);
+        // Wait for the loop to complete
+        await waitForLoopCompletion(loopId);
 
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
-        method: "DELETE",
-      });
+        const response = await fetch(`${baseUrl}/api/loops/${loopId}/pending-prompt`, {
+          method: "DELETE",
+        });
 
-      expect(response.status).toBe(409);
-      const body = await response.json();
-      expect(body.error).toBe("not_running");
+        expect(response.status).toBe(409);
+        const body = await response.json();
+        expect(body.error).toBe("not_running");
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+      }
     });
 
     test("PUT /api/loops/:id/pending-prompt returns 404 for non-existent loop", async () => {
@@ -521,23 +601,36 @@ describe("Loops Control API Integration", () => {
 
   describe("Review Comments API", () => {
     test("GET /api/loops/:id/comments returns empty array for new loop", async () => {
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Test prompt",
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
+      // Use unique directory to avoid conflicts
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-empty-test-"));
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+      
+      try {
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Test prompt",
+          }),
+        });
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
 
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
+        const response = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
 
-      expect(response.status).toBe(200);
-      const body = await response.json();
-      expect(body.success).toBe(true);
-      expect(body.comments).toEqual([]);
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body.success).toBe(true);
+        expect(body.comments).toEqual([]);
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+      }
     });
 
     test("GET /api/loops/:id/comments returns 404 for non-existent loop", async () => {
@@ -546,86 +639,116 @@ describe("Loops Control API Integration", () => {
     });
 
     test("POST /api/loops/:id/address-comments stores and returns comment IDs", async () => {
-      // Create a loop
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Test prompt",
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
+      // Use unique directory with bare repo to avoid conflicts
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-store-test-"));
+      const uniqueBareRepo = await mkdtemp(join(tmpdir(), "ralpher-comments-store-bare-"));
+      await Bun.$`git init --bare ${uniqueBareRepo}`.quiet();
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} remote add origin ${uniqueBareRepo}`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+      
+      try {
+        // Create a loop
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Test prompt",
+          }),
+        });
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
 
-      // Wait for loop to complete
-      await waitForLoopCompletion(loopId);
+        // Wait for loop to complete
+        await waitForLoopCompletion(loopId);
 
-      // Push the loop to enable review mode
-      const pushResponse = await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
-      if (pushResponse.status !== 200) {
-        const pushBody = await pushResponse.json();
-        const loopResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
-        const loopData = await loopResponse.json();
-        throw new Error(`Push failed with status ${pushResponse.status}: ${JSON.stringify(pushBody)}. Loop state: ${JSON.stringify(loopData.state)}`);
+        // Push the loop to enable review mode
+        const pushResponse = await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
+        if (pushResponse.status !== 200) {
+          const pushBody = await pushResponse.json();
+          const loopResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+          const loopData = await loopResponse.json();
+          throw new Error(`Push failed with status ${pushResponse.status}: ${JSON.stringify(pushBody)}. Loop state: ${JSON.stringify(loopData.state)}`);
+        }
+        expect(pushResponse.status).toBe(200);
+
+        // Submit comments
+        const commentsText = "Please add error handling\nImprove test coverage";
+        const addressResponse = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comments: commentsText }),
+        });
+
+        if (addressResponse.status !== 200) {
+          const errorBody = await addressResponse.json();
+          throw new Error(`Address comments failed: ${JSON.stringify(errorBody)}`);
+        }
+        expect(addressResponse.status).toBe(200);
+        const addressBody = await addressResponse.json();
+        expect(addressBody.success).toBe(true);
+        expect(addressBody.commentIds).toBeInstanceOf(Array);
+        expect(addressBody.commentIds.length).toBeGreaterThan(0);
+
+        // Verify comments are stored
+        const commentsResponse = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
+        expect(commentsResponse.status).toBe(200);
+        const commentsBody = await commentsResponse.json();
+        expect(commentsBody.success).toBe(true);
+        expect(commentsBody.comments).toBeInstanceOf(Array);
+        expect(commentsBody.comments.length).toBeGreaterThan(0);
+        expect(commentsBody.comments[0].status).toBe("pending");
+        expect(commentsBody.comments[0].reviewCycle).toBe(1);
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+        await rm(uniqueBareRepo, { recursive: true, force: true });
       }
-      expect(pushResponse.status).toBe(200);
-
-      // Submit comments
-      const commentsText = "Please add error handling\nImprove test coverage";
-      const addressResponse = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comments: commentsText }),
-      });
-
-      if (addressResponse.status !== 200) {
-        const errorBody = await addressResponse.json();
-        throw new Error(`Address comments failed: ${JSON.stringify(errorBody)}`);
-      }
-      expect(addressResponse.status).toBe(200);
-      const addressBody = await addressResponse.json();
-      expect(addressBody.success).toBe(true);
-      expect(addressBody.commentIds).toBeInstanceOf(Array);
-      expect(addressBody.commentIds.length).toBeGreaterThan(0);
-
-      // Verify comments are stored
-      const commentsResponse = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
-      expect(commentsResponse.status).toBe(200);
-      const commentsBody = await commentsResponse.json();
-      expect(commentsBody.success).toBe(true);
-      expect(commentsBody.comments).toBeInstanceOf(Array);
-      expect(commentsBody.comments.length).toBeGreaterThan(0);
-      expect(commentsBody.comments[0].status).toBe("pending");
-      expect(commentsBody.comments[0].reviewCycle).toBe(1);
     });
 
     test("POST /api/loops/:id/address-comments returns 400 for loop not in review mode", async () => {
-      // Create a loop without review mode
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Test prompt",
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
+      // Use unique directory to avoid conflicts
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-notreview-test-"));
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+      
+      try {
+        // Create a loop without review mode
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Test prompt",
+          }),
+        });
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
 
-      // Wait for loop to complete
-      await waitForLoopCompletion(loopId);
+        // Wait for loop to complete
+        await waitForLoopCompletion(loopId);
 
-      // Try to address comments without enabling review mode (no push)
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comments: "Some comment" }),
-      });
+        // Try to address comments without enabling review mode (no push)
+        const response = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comments: "Some comment" }),
+        });
 
-      expect(response.status).toBe(400);
-      const body = await response.json();
-      expect(body.error).toContain("not addressable");
+        expect(response.status).toBe(400);
+        const body = await response.json();
+        expect(body.error).toContain("not addressable");
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+      }
     });
 
     test("POST /api/loops/:id/address-comments returns 404 for non-existent loop", async () => {
@@ -638,78 +761,112 @@ describe("Loops Control API Integration", () => {
     });
 
     test("GET /api/loops/:id/comments returns comments in correct order", async () => {
-      // Create a loop
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Test prompt",
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
-
-      // Wait for completion and push
-      await waitForLoopCompletion(loopId);
-      const pushResponse = await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
-      expect(pushResponse.status).toBe(200);
-
-      // Add comments
-      const addressResponse = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comments: "First comment" }),
-      });
-      expect(addressResponse.status).toBe(200);
-
-      // Get comments - should be ordered correctly
-      const response = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
-      expect(response.status).toBe(200);
-      const body = await response.json();
-
-      // Should have at least one comment
-      expect(body.comments.length).toBeGreaterThan(0);
+      // Use unique directory with bare repo to avoid conflicts
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-order-test-"));
+      const uniqueBareRepo = await mkdtemp(join(tmpdir(), "ralpher-comments-order-bare-"));
+      await Bun.$`git init --bare ${uniqueBareRepo}`.quiet();
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} remote add origin ${uniqueBareRepo}`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
-      // First comment should be from cycle 1
-      expect(body.comments[0].reviewCycle).toBe(1);
+      try {
+        // Create a loop
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Test prompt",
+          }),
+        });
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
+
+        // Wait for completion and push
+        await waitForLoopCompletion(loopId);
+        const pushResponse = await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
+        expect(pushResponse.status).toBe(200);
+
+        // Add comments
+        const addressResponse = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comments: "First comment" }),
+        });
+        expect(addressResponse.status).toBe(200);
+
+        // Get comments - should be ordered correctly
+        const response = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
+        expect(response.status).toBe(200);
+        const body = await response.json();
+
+        // Should have at least one comment
+        expect(body.comments.length).toBeGreaterThan(0);
+        
+        // First comment should be from cycle 1
+        expect(body.comments[0].reviewCycle).toBe(1);
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+        await rm(uniqueBareRepo, { recursive: true, force: true });
+      }
     });
 
     test("Comments are stored with pending status initially", async () => {
-      // Create a loop
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Test prompt",
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
+      // Use unique directory with bare repo to avoid conflicts
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-pending-test-"));
+      const uniqueBareRepo = await mkdtemp(join(tmpdir(), "ralpher-comments-pending-bare-"));
+      await Bun.$`git init --bare ${uniqueBareRepo}`.quiet();
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} remote add origin ${uniqueBareRepo}`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+      
+      try {
+        // Create a loop
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Test prompt",
+          }),
+        });
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
 
-      // Wait for first completion
-      await waitForLoopCompletion(loopId);
+        // Wait for first completion
+        await waitForLoopCompletion(loopId);
 
-      // Push the loop
-      const pushResponse = await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
-      expect(pushResponse.status).toBe(200);
+        // Push the loop
+        const pushResponse = await fetch(`${baseUrl}/api/loops/${loopId}/push`, { method: "POST" });
+        expect(pushResponse.status).toBe(200);
 
-      // Add comments
-      const addressResponse = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comments: "Test comment" }),
-      });
-      expect(addressResponse.status).toBe(200);
+        // Add comments
+        const addressResponse = await fetch(`${baseUrl}/api/loops/${loopId}/address-comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ comments: "Test comment" }),
+        });
+        expect(addressResponse.status).toBe(200);
 
-      // Get comments - should be pending
-      const commentsResponse = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
-      const commentsBody = await commentsResponse.json();
-      expect(commentsBody.success).toBe(true);
-      expect(commentsBody.comments.length).toBeGreaterThan(0);
-      expect(commentsBody.comments[0].status).toBe("pending");
-      expect(commentsBody.comments[0].addressedAt).toBeUndefined();
+        // Get comments - should be pending
+        const commentsResponse = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
+        const commentsBody = await commentsResponse.json();
+        expect(commentsBody.success).toBe(true);
+        expect(commentsBody.comments.length).toBeGreaterThan(0);
+        expect(commentsBody.comments[0].status).toBe("pending");
+        expect(commentsBody.comments[0].addressedAt).toBeUndefined();
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+        await rm(uniqueBareRepo, { recursive: true, force: true });
+      }
     });
   });
 });

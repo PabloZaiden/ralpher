@@ -3,7 +3,7 @@
  * Tests HTTP requests to plan mode API endpoints.
  */
 
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { test, expect, describe, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -245,6 +245,35 @@ describe("Plan Mode API Integration", () => {
     await rm(testDataDir, { recursive: true });
     await rm(testWorkDir, { recursive: true });
   });
+
+  // Clean up any active loops before and after each test to prevent blocking
+  const cleanupActiveLoops = async () => {
+    const { listLoops, updateLoopState, loadLoop } = await import("../../src/persistence/loops");
+    const { loopManager } = await import("../../src/core/loop-manager");
+    
+    // Clear all running engines first
+    loopManager.resetForTesting();
+    
+    const loops = await listLoops();
+    const activeStatuses = ["idle", "planning", "starting", "running", "waiting"];
+    
+    for (const loop of loops) {
+      if (activeStatuses.includes(loop.state.status)) {
+        // Load full loop to get current state
+        const fullLoop = await loadLoop(loop.config.id);
+        if (fullLoop) {
+          // Mark as deleted to make it a terminal state
+          await updateLoopState(loop.config.id, {
+            ...fullLoop.state,
+            status: "deleted",
+          });
+        }
+      }
+    }
+  };
+
+  beforeEach(cleanupActiveLoops);
+  afterEach(cleanupActiveLoops);
 
   describe("POST /api/loops (plan mode)", () => {
     // Helper to commit any changes after tests

@@ -340,4 +340,81 @@ describe("LoopManager", () => {
       expect(fetched!.config.clearPlanningFolder).toBe(true);
     });
   });
+
+  describe("active loop validation", () => {
+    test("creates draft loops without active loop check", async () => {
+      // First create a running loop (simulate by setting status manually)
+      const runningLoop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Running task",
+      });
+
+      // Update status to running
+      await updateLoopState(runningLoop.config.id, {
+        ...runningLoop.state,
+        status: "running",
+      });
+
+      // Draft loops should not be blocked by existing active loops
+      const draftLoop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Draft task",
+        draft: true,
+      });
+
+      expect(draftLoop.config.id).toBeDefined();
+      expect(draftLoop.state.status).toBe("draft");
+    });
+
+    test("draft loops do not block other loops from being created", async () => {
+      // Create a draft loop first
+      const draftLoop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Draft task",
+        draft: true,
+      });
+
+      expect(draftLoop.state.status).toBe("draft");
+
+      // Create another loop - should work since draft doesn't block
+      const normalLoop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Normal task",
+      });
+
+      // Normal loop should be created
+      expect(normalLoop.config.id).toBeDefined();
+      expect(normalLoop.state.status).toBe("idle");
+    });
+
+    test("terminal state loops do not block new loops", async () => {
+      const terminalStatuses = ["completed", "stopped", "failed", "max_iterations", "merged", "pushed", "deleted"] as const;
+
+      for (const status of terminalStatuses) {
+        // Create a loop and set it to terminal state
+        const terminalLoop = await manager.createLoop({
+          directory: testWorkDir,
+          prompt: `Terminal ${status} task`,
+        });
+
+        await updateLoopState(terminalLoop.config.id, {
+          ...terminalLoop.state,
+          status: status,
+        });
+
+        // Verify the status was set
+        const verifyLoop = await manager.getLoop(terminalLoop.config.id);
+        expect(verifyLoop?.state.status).toBe(status);
+      }
+
+      // Creating a new loop should still work since all are terminal
+      const newLoop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "New task after terminals",
+      });
+
+      expect(newLoop.config.id).toBeDefined();
+      expect(newLoop.state.status).toBe("idle");
+    });
+  });
 });

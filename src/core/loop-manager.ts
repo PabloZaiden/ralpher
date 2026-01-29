@@ -18,6 +18,7 @@ import {
   deleteLoop as deleteLoopFile,
   listLoops,
   updateLoopState,
+  getActiveLoopByDirectory,
 } from "../persistence/loops";
 import { insertReviewComment } from "../persistence/database";
 import { backendManager } from "./backend-manager";
@@ -227,6 +228,24 @@ export class LoopManager {
     // Check if already has an engine running
     if (this.engines.has(loopId)) {
       throw new Error("Loop plan mode is already running");
+    }
+
+    // Check if another active loop exists for the same directory
+    const existingActiveLoop = await getActiveLoopByDirectory(loop.config.directory);
+    if (existingActiveLoop && existingActiveLoop.config.id !== loopId) {
+      const error = new Error(
+        `Another loop is already active for this directory: "${existingActiveLoop.config.name}". ` +
+        `Please stop or complete the existing loop before starting a new one.`
+      ) as Error & {
+        code: string;
+        conflictingLoop: { id: string; name: string };
+      };
+      error.code = "ACTIVE_LOOP_EXISTS";
+      error.conflictingLoop = {
+        id: existingActiveLoop.config.id,
+        name: existingActiveLoop.config.name,
+      };
+      throw error;
     }
 
     // Get the appropriate command executor
@@ -672,6 +691,24 @@ Follow the standard loop execution flow:
     // Check if already running
     if (this.engines.has(loopId)) {
       throw new Error("Loop is already running");
+    }
+
+    // Check if another active loop exists for the same directory
+    const existingActiveLoop = await getActiveLoopByDirectory(loop.config.directory);
+    if (existingActiveLoop && existingActiveLoop.config.id !== loopId) {
+      const error = new Error(
+        `Another loop is already active for this directory: "${existingActiveLoop.config.name}". ` +
+        `Please stop or complete the existing loop before starting a new one.`
+      ) as Error & {
+        code: string;
+        conflictingLoop: { id: string; name: string };
+      };
+      error.code = "ACTIVE_LOOP_EXISTS";
+      error.conflictingLoop = {
+        id: existingActiveLoop.config.id,
+        name: existingActiveLoop.config.name,
+      };
+      throw error;
     }
 
     // Get the appropriate command executor for the current mode

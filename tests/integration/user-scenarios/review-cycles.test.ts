@@ -3,7 +3,7 @@
  * Tests the ability to address reviewer comments after push/merge.
  */
 
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { test, expect, describe, beforeAll, afterAll, afterEach } from "bun:test";
 import {
   setupTestServer,
   teardownTestServer,
@@ -470,6 +470,27 @@ describe("Review Cycle User Scenarios", () => {
 
     afterAll(async () => {
       await teardownTestServer(ctx);
+    });
+
+    // Clean up any active loops after each test to prevent blocking subsequent tests
+    afterEach(async () => {
+      const { listLoops, updateLoopState, loadLoop } = await import("../../../src/persistence/loops");
+      const loops = await listLoops();
+      const activeStatuses = ["idle", "planning", "starting", "running", "waiting"];
+      
+      for (const loop of loops) {
+        if (activeStatuses.includes(loop.state.status)) {
+          // Load full loop to get current state
+          const fullLoop = await loadLoop(loop.config.id);
+          if (fullLoop) {
+            // Mark as deleted to make it a terminal state
+            await updateLoopState(loop.config.id, {
+              ...fullLoop.state,
+              status: "deleted",
+            });
+          }
+        }
+      }
     });
 
     test("cannot address comments on non-addressable loop", async () => {

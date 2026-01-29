@@ -3,7 +3,7 @@
  * Tests the complete user journey: create draft -> edit -> edit -> start loop
  */
 
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { test, expect, describe, beforeAll, afterAll, afterEach, beforeEach } from "bun:test";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -171,6 +171,35 @@ describe("Draft Loop E2E Workflow", () => {
     // Clear env
     delete process.env["RALPHER_DATA_DIR"];
   });
+
+  // Clean up any active loops before and after each test to prevent blocking
+  const cleanupActiveLoops = async () => {
+    const { listLoops, updateLoopState, loadLoop } = await import("../../src/persistence/loops");
+    const { loopManager } = await import("../../src/core/loop-manager");
+    
+    // Clear all running engines first
+    loopManager.resetForTesting();
+    
+    const loops = await listLoops();
+    const activeStatuses = ["idle", "planning", "starting", "running", "waiting"];
+    
+    for (const loop of loops) {
+      if (activeStatuses.includes(loop.state.status)) {
+        // Load full loop to get current state
+        const fullLoop = await loadLoop(loop.config.id);
+        if (fullLoop) {
+          // Mark as deleted to make it a terminal state
+          await updateLoopState(loop.config.id, {
+            ...fullLoop.state,
+            status: "deleted",
+          });
+        }
+      }
+    }
+  };
+
+  beforeEach(cleanupActiveLoops);
+  afterEach(cleanupActiveLoops);
 
   test("create draft -> edit -> edit -> start loop (immediate execution)", async () => {
     // Step 1: Create draft
@@ -345,37 +374,53 @@ describe("Draft Loop E2E Workflow", () => {
   });
 
   test("create draft -> do not edit -> start immediately", async () => {
-    // Step 1: Create draft
-    const createResponse = await fetch(`${baseUrl}/api/loops`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        directory: testWorkDir,
-        prompt: "Quick task",
-        draft: true,
-      }),
-    });
+    // Use a unique directory for this test to avoid conflicts with other tests
+    const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-draft-e2e-quick-"));
+    await Bun.$`git init ${uniqueWorkDir}`.quiet();
+    await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+    await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+    await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+    await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+    await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+    
+    try {
+      // Step 1: Create draft
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          directory: uniqueWorkDir,
+          prompt: "Quick task",
+          draft: true,
+        }),
+      });
 
-    expect(createResponse.status).toBe(201);
-    const createBody = await createResponse.json();
-    const loopId = createBody.config.id;
+      expect(createResponse.status).toBe(201);
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
 
-    // Verify draft status
-    expect(createBody.state.status).toBe("draft");
+      // Verify draft status
+      expect(createBody.state.status).toBe("draft");
 
-    // Step 2: Start immediately without editing
-    const startResponse = await fetch(`${baseUrl}/api/loops/${loopId}/draft/start`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planMode: false }),
-    });
+      // Step 2: Start immediately without editing
+      const startResponse = await fetch(`${baseUrl}/api/loops/${loopId}/draft/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planMode: false }),
+      });
 
-    expect(startResponse.status).toBe(200);
-    const startBody = await startResponse.json();
-    expect(startBody.state.status).not.toBe("draft");
+      expect(startResponse.status).toBe(200);
+      const startBody = await startResponse.json();
+      expect(startBody.state.status).not.toBe("draft");
 
-    // Verify configuration unchanged
-    expect(startBody.config.prompt).toBe("Quick task");
+      // Verify configuration unchanged
+      expect(startBody.config.prompt).toBe("Quick task");
+      
+      // Wait for completion to avoid affecting other tests
+      await waitForLoopStatus(loopId, ["completed", "error", "stopped"], 30000);
+    } finally {
+      await rm(uniqueWorkDir, { recursive: true, force: true });
+    }
   });
 
   test("cannot start non-draft loop via draft/start endpoint", async () => {
