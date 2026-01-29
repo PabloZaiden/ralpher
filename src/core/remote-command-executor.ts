@@ -133,7 +133,9 @@ export class CommandExecutorImpl implements CommandExecutor {
    */
   private async execViaPty(command: string, args: string[], options?: CommandOptions): Promise<CommandResult> {
     const cwd = options?.cwd ?? this.directory;
-    const timeout = options?.timeout ?? 30000;
+    // Use 120s (120000ms) default timeout to allow for slow network operations
+    // like git push/pull/fetch. This matches the HTTP server idleTimeout setting.
+    const timeout = options?.timeout ?? 120000;
     let ptyId: string | null = null;
 
     try {
