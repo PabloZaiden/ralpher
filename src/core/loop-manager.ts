@@ -280,6 +280,20 @@ export class LoopManager {
       }
     }
 
+    // Always clear plan.md when starting plan mode, regardless of clearPlanningFolder setting.
+    // This ensures the UI doesn't display stale plan content from a previous session while
+    // the AI is generating a new plan. The old plan is always irrelevant in a fresh plan session.
+    const planFilePath = `${loop.config.directory}/.planning/plan.md`;
+    try {
+      const planFileExists = await executor.fileExists(planFilePath);
+      if (planFileExists) {
+        await executor.exec("rm", ["-f", planFilePath], { cwd: loop.config.directory });
+        log.debug("Cleared stale plan.md file before starting plan mode");
+      }
+    } catch (error) {
+      log.warn(`Failed to clear plan.md: ${String(error)}`);
+    }
+
     // Get backend from global manager
     const backend = backendManager.getBackend();
 
