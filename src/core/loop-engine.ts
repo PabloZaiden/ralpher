@@ -442,7 +442,8 @@ export class LoopEngine {
         try {
           const commitInfo = await this.git.commit(
             this.config.directory,
-            `${this.config.git.commitPrefix} Clear .planning folder for fresh start`
+            `${this.config.git.commitPrefix} Clear .planning folder for fresh start`,
+            { expectedBranch: this.loop.state.git?.workingBranch }
           );
           this.emitLog("info", `Committed .planning folder cleanup`, {
             sha: commitInfo.sha.slice(0, 8),
@@ -1473,7 +1474,9 @@ When the updated plan is ready, end your response with:
 
     try {
       this.emitLog("info", "Committing changes...");
-      const commitInfo = await this.git.commit(directory, message);
+      const commitInfo = await this.git.commit(directory, message, {
+        expectedBranch: this.loop.state.git?.workingBranch,
+      });
 
       const commit: GitCommit = {
         iteration,
