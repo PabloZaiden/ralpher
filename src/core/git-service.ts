@@ -556,13 +556,17 @@ export class GitService {
    */
   async resetHard(directory: string, options: ResetHardOptions = {}): Promise<void> {
     // Verify branch if expectedBranch is provided
-    // Note: For resetHard, we check but can't auto-checkout because there are uncommitted changes
-    // (that's why we're resetting). So we just checkout directly if needed.
+    // Note: For resetHard, we use force checkout (-f) to switch branches even with uncommitted changes.
+    // Since resetHard is meant to discard all changes anyway, force checkout is appropriate.
+    // Regular checkout would fail if tracked files have conflicting uncommitted changes.
     if (options.expectedBranch) {
       const verification = await this.verifyBranch(directory, options.expectedBranch);
       if (!verification.matches) {
-        log.info(`[GitService] resetHard: Switching from '${verification.currentBranch}' to '${options.expectedBranch}' before reset`);
-        await this.checkoutBranch(directory, options.expectedBranch);
+        log.info(`[GitService] resetHard: Force switching from '${verification.currentBranch}' to '${options.expectedBranch}' before reset`);
+        const checkoutResult = await this.runGitCommand(directory, ["checkout", "-f", options.expectedBranch]);
+        if (!checkoutResult.success) {
+          throw new Error(`Failed to force checkout branch ${options.expectedBranch}: ${checkoutResult.stderr}`);
+        }
       }
     }
 

@@ -809,5 +809,37 @@ describe("GitService", () => {
       const hasChanges = await git.hasUncommittedChanges(testDir);
       expect(hasChanges).toBe(false);
     });
+
+    test("handles conflicting tracked file changes when switching branches", async () => {
+      const originalBranch = await git.getCurrentBranch(testDir);
+      
+      // Create a tracked file on original branch
+      await writeFile(join(testDir, "shared-file.txt"), "original content\n");
+      await git.commit(testDir, "Add shared file");
+      
+      // Create another branch and modify the tracked file
+      await git.createBranch(testDir, "feature-branch");
+      await writeFile(join(testDir, "shared-file.txt"), "feature content\n");
+      await git.commit(testDir, "Modify shared file on feature branch");
+      
+      // Now modify the same tracked file WITHOUT committing
+      // This creates a scenario where regular git checkout would fail
+      await writeFile(join(testDir, "shared-file.txt"), "uncommitted changes that conflict\n");
+      
+      // Verify we have uncommitted changes to a tracked file
+      expect(await git.hasUncommittedChanges(testDir)).toBe(true);
+      
+      // Reset with expectedBranch pointing to original - this previously would fail
+      // because regular checkout fails when tracked files have conflicting changes
+      await git.resetHard(testDir, { expectedBranch: originalBranch });
+      
+      // Should now be on original branch with clean state
+      expect(await git.getCurrentBranch(testDir)).toBe(originalBranch);
+      expect(await git.hasUncommittedChanges(testDir)).toBe(false);
+      
+      // Verify the file contains the original branch content
+      const content = await Bun.file(join(testDir, "shared-file.txt")).text();
+      expect(content).toBe("original content\n");
+    });
   });
 });
