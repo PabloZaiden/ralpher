@@ -183,6 +183,112 @@ describe("Plan Mode - Clear Planning Folder", () => {
   });
 });
 
+describe("Plan Mode - Always Clear plan.md on Start", () => {
+  let ctx: TestContext;
+
+  beforeEach(async () => {
+    ctx = await setupTestContext({ 
+      initGit: true,
+      mockResponses: ["<promise>PLAN_READY</promise>"],
+    });
+  });
+
+  afterEach(async () => {
+    await teardownTestContext(ctx);
+  });
+
+  test("clears plan.md when starting plan mode even with clearPlanningFolder: false", async () => {
+    // Setup: Create existing plan.md in the work directory
+    const planningDir = join(ctx.workDir, ".planning");
+    await mkdir(planningDir, { recursive: true });
+    await writeFile(join(planningDir, "plan.md"), "Old stale plan content");
+
+    // Verify file exists before loop creation
+    expect(await exists(join(planningDir, "plan.md"))).toBe(true);
+
+    // Create loop with plan mode but WITHOUT clearPlanningFolder
+    const loop = await ctx.manager.createLoop({
+      prompt: "Create a simple plan",
+      directory: ctx.workDir,
+      maxIterations: 1,
+      clearPlanningFolder: false,
+      planMode: true,
+    });
+    const loopId = loop.config.id;
+
+    // Start plan mode - this should clear plan.md regardless of clearPlanningFolder
+    await ctx.manager.startPlanMode(loopId);
+
+    // Verify plan.md was cleared immediately (before the AI creates a new one)
+    // We check quickly after startPlanMode returns since file deletion is synchronous
+    // The AI mock will create a new file, but the old content should be gone
+    await waitForPlanReady(ctx.manager, loopId);
+
+    // The plan file might exist now (created by mock), but should not have old content
+    const planContent = await Bun.file(join(planningDir, "plan.md")).text().catch(() => "");
+    expect(planContent).not.toContain("Old stale plan content");
+  });
+
+  test("clears plan.md when starting plan mode with clearPlanningFolder: true", async () => {
+    // Setup: Create existing plan.md in the work directory
+    const planningDir = join(ctx.workDir, ".planning");
+    await mkdir(planningDir, { recursive: true });
+    await writeFile(join(planningDir, "plan.md"), "Old stale plan content from previous session");
+
+    // Verify file exists before loop creation
+    expect(await exists(join(planningDir, "plan.md"))).toBe(true);
+
+    // Create loop with plan mode AND clearPlanningFolder
+    const loop = await ctx.manager.createLoop({
+      prompt: "Create a simple plan",
+      directory: ctx.workDir,
+      maxIterations: 1,
+      clearPlanningFolder: true,
+      planMode: true,
+    });
+    const loopId = loop.config.id;
+
+    // Start plan mode
+    await ctx.manager.startPlanMode(loopId);
+    await waitForPlanReady(ctx.manager, loopId);
+
+    // Verify old content is gone
+    const planContent = await Bun.file(join(planningDir, "plan.md")).text().catch(() => "");
+    expect(planContent).not.toContain("Old stale plan content from previous session");
+  });
+
+  test("does NOT clear status.md when clearPlanningFolder is false", async () => {
+    // Setup: Create both plan.md and status.md
+    const planningDir = join(ctx.workDir, ".planning");
+    await mkdir(planningDir, { recursive: true });
+    await writeFile(join(planningDir, "plan.md"), "Old plan");
+    await writeFile(join(planningDir, "status.md"), "Important status tracking info");
+
+    // Verify both files exist
+    expect(await exists(join(planningDir, "plan.md"))).toBe(true);
+    expect(await exists(join(planningDir, "status.md"))).toBe(true);
+
+    // Create loop with plan mode but WITHOUT clearPlanningFolder
+    const loop = await ctx.manager.createLoop({
+      prompt: "Create a simple plan",
+      directory: ctx.workDir,
+      maxIterations: 1,
+      clearPlanningFolder: false,
+      planMode: true,
+    });
+    const loopId = loop.config.id;
+
+    // Start plan mode - should only clear plan.md, not status.md
+    await ctx.manager.startPlanMode(loopId);
+    await waitForPlanReady(ctx.manager, loopId);
+
+    // Verify status.md still exists with original content
+    expect(await exists(join(planningDir, "status.md"))).toBe(true);
+    const statusContent = await Bun.file(join(planningDir, "status.md")).text();
+    expect(statusContent).toBe("Important status tracking info");
+  });
+});
+
 describe("Plan Mode - State Transitions", () => {
   let ctx: TestContext;
 

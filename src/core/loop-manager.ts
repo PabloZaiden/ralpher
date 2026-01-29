@@ -280,6 +280,20 @@ export class LoopManager {
       }
     }
 
+    // Always clear plan.md when starting plan mode, regardless of clearPlanningFolder setting.
+    // This ensures the UI doesn't display stale plan content from a previous session while
+    // the AI is generating a new plan. The old plan is always irrelevant in a fresh plan session.
+    const planFilePath = `${loop.config.directory}/.planning/plan.md`;
+    try {
+      const planFileExists = await executor.fileExists(planFilePath);
+      if (planFileExists) {
+        await executor.exec("rm", ["-f", planFilePath], { cwd: loop.config.directory });
+        log.debug("Cleared stale plan.md file before starting plan mode");
+      }
+    } catch (error) {
+      log.warn(`Failed to clear plan.md: ${String(error)}`);
+    }
+
     // Get backend from global manager
     const backend = backendManager.getBackend();
 
@@ -413,6 +427,10 @@ export class LoopManager {
       throw new Error("Plan is not ready yet. Wait for the AI to finish generating the plan.");
     }
 
+    // Wait for any ongoing planning iteration to complete before proceeding.
+    // This prevents race conditions where we modify state while the iteration is still running.
+    await engine.waitForLoopIdle();
+
     // Store the plan session info before transitioning
     const planSessionId = engine.state.session?.id;
     const planServerUrl = engine.state.session?.serverUrl;
@@ -425,10 +443,12 @@ export class LoopManager {
     }
 
     // Update state to transition from planning to running
-    // Mark plan mode as no longer active but preserve the flag that folder was cleared
+    // Mark plan mode as no longer active but preserve all existing planMode fields
+    // (especially isPlanReady and planContent which may have been set by the planning iteration)
     const updatedState: Partial<LoopState> = {
       status: "running",
       planMode: {
+        ...engine.state.planMode,
         active: false,
         planSessionId,
         planServerUrl,
