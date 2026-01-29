@@ -129,6 +129,57 @@ export class GitService {
   }
 
   /**
+   * Get the repository's default branch.
+   * 
+   * Detection strategy:
+   * 1. Try to get origin/HEAD reference (set by git clone or manually)
+   * 2. Check if 'main' branch exists locally
+   * 3. Check if 'master' branch exists locally
+   * 4. Fall back to the current branch
+   * 
+   * @param directory - The git repository directory
+   * @returns The name of the default branch
+   */
+  async getDefaultBranch(directory: string): Promise<string> {
+    // Strategy 1: Try to get origin/HEAD reference
+    // This is typically set by 'git clone' or can be set manually with:
+    // git remote set-head origin <branch>
+    // Use allowFailure since missing origin/HEAD is expected in repos without remotes
+    const originHeadResult = await this.runGitCommand(directory, [
+      "symbolic-ref",
+      "refs/remotes/origin/HEAD",
+    ], { allowFailure: true });
+    if (originHeadResult.success) {
+      // Output is like "refs/remotes/origin/main"
+      const ref = originHeadResult.stdout.trim();
+      const match = ref.match(/^refs\/remotes\/origin\/(.+)$/);
+      if (match?.[1]) {
+        log.trace(`[GitService] Default branch from origin/HEAD: ${match[1]}`);
+        return match[1];
+      }
+    }
+
+    // Strategy 2: Check if 'main' branch exists locally
+    const mainExists = await this.branchExists(directory, "main");
+    if (mainExists) {
+      log.trace(`[GitService] Default branch: main (exists locally)`);
+      return "main";
+    }
+
+    // Strategy 3: Check if 'master' branch exists locally
+    const masterExists = await this.branchExists(directory, "master");
+    if (masterExists) {
+      log.trace(`[GitService] Default branch: master (exists locally)`);
+      return "master";
+    }
+
+    // Strategy 4: Fall back to current branch
+    const currentBranch = await this.getCurrentBranch(directory);
+    log.trace(`[GitService] Default branch fallback to current: ${currentBranch}`);
+    return currentBranch;
+  }
+
+  /**
    * Check if there are uncommitted changes (staged or unstaged).
    */
   async hasUncommittedChanges(directory: string): Promise<boolean> {
@@ -202,13 +253,20 @@ export class GitService {
 
   /**
    * Check if a branch exists.
+   * @param directory - The git repository directory
+   * @param branchName - The branch name to check
+   * @param options - Optional configuration (allowFailure defaults to true since branch absence is expected)
    */
-  async branchExists(directory: string, branchName: string): Promise<boolean> {
+  async branchExists(
+    directory: string,
+    branchName: string,
+    options: { allowFailure?: boolean } = { allowFailure: true }
+  ): Promise<boolean> {
     const result = await this.runGitCommand(directory, [
       "rev-parse",
       "--verify",
       branchName,
-    ]);
+    ], { allowFailure: options.allowFailure ?? true });
     return result.success;
   }
 
@@ -608,11 +666,17 @@ export class GitService {
   /**
    * Run a git command in the specified directory.
    * Uses the CommandExecutor for shell execution.
+   * 
+   * @param directory - The git repository directory
+   * @param args - Arguments to pass to git
+   * @param options - Optional configuration for the command
    */
   private async runGitCommand(
     directory: string,
-    args: string[]
+    args: string[],
+    options: { allowFailure?: boolean } = {}
   ): Promise<GitCommandResult> {
+    const { allowFailure = false } = options;
     const cmdStr = `git ${args.join(" ")}`;
     log.trace(`[GitService] Running: ${cmdStr} in ${directory}`);
     
@@ -622,11 +686,22 @@ export class GitService {
     });
     
     if (!result.success) {
-      log.error(`[GitService] Command failed: ${cmdStr}`);
-      log.error(`[GitService]   exitCode: ${result.exitCode}`);
-      log.error(`[GitService]   stderr: ${result.stderr || "(empty)"}`);
-      if (result.stdout) {
-        log.error(`[GitService]   stdout: ${result.stdout.slice(0, 300)}${result.stdout.length > 300 ? "..." : ""}`);
+      // Log at trace level if failure is expected (e.g., probing for existence)
+      // Log at error level if failure is unexpected
+      if (allowFailure) {
+        log.trace(`[GitService] Command failed (expected): ${cmdStr}`);
+        log.trace(`[GitService]   exitCode: ${result.exitCode}`);
+        log.trace(`[GitService]   stderr: ${result.stderr || "(empty)"}`);
+        if (result.stdout) {
+          log.trace(`[GitService]   stdout: ${result.stdout.slice(0, 300)}${result.stdout.length > 300 ? "..." : ""}`);
+        }
+      } else {
+        log.error(`[GitService] Command failed: ${cmdStr}`);
+        log.error(`[GitService]   exitCode: ${result.exitCode}`);
+        log.error(`[GitService]   stderr: ${result.stderr || "(empty)"}`);
+        if (result.stdout) {
+          log.error(`[GitService]   stdout: ${result.stdout.slice(0, 300)}${result.stdout.length > 300 ? "..." : ""}`);
+        }
       }
     } else {
       log.trace(`[GitService] Command succeeded: ${cmdStr}`);

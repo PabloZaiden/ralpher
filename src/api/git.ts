@@ -35,6 +35,14 @@ export interface BranchesResponse {
 }
 
 /**
+ * Response for GET /api/git/default-branch endpoint.
+ */
+export interface DefaultBranchResponse {
+  /** The repository's default branch (e.g., "main", "master") */
+  defaultBranch: string;
+}
+
+/**
  * Get a GitService configured for the current backend mode.
  * Uses PTY+WebSocket for command execution in both spawn and connect modes.
  * 
@@ -99,6 +107,62 @@ export const gitRoutes = {
         const response: BranchesResponse = {
           currentBranch,
           branches,
+        };
+
+        return Response.json(response);
+      } catch (error) {
+        return Response.json(
+          { error: "git_error", message: String(error) },
+          { status: 500 }
+        );
+      }
+    },
+  },
+
+  /**
+   * GET /api/git/default-branch - Get the repository's default branch.
+   * 
+   * Returns the default branch for the repository (typically "main" or "master").
+   * Uses detection strategy: origin/HEAD → main → master → current branch.
+   * 
+   * Query Parameters:
+   * - directory (required): Path to the git repository
+   * 
+   * Errors:
+   * - 400: Missing directory parameter or not a git repo
+   * - 500: Git command error
+   * 
+   * @returns DefaultBranchResponse with defaultBranch
+   */
+  "/api/git/default-branch": {
+    async GET(req: Request): Promise<Response> {
+      const url = new URL(req.url);
+      const directory = url.searchParams.get("directory");
+
+      if (!directory) {
+        return Response.json(
+          { error: "missing_parameter", message: "directory query parameter is required" },
+          { status: 400 }
+        );
+      }
+
+      try {
+        // Get mode-appropriate git service
+        const git = await getGitService(directory);
+
+        // Check if it's a git repo
+        const isGitRepo = await git.isGitRepo(directory);
+        if (!isGitRepo) {
+          return Response.json(
+            { error: "not_git_repo", message: "Directory is not a git repository" },
+            { status: 400 }
+          );
+        }
+
+        const defaultBranch = await git.getDefaultBranch(directory);
+
+        const response: DefaultBranchResponse = {
+          defaultBranch,
         };
 
         return Response.json(response);

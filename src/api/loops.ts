@@ -140,17 +140,26 @@ export const loopsCrudRoutes = {
         return errorResponse("validation_error", validationError);
       }
 
+      // Create a single executor/GitService for the request to avoid duplicate setup
+      let git: GitService | null = null;
+      const getGitService = async (): Promise<GitService> => {
+        if (!git) {
+          const executor = await backendManager.getCommandExecutorAsync(body.directory);
+          git = GitService.withExecutor(executor);
+        }
+        return git;
+      };
+
       // Skip preflight check for drafts (drafts don't modify git)
       if (!body.draft) {
         // Preflight check: verify no uncommitted changes before creating the loop
         // This prevents creating loops that can never be started
         try {
-          const executor = await backendManager.getCommandExecutorAsync(body.directory);
-          const git = GitService.withExecutor(executor);
-          const hasChanges = await git.hasUncommittedChanges(body.directory);
+          const gitService = await getGitService();
+          const hasChanges = await gitService.hasUncommittedChanges(body.directory);
 
           if (hasChanges) {
-            const changedFiles = await git.getChangedFiles(body.directory);
+            const changedFiles = await gitService.getChangedFiles(body.directory);
             
             // If planMode and clearPlanningFolder are enabled, allow uncommitted changes in .planning/ only
             const onlyPlanningChanges = body.planMode && body.clearPlanningFolder &&
@@ -172,6 +181,19 @@ export const loopsCrudRoutes = {
         }
       }
 
+      // Auto-detect default branch if baseBranch not provided
+      let effectiveBaseBranch = body.baseBranch;
+      if (!effectiveBaseBranch) {
+        try {
+          const gitService = await getGitService();
+          effectiveBaseBranch = await gitService.getDefaultBranch(body.directory);
+          log.debug(`Auto-detected default branch for loop: ${effectiveBaseBranch}`);
+        } catch (error) {
+          log.warn(`Failed to detect default branch, will fall back to current branch: ${String(error)}`);
+          // Continue without baseBranch - loop engine will use current branch as fallback
+        }
+      }
+
       try {
         const loop = await loopManager.createLoop({
           directory: body.directory,
@@ -184,7 +206,7 @@ export const loopsCrudRoutes = {
           stopPattern: body.stopPattern,
           gitBranchPrefix: body.git?.branchPrefix,
           gitCommitPrefix: body.git?.commitPrefix,
-          baseBranch: body.baseBranch,
+          baseBranch: effectiveBaseBranch,
           clearPlanningFolder: body.clearPlanningFolder,
           planMode: body.planMode,
           draft: body.draft,

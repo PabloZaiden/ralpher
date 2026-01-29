@@ -39,6 +39,8 @@ export interface CreateLoopFormProps {
   branchesLoading?: boolean;
   /** Current branch name */
   currentBranch?: string;
+  /** Default branch name (e.g., "main" or "master") */
+  defaultBranch?: string;
   /** Initial directory to pre-fill (last used) */
   initialDirectory?: string;
   /** Loop ID if editing an existing draft */
@@ -71,6 +73,7 @@ export function CreateLoopForm({
   branches = [],
   branchesLoading = false,
   currentBranch = "",
+  defaultBranch = "",
   initialDirectory = "",
   editLoopId = null,
   initialLoopData = null,
@@ -87,6 +90,8 @@ export function CreateLoopForm({
   const [submitting, setSubmitting] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedBranch, setSelectedBranch] = useState<string>(initialLoopData?.baseBranch ?? "");
+  // Track whether user has manually changed the branch selection
+  const [userChangedBranch, setUserChangedBranch] = useState(!!initialLoopData?.baseBranch);
   const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
   const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? false);
 
@@ -97,13 +102,16 @@ export function CreateLoopForm({
     }
   }, [initialDirectory, directory]);
 
-  // Reset selected branch when current branch changes (directory changed)
+  // Reset selected branch when default branch changes (directory changed)
   useEffect(() => {
-    // Default to current branch when it changes (only for new loop)
-    if (currentBranch && !isEditing) {
-      setSelectedBranch(currentBranch);
+    // Only set default branch if:
+    // 1. We have a default branch from the server
+    // 2. User hasn't manually changed the branch
+    // 3. Not editing an existing loop (for edits, use the stored baseBranch)
+    if (defaultBranch && !userChangedBranch && !isEditing) {
+      setSelectedBranch(defaultBranch);
     }
-  }, [currentBranch, isEditing]);
+  }, [defaultBranch, userChangedBranch, isEditing]);
 
   // Set initial model when lastModel, models, or initialLoopData change
   useEffect(() => {
@@ -141,11 +149,15 @@ export function CreateLoopForm({
   }, [lastModel, models, selectedModel, initialLoopData]);
 
   // Notify parent when directory changes (debounced)
+  // Also reset the user's branch selection since we're loading a new directory's branches
   useEffect(() => {
     if (!directory.trim() || !onDirectoryChange) return;
 
     const timer = setTimeout(() => {
       onDirectoryChange(directory.trim());
+      // Reset the manual selection flag when directory changes,
+      // so the new default branch will be used
+      setUserChangedBranch(false);
     }, 500);
 
     return () => clearTimeout(timer);
@@ -317,7 +329,10 @@ export function CreateLoopForm({
         <select
           id="branch"
           value={selectedBranch}
-          onChange={(e) => setSelectedBranch(e.target.value)}
+          onChange={(e) => {
+            setSelectedBranch(e.target.value);
+            setUserChangedBranch(true);
+          }}
           disabled={branchesLoading || branches.length === 0}
           className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 font-mono text-sm"
         >
@@ -329,23 +344,25 @@ export function CreateLoopForm({
           )}
           {!branchesLoading && branches.length > 0 && (
             <>
-              {/* Current branch first */}
-              {currentBranch && (
+              {/* Default branch first (with label) */}
+              {defaultBranch && (
+                <option value={defaultBranch}>
+                  {defaultBranch} (default){defaultBranch === currentBranch ? " (current)" : ""}
+                </option>
+              )}
+              {/* Current branch if different from default */}
+              {currentBranch && currentBranch !== defaultBranch && (
                 <option value={currentBranch}>
                   {currentBranch} (current)
                 </option>
               )}
-              {/* Main branch if not current */}
-              {branches.some((b) => b.name === "main" && !b.current) && (
-                <option value="main">main</option>
-              )}
               {/* Separator if we have special branches */}
-              {(currentBranch || branches.some((b) => b.name === "main")) && branches.length > 1 && (
+              {(defaultBranch || currentBranch) && branches.length > 1 && (
                 <option disabled>──────────</option>
               )}
-              {/* Other branches sorted by name */}
+              {/* Other branches sorted by name (excluding default and current) */}
               {branches
-                .filter((b) => !b.current && b.name !== "main")
+                .filter((b) => b.name !== defaultBranch && b.name !== currentBranch)
                 .map((branch) => (
                   <option key={branch.name} value={branch.name}>
                     {branch.name}
@@ -355,7 +372,7 @@ export function CreateLoopForm({
           )}
         </select>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Branch to base the loop on (default: current branch)
+          Branch to base the loop on (default: repository's default branch)
         </p>
       </div>
 

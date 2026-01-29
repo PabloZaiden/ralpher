@@ -120,6 +120,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [currentBranch, setCurrentBranch] = useState("");
+  const [defaultBranch, setDefaultBranch] = useState("");
 
   // Fetch last model on mount
   useEffect(() => {
@@ -226,6 +227,26 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     }
   }, []);
 
+  // Fetch default branch when directory changes
+  const fetchDefaultBranch = useCallback(async (directory: string) => {
+    if (!directory) {
+      setDefaultBranch("");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/git/default-branch?directory=${encodeURIComponent(directory)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setDefaultBranch(data.defaultBranch ?? "");
+      } else {
+        setDefaultBranch("");
+      }
+    } catch {
+      setDefaultBranch("");
+    }
+  }, []);
+
   // Handle directory change from form
   // Fetch branches, models, and check planning dir for both spawn and connect modes (unified via PTY+WebSocket)
   const handleDirectoryChange = useCallback((directory: string) => {
@@ -233,9 +254,10 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       setModelsDirectory(directory);
       fetchModels(directory);
       fetchBranches(directory);
+      fetchDefaultBranch(directory);
       checkPlanningDir(directory);
     }
-  }, [modelsDirectory, fetchModels, checkPlanningDir, fetchBranches]);
+  }, [modelsDirectory, fetchModels, checkPlanningDir, fetchBranches, fetchDefaultBranch]);
 
   // Reset model state when modal closes
   const handleCloseCreateModal = useCallback(() => {
@@ -246,6 +268,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     setPlanningWarning(null);
     setBranches([]);
     setCurrentBranch("");
+    setDefaultBranch("");
   }, []);
 
   // Handle edit draft
@@ -662,6 +685,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               branches={branches}
               branchesLoading={branchesLoading}
               currentBranch={currentBranch}
+              defaultBranch={defaultBranch}
               initialDirectory={lastDirectory ?? ""}
             />
           </Modal>
