@@ -90,6 +90,8 @@ export function CreateLoopForm({
   const [submitting, setSubmitting] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedBranch, setSelectedBranch] = useState<string>(initialLoopData?.baseBranch ?? "");
+  // Track whether user has manually changed the branch selection
+  const [userChangedBranch, setUserChangedBranch] = useState(!!initialLoopData?.baseBranch);
   const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
   const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? false);
 
@@ -102,11 +104,14 @@ export function CreateLoopForm({
 
   // Reset selected branch when default branch changes (directory changed)
   useEffect(() => {
-    // Default to repository's default branch when it changes (only for new loop)
-    if (defaultBranch && !isEditing) {
+    // Only set default branch if:
+    // 1. We have a default branch from the server
+    // 2. User hasn't manually changed the branch
+    // 3. Not editing an existing loop (for edits, use the stored baseBranch)
+    if (defaultBranch && !userChangedBranch && !isEditing) {
       setSelectedBranch(defaultBranch);
     }
-  }, [defaultBranch, isEditing]);
+  }, [defaultBranch, userChangedBranch, isEditing]);
 
   // Set initial model when lastModel, models, or initialLoopData change
   useEffect(() => {
@@ -144,11 +149,15 @@ export function CreateLoopForm({
   }, [lastModel, models, selectedModel, initialLoopData]);
 
   // Notify parent when directory changes (debounced)
+  // Also reset the user's branch selection since we're loading a new directory's branches
   useEffect(() => {
     if (!directory.trim() || !onDirectoryChange) return;
 
     const timer = setTimeout(() => {
       onDirectoryChange(directory.trim());
+      // Reset the manual selection flag when directory changes,
+      // so the new default branch will be used
+      setUserChangedBranch(false);
     }, 500);
 
     return () => clearTimeout(timer);
@@ -320,7 +329,10 @@ export function CreateLoopForm({
         <select
           id="branch"
           value={selectedBranch}
-          onChange={(e) => setSelectedBranch(e.target.value)}
+          onChange={(e) => {
+            setSelectedBranch(e.target.value);
+            setUserChangedBranch(true);
+          }}
           disabled={branchesLoading || branches.length === 0}
           className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 font-mono text-sm"
         >

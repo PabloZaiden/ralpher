@@ -144,10 +144,11 @@ export class GitService {
     // Strategy 1: Try to get origin/HEAD reference
     // This is typically set by 'git clone' or can be set manually with:
     // git remote set-head origin <branch>
+    // Use allowFailure since missing origin/HEAD is expected in repos without remotes
     const originHeadResult = await this.runGitCommand(directory, [
       "symbolic-ref",
       "refs/remotes/origin/HEAD",
-    ]);
+    ], { allowFailure: true });
     if (originHeadResult.success) {
       // Output is like "refs/remotes/origin/main"
       const ref = originHeadResult.stdout.trim();
@@ -252,13 +253,20 @@ export class GitService {
 
   /**
    * Check if a branch exists.
+   * @param directory - The git repository directory
+   * @param branchName - The branch name to check
+   * @param options - Optional configuration (allowFailure defaults to true since branch absence is expected)
    */
-  async branchExists(directory: string, branchName: string): Promise<boolean> {
+  async branchExists(
+    directory: string,
+    branchName: string,
+    options: { allowFailure?: boolean } = { allowFailure: true }
+  ): Promise<boolean> {
     const result = await this.runGitCommand(directory, [
       "rev-parse",
       "--verify",
       branchName,
-    ]);
+    ], { allowFailure: options.allowFailure ?? true });
     return result.success;
   }
 
@@ -658,11 +666,17 @@ export class GitService {
   /**
    * Run a git command in the specified directory.
    * Uses the CommandExecutor for shell execution.
+   * 
+   * @param directory - The git repository directory
+   * @param args - Arguments to pass to git
+   * @param options - Optional configuration for the command
    */
   private async runGitCommand(
     directory: string,
-    args: string[]
+    args: string[],
+    options: { allowFailure?: boolean } = {}
   ): Promise<GitCommandResult> {
+    const { allowFailure = false } = options;
     const cmdStr = `git ${args.join(" ")}`;
     log.trace(`[GitService] Running: ${cmdStr} in ${directory}`);
     
@@ -672,11 +686,22 @@ export class GitService {
     });
     
     if (!result.success) {
-      log.error(`[GitService] Command failed: ${cmdStr}`);
-      log.error(`[GitService]   exitCode: ${result.exitCode}`);
-      log.error(`[GitService]   stderr: ${result.stderr || "(empty)"}`);
-      if (result.stdout) {
-        log.error(`[GitService]   stdout: ${result.stdout.slice(0, 300)}${result.stdout.length > 300 ? "..." : ""}`);
+      // Log at trace level if failure is expected (e.g., probing for existence)
+      // Log at error level if failure is unexpected
+      if (allowFailure) {
+        log.trace(`[GitService] Command failed (expected): ${cmdStr}`);
+        log.trace(`[GitService]   exitCode: ${result.exitCode}`);
+        log.trace(`[GitService]   stderr: ${result.stderr || "(empty)"}`);
+        if (result.stdout) {
+          log.trace(`[GitService]   stdout: ${result.stdout.slice(0, 300)}${result.stdout.length > 300 ? "..." : ""}`);
+        }
+      } else {
+        log.error(`[GitService] Command failed: ${cmdStr}`);
+        log.error(`[GitService]   exitCode: ${result.exitCode}`);
+        log.error(`[GitService]   stderr: ${result.stderr || "(empty)"}`);
+        if (result.stdout) {
+          log.error(`[GitService]   stdout: ${result.stdout.slice(0, 300)}${result.stdout.length > 300 ? "..." : ""}`);
+        }
       }
     } else {
       log.trace(`[GitService] Command succeeded: ${cmdStr}`);
