@@ -3,7 +3,7 @@
  * Tests use actual HTTP requests to a test server.
  */
 
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { test, expect, describe, beforeAll, afterAll, afterEach, beforeEach } from "bun:test";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -171,6 +171,36 @@ describe("Loops CRUD API Integration", () => {
     delete process.env["RALPHER_DATA_DIR"];
   });
 
+  // Clean up any active loops BEFORE each test to prevent blocking
+  const cleanupActiveLoops = async () => {
+    const { listLoops, updateLoopState, loadLoop } = await import("../../src/persistence/loops");
+    const { loopManager } = await import("../../src/core/loop-manager");
+    
+    // Clear all running engines first
+    loopManager.resetForTesting();
+    
+    const loops = await listLoops();
+    const activeStatuses = ["idle", "planning", "starting", "running", "waiting"];
+    
+    for (const loop of loops) {
+      if (activeStatuses.includes(loop.state.status)) {
+        // Load full loop to get current state
+        const fullLoop = await loadLoop(loop.config.id);
+        if (fullLoop) {
+          // Mark as deleted to make it a terminal state
+          await updateLoopState(loop.config.id, {
+            ...fullLoop.state,
+            status: "deleted",
+          });
+        }
+      }
+    }
+  };
+
+  // Clean up before and after each test
+  beforeEach(cleanupActiveLoops);
+  afterEach(cleanupActiveLoops);
+
   describe("GET /api/health", () => {
     test("returns healthy status", async () => {
       const response = await fetch(`${baseUrl}/api/health`);
@@ -277,13 +307,14 @@ describe("Loops CRUD API Integration", () => {
 
   describe("GET /api/loops/:id", () => {
     test("returns a specific loop", async () => {
-      // First create a loop
+      // First create a draft loop (to avoid active loop conflicts)
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           directory: testWorkDir,
           prompt: "Test prompt",
+          draft: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -308,22 +339,20 @@ describe("Loops CRUD API Integration", () => {
 
   describe("PATCH /api/loops/:id", () => {
     test("updates a loop", async () => {
-      // First create a loop
+      // First create a draft loop (to avoid active loop conflicts)
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           directory: testWorkDir,
           prompt: "Original prompt",
+          draft: true,
         }),
       });
       const createBody = await createResponse.json();
       const loopId = createBody.config.id;
 
-      // Wait for the loop to complete (loops auto-start now)
-      await waitForLoopCompletion(loopId);
-
-      // Then update it
+      // Update the loop
       const response = await fetch(`${baseUrl}/api/loops/${loopId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -347,13 +376,14 @@ describe("Loops CRUD API Integration", () => {
     });
 
     test("returns 400 for invalid JSON", async () => {
-      // First create a loop
+      // First create a draft loop (to avoid active loop conflicts)
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           directory: testWorkDir,
           prompt: "Test",
+          draft: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -374,13 +404,14 @@ describe("Loops CRUD API Integration", () => {
 
   describe("DELETE /api/loops/:id", () => {
     test("deletes a loop", async () => {
-      // First create a loop
+      // First create a draft loop (to avoid active loop conflicts)
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           directory: testWorkDir,
           prompt: "Test prompt",
+          draft: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -403,13 +434,14 @@ describe("Loops CRUD API Integration", () => {
     });
 
     test("purges a deleted loop", async () => {
-      // Create a loop first
+      // Create a draft loop first (to avoid active loop conflicts)
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           directory: testWorkDir,
           prompt: "Purge me",
+          draft: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -449,6 +481,7 @@ describe("Loops CRUD API Integration", () => {
           directory: testWorkDir,
           prompt: "Task with clearing",
           clearPlanningFolder: true,
+          draft: true,
         }),
       });
 
@@ -465,6 +498,7 @@ describe("Loops CRUD API Integration", () => {
           directory: testWorkDir,
           prompt: "Task without clearing",
           clearPlanningFolder: false,
+          draft: true,
         }),
       });
 
@@ -480,6 +514,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           directory: testWorkDir,
           prompt: "Task with default",
+          draft: true,
         }),
       });
 
@@ -490,7 +525,7 @@ describe("Loops CRUD API Integration", () => {
     });
 
     test("GET returns clearPlanningFolder value correctly", async () => {
-      // Create a loop with clearPlanningFolder = true
+      // Create a draft loop with clearPlanningFolder = true
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -498,13 +533,11 @@ describe("Loops CRUD API Integration", () => {
           directory: testWorkDir,
           prompt: "Test",
           clearPlanningFolder: true,
+          draft: true,
         }),
       });
       const createBody = await createResponse.json();
       const loopId = createBody.config.id;
-
-      // Wait for the loop to complete
-      await waitForLoopCompletion(loopId);
 
       // Get the loop and verify clearPlanningFolder is set
       const getResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
@@ -535,20 +568,36 @@ describe("Loops CRUD API Integration", () => {
     });
 
     test("non-draft loops still auto-start", async () => {
-      const response = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Normal task",
-          draft: false,
-        }),
-      });
+      // Create a unique directory for this test to avoid conflicts with other tests
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-non-draft-test-"));
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+      
+      try {
+        const response = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Normal task",
+            draft: false,
+          }),
+        });
 
-      expect(response.status).toBe(201);
-      const body = await response.json();
-      expect(body.state.status).not.toBe("draft");
-      expect(body.state.status).not.toBe("idle");
+        expect(response.status).toBe(201);
+        const body = await response.json();
+        expect(body.state.status).not.toBe("draft");
+        expect(body.state.status).not.toBe("idle");
+        
+        // Wait for completion so it doesn't interfere with other tests
+        await waitForLoopCompletion(body.config.id);
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+      }
     });
 
     test("can update a draft loop via PUT", async () => {
@@ -581,32 +630,46 @@ describe("Loops CRUD API Integration", () => {
     });
 
     test("cannot update non-draft loop via PUT", async () => {
-      // Create regular loop
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Task",
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
+      // Create a unique directory for this test to avoid conflicts
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-put-test-"));
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+      
+      try {
+        // Create regular loop
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Task",
+          }),
+        });
+        expect(createResponse.status).toBe(201);
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
 
-      // Wait for completion
-      await waitForLoopCompletion(loopId);
+        // Wait for completion
+        await waitForLoopCompletion(loopId);
 
-      // Try to update
-      const updateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-        }),
-      });
+        // Try to update
+        const updateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+          }),
+        });
 
-      expect(updateResponse.status).toBe(400);
-      const body = await updateResponse.json();
-      expect(body.error).toBe("not_draft");
+        expect(updateResponse.status).toBe(400);
+        const body = await updateResponse.json();
+        expect(body.error).toBe("not_draft");
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+      }
     });
 
     test("can start draft as immediate execution", async () => {
@@ -675,30 +738,55 @@ describe("Loops CRUD API Integration", () => {
     });
 
     test("cannot start non-draft loop via draft/start", async () => {
-      // Create regular loop
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          directory: testWorkDir,
-          prompt: "Task",
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
+      // Create a unique directory for this test to avoid conflicts
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-start-test-"));
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+      
+      try {
+        // Create a draft loop
+        const draftResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directory: uniqueWorkDir,
+            prompt: "Task",
+            draft: true,
+          }),
+        });
+        const draftBody = await draftResponse.json();
+        const draftLoopId = draftBody.config.id;
+        
+        // Start it immediately to make it a non-draft loop
+        const startDraftResponse = await fetch(`${baseUrl}/api/loops/${draftLoopId}/draft/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ planMode: false }),
+        });
+        
+        expect(startDraftResponse.status).toBe(200);
+        await waitForLoopCompletion(draftLoopId);
 
-      // Try to start via draft endpoint
-      const startResponse = await fetch(`${baseUrl}/api/loops/${loopId}/draft/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          planMode: false,
-        }),
-      });
+        // Now the loop should be completed (non-draft)
+        // Try to start via draft endpoint - should fail with not_draft (not 409)
+        const startResponse = await fetch(`${baseUrl}/api/loops/${draftLoopId}/draft/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            planMode: false,
+          }),
+        });
 
-      expect(startResponse.status).toBe(400);
-      const body = await startResponse.json();
-      expect(body.error).toBe("not_draft");
+        expect(startResponse.status).toBe(400);
+        const body = await startResponse.json();
+        expect(body.error).toBe("not_draft");
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+      }
     });
 
     test("can delete a draft loop", async () => {

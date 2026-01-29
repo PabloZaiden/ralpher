@@ -222,6 +222,27 @@ export interface UncommittedChangesError {
 }
 
 /**
+ * Error response returned when an active loop already exists for the directory.
+ * 
+ * This error (HTTP 409) indicates the loop cannot start because another
+ * non-draft, non-terminal loop is already active for the same working directory.
+ * The user must stop or complete the existing loop before starting a new one.
+ */
+export interface ActiveLoopExistsError {
+  /** Error code for this specific error type */
+  error: "active_loop_exists";
+  /** Human-readable error description */
+  message: string;
+  /** Information about the conflicting loop */
+  conflictingLoop: {
+    /** ID of the existing active loop */
+    id: string;
+    /** Name of the existing active loop */
+    name: string;
+  };
+}
+
+/**
  * Generic error response format used by all API endpoints.
  */
 export interface ErrorResponse {

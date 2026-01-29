@@ -180,5 +180,226 @@ describe("Persistence", () => {
       expect(loops[0]!.config.id).toBe("loop-2");
       expect(loops[1]!.config.id).toBe("loop-1");
     });
+
+    describe("getActiveLoopByDirectory", () => {
+      test("returns null when no loops exist for directory", async () => {
+        const { ensureDataDirectories } = await import("../../src/persistence/paths");
+        const { getActiveLoopByDirectory } = await import("../../src/persistence/loops");
+
+        await ensureDataDirectories();
+
+        const result = await getActiveLoopByDirectory("/tmp/test");
+        expect(result).toBeNull();
+      });
+
+      test("returns null when only draft loops exist for directory", async () => {
+        const { ensureDataDirectories } = await import("../../src/persistence/paths");
+        const { saveLoop, getActiveLoopByDirectory } = await import("../../src/persistence/loops");
+
+        await ensureDataDirectories();
+
+        const draftLoop = {
+          config: {
+            id: "draft-loop",
+            name: "draft-loop",
+            directory: "/tmp/test",
+            prompt: "Test",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            stopPattern: "<promise>COMPLETE</promise>$",
+            git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+          },
+          state: {
+            id: "draft-loop",
+            status: "draft" as const,
+            currentIteration: 0,
+            recentIterations: [],
+          },
+        };
+
+        await saveLoop(draftLoop);
+
+        const result = await getActiveLoopByDirectory("/tmp/test");
+        expect(result).toBeNull();
+      });
+
+      test("returns null when only terminal state loops exist for directory", async () => {
+        const { ensureDataDirectories } = await import("../../src/persistence/paths");
+        const { saveLoop, getActiveLoopByDirectory } = await import("../../src/persistence/loops");
+
+        await ensureDataDirectories();
+
+        const terminalStatuses = ["completed", "stopped", "failed", "max_iterations", "merged", "pushed", "deleted"] as const;
+
+        for (let i = 0; i < terminalStatuses.length; i++) {
+          await saveLoop({
+            config: {
+              id: `terminal-loop-${i}`,
+              name: `terminal-loop-${i}`,
+              directory: "/tmp/test",
+              prompt: "Test",
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              stopPattern: "<promise>COMPLETE</promise>$",
+              git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+            },
+            state: {
+              id: `terminal-loop-${i}`,
+              status: terminalStatuses[i]!,
+              currentIteration: 0,
+              recentIterations: [],
+            },
+          });
+        }
+
+        const result = await getActiveLoopByDirectory("/tmp/test");
+        expect(result).toBeNull();
+      });
+
+      test("returns the active loop when one exists", async () => {
+        const { ensureDataDirectories } = await import("../../src/persistence/paths");
+        const { saveLoop, getActiveLoopByDirectory, deleteLoop } = await import("../../src/persistence/loops");
+
+        await ensureDataDirectories();
+
+        const activeStatuses = ["idle", "planning", "starting", "running", "waiting"] as const;
+
+        for (const status of activeStatuses) {
+          const testLoop = {
+            config: {
+              id: `active-loop-${status}`,
+              name: `active-loop-${status}`,
+              directory: `/tmp/active-test-${status}`,
+              prompt: "Test",
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              stopPattern: "<promise>COMPLETE</promise>$",
+              git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+            },
+            state: {
+              id: `active-loop-${status}`,
+              status: status,
+              currentIteration: 0,
+              recentIterations: [],
+            },
+          };
+
+          await saveLoop(testLoop);
+
+          const result = await getActiveLoopByDirectory(`/tmp/active-test-${status}`);
+          expect(result).not.toBeNull();
+          expect(result!.config.id).toBe(`active-loop-${status}`);
+          expect(result!.state.status).toBe(status);
+
+          // Clean up
+          await deleteLoop(testLoop.config.id);
+        }
+      });
+
+      test("does not return loops from different directories", async () => {
+        const { ensureDataDirectories } = await import("../../src/persistence/paths");
+        const { saveLoop, getActiveLoopByDirectory } = await import("../../src/persistence/loops");
+
+        await ensureDataDirectories();
+
+        // Save a running loop in a different directory
+        const otherDirLoop = {
+          config: {
+            id: "other-dir-loop",
+            name: "other-dir-loop",
+            directory: "/tmp/other-dir",
+            prompt: "Test",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            stopPattern: "<promise>COMPLETE</promise>$",
+            git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+          },
+          state: {
+            id: "other-dir-loop",
+            status: "running" as const,
+            currentIteration: 0,
+            recentIterations: [],
+          },
+        };
+
+        await saveLoop(otherDirLoop);
+
+        // Query for a different directory
+        const result = await getActiveLoopByDirectory("/tmp/my-dir");
+        expect(result).toBeNull();
+      });
+
+      test("returns the active loop even when other loops exist for same directory", async () => {
+        const { ensureDataDirectories } = await import("../../src/persistence/paths");
+        const { saveLoop, getActiveLoopByDirectory } = await import("../../src/persistence/loops");
+
+        await ensureDataDirectories();
+
+        // Save a draft loop
+        await saveLoop({
+          config: {
+            id: "draft-loop",
+            name: "draft-loop",
+            directory: "/tmp/multi-test",
+            prompt: "Test",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            stopPattern: "<promise>COMPLETE</promise>$",
+            git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+          },
+          state: {
+            id: "draft-loop",
+            status: "draft" as const,
+            currentIteration: 0,
+            recentIterations: [],
+          },
+        });
+
+        // Save a completed loop
+        await saveLoop({
+          config: {
+            id: "completed-loop",
+            name: "completed-loop",
+            directory: "/tmp/multi-test",
+            prompt: "Test",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            stopPattern: "<promise>COMPLETE</promise>$",
+            git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+          },
+          state: {
+            id: "completed-loop",
+            status: "completed" as const,
+            currentIteration: 5,
+            recentIterations: [],
+          },
+        });
+
+        // Save a running loop
+        await saveLoop({
+          config: {
+            id: "running-loop",
+            name: "running-loop",
+            directory: "/tmp/multi-test",
+            prompt: "Test",
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            stopPattern: "<promise>COMPLETE</promise>$",
+            git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+          },
+          state: {
+            id: "running-loop",
+            status: "running" as const,
+            currentIteration: 2,
+            recentIterations: [],
+          },
+        });
+
+        const result = await getActiveLoopByDirectory("/tmp/multi-test");
+        expect(result).not.toBeNull();
+        expect(result!.config.id).toBe("running-loop");
+        expect(result!.state.status).toBe("running");
+      });
+    });
   });
 });

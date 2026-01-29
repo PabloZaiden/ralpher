@@ -19,7 +19,7 @@ import { loopManager } from "../core/loop-manager";
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
 import { setLastModel } from "../persistence/preferences";
-import { updateLoopState } from "../persistence/loops";
+import { updateLoopState, getActiveLoopByDirectory } from "../persistence/loops";
 import { getReviewComments } from "../persistence/database";
 import { log } from "../core/logger";
 import type {
@@ -178,6 +178,26 @@ export const loopsCrudRoutes = {
           }
         } catch (preflightError) {
           return errorResponse("preflight_failed", `Failed to check for uncommitted changes: ${String(preflightError)}`, 500);
+        }
+
+        // Check if another active loop exists for this directory
+        try {
+          const existingActiveLoop = await getActiveLoopByDirectory(body.directory);
+          if (existingActiveLoop) {
+            return Response.json(
+              {
+                error: "active_loop_exists",
+                message: `Another loop is already active for this directory: "${existingActiveLoop.config.name}". Please stop or complete the existing loop before starting a new one.`,
+                conflictingLoop: {
+                  id: existingActiveLoop.config.id,
+                  name: existingActiveLoop.config.name,
+                },
+              },
+              { status: 409 }
+            );
+          }
+        } catch (checkError) {
+          return errorResponse("preflight_failed", `Failed to check for existing active loops: ${String(checkError)}`, 500);
         }
       }
 
@@ -545,6 +565,26 @@ export const loopsControlRoutes = {
       // Verify it's a draft
       if (loop.state.status !== "draft") {
         return errorResponse("not_draft", "Loop is not in draft status", 400);
+      }
+
+      // Check if another active loop exists for this directory
+      try {
+        const existingActiveLoop = await getActiveLoopByDirectory(loop.config.directory);
+        if (existingActiveLoop) {
+          return Response.json(
+            {
+              error: "active_loop_exists",
+              message: `Another loop is already active for this directory: "${existingActiveLoop.config.name}". Please stop or complete the existing loop before starting a new one.`,
+              conflictingLoop: {
+                id: existingActiveLoop.config.id,
+                name: existingActiveLoop.config.name,
+              },
+            },
+            { status: 409 }
+          );
+        }
+      } catch (checkError) {
+        return errorResponse("preflight_failed", `Failed to check for existing active loops: ${String(checkError)}`, 500);
       }
 
       // Preflight check: verify no uncommitted changes before starting

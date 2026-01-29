@@ -3,7 +3,7 @@
  * Tests HTTP requests to plan mode API endpoints.
  */
 
-import { test, expect, describe, beforeAll, afterAll } from "bun:test";
+import { test, expect, describe, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -137,10 +137,12 @@ class PlanModeMockBackend implements LoopBackend {
 
 describe("Plan Mode API Integration", () => {
   let testDataDir: string;
-  let testWorkDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
   let mockBackend: PlanModeMockBackend;
+  
+  // Per-test work directory to avoid conflicts between tests
+  let currentTestWorkDir: string;
 
   // Helper to check if file exists
   async function exists(path: string): Promise<boolean> {
@@ -200,21 +202,12 @@ describe("Plan Mode API Integration", () => {
   }
 
   beforeAll(async () => {
-    // Create temp directories
+    // Create temp data directory
     testDataDir = await mkdtemp(join(tmpdir(), "ralpher-api-plan-test-data-"));
-    testWorkDir = await mkdtemp(join(tmpdir(), "ralpher-api-plan-test-work-"));
 
     // Set env var for persistence
     process.env["RALPHER_DATA_DIR"] = testDataDir;
     await ensureDataDirectories();
-
-    // Initialize git repo
-    await Bun.$`git init ${testWorkDir}`.quiet();
-    await Bun.$`git -C ${testWorkDir} config user.email "test@test.com"`.quiet();
-    await Bun.$`git -C ${testWorkDir} config user.name "Test User"`.quiet();
-    await Bun.$`touch ${testWorkDir}/README.md`.quiet();
-    await Bun.$`git -C ${testWorkDir} add .`.quiet();
-    await Bun.$`git -C ${testWorkDir} commit -m "Initial commit"`.quiet();
 
     // Set up backend manager with class-based mock
     mockBackend = new PlanModeMockBackend();
@@ -241,29 +234,95 @@ describe("Plan Mode API Integration", () => {
     closeDatabase();
     delete process.env["RALPHER_DATA_DIR"];
 
-    // Remove temp directories
+    // Remove temp data directory
     await rm(testDataDir, { recursive: true });
-    await rm(testWorkDir, { recursive: true });
   });
 
-  describe("POST /api/loops (plan mode)", () => {
-    // Helper to commit any changes after tests
-    async function commitChanges() {
-      try {
-        await Bun.$`git -C ${testWorkDir} add -A`.quiet();
-        await Bun.$`git -C ${testWorkDir} commit -m "Test changes" --allow-empty`.quiet();
-      } catch {
-        // Ignore if nothing to commit
+  // Helper to create a unique work directory with git initialized
+  async function createTestWorkDir(): Promise<string> {
+    const workDir = await mkdtemp(join(tmpdir(), "ralpher-api-plan-test-work-"));
+    await Bun.$`git init ${workDir}`.quiet();
+    await Bun.$`git -C ${workDir} config user.email "test@test.com"`.quiet();
+    await Bun.$`git -C ${workDir} config user.name "Test User"`.quiet();
+    await Bun.$`touch ${workDir}/README.md`.quiet();
+    await Bun.$`git -C ${workDir} add .`.quiet();
+    await Bun.$`git -C ${workDir} commit -m "Initial commit"`.quiet();
+    return workDir;
+  }
+
+  // Clean up any active loops and reset state before/after each test
+  const setupAndCleanup = async () => {
+    const { listLoops, updateLoopState, loadLoop } = await import("../../src/persistence/loops");
+    const { loopManager } = await import("../../src/core/loop-manager");
+    
+    // Clear all running engines first
+    loopManager.resetForTesting();
+    
+    // Reset the mock backend state
+    mockBackend.reset();
+    
+    const loops = await listLoops();
+    const activeStatuses = ["idle", "planning", "starting", "running", "waiting"];
+    
+    for (const loop of loops) {
+      if (activeStatuses.includes(loop.state.status)) {
+        // Load full loop to get current state
+        const fullLoop = await loadLoop(loop.config.id);
+        if (fullLoop) {
+          // Mark as deleted to make it a terminal state
+          await updateLoopState(loop.config.id, {
+            ...fullLoop.state,
+            status: "deleted",
+          });
+        }
       }
     }
+    
+    // Create a fresh work directory for this test
+    currentTestWorkDir = await createTestWorkDir();
+  };
+  
+  const teardownTest = async () => {
+    const { listLoops, updateLoopState, loadLoop } = await import("../../src/persistence/loops");
+    const { loopManager } = await import("../../src/core/loop-manager");
+    
+    // Clear all running engines first
+    loopManager.resetForTesting();
+    
+    const loops = await listLoops();
+    const activeStatuses = ["idle", "planning", "starting", "running", "waiting"];
+    
+    for (const loop of loops) {
+      if (activeStatuses.includes(loop.state.status)) {
+        // Load full loop to get current state
+        const fullLoop = await loadLoop(loop.config.id);
+        if (fullLoop) {
+          // Mark as deleted to make it a terminal state
+          await updateLoopState(loop.config.id, {
+            ...fullLoop.state,
+            status: "deleted",
+          });
+        }
+      }
+    }
+    
+    // Clean up the test work directory
+    if (currentTestWorkDir) {
+      await rm(currentTestWorkDir, { recursive: true, force: true });
+    }
+  };
 
+  beforeEach(setupAndCleanup);
+  afterEach(teardownTest);
+
+  describe("POST /api/loops (plan mode)", () => {
     test("creates loop in planning status when planMode is true", async () => {
       const response = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: testWorkDir,
+          directory: currentTestWorkDir,
           maxIterations: 1,
           planMode: true,
         }),
@@ -279,14 +338,11 @@ describe("Plan Mode API Integration", () => {
       const loop = await getResponse.json();
       expect(loop.state.status).toBe("planning");
       expect(loop.state.planMode?.active).toBe(true);
-
-      // Clean up for next test
-      await commitChanges();
     });
 
     test("clears planning folder before plan creation when clearPlanningFolder is true", async () => {
       // Setup: Create existing files in .planning folder
-      const planningDir = join(testWorkDir, ".planning");
+      const planningDir = join(currentTestWorkDir, ".planning");
       await mkdir(planningDir, { recursive: true });
       await writeFile(join(planningDir, "old-plan.md"), "Old content");
 
@@ -295,7 +351,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: testWorkDir,
+          directory: currentTestWorkDir,
           maxIterations: 1,
           clearPlanningFolder: true,
           planMode: true,
@@ -315,9 +371,6 @@ describe("Plan Mode API Integration", () => {
       const getResponse2 = await fetch(`${baseUrl}/api/loops/${data.config.id}`);
       const loop = await getResponse2.json();
       expect(loop.state.planMode?.planningFolderCleared).toBe(true);
-
-      // Clean up for next test
-      await commitChanges();
     });
 
     test("returns 400 if required fields missing", async () => {
@@ -342,13 +395,16 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: testWorkDir,
+          directory: currentTestWorkDir,
           maxIterations: 1,
           planMode: true,
         }),
       });
 
-      const response = await createResponse.json(); const id = response.config.id;
+      expect(createResponse.status).toBe(201);
+      const response = await createResponse.json();
+      expect(response.config).toBeDefined();
+      const id = response.config.id;
       await waitForPlanReady(id);
 
       // Get initial feedback rounds
@@ -381,13 +437,16 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Do something",
-          directory: testWorkDir,
+          directory: currentTestWorkDir,
           maxIterations: 1,
           planMode: false,
         }),
       });
 
-      const response = await createResponse.json(); const id = response.config.id;
+      expect(createResponse.status).toBe(201);
+      const response = await createResponse.json();
+      expect(response.config).toBeDefined();
+      const id = response.config.id;
 
       // Try to send feedback (should fail)
       const feedbackResponse = await fetch(`${baseUrl}/api/loops/${id}/plan/feedback`, {
@@ -422,13 +481,16 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: testWorkDir,
+          directory: currentTestWorkDir,
           maxIterations: 1,
           planMode: true,
         }),
       });
 
-      const response = await createResponse.json(); const id = response.config.id;
+      expect(createResponse.status).toBe(201);
+      const response = await createResponse.json();
+      expect(response.config).toBeDefined();
+      const id = response.config.id;
       await waitForPlanReady(id);
 
       // Verify in planning status
@@ -452,14 +514,14 @@ describe("Plan Mode API Integration", () => {
       // IMPORTANT: Previous tests may leave us on a working branch, so we need to
       // checkout the base branch before creating the loop to ensure proper test isolation.
       // Get the default branch by checking if 'main' or 'master' exists (same logic as GitService.getDefaultBranch)
-      const mainExists = await Bun.$`git -C ${testWorkDir} rev-parse --verify main`.quiet().then(() => true).catch(() => false);
+      const mainExists = await Bun.$`git -C ${currentTestWorkDir} rev-parse --verify main`.quiet().then(() => true).catch(() => false);
       const baseBranch = mainExists ? "main" : "master";
       
       // Checkout the base branch to ensure we're not on a working branch from previous tests
-      await Bun.$`git -C ${testWorkDir} checkout ${baseBranch}`.quiet();
+      await Bun.$`git -C ${currentTestWorkDir} checkout ${baseBranch}`.quiet();
       
       // Create loop with clear folder enabled
-      const planningDir = join(testWorkDir, ".planning-test2");
+      const planningDir = join(currentTestWorkDir, ".planning-test2");
       await mkdir(planningDir, { recursive: true });
 
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
@@ -467,7 +529,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: testWorkDir,
+          directory: currentTestWorkDir,
           planningFolderPath: ".planning-test2",
           maxIterations: 1,
           clearPlanningFolder: true,
@@ -475,7 +537,10 @@ describe("Plan Mode API Integration", () => {
         }),
       });
 
-      const response = await createResponse.json(); const id = response.config.id;
+      expect(createResponse.status).toBe(201);
+      const response = await createResponse.json();
+      expect(response.config).toBeDefined();
+      const id = response.config.id;
       await waitForPlanReady(id);
 
       // Create a plan file and commit it to the base branch.
@@ -483,8 +548,8 @@ describe("Plan Mode API Integration", () => {
       // create a new working branch from it. The plan.md must exist on the base branch
       // so it will also exist on the new working branch.
       await writeFile(join(planningDir, "plan.md"), "# My Plan");
-      await Bun.$`git -C ${testWorkDir} add .`.quiet();
-      await Bun.$`git -C ${testWorkDir} commit -m "Add plan file"`.quiet();
+      await Bun.$`git -C ${currentTestWorkDir} add .`.quiet();
+      await Bun.$`git -C ${currentTestWorkDir} commit -m "Add plan file"`.quiet();
 
       // Accept the plan
       const acceptResponse = await fetch(`${baseUrl}/api/loops/${id}/plan/accept`, { method: "POST" });
@@ -502,8 +567,8 @@ describe("Plan Mode API Integration", () => {
     test("returns 400 if loop is not in planning status", async () => {
       // Commit any previous changes first
       try {
-        await Bun.$`git -C ${testWorkDir} add -A`.quiet();
-        await Bun.$`git -C ${testWorkDir} commit -m "Test changes" --allow-empty`.quiet();
+        await Bun.$`git -C ${currentTestWorkDir} add -A`.quiet();
+        await Bun.$`git -C ${currentTestWorkDir} commit -m "Test changes" --allow-empty`.quiet();
       } catch {
         // Ignore if nothing to commit
       }
@@ -514,12 +579,15 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Do something",
-          directory: testWorkDir,
+          directory: currentTestWorkDir,
           maxIterations: 1,
         }),
       });
 
-      const response = await createResponse.json(); const id = response.config.id;
+      expect(createResponse.status).toBe(201);
+      const response = await createResponse.json();
+      expect(response.config).toBeDefined();
+      const id = response.config.id;
 
       // Try to accept (should fail)
       const acceptResponse = await fetch(`${baseUrl}/api/loops/${id}/plan/accept`, {
@@ -534,8 +602,8 @@ describe("Plan Mode API Integration", () => {
     test("deletes the loop", async () => {
       // Commit any previous changes first
       try {
-        await Bun.$`git -C ${testWorkDir} add -A`.quiet();
-        await Bun.$`git -C ${testWorkDir} commit -m "Test changes" --allow-empty`.quiet();
+        await Bun.$`git -C ${currentTestWorkDir} add -A`.quiet();
+        await Bun.$`git -C ${currentTestWorkDir} commit -m "Test changes" --allow-empty`.quiet();
       } catch {
         // Ignore if nothing to commit
       }
@@ -546,7 +614,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: testWorkDir,
+          directory: currentTestWorkDir,
           maxIterations: 1,
           planMode: true,
         }),

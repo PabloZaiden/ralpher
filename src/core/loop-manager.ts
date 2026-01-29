@@ -18,6 +18,7 @@ import {
   deleteLoop as deleteLoopFile,
   listLoops,
   updateLoopState,
+  getActiveLoopByDirectory,
 } from "../persistence/loops";
 import { insertReviewComment } from "../persistence/database";
 import { backendManager } from "./backend-manager";
@@ -102,6 +103,32 @@ export class LoopManager {
     eventEmitter?: SimpleEventEmitter<LoopEvent>;
   }) {
     this.emitter = options?.eventEmitter ?? loopEventEmitter;
+  }
+
+  /**
+   * Validates that no other active loop exists for the given directory.
+   * Throws an error with code "ACTIVE_LOOP_EXISTS" if a conflicting loop is found.
+   * 
+   * @param directory - The directory to check
+   * @param excludeLoopId - The current loop's ID to exclude from the check
+   */
+  private async validateNoActiveLoopForDirectory(directory: string, excludeLoopId: string): Promise<void> {
+    const existingActiveLoop = await getActiveLoopByDirectory(directory);
+    if (existingActiveLoop && existingActiveLoop.config.id !== excludeLoopId) {
+      const error = new Error(
+        `Another loop is already active for this directory: "${existingActiveLoop.config.name}". ` +
+        `Please stop or complete the existing loop before starting a new one.`
+      ) as Error & {
+        code: string;
+        conflictingLoop: { id: string; name: string };
+      };
+      error.code = "ACTIVE_LOOP_EXISTS";
+      error.conflictingLoop = {
+        id: existingActiveLoop.config.id,
+        name: existingActiveLoop.config.name,
+      };
+      throw error;
+    }
   }
 
   /**
@@ -228,6 +255,9 @@ export class LoopManager {
     if (this.engines.has(loopId)) {
       throw new Error("Loop plan mode is already running");
     }
+
+    // Check if another active loop exists for the same directory
+    await this.validateNoActiveLoopForDirectory(loop.config.directory, loopId);
 
     // Get the appropriate command executor
     const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
@@ -673,6 +703,9 @@ Follow the standard loop execution flow:
     if (this.engines.has(loopId)) {
       throw new Error("Loop is already running");
     }
+
+    // Check if another active loop exists for the same directory
+    await this.validateNoActiveLoopForDirectory(loop.config.directory, loopId);
 
     // Get the appropriate command executor for the current mode
     // (local for spawn mode, remote for connect mode)
