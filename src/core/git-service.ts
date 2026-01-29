@@ -80,7 +80,11 @@ export interface CommitOptions {
  * Options for resetHard operation with branch verification.
  */
 export interface ResetHardOptions {
-  /** Expected branch to verify before resetting. If set and mismatch, will auto-checkout. */
+  /**
+   * Expected branch to verify before resetting.
+   * If set and there is a mismatch, resetHard will directly checkout the expected branch
+   * without performing the additional safety checks used by other operations.
+   */
   expectedBranch?: string;
 }
 
