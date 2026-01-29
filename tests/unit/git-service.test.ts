@@ -509,4 +509,129 @@ describe("GitService", () => {
       }
     });
   });
+
+  describe("getDefaultBranch", () => {
+    test("returns branch from origin/HEAD when set", async () => {
+      // Create a bare remote repo
+      const remoteDir = await mkdtemp(join(tmpdir(), "ralpher-remote-"));
+      try {
+        await Bun.$`git init --bare ${remoteDir}`.quiet();
+        await Bun.$`git -C ${testDir} remote add origin ${remoteDir}`.quiet();
+        
+        // Push current branch to remote
+        const currentBranch = await git.getCurrentBranch(testDir);
+        await Bun.$`git -C ${testDir} push -u origin ${currentBranch}`.quiet();
+        
+        // Set origin/HEAD to point to our branch
+        await Bun.$`git -C ${testDir} remote set-head origin ${currentBranch}`.quiet();
+        
+        const defaultBranch = await git.getDefaultBranch(testDir);
+        expect(defaultBranch).toBe(currentBranch);
+      } finally {
+        await rm(remoteDir, { recursive: true });
+      }
+    });
+
+    test("falls back to main when origin/HEAD is not set but main exists", async () => {
+      // Our test repo should already have main or master
+      const currentBranch = await git.getCurrentBranch(testDir);
+      
+      // If the current branch is "main", this test is valid
+      if (currentBranch === "main") {
+        const defaultBranch = await git.getDefaultBranch(testDir);
+        expect(defaultBranch).toBe("main");
+      } else {
+        // Create a "main" branch if it doesn't exist
+        await git.createBranch(testDir, "main");
+        await git.checkoutBranch(testDir, currentBranch);
+        
+        const defaultBranch = await git.getDefaultBranch(testDir);
+        expect(defaultBranch).toBe("main");
+      }
+    });
+
+    test("falls back to master when main does not exist but master does", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+      
+      // If the current branch is "master", this test is valid
+      if (currentBranch === "master") {
+        const defaultBranch = await git.getDefaultBranch(testDir);
+        expect(defaultBranch).toBe("master");
+      } else {
+        // Create a repo with only "master" branch
+        const masterRepoDir = await mkdtemp(join(tmpdir(), "ralpher-master-repo-"));
+        try {
+          // Initialize with master as default branch
+          await Bun.$`git -c init.defaultBranch=master init ${masterRepoDir}`.quiet();
+          await Bun.$`git -C ${masterRepoDir} config user.email "test@test.com"`.quiet();
+          await Bun.$`git -C ${masterRepoDir} config user.name "Test User"`.quiet();
+          await writeFile(join(masterRepoDir, "README.md"), "# Test\n");
+          await Bun.$`git -C ${masterRepoDir} add -A`.quiet();
+          await Bun.$`git -C ${masterRepoDir} commit -m "Initial commit"`.quiet();
+          
+          // Create a new GitService for this repo
+          const executor = new TestCommandExecutor();
+          const masterGit = new GitService(executor);
+          
+          const defaultBranch = await masterGit.getDefaultBranch(masterRepoDir);
+          expect(defaultBranch).toBe("master");
+        } finally {
+          await rm(masterRepoDir, { recursive: true });
+        }
+      }
+    });
+
+    test("falls back to current branch when neither main nor master exists", async () => {
+      // Create a repo with a custom default branch name
+      const customRepoDir = await mkdtemp(join(tmpdir(), "ralpher-custom-repo-"));
+      try {
+        // Initialize with a custom default branch
+        await Bun.$`git -c init.defaultBranch=develop init ${customRepoDir}`.quiet();
+        await Bun.$`git -C ${customRepoDir} config user.email "test@test.com"`.quiet();
+        await Bun.$`git -C ${customRepoDir} config user.name "Test User"`.quiet();
+        await writeFile(join(customRepoDir, "README.md"), "# Test\n");
+        await Bun.$`git -C ${customRepoDir} add -A`.quiet();
+        await Bun.$`git -C ${customRepoDir} commit -m "Initial commit"`.quiet();
+        
+        // Create a new GitService for this repo
+        const executor = new TestCommandExecutor();
+        const customGit = new GitService(executor);
+        
+        const defaultBranch = await customGit.getDefaultBranch(customRepoDir);
+        expect(defaultBranch).toBe("develop");
+      } finally {
+        await rm(customRepoDir, { recursive: true });
+      }
+    });
+
+    test("prefers origin/HEAD over local main branch", async () => {
+      // Create a bare remote repo
+      const remoteDir = await mkdtemp(join(tmpdir(), "ralpher-remote-"));
+      try {
+        await Bun.$`git init --bare ${remoteDir}`.quiet();
+        await Bun.$`git -C ${testDir} remote add origin ${remoteDir}`.quiet();
+        
+        // Get current branch
+        const currentBranch = await git.getCurrentBranch(testDir);
+        
+        // Create a "develop" branch and push it
+        await git.createBranch(testDir, "develop");
+        await writeFile(join(testDir, "develop.txt"), "develop\n");
+        await git.commit(testDir, "Develop commit");
+        await Bun.$`git -C ${testDir} push -u origin develop`.quiet();
+        
+        // Go back to original branch and push it
+        await git.checkoutBranch(testDir, currentBranch);
+        await Bun.$`git -C ${testDir} push -u origin ${currentBranch}`.quiet();
+        
+        // Set origin/HEAD to develop (not main/master)
+        await Bun.$`git -C ${testDir} remote set-head origin develop`.quiet();
+        
+        const defaultBranch = await git.getDefaultBranch(testDir);
+        expect(defaultBranch).toBe("develop");
+      } finally {
+        await rm(remoteDir, { recursive: true });
+      }
+    });
+  });
 });

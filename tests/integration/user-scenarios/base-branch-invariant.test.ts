@@ -205,3 +205,110 @@ describe("Base Branch Invariant - Plan Mode", () => {
     });
   });
 });
+
+describe("Default Base Branch - Auto-Detection", () => {
+  describe("Loop creation without explicit baseBranch", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: [
+          "test-loop-name", // Name generation
+          "Working...",
+          "Done! <promise>COMPLETE</promise>",
+        ],
+        withPlanningDir: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("loop created without baseBranch uses repository's default branch", async () => {
+      // Create a feature branch and switch to it
+      await Bun.$`git -C ${ctx.workDir} checkout -b feature/some-work`.quiet();
+      
+      // Verify we're on the feature branch
+      const currentBranch = await getCurrentBranch(ctx.workDir);
+      expect(currentBranch).toBe("feature/some-work");
+
+      // Create a loop WITHOUT specifying baseBranch
+      const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
+        directory: ctx.workDir,
+        prompt: "Do some work",
+        // Note: baseBranch is NOT specified
+      });
+
+      expect(status).toBe(201);
+      const loop = body as Loop;
+
+      // The loop's baseBranch should be the repository's default branch (main/master),
+      // NOT the current branch (feature/some-work)
+      expect(loop.config.baseBranch).toBeDefined();
+      expect(["main", "master"]).toContain(loop.config.baseBranch ?? "");
+      expect(loop.config.baseBranch).not.toBe("feature/some-work");
+
+      // Wait for completion and verify git state
+      const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      
+      // originalBranch should be the default branch
+      expect(completedLoop.state.git?.originalBranch).toBe(ctx.defaultBranch);
+      expect(completedLoop.state.git?.originalBranch).not.toBe("feature/some-work");
+
+      // Clean up
+      await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/discard`, { method: "POST" });
+    });
+  });
+
+  describe("Loop creation with explicit baseBranch override", () => {
+    let ctx: TestServerContext;
+
+    beforeAll(async () => {
+      ctx = await setupTestServer({
+        mockResponses: [
+          "test-loop-name", // Name generation
+          "Working...",
+          "Done! <promise>COMPLETE</promise>",
+        ],
+        withPlanningDir: true,
+      });
+    });
+
+    afterAll(async () => {
+      await teardownTestServer(ctx);
+    });
+
+    test("loop created with explicit baseBranch uses that branch", async () => {
+      // Create a develop branch
+      await Bun.$`git -C ${ctx.workDir} checkout -b develop`.quiet();
+      await Bun.$`git -C ${ctx.workDir} checkout ${ctx.defaultBranch}`.quiet();
+
+      // Verify we're on the default branch
+      const currentBranch = await getCurrentBranch(ctx.workDir);
+      expect(currentBranch).toBe(ctx.defaultBranch);
+
+      // Create a loop WITH explicit baseBranch pointing to develop
+      const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
+        directory: ctx.workDir,
+        prompt: "Do some work on develop",
+        baseBranch: "develop",  // Explicit override
+      });
+
+      expect(status).toBe(201);
+      const loop = body as Loop;
+
+      // The loop's baseBranch should be the explicitly specified branch
+      expect(loop.config.baseBranch).toBe("develop");
+
+      // Wait for completion and verify git state
+      const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      
+      // originalBranch should be the explicitly specified branch (develop)
+      expect(completedLoop.state.git?.originalBranch).toBe("develop");
+
+      // Clean up
+      await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/discard`, { method: "POST" });
+    });
+  });
+});

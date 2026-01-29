@@ -172,6 +172,20 @@ export const loopsCrudRoutes = {
         }
       }
 
+      // Auto-detect default branch if baseBranch not provided
+      let effectiveBaseBranch = body.baseBranch;
+      if (!effectiveBaseBranch) {
+        try {
+          const executor = await backendManager.getCommandExecutorAsync(body.directory);
+          const git = GitService.withExecutor(executor);
+          effectiveBaseBranch = await git.getDefaultBranch(body.directory);
+          log.debug(`Auto-detected default branch for loop: ${effectiveBaseBranch}`);
+        } catch (error) {
+          log.warn(`Failed to detect default branch, will fall back to current branch: ${String(error)}`);
+          // Continue without baseBranch - loop engine will use current branch as fallback
+        }
+      }
+
       try {
         const loop = await loopManager.createLoop({
           directory: body.directory,
@@ -184,7 +198,7 @@ export const loopsCrudRoutes = {
           stopPattern: body.stopPattern,
           gitBranchPrefix: body.git?.branchPrefix,
           gitCommitPrefix: body.git?.commitPrefix,
-          baseBranch: body.baseBranch,
+          baseBranch: effectiveBaseBranch,
           clearPlanningFolder: body.clearPlanningFolder,
           planMode: body.planMode,
           draft: body.draft,

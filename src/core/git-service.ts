@@ -129,6 +129,56 @@ export class GitService {
   }
 
   /**
+   * Get the repository's default branch.
+   * 
+   * Detection strategy:
+   * 1. Try to get origin/HEAD reference (set by git clone or manually)
+   * 2. Check if 'main' branch exists locally
+   * 3. Check if 'master' branch exists locally
+   * 4. Fall back to the current branch
+   * 
+   * @param directory - The git repository directory
+   * @returns The name of the default branch
+   */
+  async getDefaultBranch(directory: string): Promise<string> {
+    // Strategy 1: Try to get origin/HEAD reference
+    // This is typically set by 'git clone' or can be set manually with:
+    // git remote set-head origin <branch>
+    const originHeadResult = await this.runGitCommand(directory, [
+      "symbolic-ref",
+      "refs/remotes/origin/HEAD",
+    ]);
+    if (originHeadResult.success) {
+      // Output is like "refs/remotes/origin/main"
+      const ref = originHeadResult.stdout.trim();
+      const match = ref.match(/^refs\/remotes\/origin\/(.+)$/);
+      if (match?.[1]) {
+        log.trace(`[GitService] Default branch from origin/HEAD: ${match[1]}`);
+        return match[1];
+      }
+    }
+
+    // Strategy 2: Check if 'main' branch exists locally
+    const mainExists = await this.branchExists(directory, "main");
+    if (mainExists) {
+      log.trace(`[GitService] Default branch: main (exists locally)`);
+      return "main";
+    }
+
+    // Strategy 3: Check if 'master' branch exists locally
+    const masterExists = await this.branchExists(directory, "master");
+    if (masterExists) {
+      log.trace(`[GitService] Default branch: master (exists locally)`);
+      return "master";
+    }
+
+    // Strategy 4: Fall back to current branch
+    const currentBranch = await this.getCurrentBranch(directory);
+    log.trace(`[GitService] Default branch fallback to current: ${currentBranch}`);
+    return currentBranch;
+  }
+
+  /**
    * Check if there are uncommitted changes (staged or unstaged).
    */
   async hasUncommittedChanges(directory: string): Promise<boolean> {
