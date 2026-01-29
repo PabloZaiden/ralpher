@@ -82,12 +82,16 @@ class PlanModeMockBackend implements LoopBackend {
     return session;
   }
 
+  // Track unique name counter for generating unique loop names
+  private nameCounter = 0;
+
   async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
-    // sendPrompt is used for name generation - always return a name
+    // sendPrompt is used for name generation - return a unique name to avoid branch collisions
+    const uniqueName = `test-loop-name-${++this.nameCounter}`;
     return {
       id: `msg-${Date.now()}`,
-      content: "test-loop-name",
-      parts: [{ type: "text", text: "test-loop-name" }],
+      content: uniqueName,
+      parts: [{ type: "text", text: uniqueName }],
     };
   }
 
@@ -445,6 +449,15 @@ describe("Plan Mode API Integration", () => {
     });
 
     test("does not clear planning folder on accept", async () => {
+      // IMPORTANT: Previous tests may leave us on a working branch, so we need to
+      // checkout the base branch before creating the loop to ensure proper test isolation.
+      // Get the default branch by checking if 'main' or 'master' exists (same logic as GitService.getDefaultBranch)
+      const mainExists = await Bun.$`git -C ${testWorkDir} rev-parse --verify main`.quiet().then(() => true).catch(() => false);
+      const baseBranch = mainExists ? "main" : "master";
+      
+      // Checkout the base branch to ensure we're not on a working branch from previous tests
+      await Bun.$`git -C ${testWorkDir} checkout ${baseBranch}`.quiet();
+      
       // Create loop with clear folder enabled
       const planningDir = join(testWorkDir, ".planning-test2");
       await mkdir(planningDir, { recursive: true });
@@ -465,7 +478,10 @@ describe("Plan Mode API Integration", () => {
       const response = await createResponse.json(); const id = response.config.id;
       await waitForPlanReady(id);
 
-      // Create a plan file and commit it (required before git branch setup)
+      // Create a plan file and commit it to the base branch.
+      // When accept is called, the loop engine will switch to the base branch and
+      // create a new working branch from it. The plan.md must exist on the base branch
+      // so it will also exist on the new working branch.
       await writeFile(join(planningDir, "plan.md"), "# My Plan");
       await Bun.$`git -C ${testWorkDir} add .`.quiet();
       await Bun.$`git -C ${testWorkDir} commit -m "Add plan file"`.quiet();
