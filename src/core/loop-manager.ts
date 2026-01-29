@@ -770,6 +770,16 @@ Follow the standard loop execution flow:
       return { success: false, error: "No git branch was created for this loop" };
     }
 
+    // Prevent switching completion action on review cycles
+    // If the loop was originally pushed, it must continue to be pushed
+    if (loop.state.reviewMode?.completionAction && 
+        loop.state.reviewMode.completionAction !== "merge") {
+      return { 
+        success: false, 
+        error: "This loop was originally pushed. Use push to finalize review cycles." 
+      };
+    }
+
     // Mark as being accepted
     this.loopsBeingAccepted.add(loopId);
     log.debug(`[LoopManager] acceptLoop: Starting accept for loop ${loopId}`);
@@ -860,6 +870,16 @@ Follow the standard loop execution flow:
     // Must have git state (branch was created)
     if (!loop.state.git) {
       return { success: false, error: "No git branch was created for this loop" };
+    }
+
+    // Prevent switching completion action on review cycles
+    // If the loop was originally merged, it must continue to be merged
+    if (loop.state.reviewMode?.completionAction && 
+        loop.state.reviewMode.completionAction !== "push") {
+      return { 
+        success: false, 
+        error: "This loop was originally merged. Use merge to finalize review cycles." 
+      };
     }
 
     // Mark as being processed

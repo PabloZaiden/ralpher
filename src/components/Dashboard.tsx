@@ -681,6 +681,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         onClose={() => setAcceptModal({ open: false, loopId: null })}
         onAccept={handleAccept}
         onPush={handlePush}
+        restrictToAction={loops.find(l => l.config.id === acceptModal.loopId)?.state.reviewMode?.completionAction}
       />
 
       {/* Purge confirmation modal */}

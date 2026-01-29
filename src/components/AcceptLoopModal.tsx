@@ -15,6 +15,8 @@ export interface AcceptLoopModalProps {
   onAccept: () => Promise<void>;
   /** Callback to push the loop to remote */
   onPush: () => Promise<void>;
+  /** Optional: restrict to only one finalization action (for review cycles) */
+  restrictToAction?: "push" | "merge";
 }
 
 /**
@@ -26,11 +28,23 @@ export function AcceptLoopModal({
   onClose,
   onAccept,
   onPush,
+  restrictToAction,
 }: AcceptLoopModalProps) {
   const [accepting, setAccepting] = useState(false);
   const [pushing, setPushing] = useState(false);
 
   const isLoading = accepting || pushing;
+
+  // Determine which buttons to show based on restrictToAction
+  const showPush = !restrictToAction || restrictToAction === "push";
+  const showMerge = !restrictToAction || restrictToAction === "merge";
+
+  // Determine modal title and description based on restriction
+  const isReviewCycle = !!restrictToAction;
+  const modalTitle = isReviewCycle ? "Finalize Review Cycle" : "Finalize Loop";
+  const modalDescription = isReviewCycle
+    ? `This loop was originally ${restrictToAction === "push" ? "pushed" : "merged"}. Continue with the same action.`
+    : "Choose how to finalize this loop's changes.";
 
   async function handleAccept() {
     setAccepting(true);
@@ -54,8 +68,8 @@ export function AcceptLoopModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Finalize Loop"
-      description="Choose how to finalize this loop's changes."
+      title={modalTitle}
+      description={modalDescription}
       size="md"
       footer={
         <Button
@@ -68,49 +82,53 @@ export function AcceptLoopModal({
       }
     >
       <div className="space-y-2">
-        <button
-          onClick={handlePush}
-          disabled={isLoading}
-          className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-            {pushing ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
-            ) : (
-              <span className="text-blue-600 dark:text-blue-400 text-sm">↑</span>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-              Push to Remote <span className="text-gray-500 dark:text-gray-400 font-normal">(recommended)</span>
+        {showPush && (
+          <button
+            onClick={handlePush}
+            disabled={isLoading}
+            className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+              {pushing ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
+              ) : (
+                <span className="text-blue-600 dark:text-blue-400 text-sm">↑</span>
+              )}
             </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              Push the working branch to remote. Create a PR for code review or update an existing one.
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                Push to Remote {!restrictToAction && <span className="text-gray-500 dark:text-gray-400 font-normal">(recommended)</span>}
+              </div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Push the working branch to remote. Create a PR for code review or update an existing one.
+              </div>
             </div>
-          </div>
-          <span className="text-gray-400 dark:text-gray-500">→</span>
-        </button>
+            <span className="text-gray-400 dark:text-gray-500">→</span>
+          </button>
+        )}
 
-        <button
-          onClick={handleAccept}
-          disabled={isLoading}
-          className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-            {accepting ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-green-500 border-t-transparent" />
-            ) : (
-              <span className="text-green-600 dark:text-green-400 text-sm">✓</span>
-            )}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Accept & Merge</div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              Merge changes into the original branch locally. Use if you don't need a PR.
+        {showMerge && (
+          <button
+            onClick={handleAccept}
+            disabled={isLoading}
+            className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              {accepting ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-green-500 border-t-transparent" />
+              ) : (
+                <span className="text-green-600 dark:text-green-400 text-sm">✓</span>
+              )}
             </div>
-          </div>
-          <span className="text-gray-400 dark:text-gray-500">→</span>
-        </button>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Accept & Merge</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Merge changes into the original branch locally. Use if you don't need a PR.
+              </div>
+            </div>
+            <span className="text-gray-400 dark:text-gray-500">→</span>
+          </button>
+        )}
       </div>
     </Modal>
   );

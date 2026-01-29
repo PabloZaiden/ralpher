@@ -4,7 +4,7 @@
  */
 
 import { test, expect, describe } from "bun:test";
-import { setupTestContext, teardownTestContext, waitForEvent } from "../setup";
+import { setupTestContext, teardownTestContext, waitForEvent, waitForLoopStatus } from "../setup";
 import { join } from "path";
 
 describe("Review Mode", () => {
@@ -303,6 +303,187 @@ describe("Review Mode", () => {
         const result = await ctx.manager.getReviewHistory("non-existent-id");
         expect(result.success).toBe(false);
         expect(result.error).toBe("Loop not found");
+      } finally {
+        await teardownTestContext(ctx);
+      }
+    });
+  });
+
+  describe("Completion Action Enforcement", () => {
+    test("acceptLoop rejects if loop was originally pushed", async () => {
+      const ctx = await setupTestContext({
+        initGit: true,
+        initialFiles: {
+          "test.txt": "Initial content",
+        },
+      });
+
+      try {
+        // Set up remote for pushing
+        const remoteDir = join(ctx.dataDir, "remote-" + Date.now() + ".git");
+        await Bun.$`git init --bare ${remoteDir}`.quiet();
+        await Bun.$`git -C ${ctx.workDir} remote add origin ${remoteDir}`.quiet();
+        const currentBranch = (await Bun.$`git -C ${ctx.workDir} branch --show-current`.text()).trim();
+        await Bun.$`git -C ${ctx.workDir} push origin ${currentBranch}`.quiet();
+
+        // Create, complete, and push a loop
+        const loop = await ctx.manager.createLoop({
+          directory: ctx.workDir,
+          prompt: "Make changes",
+        });
+
+        await ctx.manager.startLoop(loop.config.id);
+        await waitForEvent(ctx.events, "loop.completed");
+
+        // Push the loop (sets completionAction to "push")
+        const pushResult = await ctx.manager.pushLoop(loop.config.id);
+        expect(pushResult.success).toBe(true);
+
+        // Verify it was pushed
+        const pushedLoop = await ctx.manager.getLoop(loop.config.id);
+        expect(pushedLoop!.state.reviewMode?.completionAction).toBe("push");
+
+        // Address comments to start a new review cycle
+        const addressResult = await ctx.manager.addressReviewComments(
+          loop.config.id,
+          "Please fix this issue"
+        );
+        expect(addressResult.success).toBe(true);
+
+        // Wait for the review cycle to complete
+        await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"]);
+
+        // Now try to accept (merge) - this should be rejected
+        const acceptResult = await ctx.manager.acceptLoop(loop.config.id);
+        expect(acceptResult.success).toBe(false);
+        expect(acceptResult.error).toContain("originally pushed");
+      } finally {
+        await teardownTestContext(ctx);
+      }
+    });
+
+    test("pushLoop rejects if loop was originally merged", async () => {
+      const ctx = await setupTestContext({
+        initGit: true,
+        initialFiles: {
+          "test.txt": "Initial content",
+        },
+      });
+
+      try {
+        // Set up remote for pushing
+        const remoteDir = join(ctx.dataDir, "remote-" + Date.now() + ".git");
+        await Bun.$`git init --bare ${remoteDir}`.quiet();
+        await Bun.$`git -C ${ctx.workDir} remote add origin ${remoteDir}`.quiet();
+        const currentBranch = (await Bun.$`git -C ${ctx.workDir} branch --show-current`.text()).trim();
+        await Bun.$`git -C ${ctx.workDir} push origin ${currentBranch}`.quiet();
+
+        // Create, complete, and merge a loop
+        const loop = await ctx.manager.createLoop({
+          directory: ctx.workDir,
+          prompt: "Make changes",
+        });
+
+        await ctx.manager.startLoop(loop.config.id);
+        await waitForEvent(ctx.events, "loop.completed");
+
+        // Accept (merge) the loop (sets completionAction to "merge")
+        const acceptResult = await ctx.manager.acceptLoop(loop.config.id);
+        expect(acceptResult.success).toBe(true);
+
+        // Verify it was merged
+        const mergedLoop = await ctx.manager.getLoop(loop.config.id);
+        expect(mergedLoop!.state.reviewMode?.completionAction).toBe("merge");
+
+        // Address comments to start a new review cycle
+        const addressResult = await ctx.manager.addressReviewComments(
+          loop.config.id,
+          "Please fix this issue"
+        );
+        expect(addressResult.success).toBe(true);
+
+        // Wait for the review cycle to complete
+        await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"]);
+
+        // Now try to push - this should be rejected
+        const pushResult = await ctx.manager.pushLoop(loop.config.id);
+        expect(pushResult.success).toBe(false);
+        expect(pushResult.error).toContain("originally merged");
+      } finally {
+        await teardownTestContext(ctx);
+      }
+    });
+
+    test("acceptLoop allows merge on first completion (no prior completionAction)", async () => {
+      const ctx = await setupTestContext({
+        initGit: true,
+        initialFiles: {
+          "test.txt": "Initial content",
+        },
+      });
+
+      try {
+        // Create and complete a loop
+        const loop = await ctx.manager.createLoop({
+          directory: ctx.workDir,
+          prompt: "Make changes",
+        });
+
+        await ctx.manager.startLoop(loop.config.id);
+        await waitForEvent(ctx.events, "loop.completed");
+
+        // Verify no prior reviewMode
+        const beforeAccept = await ctx.manager.getLoop(loop.config.id);
+        expect(beforeAccept!.state.reviewMode).toBeUndefined();
+
+        // Accept (merge) should succeed
+        const acceptResult = await ctx.manager.acceptLoop(loop.config.id);
+        expect(acceptResult.success).toBe(true);
+
+        // Verify completionAction is now set
+        const afterAccept = await ctx.manager.getLoop(loop.config.id);
+        expect(afterAccept!.state.reviewMode?.completionAction).toBe("merge");
+      } finally {
+        await teardownTestContext(ctx);
+      }
+    });
+
+    test("pushLoop allows push on first completion (no prior completionAction)", async () => {
+      const ctx = await setupTestContext({
+        initGit: true,
+        initialFiles: {
+          "test.txt": "Initial content",
+        },
+      });
+
+      try {
+        // Set up remote for pushing
+        const remoteDir = join(ctx.dataDir, "remote-" + Date.now() + ".git");
+        await Bun.$`git init --bare ${remoteDir}`.quiet();
+        await Bun.$`git -C ${ctx.workDir} remote add origin ${remoteDir}`.quiet();
+        const currentBranch = (await Bun.$`git -C ${ctx.workDir} branch --show-current`.text()).trim();
+        await Bun.$`git -C ${ctx.workDir} push origin ${currentBranch}`.quiet();
+
+        // Create and complete a loop
+        const loop = await ctx.manager.createLoop({
+          directory: ctx.workDir,
+          prompt: "Make changes",
+        });
+
+        await ctx.manager.startLoop(loop.config.id);
+        await waitForEvent(ctx.events, "loop.completed");
+
+        // Verify no prior reviewMode
+        const beforePush = await ctx.manager.getLoop(loop.config.id);
+        expect(beforePush!.state.reviewMode).toBeUndefined();
+
+        // Push should succeed
+        const pushResult = await ctx.manager.pushLoop(loop.config.id);
+        expect(pushResult.success).toBe(true);
+
+        // Verify completionAction is now set
+        const afterPush = await ctx.manager.getLoop(loop.config.id);
+        expect(afterPush!.state.reviewMode?.completionAction).toBe("push");
       } finally {
         await teardownTestContext(ctx);
       }
