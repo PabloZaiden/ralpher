@@ -79,7 +79,7 @@ export function CreateLoopForm({
   const isEditing = !!editLoopId;
   
   const [directory, setDirectory] = useState(initialLoopData?.directory ?? initialDirectory);
-  const [prompt, setPrompt] = useState(initialLoopData?.prompt ?? "Do everything that's pending in the plan");
+  const [prompt, setPrompt] = useState(initialLoopData?.prompt ?? "");
   const [maxIterations, setMaxIterations] = useState<string>(initialLoopData?.maxIterations?.toString() ?? "");
   const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>(initialLoopData?.maxConsecutiveErrors?.toString() ?? "10");
   const [activityTimeoutSeconds, setActivityTimeoutSeconds] = useState<string>(initialLoopData?.activityTimeoutSeconds?.toString() ?? "180");

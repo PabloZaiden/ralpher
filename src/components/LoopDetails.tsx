@@ -1046,6 +1046,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         onClose={() => setAcceptModal(false)}
         onAccept={handleAccept}
         onPush={handlePush}
+        restrictToAction={state.reviewMode?.completionAction}
       />
 
       {/* Purge confirmation modal */}
