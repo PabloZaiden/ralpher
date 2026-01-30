@@ -149,7 +149,7 @@ This downloads the appropriate binary for your platform (Linux/macOS, x64/arm64)
 
 - [Bun](https://bun.sh) v1.3.5+ (for development only)
 - Git
-- An [OpenCode](https://opencode.ai) compatible AI provider API key
+- A local [OpenCode](https://opencode.ai) binary in your PATH (for Spawn mode) **or** a remote OpenCode server URL (for Connect mode)
 
 ### Running Ralpher
 
