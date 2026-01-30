@@ -880,8 +880,15 @@ export const loopsControlRoutes = {
       }
 
       // Validate message if provided
-      if (body.message !== undefined && typeof body.message !== "string") {
-        return errorResponse("validation_error", "'message' must be a string");
+      if (body.message !== undefined) {
+        if (typeof body.message !== "string") {
+          return errorResponse("validation_error", "'message' must be a string");
+        }
+        const trimmedMessage = body.message.trim();
+        if (trimmedMessage === "") {
+          return errorResponse("validation_error", "'message' must be a non-empty string");
+        }
+        body.message = trimmedMessage;
       }
 
       // Validate model if provided
