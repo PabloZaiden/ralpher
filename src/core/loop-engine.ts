@@ -1565,6 +1565,8 @@ When the updated plan is ready, end your response with:
 
 - If the \`./.planning\` folder does not exist or is empty, create it and add a file called \`plan.md\` where you outline your plan to achieve the goal, and a \`status.md\` file to track progress.
 
+- If the user added a new message, make sure to incorporate that into your plan and tasks. If it contradicts or changes something in the original plan or goal, update the plan accordingly.
+
 - Make sure that the implementations and fixes you make don't contradict the core design principles outlined in AGENTS.md and the planning document.
 
 - Add tasks to the plan to achieve the goal.
