@@ -1515,6 +1515,11 @@ export class LoopEngine {
         // Plan feedback prompt (uses pending prompt set by sendPlanFeedback)
         const feedback = this.loop.state.pendingPrompt ?? "Please refine the plan based on feedback.";
         
+        // Log the user's plan feedback so it appears in the conversation logs
+        if (this.loop.state.pendingPrompt) {
+          this.emitLog("user", this.loop.state.pendingPrompt);
+        }
+        
         const text = `The user has provided feedback on your plan:
 
 ---
@@ -1542,6 +1547,8 @@ When the updated plan is ready, end your response with:
     
     // Clear the pending prompt after consumption (it's a one-time override)
     if (this.loop.state.pendingPrompt) {
+      // Log the user's injected message so it appears in the conversation logs
+      this.emitLog("user", this.loop.state.pendingPrompt);
       this.emitLog("info", "Using pending prompt for this iteration", {
         originalPrompt: this.config.prompt.slice(0, 50) + (this.config.prompt.length > 50 ? "..." : ""),
         pendingPrompt: goalPrompt.slice(0, 50) + (goalPrompt.length > 50 ? "..." : ""),

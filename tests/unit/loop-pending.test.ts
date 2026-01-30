@@ -413,4 +413,40 @@ describe("LoopEngine Pending Model", () => {
       modelID: "gpt-4o",
     });
   });
+
+  test("pending message is logged as 'user' level when consumed", async () => {
+    const loop = createTestLoop({ prompt: "Original prompt" });
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    // Set pending prompt before starting
+    engine.setPendingPrompt("User injected message for testing");
+
+    // Start the engine
+    await engine.start();
+
+    // Wait for completion
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Verify a log event with level "user" was emitted containing the message
+    const userLogEvents = emittedEvents.filter(
+      (e) => e.type === "loop.log" && e.level === "user"
+    );
+    expect(userLogEvents.length).toBe(1);
+    expect(userLogEvents[0]).toMatchObject({
+      type: "loop.log",
+      loopId: "test-loop-1",
+      level: "user",
+      message: "User injected message for testing",
+    });
+
+    // Verify the message is also persisted in the loop state logs
+    const userLogs = loop.state.logs?.filter((log) => log.level === "user");
+    expect(userLogs?.length).toBe(1);
+    expect(userLogs?.[0]?.message).toBe("User injected message for testing");
+  });
 });
