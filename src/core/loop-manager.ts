@@ -1426,6 +1426,10 @@ Follow the standard loop execution flow:
    * Sets the pending prompt/model and restarts the loop.
    * 
    * Works for loops in: completed, stopped, failed, max_iterations states.
+   * 
+   * Branch handling:
+   * - If the loop was NOT merged/accepted: continues on the existing working branch
+   * - If the loop was merged/accepted (no working branch): creates new branch from original
    */
   private async jumpstartLoop(loopId: string, options: { message?: string; model?: ModelConfig }): Promise<{ success: boolean; error?: string }> {
     const loop = await loadLoop(loopId);
@@ -1473,14 +1477,69 @@ Follow the standard loop execution flow:
       timestamp: createTimestamp(),
     });
 
-    // Restart the loop
+    // Determine if we should continue on existing branch or create new one
+    // If the loop has an existing working branch, continue on it (don't create a new branch)
+    const hasExistingBranch = !!loop.state.git?.workingBranch;
+    
+    if (hasExistingBranch) {
+      // Continue on the existing working branch (similar to addressReviewComments for pushed loops)
+      return this.jumpstartOnExistingBranch(loopId, loop);
+    } else {
+      // No existing working branch (merged loop or never ran) - use normal startLoop which creates new branch
+      try {
+        await this.startLoop(loopId);
+        log.info(`Jumpstarted loop ${loopId} with pending message (new branch)`);
+        return { success: true };
+      } catch (startError) {
+        log.error(`Failed to jumpstart loop ${loopId}: ${String(startError)}`);
+        return { success: false, error: `Failed to jumpstart loop: ${String(startError)}` };
+      }
+    }
+  }
+
+  /**
+   * Jumpstart a loop on its existing working branch.
+   * Used when the loop was NOT merged/accepted and should continue its previous work.
+   */
+  private async jumpstartOnExistingBranch(loopId: string, loop: Loop): Promise<{ success: boolean; error?: string }> {
     try {
-      await this.startLoop(loopId);
-      log.info(`Jumpstarted loop ${loopId} with pending message`);
+      // Get the appropriate command executor for the current mode
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const git = GitService.withExecutor(executor);
+      const backend = backendManager.getBackend();
+
+      // Check out the existing working branch
+      const workingBranch = loop.state.git!.workingBranch;
+      log.info(`Jumpstarting loop ${loopId} on existing branch: ${workingBranch}`);
+      await git.checkoutBranch(loop.config.directory, workingBranch);
+
+      // Create and start a new loop engine with skipGitSetup
+      // (branch is already checked out, no need to create a new one)
+      const engine = new LoopEngine({
+        loop: { config: loop.config, state: loop.state },
+        backend,
+        gitService: git,
+        eventEmitter: this.emitter,
+        onPersistState: async (state) => {
+          await updateLoopState(loopId, state);
+        },
+        skipGitSetup: true, // Don't create a new branch - continue on existing
+      });
+      this.engines.set(loopId, engine);
+
+      // Start state persistence
+      this.startStatePersistence(loopId);
+
+      // Start execution (fire and forget - don't block the caller)
+      engine.start().catch((error) => {
+        log.error(`Loop ${loopId} failed to start after jumpstart:`, String(error));
+      });
+
+      log.info(`Jumpstarted loop ${loopId} with pending message on existing branch: ${workingBranch}`);
       return { success: true };
-    } catch (startError) {
-      log.error(`Failed to jumpstart loop ${loopId}: ${String(startError)}`);
-      return { success: false, error: `Failed to jumpstart loop: ${String(startError)}` };
+    } catch (error) {
+      log.error(`Failed to jumpstart loop ${loopId} on existing branch: ${String(error)}`);
+      return { success: false, error: `Failed to jumpstart loop: ${String(error)}` };
     }
   }
 

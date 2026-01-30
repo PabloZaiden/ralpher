@@ -830,4 +830,63 @@ describe("POST /api/loops/:id/pending", () => {
       await rm(workDir, { recursive: true, force: true });
     }
   });
+
+  test("POST jumpstart continues on existing branch instead of creating new one", async () => {
+    const workDir = await createTestWorkDir();
+    try {
+      // Create and start a loop
+      const createRes = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Branch Continuation Test",
+          directory: workDir,
+          prompt: "Test prompt",
+        }),
+      });
+      expect(createRes.status).toBe(201);
+      const created = await createRes.json();
+      const loopId = created.config.id;
+
+      // Wait for it to be running
+      await waitForLoopStatus(loopId, ["running"]);
+
+      // Get the working branch that was created
+      const loopBeforeStop = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      const loopDataBeforeStop = await loopBeforeStop.json();
+      const originalWorkingBranch = loopDataBeforeStop.state.git?.workingBranch;
+      expect(originalWorkingBranch).toBeDefined();
+      expect(originalWorkingBranch).toContain("ralph/");
+
+      // Stop the loop
+      await loopManager.stopLoop(loopId);
+      await waitForLoopStatus(loopId, ["stopped"]);
+
+      // Jumpstart the loop with a message
+      const pendingRes = await fetch(`${baseUrl}/api/loops/${loopId}/pending`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Continue on the same branch",
+        }),
+      });
+      expect(pendingRes.status).toBe(200);
+
+      // Wait for it to be running again
+      await waitForLoopStatus(loopId, ["starting", "running"]);
+
+      // Verify it's still on the same working branch
+      const loopAfterJumpstart = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      const loopDataAfterJumpstart = await loopAfterJumpstart.json();
+      const currentWorkingBranch = loopDataAfterJumpstart.state.git?.workingBranch;
+
+      // The working branch should be the same as before the stop
+      expect(currentWorkingBranch).toBe(originalWorkingBranch);
+
+      // Clean up
+      await loopManager.stopLoop(loopId);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
 });
