@@ -269,5 +269,3 @@ export function LoopActionBar({
     </div>
   );
 }
-
-export default LoopActionBar;
