@@ -32,19 +32,19 @@ export interface LoopConfig {
   /** ISO 8601 timestamp of the last configuration update */
   updatedAt: string;
 
-  /** Model configuration for AI provider and model selection */
+  /** Model configuration for AI provider and model selection (optional - uses backend default if not set) */
   model?: ModelConfig;
 
-  /** Maximum iterations before stopping (default: unlimited) */
-  maxIterations?: number;
+  /** Maximum iterations before stopping (Infinity for unlimited) */
+  maxIterations: number;
 
-  /** Maximum consecutive identical errors before failsafe exit (default: 10) */
-  maxConsecutiveErrors?: number;
+  /** Maximum consecutive identical errors before failsafe exit */
+  maxConsecutiveErrors: number;
 
-  /** Seconds without events before treating as error and retrying (default: 180) */
-  activityTimeoutSeconds?: number;
+  /** Seconds without events before treating as error and retrying */
+  activityTimeoutSeconds: number;
 
-  /** Regex pattern for completion detection. Default: "<promise>COMPLETE</promise>$" */
+  /** Regex pattern for completion detection */
   stopPattern: string;
 
   /** Git integration settings for branch and commit naming */
@@ -53,11 +53,11 @@ export interface LoopConfig {
   /** Base branch to create the loop from (if different from current when started) */
   baseBranch?: string;
 
-  /** Whether to clear .planning folder on start (default: false) */
-  clearPlanningFolder?: boolean;
+  /** Whether to clear .planning folder on start */
+  clearPlanningFolder: boolean;
 
   /** Whether to start in plan mode (for drafts, this indicates the intended mode) */
-  planMode?: boolean;
+  planMode: boolean;
 }
 
 /**
@@ -116,14 +116,14 @@ export interface LoopState {
   /** Recent iteration summaries for display (last N iterations) */
   recentIterations: IterationSummary[];
 
-  /** Application logs persisted for page refresh */
-  logs?: LoopLogEntry[];
+  /** Application logs persisted for page refresh (always initialized as empty array) */
+  logs: LoopLogEntry[];
 
-  /** Messages from current iteration persisted for page refresh */
-  messages?: PersistedMessage[];
+  /** Messages from current iteration persisted for page refresh (always initialized as empty array) */
+  messages: PersistedMessage[];
 
-  /** Tool calls from current iteration persisted for page refresh */
-  toolCalls?: PersistedToolCall[];
+  /** Tool calls from current iteration persisted for page refresh (always initialized as empty array) */
+  toolCalls: PersistedToolCall[];
 
   /** Consecutive error tracking for failsafe exit */
   consecutiveErrors?: ConsecutiveErrorTracker;
@@ -164,8 +164,8 @@ export interface LoopState {
     reviewBranches: string[];
   };
 
-  /** TODOs from the session persisted for screen refresh */
-  todos?: TodoItem[];
+  /** TODOs from the session persisted for screen refresh (always initialized as empty array) */
+  todos: TodoItem[];
 }
 
 /**
@@ -340,8 +340,11 @@ export interface Loop {
  */
 export const DEFAULT_LOOP_CONFIG = {
   stopPattern: "<promise>COMPLETE</promise>$",
+  maxIterations: Infinity,
   maxConsecutiveErrors: 10,
   activityTimeoutSeconds: 180, // 3 minutes
+  clearPlanningFolder: false,
+  planMode: false,
   git: {
     branchPrefix: "ralph/",
     commitPrefix: "[Ralph]",
@@ -360,6 +363,7 @@ export function createInitialState(id: string): LoopState {
     logs: [],
     messages: [],
     toolCalls: [],
+    todos: [],
   };
 }
 

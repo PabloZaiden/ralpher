@@ -3,8 +3,7 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
-import type { UncommittedChangesError, ModelInfo, HealthResponse } from "../types";
-import type { BranchInfo } from "./CreateLoopForm";
+import type { UncommittedChangesError, ModelInfo, HealthResponse, BranchInfo } from "../types";
 import { useLoops, useServerSettings } from "../hooks";
 import { Button, Modal } from "./common";
 import { LoopCard } from "./LoopCard";

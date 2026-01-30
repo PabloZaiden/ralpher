@@ -13,16 +13,7 @@
 
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
-
-/**
- * Branch information returned by the API.
- */
-export interface BranchInfo {
-  /** Branch name (e.g., "main", "feature/auth") */
-  name: string;
-  /** Whether this is the currently checked out branch */
-  current: boolean;
-}
+import type { BranchInfo } from "../types";
 
 /**
  * Response for GET /api/git/branches endpoint.

@@ -133,6 +133,11 @@ describe("LoopEngine Pending Model", () => {
         providerID: "anthropic",
         modelID: "claude-sonnet-4-20250514",
       },
+      maxIterations: Infinity,
+      maxConsecutiveErrors: 10,
+      activityTimeoutSeconds: 180,
+      clearPlanningFolder: false,
+      planMode: false,
       ...overrides,
     };
 
@@ -141,6 +146,10 @@ describe("LoopEngine Pending Model", () => {
       status: "idle",
       currentIteration: 0,
       recentIterations: [],
+      logs: [],
+      messages: [],
+      toolCalls: [],
+      todos: [],
     };
 
     return { config, state };

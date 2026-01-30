@@ -7,7 +7,17 @@
  * @module types/api
  */
 
-import type { GitConfig, Loop, ModelConfig, ReviewComment } from "./loop";
+import type { GitConfig, ModelConfig, ReviewComment } from "./loop";
+
+/**
+ * Branch information returned by the git API.
+ */
+export interface BranchInfo {
+  /** Branch name (e.g., "main", "feature/auth") */
+  name: string;
+  /** Whether this is the currently checked out branch */
+  current: boolean;
+}
 
 /**
  * Model information returned by the GET /api/models endpoint.
@@ -43,7 +53,7 @@ export interface CreateLoopRequest {
   prompt: string;
   /** Model configuration for AI provider and model selection */
   model?: ModelConfig;
-  /** Maximum number of iterations before stopping (unlimited if not set) */
+  /** Maximum number of iterations before stopping (default: Infinity for unlimited) */
   maxIterations?: number;
   /** Maximum consecutive identical errors before failsafe exit (default: 10) */
   maxConsecutiveErrors?: number;
@@ -57,7 +67,7 @@ export interface CreateLoopRequest {
   baseBranch?: string;
   /** Clear the .planning folder contents before starting (default: false) */
   clearPlanningFolder?: boolean;
-  /** Start in plan creation mode instead of immediate execution */
+  /** Start in plan creation mode instead of immediate execution (default: false) */
   planMode?: boolean;
   /** Save as draft without starting (no git branch or session created) */
   draft?: boolean;
@@ -84,22 +94,6 @@ export interface UpdateLoopRequest {
   stopPattern?: string;
   /** Update git configuration (branch/commit prefixes) */
   git?: Partial<GitConfig>;
-}
-
-/**
- * Request body for POST /api/loops/:id/plan/feedback endpoint.
- */
-export interface PlanFeedbackRequest {
-  /** User's feedback/comments on the plan to be incorporated */
-  feedback: string;
-}
-
-/**
- * Request body for POST /api/loops/:id/plan/accept endpoint.
- * Empty body - just triggers acceptance of the current plan.
- */
-export interface PlanAcceptRequest {
-  // Empty - just triggers acceptance
 }
 
 /**
@@ -167,25 +161,6 @@ export interface ReviewHistoryResponse {
 }
 
 /**
- * Request body for starting a loop.
- * Currently reserved for future options.
- * 
- * Note: Previously supported handleUncommitted option has been removed.
- * Loops now fail to start if there are uncommitted changes.
- */
-export interface StartLoopRequest {
-  // Reserved for future options
-}
-
-/**
- * Generic success response for operations without additional data.
- */
-export interface SuccessResponse {
-  /** Always true for successful operations */
-  success: boolean;
-}
-
-/**
  * Response from POST /api/loops/:id/accept endpoint.
  */
 export interface AcceptResponse {
@@ -219,27 +194,6 @@ export interface UncommittedChangesError {
   message: string;
   /** List of files with uncommitted changes */
   changedFiles: string[];
-}
-
-/**
- * Error response returned when an active loop already exists for the directory.
- * 
- * This error (HTTP 409) indicates the loop cannot start because another
- * non-draft, non-terminal loop is already active for the same working directory.
- * The user must stop or complete the existing loop before starting a new one.
- */
-export interface ActiveLoopExistsError {
-  /** Error code for this specific error type */
-  error: "active_loop_exists";
-  /** Human-readable error description */
-  message: string;
-  /** Information about the conflicting loop */
-  conflictingLoop: {
-    /** ID of the existing active loop */
-    id: string;
-    /** Name of the existing active loop */
-    name: string;
-  };
 }
 
 /**
@@ -304,29 +258,6 @@ export interface FileContentResponse {
   /** Whether the file exists on disk */
   exists: boolean;
 }
-
-/**
- * Type alias for API responses that return a single loop.
- */
-export type LoopResponse = Loop;
-
-/**
- * Response type from POST /api/loops endpoint.
- * 
- * On success, returns the created loop. The loop status depends on options:
- * - `draft: true`: status is "draft"
- * - `planMode: true`: status is "planning"
- * - Otherwise: status is "running" (auto-started)
- * 
- * On failure due to uncommitted changes, returns HTTP 409 with UncommittedChangesError.
- */
-export type CreateLoopResponse = Loop;
-
-/**
- * Type alias for API responses that return multiple loops.
- * Used by GET /api/loops endpoint.
- */
-export type LoopsResponse = Loop[];
 
 /**
  * Validate a CreateLoopRequest object.

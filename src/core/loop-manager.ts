@@ -42,9 +42,9 @@ export interface CreateLoopOptions {
   modelProviderID?: string;
   /** Model ID */
   modelID?: string;
-  /** Maximum iterations (optional) */
+  /** Maximum iterations (default: Infinity for unlimited) */
   maxIterations?: number;
-  /** Maximum consecutive identical errors before failsafe exit (default: 5) */
+  /** Maximum consecutive identical errors before failsafe exit (default: 10) */
   maxConsecutiveErrors?: number;
   /** Activity timeout in seconds - time without events before treating as error (default: 180 = 3 minutes) */
   activityTimeoutSeconds?: number;
@@ -58,7 +58,7 @@ export interface CreateLoopOptions {
   baseBranch?: string;
   /** Clear the .planning folder contents before starting (default: false) */
   clearPlanningFolder?: boolean;
-  /** Start in plan creation mode instead of immediate execution */
+  /** Start in plan creation mode instead of immediate execution (default: false) */
   planMode?: boolean;
   /** Save as draft without starting (no git branch or session created) */
   draft?: boolean;
@@ -191,7 +191,7 @@ export class LoopManager {
         options.modelProviderID && options.modelID
           ? { providerID: options.modelProviderID, modelID: options.modelID }
           : undefined,
-      maxIterations: options.maxIterations,
+      maxIterations: options.maxIterations ?? DEFAULT_LOOP_CONFIG.maxIterations,
       maxConsecutiveErrors: options.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors,
       activityTimeoutSeconds: options.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
       stopPattern: options.stopPattern ?? DEFAULT_LOOP_CONFIG.stopPattern,
@@ -200,8 +200,8 @@ export class LoopManager {
         commitPrefix: options.gitCommitPrefix ?? DEFAULT_LOOP_CONFIG.git.commitPrefix,
       },
       baseBranch: options.baseBranch,
-      clearPlanningFolder: options.clearPlanningFolder ?? false,
-      planMode: options.planMode,
+      clearPlanningFolder: options.clearPlanningFolder ?? DEFAULT_LOOP_CONFIG.clearPlanningFolder,
+      planMode: options.planMode ?? DEFAULT_LOOP_CONFIG.planMode,
     };
 
     const state = createInitialState(id);
