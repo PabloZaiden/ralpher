@@ -15,7 +15,7 @@
  * @module types/events
  */
 
-import type { GitCommit, LoopConfig } from "./loop";
+import type { GitCommit, LoopConfig, ModelConfig } from "./loop";
 import type { TodoItem } from "../backends/types";
 
 /**
@@ -115,7 +115,8 @@ export type LoopEvent =
   | LoopPlanFeedbackSentEvent
   | LoopPlanAcceptedEvent
   | LoopPlanDiscardedEvent
-  | LoopTodoUpdatedEvent;
+  | LoopTodoUpdatedEvent
+  | LoopPendingUpdatedEvent;
 
 /**
  * Emitted when a new loop is created.
@@ -230,14 +231,15 @@ export interface LoopProgressEvent {
 }
 
 /**
- * Log level for application log events.
- * - "agent": AI agent activity (responses, tool calls)
+ * Log level for application logs.
+ * - "agent": AI agent activity (prompts, responses, tool calls)
+ * - "user": User-injected messages (mid-loop messages from the user)
  * - "info": General informational messages
  * - "warn": Warning messages
  * - "error": Error messages
  * - "debug": Debug/verbose messages
  */
-export type LogLevel = "agent" | "info" | "warn" | "error" | "debug";
+export type LogLevel = "agent" | "user" | "info" | "warn" | "error" | "debug";
 
 /**
  * Application-level log event.
@@ -429,6 +431,22 @@ export interface LoopTodoUpdatedEvent {
   loopId: string;
   /** Current TODO items from the session */
   todos: TodoItem[];
+  /** ISO 8601 timestamp */
+  timestamp: string;
+}
+
+/**
+ * Emitted when pending values (prompt or model) are updated.
+ * Used for real-time UI updates when user queues a message or model change.
+ */
+export interface LoopPendingUpdatedEvent {
+  type: "loop.pending.updated";
+  /** ID of the loop */
+  loopId: string;
+  /** Pending prompt (if set, undefined if cleared) */
+  pendingPrompt?: string;
+  /** Pending model (if set, undefined if cleared) */
+  pendingModel?: ModelConfig;
   /** ISO 8601 timestamp */
   timestamp: string;
 }

@@ -8,6 +8,7 @@ export {
   isFinalState,
   isLoopActive,
   isLoopRunning,
+  canJumpstart,
 } from "./loop-status";
 
 /**

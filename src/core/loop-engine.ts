@@ -11,6 +11,7 @@ import type {
   IterationSummary,
   GitCommit,
   LoopLogEntry,
+  ModelConfig,
 } from "../types/loop";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import type {
@@ -171,6 +172,12 @@ export class LoopEngine {
   private isLoopRunning = false;
   /** Skip git branch setup (for review cycles) */
   private skipGitSetup: boolean;
+  /** 
+   * Flag to indicate that a pending prompt/model was injected and the current
+   * iteration should be aborted to immediately start a new one with the injected values.
+   * This is different from `aborted` which stops the loop entirely.
+   */
+  private injectionPending = false;
 
   constructor(options: LoopEngineOptions) {
     this.loop = options.loop;
@@ -209,6 +216,98 @@ export class LoopEngine {
    */
   clearPendingPrompt(): void {
     this.updateState({ pendingPrompt: undefined });
+  }
+
+  /**
+   * Set a pending model to use for the next iteration.
+   * This overrides the config.model and becomes the new default after use.
+   */
+  setPendingModel(model: ModelConfig): void {
+    this.updateState({ pendingModel: model });
+    // Emit event for UI update
+    this.emitter.emit({
+      type: "loop.pending.updated",
+      loopId: this.loop.config.id,
+      pendingModel: model,
+      timestamp: createTimestamp(),
+    });
+  }
+
+  /**
+   * Clear any pending model.
+   */
+  clearPendingModel(): void {
+    this.updateState({ pendingModel: undefined });
+    // Emit event for UI update
+    this.emitter.emit({
+      type: "loop.pending.updated",
+      loopId: this.loop.config.id,
+      pendingModel: undefined,
+      timestamp: createTimestamp(),
+    });
+  }
+
+  /**
+   * Clear all pending values (prompt and model).
+   */
+  clearPending(): void {
+    this.updateState({ pendingPrompt: undefined, pendingModel: undefined });
+    // Emit event for UI update
+    this.emitter.emit({
+      type: "loop.pending.updated",
+      loopId: this.loop.config.id,
+      pendingPrompt: undefined,
+      pendingModel: undefined,
+      timestamp: createTimestamp(),
+    });
+  }
+
+  /**
+   * Inject pending prompt and/or model immediately by aborting the current iteration.
+   * Unlike regular setPending methods which wait for the current iteration to complete,
+   * this method interrupts the AI and starts a new iteration immediately.
+   * 
+   * The session is preserved (conversation history maintained), only the current
+   * AI processing is interrupted.
+   * 
+   * @param options - The pending prompt and/or model to inject
+   */
+  async injectPendingNow(options: { message?: string; model?: ModelConfig }): Promise<void> {
+    // Set the pending values first
+    if (options.message !== undefined) {
+      this.updateState({ pendingPrompt: options.message });
+    }
+    if (options.model !== undefined) {
+      this.updateState({ pendingModel: options.model });
+    }
+
+    // Emit event for UI update
+    this.emitter.emit({
+      type: "loop.pending.updated",
+      loopId: this.loop.config.id,
+      pendingPrompt: options.message,
+      pendingModel: options.model,
+      timestamp: createTimestamp(),
+    });
+
+    // If the loop is not actively running an iteration, no need to abort
+    if (!this.isLoopRunning) {
+      this.emitLog("debug", "Pending values set, loop not actively running - will apply on next iteration");
+      return;
+    }
+
+    // Mark that we're doing an injection abort (not a user stop)
+    this.injectionPending = true;
+
+    // Abort the current session to interrupt AI processing
+    if (this.sessionId) {
+      try {
+        this.emitLog("info", "Injecting pending message - aborting current AI processing");
+        await this.backend.abortSession(this.sessionId);
+      } catch {
+        // Ignore abort errors - the session may already be complete
+      }
+    }
   }
 
   /**
@@ -874,6 +973,15 @@ export class LoopEngine {
 
         // Check if aborted during iteration
         if (this.aborted) {
+          // Check if this was an injection abort (not a user stop)
+          if (this.injectionPending) {
+            this.emitLog("debug", "Injection abort detected, restarting iteration with pending values");
+            // Reset both flags to allow the loop to continue
+            this.aborted = false;
+            this.injectionPending = false;
+            // Continue the while loop - next iteration will use pending values
+            continue;
+          }
           this.emitLog("debug", "Aborted during iteration, exiting runLoop");
           return; // Stop method already updated status
         }
@@ -1024,7 +1132,11 @@ export class LoopEngine {
           log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
           // Check if aborted
           if (this.aborted) {
-            this.emitLog("info", "Iteration aborted by user");
+            if (this.injectionPending) {
+              this.emitLog("info", "Iteration interrupted for pending message injection");
+            } else {
+              this.emitLog("info", "Iteration aborted by user");
+            }
             break;
           }
 
@@ -1351,9 +1463,25 @@ export class LoopEngine {
    * Build the prompt for an iteration.
    * Uses a consistent template that instructs the AI to follow the planning docs pattern.
    * If a pendingPrompt is set, it overrides the config.prompt for this iteration only.
+   * If a pendingModel is set, it overrides the config.model and becomes the new default.
    * If loop is in planning mode, uses the plan creation prompt instead.
    */
   private buildPrompt(_iteration: number): PromptInput {
+    // Determine the model to use (pending model takes precedence)
+    // If pendingModel is set, use it and update config.model so it persists
+    let model = this.config.model;
+    if (this.loop.state.pendingModel) {
+      model = this.loop.state.pendingModel;
+      this.emitLog("info", "Using pending model for this iteration", {
+        previousModel: this.config.model ? `${this.config.model.providerID}/${this.config.model.modelID}` : "default",
+        newModel: `${model.providerID}/${model.modelID}`,
+      });
+      // Update config.model so the new model persists for subsequent iterations
+      this.config.model = model;
+      // Clear pendingModel after consumption
+      this.updateState({ pendingModel: undefined });
+    }
+
     // Check if this is a plan mode iteration
     if (this.loop.state.status === "planning" && this.loop.state.planMode?.active) {
       // Plan mode prompt
@@ -1381,11 +1509,16 @@ export class LoopEngine {
 
         return {
           parts: [{ type: "text", text }],
-          model: this.config.model,
+          model,
         };
       } else {
         // Plan feedback prompt (uses pending prompt set by sendPlanFeedback)
         const feedback = this.loop.state.pendingPrompt ?? "Please refine the plan based on feedback.";
+        
+        // Log the user's plan feedback so it appears in the conversation logs
+        if (this.loop.state.pendingPrompt) {
+          this.emitLog("user", this.loop.state.pendingPrompt);
+        }
         
         const text = `The user has provided feedback on your plan:
 
@@ -1404,31 +1537,40 @@ When the updated plan is ready, end your response with:
 
         return {
           parts: [{ type: "text", text }],
-          model: this.config.model,
+          model,
         };
       }
     }
     
-    // Use pendingPrompt if set, otherwise use config.prompt
-    const goalPrompt = this.loop.state.pendingPrompt ?? this.config.prompt;
+    // Get the pending user message if any (new message injected by the user)
+    const userMessage = this.loop.state.pendingPrompt;
     
     // Clear the pending prompt after consumption (it's a one-time override)
-    if (this.loop.state.pendingPrompt) {
-      this.emitLog("info", "Using pending prompt for this iteration", {
-        originalPrompt: this.config.prompt.slice(0, 50) + (this.config.prompt.length > 50 ? "..." : ""),
-        pendingPrompt: goalPrompt.slice(0, 50) + (goalPrompt.length > 50 ? "..." : ""),
+    if (userMessage) {
+      // Log the user's injected message so it appears in the conversation logs
+      this.emitLog("user", userMessage);
+      this.emitLog("info", "User injected a new message", {
+        originalGoal: this.config.prompt.slice(0, 50) + (this.config.prompt.length > 50 ? "..." : ""),
+        userMessage: userMessage.slice(0, 50) + (userMessage.length > 50 ? "..." : ""),
       });
-      // Clear it so next iteration uses config.prompt again
+      // Clear it so next iteration doesn't see it again
       this.updateState({
         pendingPrompt: undefined,
       });
     }
 
-    const text = `- Goal: ${goalPrompt}
-    
+    // Build the prompt with original goal always present, and user message as an addition
+    const userMessageSection = userMessage
+      ? `\n- **User Message**: The user has added the following message. This should be your primary focus for this iteration. Address it while keeping the original goal in mind:\n\n${userMessage}\n`
+      : "";
+
+    const text = `- Original Goal: ${this.config.prompt}
+${userMessageSection}
 - Read AGENTS.md, read the document in the \`./.planning\` folder, pick up the most important task to continue with, and make sure you make a plan with coding tasks that includes updating the docs with your progress and what the next steps to work on are, at the end. Don't ask for confirmation and start working on it right away.
 
 - If the \`./.planning\` folder does not exist or is empty, create it and add a file called \`plan.md\` where you outline your plan to achieve the goal, and a \`status.md\` file to track progress.
+
+- If the user added a new message above, prioritize addressing it. It may change or add to the plan. If it contradicts something in the original goal or plan, follow the user's latest message.
 
 - Make sure that the implementations and fixes you make don't contradict the core design principles outlined in AGENTS.md and the planning document.
 
@@ -1444,7 +1586,7 @@ When the updated plan is ready, end your response with:
 
     return {
       parts: [{ type: "text", text }],
-      model: this.config.model,
+      model,
     };
   }
 

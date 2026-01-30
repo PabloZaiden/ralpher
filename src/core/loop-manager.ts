@@ -8,6 +8,7 @@ import type {
   Loop,
   LoopConfig,
   LoopState,
+  ModelConfig,
 } from "../types/loop";
 import type { LoopEvent } from "../types/events";
 import { createTimestamp } from "../types/events";
@@ -1243,6 +1244,303 @@ Follow the standard loop execution flow:
     engine.clearPendingPrompt();
 
     return { success: true };
+  }
+
+  /**
+   * Set the pending model for the next iteration.
+   * This will override config.model and become the new default after use.
+   * Only works when the loop is in an active state (running, waiting, planning).
+   */
+  async setPendingModel(loopId: string, model: ModelConfig): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      // Check if loop exists but isn't running
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      return { success: false, error: "Loop is not running. Pending model can only be set for running loops." };
+    }
+
+    // Check if the loop is in an active state
+    const status = engine.state.status;
+    if (!["running", "waiting", "planning", "starting"].includes(status)) {
+      return { success: false, error: `Loop is not in an active state (status: ${status}). Pending model can only be set for active loops.` };
+    }
+
+    // Validate model config
+    if (!model.providerID || !model.modelID) {
+      return { success: false, error: "Invalid model config: providerID and modelID are required" };
+    }
+
+    // Update the state with the pending model
+    engine.setPendingModel(model);
+
+    return { success: true };
+  }
+
+  /**
+   * Clear the pending model for a loop.
+   * Only works when the loop is in an active state.
+   */
+  async clearPendingModel(loopId: string): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      return { success: false, error: "Loop is not running. Pending model can only be cleared for running loops." };
+    }
+
+    // Check if the loop is in an active state
+    const status = engine.state.status;
+    if (!["running", "waiting", "planning", "starting"].includes(status)) {
+      return { success: false, error: `Loop is not in an active state (status: ${status}). Pending model can only be cleared for active loops.` };
+    }
+
+    engine.clearPendingModel();
+
+    return { success: true };
+  }
+
+  /**
+   * Clear all pending values (prompt and model) for a loop.
+   * Only works when the loop is in an active state.
+   */
+  async clearPending(loopId: string): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      return { success: false, error: "Loop is not running. Pending values can only be cleared for running loops." };
+    }
+
+    // Check if the loop is in an active state
+    const status = engine.state.status;
+    if (!["running", "waiting", "planning", "starting"].includes(status)) {
+      return { success: false, error: `Loop is not in an active state (status: ${status}). Pending values can only be cleared for active loops.` };
+    }
+
+    engine.clearPending();
+
+    return { success: true };
+  }
+
+  /**
+   * Set pending message and/or model for the next iteration.
+   * Convenience method to set both values at once.
+   * Only works when the loop is in an active state (running, waiting, planning).
+   */
+  async setPending(loopId: string, options: { message?: string; model?: ModelConfig }): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      return { success: false, error: "Loop is not running. Pending values can only be set for running loops." };
+    }
+
+    // Check if the loop is in an active state
+    const status = engine.state.status;
+    if (!["running", "waiting", "planning", "starting"].includes(status)) {
+      return { success: false, error: `Loop is not in an active state (status: ${status}). Pending values can only be set for active loops.` };
+    }
+
+    // Validate model config if provided
+    if (options.model && (!options.model.providerID || !options.model.modelID)) {
+      return { success: false, error: "Invalid model config: providerID and modelID are required" };
+    }
+
+    // Set pending values
+    if (options.message !== undefined) {
+      engine.setPendingPrompt(options.message);
+    }
+    if (options.model !== undefined) {
+      engine.setPendingModel(options.model);
+    }
+
+    return { success: true };
+  }
+
+  /**
+   * Inject pending message and/or model immediately by aborting the current iteration.
+   * Unlike setPending which waits for the current iteration to complete naturally,
+   * this method interrupts the AI and starts a new iteration immediately with the
+   * injected values.
+   * 
+   * The session is preserved (conversation history maintained), only the current
+   * AI processing is interrupted.
+   * 
+   * If the loop is in a "jumpstartable" state (completed, stopped, failed, max_iterations),
+   * the loop will be restarted with the pending message.
+   * 
+   * Only works when the loop is in an active state OR a jumpstartable state.
+   */
+  async injectPending(loopId: string, options: { message?: string; model?: ModelConfig }): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    
+    // Validate model config if provided
+    if (options.model && (!options.model.providerID || !options.model.modelID)) {
+      return { success: false, error: "Invalid model config: providerID and modelID are required" };
+    }
+
+    if (!engine) {
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      
+      // Check if loop can be jumpstarted from a stopped state
+      const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations"];
+      if (jumpstartableStates.includes(loop.state.status)) {
+        // Jumpstart the loop with the pending message
+        return this.jumpstartLoop(loopId, options);
+      }
+      
+      return { success: false, error: "Loop is not running. Pending values can only be injected for running loops." };
+    }
+
+    // Check if the loop is in an active state
+    const status = engine.state.status;
+    if (!["running", "waiting", "planning", "starting"].includes(status)) {
+      // Check if we can jumpstart from a stopped state
+      const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations"];
+      if (jumpstartableStates.includes(status)) {
+        return this.jumpstartLoop(loopId, options);
+      }
+      return { success: false, error: `Loop is not in an active state (status: ${status}). Pending values can only be injected for active loops.` };
+    }
+
+    // Call the engine's injectPendingNow method
+    await engine.injectPendingNow(options);
+
+    return { success: true };
+  }
+
+  /**
+   * Jumpstart a loop that has stopped running.
+   * Sets the pending prompt/model and restarts the loop.
+   * 
+   * Works for loops in: completed, stopped, failed, max_iterations states.
+   * 
+   * Branch handling:
+   * - If the loop was NOT merged/accepted: continues on the existing working branch
+   * - If the loop was merged/accepted (no working branch): creates new branch from original
+   */
+  private async jumpstartLoop(loopId: string, options: { message?: string; model?: ModelConfig }): Promise<{ success: boolean; error?: string }> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      return { success: false, error: "Loop not found" };
+    }
+
+    // Check if loop can be jumpstarted
+    const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations"];
+    if (!jumpstartableStates.includes(loop.state.status)) {
+      return { success: false, error: `Loop cannot be jumpstarted from status: ${loop.state.status}` };
+    }
+
+    // Check if another active loop exists for the same directory
+    try {
+      await this.validateNoActiveLoopForDirectory(loop.config.directory, loopId);
+    } catch (validationError) {
+      return { success: false, error: String(validationError) };
+    }
+
+    // Set pending values in the state
+    if (options.message !== undefined) {
+      loop.state.pendingPrompt = options.message;
+    }
+    if (options.model !== undefined) {
+      loop.state.pendingModel = options.model;
+      // Also update the config model so it persists after the pending model is consumed
+      loop.config.model = options.model;
+    }
+
+    // Reset the loop to a restartable state
+    loop.state.status = "stopped"; // LoopEngine.start() accepts 'idle', 'stopped', or 'planning'
+    loop.state.completedAt = undefined;
+    
+    // Save the updated state
+    await updateLoopState(loopId, loop.state);
+    await saveLoop(loop);
+
+    // Emit event for UI update
+    this.emitter.emit({
+      type: "loop.pending.updated",
+      loopId,
+      pendingPrompt: options.message,
+      pendingModel: options.model,
+      timestamp: createTimestamp(),
+    });
+
+    // Determine if we should continue on existing branch or create new one
+    // If the loop has an existing working branch, continue on it (don't create a new branch)
+    const hasExistingBranch = !!loop.state.git?.workingBranch;
+    
+    if (hasExistingBranch) {
+      // Continue on the existing working branch (similar to addressReviewComments for pushed loops)
+      return this.jumpstartOnExistingBranch(loopId, loop);
+    } else {
+      // No existing working branch (merged loop or never ran) - use normal startLoop which creates new branch
+      try {
+        await this.startLoop(loopId);
+        log.info(`Jumpstarted loop ${loopId} with pending message (new branch)`);
+        return { success: true };
+      } catch (startError) {
+        log.error(`Failed to jumpstart loop ${loopId}: ${String(startError)}`);
+        return { success: false, error: `Failed to jumpstart loop: ${String(startError)}` };
+      }
+    }
+  }
+
+  /**
+   * Jumpstart a loop on its existing working branch.
+   * Used when the loop was NOT merged/accepted and should continue its previous work.
+   */
+  private async jumpstartOnExistingBranch(loopId: string, loop: Loop): Promise<{ success: boolean; error?: string }> {
+    try {
+      // Get the appropriate command executor for the current mode
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const git = GitService.withExecutor(executor);
+      const backend = backendManager.getBackend();
+
+      // Check out the existing working branch
+      const workingBranch = loop.state.git!.workingBranch;
+      log.info(`Jumpstarting loop ${loopId} on existing branch: ${workingBranch}`);
+      await git.checkoutBranch(loop.config.directory, workingBranch);
+
+      // Create and start a new loop engine with skipGitSetup
+      // (branch is already checked out, no need to create a new one)
+      const engine = new LoopEngine({
+        loop: { config: loop.config, state: loop.state },
+        backend,
+        gitService: git,
+        eventEmitter: this.emitter,
+        onPersistState: async (state) => {
+          await updateLoopState(loopId, state);
+        },
+        skipGitSetup: true, // Don't create a new branch - continue on existing
+      });
+      this.engines.set(loopId, engine);
+
+      // Start state persistence
+      this.startStatePersistence(loopId);
+
+      // Start execution (fire and forget - don't block the caller)
+      engine.start().catch((error) => {
+        log.error(`Loop ${loopId} failed to start after jumpstart:`, String(error));
+      });
+
+      log.info(`Jumpstarted loop ${loopId} with pending message on existing branch: ${workingBranch}`);
+      return { success: true };
+    } catch (error) {
+      log.error(`Failed to jumpstart loop ${loopId} on existing branch: ${String(error)}`);
+      return { success: false, error: `Failed to jumpstart loop: ${String(error)}` };
+    }
   }
 
   /**

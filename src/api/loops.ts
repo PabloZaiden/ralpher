@@ -849,6 +849,122 @@ export const loopsControlRoutes = {
     },
   },
 
+  "/api/loops/:id/pending": {
+    /**
+     * POST /api/loops/:id/pending - Set pending message and/or model for next iteration.
+     * 
+     * Queues a message and/or model change. By default (immediate: true), the current
+     * iteration is interrupted and the pending values are applied immediately in a new
+     * iteration. Set immediate: false to wait for the current iteration to complete.
+     * Works for active loops (running, waiting, planning, starting) and can also
+     * jumpstart loops in supported stopped states (completed, stopped, failed, max_iterations).
+     * 
+     * Request Body:
+     * - message (optional): Message to queue for next iteration
+     * - model (optional): { providerID, modelID } for model change
+     * - immediate (optional, default: true): If true, interrupt current iteration
+     *   and apply pending values immediately. If false, wait for current iteration.
+     * 
+     * At least one of message or model must be provided.
+     * 
+     * @returns Success response
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      const body = await parseBody<{ message?: string; model?: { providerID: string; modelID: string }; immediate?: boolean }>(req);
+      if (!body) {
+        return errorResponse("invalid_body", "Request body must be valid JSON");
+      }
+
+      // At least one of message or model must be provided
+      if (body.message === undefined && body.model === undefined) {
+        return errorResponse("validation_error", "At least one of 'message' or 'model' must be provided");
+      }
+
+      // Validate message if provided
+      if (body.message !== undefined) {
+        if (typeof body.message !== "string") {
+          return errorResponse("validation_error", "'message' must be a string");
+        }
+        const trimmedMessage = body.message.trim();
+        if (trimmedMessage === "") {
+          return errorResponse("validation_error", "'message' must be a non-empty string");
+        }
+        body.message = trimmedMessage;
+      }
+
+      // Validate model if provided
+      if (body.model !== undefined) {
+        if (typeof body.model !== "object" || body.model === null) {
+          return errorResponse("validation_error", "'model' must be an object with providerID and modelID");
+        }
+        if (!body.model.providerID || typeof body.model.providerID !== "string") {
+          return errorResponse("validation_error", "'model.providerID' is required and must be a string");
+        }
+        if (!body.model.modelID || typeof body.model.modelID !== "string") {
+          return errorResponse("validation_error", "'model.modelID' is required and must be a string");
+        }
+      }
+
+      // Validate immediate if provided (must be boolean)
+      if (body.immediate !== undefined && typeof body.immediate !== "boolean") {
+        return errorResponse("validation_error", "'immediate' must be a boolean");
+      }
+
+      // Default to immediate: true
+      const immediate = body.immediate ?? true;
+
+      let result: { success: boolean; error?: string };
+      if (immediate) {
+        // Inject immediately by aborting current iteration
+        result = await loopManager.injectPending(req.params.id, {
+          message: body.message,
+          model: body.model,
+        });
+      } else {
+        // Queue for next natural iteration
+        result = await loopManager.setPending(req.params.id, {
+          message: body.message,
+          model: body.model,
+        });
+      }
+
+      if (!result.success) {
+        if (result.error?.includes("not found")) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        if (result.error?.includes("not running") || result.error?.includes("not in an active state")) {
+          return errorResponse("not_running", result.error, 409);
+        }
+        return errorResponse("set_pending_failed", result.error ?? "Unknown error", 400);
+      }
+
+      return successResponse();
+    },
+
+    /**
+     * DELETE /api/loops/:id/pending - Clear all pending values (message and model).
+     * 
+     * Removes any queued message and model change. Only works for active loops.
+     * 
+     * @returns Success response
+     */
+    async DELETE(req: Request & { params: { id: string } }): Promise<Response> {
+      const result = await loopManager.clearPending(req.params.id);
+
+      if (!result.success) {
+        if (result.error?.includes("not found")) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        if (result.error?.includes("not running") || result.error?.includes("not in an active state")) {
+          return errorResponse("not_running", result.error, 409);
+        }
+        return errorResponse("clear_pending_failed", result.error ?? "Unknown error", 400);
+      }
+
+      return successResponse();
+    },
+  },
+
   "/api/loops/:id/plan/feedback": {
     /**
      * POST /api/loops/:id/plan/feedback - Send feedback to refine the plan.

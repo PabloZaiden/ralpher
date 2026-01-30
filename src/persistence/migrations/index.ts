@@ -262,6 +262,31 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 9,
+    name: "add_pending_model_columns",
+    up: (db) => {
+      // Check if the loops table exists
+      if (!tableExists(db, "loops")) {
+        log.debug("loops table does not exist, skipping migration 9");
+        return;
+      }
+      
+      const columns = getTableColumns(db, "loops");
+      
+      // Add pending_model_provider_id column for pending model changes
+      if (!columns.includes("pending_model_provider_id")) {
+        db.run("ALTER TABLE loops ADD COLUMN pending_model_provider_id TEXT");
+        log.info("Added pending_model_provider_id column to loops table");
+      }
+      
+      // Add pending_model_model_id column for pending model changes
+      if (!columns.includes("pending_model_model_id")) {
+        db.run("ALTER TABLE loops ADD COLUMN pending_model_model_id TEXT");
+        log.info("Added pending_model_model_id column to loops table");
+      }
+    },
+  },
 ];
 
 /**

@@ -131,6 +131,9 @@ export interface LoopState {
   /** Pending prompt that overrides config.prompt for the next iteration only */
   pendingPrompt?: string;
 
+  /** Model override for the next prompt (one-time, cleared after use) */
+  pendingModel?: ModelConfig;
+
   /** Plan mode state (active when status is "planning") */
   planMode?: {
     /** Whether plan mode is currently active */
@@ -173,7 +176,7 @@ export interface LoopLogEntry {
   /** Unique ID for the log entry (used for updates and deduplication) */
   id: string;
   /** Log level indicating the type/severity */
-  level: "agent" | "info" | "warn" | "error" | "debug";
+  level: "agent" | "user" | "info" | "warn" | "error" | "debug";
   /** The log message content */
   message: string;
   /** Optional additional structured details */

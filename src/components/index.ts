@@ -11,3 +11,4 @@ export { LoopCard } from "./LoopCard";
 export { LoopDetails } from "./LoopDetails";
 export { LogViewer } from "./LogViewer";
 export { CreateLoopForm } from "./CreateLoopForm";
+export { LoopActionBar } from "./LoopActionBar";

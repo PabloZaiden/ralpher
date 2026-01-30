@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { FileDiff, FileContentResponse } from "../types";
+import type { FileDiff, FileContentResponse, ModelInfo } from "../types";
 import type { ReviewComment } from "../types/loop";
 import { useLoop } from "../hooks";
 import { Badge, Button, getStatusBadgeVariant } from "./common";
@@ -18,12 +18,13 @@ import {
   MarkMergedModal,
 } from "./LoopModals";
 import { PlanReviewPanel } from "./PlanReviewPanel";
+import { LoopActionBar } from "./LoopActionBar";
 import {
   getStatusLabel,
   canAccept,
   isFinalState,
   isLoopActive,
-  isLoopRunning,
+  canJumpstart,
 } from "../utils";
 
 export interface LoopDetailsProps {
@@ -99,8 +100,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     remove,
     purge,
     markMerged,
-    setPendingPrompt,
-    clearPendingPrompt,
+    setPending,
+    clearPending,
     getDiff,
     getPlan,
     getStatusFile,
@@ -119,6 +120,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
 
   // Collapse/expand state for Logs and TODOs sections
   const [logsCollapsed, setLogsCollapsed] = useState(false);
@@ -142,10 +144,9 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [markMergedModal, setMarkMergedModal] = useState(false);
   const [addressCommentsModal, setAddressCommentsModal] = useState(false);
 
-  // Pending prompt editing state
-  const [pendingPromptText, setPendingPromptText] = useState("");
-  const [pendingPromptDirty, setPendingPromptDirty] = useState(false);
-  const [pendingPromptSaving, setPendingPromptSaving] = useState(false);
+  // Models state for LoopActionBar
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
 
   // Function to fetch review comments
   const fetchReviewComments = useCallback(async () => {
@@ -165,13 +166,27 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     }
   }, [loopId]);
 
-  // Initialize pending prompt text from loop state when it changes
+  // Fetch models when loop directory is available
   useEffect(() => {
-    if (loop?.state.pendingPrompt !== undefined) {
-      setPendingPromptText(loop.state.pendingPrompt ?? "");
-      setPendingPromptDirty(false);
+    if (!loop?.config.directory) return;
+
+    async function fetchModels() {
+      setModelsLoading(true);
+      try {
+        const response = await fetch(`/api/models?directory=${encodeURIComponent(loop!.config.directory)}`);
+        if (response.ok) {
+          const data = await response.json() as ModelInfo[];
+          setModels(data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch models:", String(error));
+      } finally {
+        setModelsLoading(false);
+      }
     }
-  }, [loop?.state.pendingPrompt]);
+
+    fetchModels();
+  }, [loop?.config.directory]);
 
   // Clear update indicator when switching to a tab
   function handleTabChange(tabId: TabId) {
@@ -364,30 +379,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     }
   }
 
-  // Handle pending prompt save
-  async function handleSavePendingPrompt() {
-    if (!pendingPromptText.trim()) {
-      return;
-    }
-    setPendingPromptSaving(true);
-    const success = await setPendingPrompt(pendingPromptText.trim());
-    if (success) {
-      setPendingPromptDirty(false);
-    }
-    setPendingPromptSaving(false);
-  }
-
-  // Handle pending prompt clear
-  async function handleClearPendingPrompt() {
-    setPendingPromptSaving(true);
-    const success = await clearPendingPrompt();
-    if (success) {
-      setPendingPromptText("");
-      setPendingPromptDirty(false);
-    }
-    setPendingPromptSaving(false);
-  }
-
   if (loading && !loop) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -496,6 +487,21 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
               </span>
             </>
           )}
+
+          {/* Model info */}
+          <span className="text-gray-500 dark:text-gray-400">
+            Model: <span className="font-medium text-gray-900 dark:text-gray-100">
+              {config.model 
+                ? `${config.model.modelID}`
+                : "Default"
+              }
+            </span>
+            {state.pendingModel && (
+              <span className="ml-1 text-yellow-600 dark:text-yellow-400">
+                → {state.pendingModel.modelID}
+              </span>
+            )}
+          </span>
         </div>
       </div>
 
@@ -579,6 +585,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                               toolCalls={toolCalls}
                               logs={logs}
                               showDebugLogs={showDebugLogs}
+                              autoScroll={autoScroll}
                             />
                           )}
                         </div>
@@ -602,17 +609,28 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                         </div>
                       </div>
                       
-                      {/* Debug logs toggle at the bottom */}
+                      {/* Debug logs and autoscroll toggles at the bottom */}
                       <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
-                        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={showDebugLogs}
-                            onChange={(e) => setShowDebugLogs(e.target.checked)}
-                            className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
-                          />
-                          <span>Show debug logs</span>
-                        </label>
+                        <div className="flex flex-wrap items-center gap-4">
+                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={showDebugLogs}
+                              onChange={(e) => setShowDebugLogs(e.target.checked)}
+                              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                            />
+                            <span>Show debug logs</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={autoScroll}
+                              onChange={(e) => setAutoScroll(e.target.checked)}
+                              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                            />
+                            <span>Autoscroll</span>
+                          </label>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -629,82 +647,44 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                         </pre>
                       </div>
 
-                      {/* Pending Prompt Editor (only when running) */}
-                      {isLoopRunning(state.status) && (
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">
-                              Pending Prompt for Next Iteration
-                              {state.pendingPrompt && (
-                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
-                                  Scheduled
-                                </span>
-                              )}
-                            </h3>
-                            {pendingPromptDirty && (
-                              <span className="text-xs text-yellow-600 dark:text-yellow-400">
-                                Unsaved changes
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                            Modify the prompt for the next iteration. The current iteration will continue with the original prompt.
-                          </p>
-                          <textarea
-                            value={pendingPromptText}
-                            onChange={(e) => {
-                              setPendingPromptText(e.target.value);
-                              setPendingPromptDirty(true);
-                            }}
-                            placeholder="Enter a modified prompt for the next iteration..."
-                            rows={5}
-                            className="w-full px-3 py-2 text-sm font-mono rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            disabled={pendingPromptSaving}
-                          />
-                          <div className="flex gap-2 mt-2">
-                            <Button
-                              size="sm"
-                              onClick={handleSavePendingPrompt}
-                              disabled={!pendingPromptText.trim() || pendingPromptSaving}
-                            >
-                              {pendingPromptSaving ? "Saving..." : state.pendingPrompt ? "Update Pending Prompt" : "Set Pending Prompt"}
-                            </Button>
-                            {state.pendingPrompt && (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={handleClearPendingPrompt}
-                                disabled={pendingPromptSaving}
-                              >
-                                Clear Pending Prompt
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Show existing pending prompt for non-running loops (read-only info) */}
-                      {!isLoopRunning(state.status) && state.pendingPrompt && (
-                        <div>
-                          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                            Pending Prompt (Unused)
-                            <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300">
-                              Not Applied
-                            </span>
+                      {/* Pending prompt status (read-only) */}
+                      {state.pendingPrompt && (
+                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                          <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-2">
+                            Queued Message
                           </h3>
-                          <pre className="whitespace-pre-wrap text-sm text-gray-600 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4 border border-dashed border-gray-300 dark:border-gray-600">
+                          <pre className="whitespace-pre-wrap text-sm text-yellow-700 dark:text-yellow-300 font-mono">
                             {state.pendingPrompt}
                           </pre>
-                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            This pending prompt was set but the loop is no longer running.
+                          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
+                            This message will be sent after the current step completes.
                           </p>
                         </div>
                       )}
 
-                      {/* Info message when loop is not running and no pending prompt */}
-                      {!isLoopRunning(state.status) && !state.pendingPrompt && (
+                      {/* Pending model status (read-only) */}
+                      {state.pendingModel && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                          <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                            Model Change Queued
+                          </h3>
+                          <p className="text-sm text-blue-700 dark:text-blue-300">
+                            Model will change to <span className="font-mono font-medium">{state.pendingModel.modelID}</span> after the current step.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Tip for using action bar */}
+                      {isActive && !state.pendingPrompt && !state.pendingModel && (
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Pending prompts can only be set while the loop is running. Start the loop to modify the prompt for subsequent iterations.
+                          Use the action bar at the bottom to send a message or change the model while the loop is running.
+                        </p>
+                      )}
+
+                      {/* Info message when loop is not running */}
+                      {!isActive && !state.pendingPrompt && !state.pendingModel && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Messages can only be queued while the loop is running.
                         </p>
                       )}
                     </div>
@@ -1056,6 +1036,24 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
             )}
         </div>
       </main>
+
+      {/* LoopActionBar for mid-loop messaging (active loops and jumpstartable loops) */}
+      {(isActive || canJumpstart(state.status)) && (
+        <LoopActionBar
+          currentModel={config.model}
+          pendingModel={state.pendingModel}
+          pendingPrompt={state.pendingPrompt}
+          models={models}
+          modelsLoading={modelsLoading}
+          onQueuePending={async (options) => {
+            const result = await setPending(options);
+            return result.success;
+          }}
+          onClearPending={async () => {
+            return await clearPending();
+          }}
+        />
+      )}
 
       {/* Delete confirmation modal */}
       <DeleteLoopModal

@@ -72,3 +72,11 @@ export function isLoopActive(status: LoopStatus): boolean {
 export function isLoopRunning(status: LoopStatus): boolean {
   return status === "running" || status === "starting";
 }
+
+/**
+ * Check if a loop can be "jumpstarted" - restarted from a stopped state.
+ * This allows users to send a message to restart the loop.
+ */
+export function canJumpstart(status: LoopStatus): boolean {
+  return status === "completed" || status === "stopped" || status === "failed" || status === "max_iterations";
+}
