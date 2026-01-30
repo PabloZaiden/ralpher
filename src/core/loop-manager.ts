@@ -1375,33 +1375,113 @@ Follow the standard loop execution flow:
    * The session is preserved (conversation history maintained), only the current
    * AI processing is interrupted.
    * 
-   * Only works when the loop is in an active state (running, waiting, planning).
+   * If the loop is in a "jumpstartable" state (completed, stopped, failed, max_iterations),
+   * the loop will be restarted with the pending message.
+   * 
+   * Only works when the loop is in an active state OR a jumpstartable state.
    */
   async injectPending(loopId: string, options: { message?: string; model?: ModelConfig }): Promise<{ success: boolean; error?: string }> {
     const engine = this.engines.get(loopId);
+    
+    // Validate model config if provided
+    if (options.model && (!options.model.providerID || !options.model.modelID)) {
+      return { success: false, error: "Invalid model config: providerID and modelID are required" };
+    }
+
     if (!engine) {
       const loop = await loadLoop(loopId);
       if (!loop) {
         return { success: false, error: "Loop not found" };
       }
+      
+      // Check if loop can be jumpstarted from a stopped state
+      const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations"];
+      if (jumpstartableStates.includes(loop.state.status)) {
+        // Jumpstart the loop with the pending message
+        return this.jumpstartLoop(loopId, options);
+      }
+      
       return { success: false, error: "Loop is not running. Pending values can only be injected for running loops." };
     }
 
     // Check if the loop is in an active state
     const status = engine.state.status;
     if (!["running", "waiting", "planning", "starting"].includes(status)) {
+      // Check if we can jumpstart from a stopped state
+      const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations"];
+      if (jumpstartableStates.includes(status)) {
+        return this.jumpstartLoop(loopId, options);
+      }
       return { success: false, error: `Loop is not in an active state (status: ${status}). Pending values can only be injected for active loops.` };
-    }
-
-    // Validate model config if provided
-    if (options.model && (!options.model.providerID || !options.model.modelID)) {
-      return { success: false, error: "Invalid model config: providerID and modelID are required" };
     }
 
     // Call the engine's injectPendingNow method
     await engine.injectPendingNow(options);
 
     return { success: true };
+  }
+
+  /**
+   * Jumpstart a loop that has stopped running.
+   * Sets the pending prompt/model and restarts the loop.
+   * 
+   * Works for loops in: completed, stopped, failed, max_iterations states.
+   */
+  private async jumpstartLoop(loopId: string, options: { message?: string; model?: ModelConfig }): Promise<{ success: boolean; error?: string }> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      return { success: false, error: "Loop not found" };
+    }
+
+    // Check if loop can be jumpstarted
+    const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations"];
+    if (!jumpstartableStates.includes(loop.state.status)) {
+      return { success: false, error: `Loop cannot be jumpstarted from status: ${loop.state.status}` };
+    }
+
+    // Check if another active loop exists for the same directory
+    try {
+      await this.validateNoActiveLoopForDirectory(loop.config.directory, loopId);
+    } catch (validationError) {
+      return { success: false, error: String(validationError) };
+    }
+
+    // Set pending values in the state
+    if (options.message !== undefined) {
+      loop.state.pendingPrompt = options.message;
+    }
+    if (options.model !== undefined) {
+      loop.state.pendingModel = options.model;
+      // Also update the config model so it persists after the pending model is consumed
+      loop.config.model = options.model;
+    }
+
+    // Reset the loop to a restartable state
+    loop.state.status = "stopped"; // LoopEngine.start() accepts 'idle', 'stopped', or 'planning'
+    loop.state.completedAt = undefined;
+    
+    // Save the updated state
+    await updateLoopState(loopId, loop.state);
+    await saveLoop(loop);
+
+    // Emit event for UI update
+    this.emitter.emit({
+      type: "loop.pending.updated",
+      loopId,
+      pendingPrompt: options.message,
+      pendingModel: options.model,
+      timestamp: createTimestamp(),
+    });
+
+    // Restart the loop
+    try {
+      await this.startLoop(loopId);
+      log.info(`Jumpstarted loop ${loopId} with pending message`);
+      return { success: true };
+    } catch (startError) {
+      log.error(`Failed to jumpstart loop ${loopId}: ${String(startError)}`);
+      return { success: false, error: `Failed to jumpstart loop: ${String(startError)}` };
+    }
   }
 
   /**

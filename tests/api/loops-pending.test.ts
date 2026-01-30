@@ -732,4 +732,102 @@ describe("POST /api/loops/:id/pending", () => {
       await rm(workDir, { recursive: true, force: true });
     }
   });
+
+  test("POST with message jumpstarts a stopped loop", async () => {
+    const workDir = await createTestWorkDir();
+    try {
+      // Create a loop and let it start
+      const createRes = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Jumpstart Test Loop",
+          directory: workDir,
+          prompt: "Test prompt",
+        }),
+      });
+      expect(createRes.status).toBe(201);
+      const created = await createRes.json();
+      const loopId = created.config.id;
+
+      // Wait for it to be running
+      await waitForLoopStatus(loopId, ["running"]);
+
+      // Stop the loop using the manager (no HTTP API for this)
+      await loopManager.stopLoop(loopId);
+
+      // Wait for it to be stopped
+      await waitForLoopStatus(loopId, ["stopped"]);
+
+      // Now send a message to jumpstart it
+      const pendingRes = await fetch(`${baseUrl}/api/loops/${loopId}/pending`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Please continue working on the feature",
+        }),
+      });
+      expect(pendingRes.status).toBe(200);
+      const pendingData = await pendingRes.json();
+      expect(pendingData.success).toBe(true);
+
+      // Loop should be running again after jumpstart
+      await waitForLoopStatus(loopId, ["starting", "running"]);
+
+      // Stop the loop to clean up
+      await loopManager.stopLoop(loopId);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("POST with model jumpstarts a stopped loop and updates config model", async () => {
+    const workDir = await createTestWorkDir();
+    try {
+      const createRes = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Jumpstart Model Test Loop",
+          directory: workDir,
+          prompt: "Test prompt",
+        }),
+      });
+      expect(createRes.status).toBe(201);
+      const created = await createRes.json();
+      const loopId = created.config.id;
+
+      await waitForLoopStatus(loopId, ["running"]);
+
+      // Stop the loop using the manager (no HTTP API for this)
+      await loopManager.stopLoop(loopId);
+      await waitForLoopStatus(loopId, ["stopped"]);
+
+      // Jumpstart with a new model
+      const pendingRes = await fetch(`${baseUrl}/api/loops/${loopId}/pending`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Continue with new model",
+          model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+        }),
+      });
+      expect(pendingRes.status).toBe(200);
+
+      // Wait for it to restart
+      await waitForLoopStatus(loopId, ["starting", "running"]);
+
+      // Verify the config model was updated
+      const loopRes = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      const loopData = await loopRes.json();
+      expect(loopData.config.model).toEqual({
+        providerID: "anthropic",
+        modelID: "claude-sonnet-4-20250514",
+      });
+
+      await loopManager.stopLoop(loopId);
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
 });

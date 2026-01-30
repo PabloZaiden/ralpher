@@ -24,6 +24,7 @@ import {
   canAccept,
   isFinalState,
   isLoopActive,
+  canJumpstart,
 } from "../utils";
 
 export interface LoopDetailsProps {
@@ -119,6 +120,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [showDebugLogs, setShowDebugLogs] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
 
   // Collapse/expand state for Logs and TODOs sections
   const [logsCollapsed, setLogsCollapsed] = useState(false);
@@ -583,6 +585,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                               toolCalls={toolCalls}
                               logs={logs}
                               showDebugLogs={showDebugLogs}
+                              autoScroll={autoScroll}
                             />
                           )}
                         </div>
@@ -606,17 +609,28 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                         </div>
                       </div>
                       
-                      {/* Debug logs toggle at the bottom */}
+                      {/* Debug logs and autoscroll toggles at the bottom */}
                       <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
-                        <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={showDebugLogs}
-                            onChange={(e) => setShowDebugLogs(e.target.checked)}
-                            className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
-                          />
-                          <span>Show debug logs</span>
-                        </label>
+                        <div className="flex flex-wrap items-center gap-4">
+                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={showDebugLogs}
+                              onChange={(e) => setShowDebugLogs(e.target.checked)}
+                              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                            />
+                            <span>Show debug logs</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={autoScroll}
+                              onChange={(e) => setAutoScroll(e.target.checked)}
+                              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                            />
+                            <span>Autoscroll</span>
+                          </label>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1023,8 +1037,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         </div>
       </main>
 
-      {/* LoopActionBar for mid-loop messaging (only when loop is active) */}
-      {isActive && (
+      {/* LoopActionBar for mid-loop messaging (active loops and jumpstartable loops) */}
+      {(isActive || canJumpstart(state.status)) && (
         <LoopActionBar
           currentModel={config.model}
           pendingModel={state.pendingModel}
