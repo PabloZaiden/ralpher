@@ -1542,30 +1542,35 @@ When the updated plan is ready, end your response with:
       }
     }
     
-    // Use pendingPrompt if set, otherwise use config.prompt
-    const goalPrompt = this.loop.state.pendingPrompt ?? this.config.prompt;
+    // Get the pending user message if any (new message injected by the user)
+    const userMessage = this.loop.state.pendingPrompt;
     
     // Clear the pending prompt after consumption (it's a one-time override)
-    if (this.loop.state.pendingPrompt) {
+    if (userMessage) {
       // Log the user's injected message so it appears in the conversation logs
-      this.emitLog("user", this.loop.state.pendingPrompt);
-      this.emitLog("info", "Using pending prompt for this iteration", {
-        originalPrompt: this.config.prompt.slice(0, 50) + (this.config.prompt.length > 50 ? "..." : ""),
-        pendingPrompt: goalPrompt.slice(0, 50) + (goalPrompt.length > 50 ? "..." : ""),
+      this.emitLog("user", userMessage);
+      this.emitLog("info", "User injected a new message", {
+        originalGoal: this.config.prompt.slice(0, 50) + (this.config.prompt.length > 50 ? "..." : ""),
+        userMessage: userMessage.slice(0, 50) + (userMessage.length > 50 ? "..." : ""),
       });
-      // Clear it so next iteration uses config.prompt again
+      // Clear it so next iteration doesn't see it again
       this.updateState({
         pendingPrompt: undefined,
       });
     }
 
-    const text = `- Goal: ${goalPrompt}
-    
+    // Build the prompt with original goal always present, and user message as an addition
+    const userMessageSection = userMessage
+      ? `\n- **User Message**: The user has added the following message. This should be your primary focus for this iteration. Address it while keeping the original goal in mind:\n\n${userMessage}\n`
+      : "";
+
+    const text = `- Original Goal: ${this.config.prompt}
+${userMessageSection}
 - Read AGENTS.md, read the document in the \`./.planning\` folder, pick up the most important task to continue with, and make sure you make a plan with coding tasks that includes updating the docs with your progress and what the next steps to work on are, at the end. Don't ask for confirmation and start working on it right away.
 
 - If the \`./.planning\` folder does not exist or is empty, create it and add a file called \`plan.md\` where you outline your plan to achieve the goal, and a \`status.md\` file to track progress.
 
-- If the user added a new message, make sure to incorporate that into your plan and tasks. If it contradicts or changes something in the original plan or goal, update the plan accordingly.
+- If the user added a new message above, prioritize addressing it. It may change or add to the plan. If it contradicts something in the original goal or plan, follow the user's latest message.
 
 - Make sure that the implementations and fixes you make don't contradict the core design principles outlined in AGENTS.md and the planning document.
 

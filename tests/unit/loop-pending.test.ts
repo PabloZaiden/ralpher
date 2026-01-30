@@ -317,7 +317,7 @@ describe("LoopEngine Pending Model", () => {
     });
   });
 
-  test("setPendingPrompt overrides default prompt", async () => {
+  test("setPendingPrompt adds user message to prompt while preserving original goal", async () => {
     const loop = createTestLoop({ prompt: "Original prompt" });
     const engine = new LoopEngine({
       loop,
@@ -335,17 +335,51 @@ describe("LoopEngine Pending Model", () => {
     // Wait for completion
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // Verify the prompt text contains the custom message
+    // Verify the prompt text contains BOTH the original goal AND the custom message
     expect(capturedPrompts.length).toBeGreaterThan(0);
-    // The prompt parts should contain the pending prompt text
     const promptText = capturedPrompts[0]!.parts
       .filter((p) => p.type === "text")
       .map((p) => (p as { type: "text"; text: string }).text)
       .join("");
+    
+    // Should contain the original goal
+    expect(promptText).toContain("Original Goal: Original prompt");
+    
+    // Should contain the user message as a separate section
+    expect(promptText).toContain("User Message");
     expect(promptText).toContain("Custom user message");
 
     // Verify pending prompt was cleared
     expect(loop.state.pendingPrompt).toBeUndefined();
+  });
+
+  test("prompt without pendingPrompt only shows original goal (no user message section)", async () => {
+    const loop = createTestLoop({ prompt: "Original prompt only" });
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    // Start the engine WITHOUT setting a pending prompt
+    await engine.start();
+
+    // Wait for completion
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Verify the prompt text contains the original goal but NOT a user message section
+    expect(capturedPrompts.length).toBeGreaterThan(0);
+    const promptText = capturedPrompts[0]!.parts
+      .filter((p) => p.type === "text")
+      .map((p) => (p as { type: "text"; text: string }).text)
+      .join("");
+    
+    // Should contain the original goal
+    expect(promptText).toContain("Original Goal: Original prompt only");
+    
+    // Should NOT contain a User Message section header
+    expect(promptText).not.toContain("**User Message**");
   });
 
   test("injectPendingNow sets pending values and marks injection pending", async () => {

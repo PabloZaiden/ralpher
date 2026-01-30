@@ -684,11 +684,11 @@ describe("StopPatternDetector", () => {
     // After the loop completes, pending prompt should be cleared
     expect(engine.state.pendingPrompt).toBeUndefined();
 
-    // Check that log events were emitted for pending prompt usage
-    const pendingPromptLogs = emittedEvents.filter(
-      (e) => e.type === "loop.log" && e.message.includes("pending prompt")
+    // Check that log events were emitted for user message injection
+    const userMessageLogs = emittedEvents.filter(
+      (e) => e.type === "loop.log" && e.message.includes("User injected")
     );
-    expect(pendingPromptLogs.length).toBeGreaterThan(0);
+    expect(userMessageLogs.length).toBeGreaterThan(0);
   });
 
   test("timeout triggers when no events are received within activity timeout", async () => {
