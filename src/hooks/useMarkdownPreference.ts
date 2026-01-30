@@ -3,7 +3,7 @@
  * Provides access to the global markdown rendering setting.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface UseMarkdownPreferenceResult {
   /** Whether markdown rendering is enabled */
@@ -29,6 +29,12 @@ export function useMarkdownPreference(): UseMarkdownPreferenceResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Ref to track the latest enabled value to avoid stale closure in toggle
+  const enabledRef = useRef(enabled);
+  useEffect(() => {
+    enabledRef.current = enabled;
+  }, [enabled]);
 
   // Fetch the current preference
   const fetchPreference = useCallback(async () => {
@@ -72,10 +78,10 @@ export function useMarkdownPreference(): UseMarkdownPreferenceResult {
     }
   }, []);
 
-  // Toggle the preference
+  // Toggle the preference using ref to avoid stale closure issues
   const toggle = useCallback(async () => {
-    await setEnabled(!enabled);
-  }, [enabled, setEnabled]);
+    await setEnabled(!enabledRef.current);
+  }, [setEnabled]);
 
   // Initial fetch
   useEffect(() => {

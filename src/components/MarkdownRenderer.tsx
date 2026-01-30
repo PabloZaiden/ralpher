@@ -35,7 +35,7 @@ export function MarkdownRenderer({ content, className = "", dimmed = false, rawM
       <div
         className={`${dimmed ? "opacity-60" : ""} ${className}`.trim()}
       >
-        <pre className="whitespace-pre-wrap break-words font-mono text-sm text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto">
+        <pre className="whitespace-pre-wrap break-words font-mono text-sm text-gray-900 dark:text-gray-100 overflow-x-auto">
           {content}
         </pre>
       </div>
