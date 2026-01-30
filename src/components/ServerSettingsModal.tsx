@@ -57,7 +57,6 @@ export function ServerSettingsModal({
   const [useHttps, setUseHttps] = useState(false);
   const [allowInsecure, setAllowInsecure] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Markdown rendering preference
@@ -75,8 +74,6 @@ export function ServerSettingsModal({
       setUseHttps(settings.useHttps ?? false);
       setAllowInsecure(settings.allowInsecure ?? false);
       setTestResult(null);
-      // Mark as dirty if we had to switch from spawn to connect due to remote-only
-      setIsDirty(remoteOnly && settings.mode === "spawn");
     }
   }, [isOpen, settings, remoteOnly]);
 
@@ -120,29 +117,24 @@ export function ServerSettingsModal({
     setTestResult(result);
   }
 
-  // Mark as dirty when form values change
   function handleModeChange(newMode: "spawn" | "connect") {
     setMode(newMode);
     setTestResult(null);
-    setIsDirty(true);
   }
 
   function handleHostnameChange(value: string) {
     setHostname(value);
     setTestResult(null);
-    setIsDirty(true);
   }
 
   function handlePortChange(value: string) {
     setPort(value);
     setTestResult(null);
-    setIsDirty(true);
   }
 
   function handlePasswordChange(value: string) {
     setPassword(value);
     setTestResult(null);
-    setIsDirty(true);
   }
 
   function handleUseHttpsChange(checked: boolean) {
@@ -152,13 +144,11 @@ export function ServerSettingsModal({
       setAllowInsecure(false);
     }
     setTestResult(null);
-    setIsDirty(true);
   }
 
   function handleAllowInsecureChange(checked: boolean) {
     setAllowInsecure(checked);
     setTestResult(null);
-    setIsDirty(true);
   }
 
   // Validation
@@ -180,7 +170,7 @@ export function ServerSettingsModal({
             type="submit"
             form="server-settings-form"
             loading={saving}
-            disabled={!isValid || !isDirty}
+            disabled={!isValid}
           >
             Save Changes
           </Button>
