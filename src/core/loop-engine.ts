@@ -172,6 +172,12 @@ export class LoopEngine {
   private isLoopRunning = false;
   /** Skip git branch setup (for review cycles) */
   private skipGitSetup: boolean;
+  /** 
+   * Flag to indicate that a pending prompt/model was injected and the current
+   * iteration should be aborted to immediately start a new one with the injected values.
+   * This is different from `aborted` which stops the loop entirely.
+   */
+  private injectionPending = false;
 
   constructor(options: LoopEngineOptions) {
     this.loop = options.loop;
@@ -254,6 +260,54 @@ export class LoopEngine {
       pendingModel: undefined,
       timestamp: createTimestamp(),
     });
+  }
+
+  /**
+   * Inject pending prompt and/or model immediately by aborting the current iteration.
+   * Unlike regular setPending methods which wait for the current iteration to complete,
+   * this method interrupts the AI and starts a new iteration immediately.
+   * 
+   * The session is preserved (conversation history maintained), only the current
+   * AI processing is interrupted.
+   * 
+   * @param options - The pending prompt and/or model to inject
+   */
+  async injectPendingNow(options: { message?: string; model?: ModelConfig }): Promise<void> {
+    // Set the pending values first
+    if (options.message !== undefined) {
+      this.updateState({ pendingPrompt: options.message });
+    }
+    if (options.model !== undefined) {
+      this.updateState({ pendingModel: options.model });
+    }
+
+    // Emit event for UI update
+    this.emitter.emit({
+      type: "loop.pending.updated",
+      loopId: this.loop.config.id,
+      pendingPrompt: options.message,
+      pendingModel: options.model,
+      timestamp: createTimestamp(),
+    });
+
+    // If the loop is not actively running an iteration, no need to abort
+    if (!this.isLoopRunning) {
+      this.emitLog("debug", "Pending values set, loop not actively running - will apply on next iteration");
+      return;
+    }
+
+    // Mark that we're doing an injection abort (not a user stop)
+    this.injectionPending = true;
+
+    // Abort the current session to interrupt AI processing
+    if (this.sessionId) {
+      try {
+        this.emitLog("info", "Injecting pending message - aborting current AI processing");
+        await this.backend.abortSession(this.sessionId);
+      } catch {
+        // Ignore abort errors - the session may already be complete
+      }
+    }
   }
 
   /**
@@ -919,6 +973,15 @@ export class LoopEngine {
 
         // Check if aborted during iteration
         if (this.aborted) {
+          // Check if this was an injection abort (not a user stop)
+          if (this.injectionPending) {
+            this.emitLog("debug", "Injection abort detected, restarting iteration with pending values");
+            // Reset both flags to allow the loop to continue
+            this.aborted = false;
+            this.injectionPending = false;
+            // Continue the while loop - next iteration will use pending values
+            continue;
+          }
           this.emitLog("debug", "Aborted during iteration, exiting runLoop");
           return; // Stop method already updated status
         }
@@ -1069,7 +1132,11 @@ export class LoopEngine {
           log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
           // Check if aborted
           if (this.aborted) {
-            this.emitLog("info", "Iteration aborted by user");
+            if (this.injectionPending) {
+              this.emitLog("info", "Iteration interrupted for pending message injection");
+            } else {
+              this.emitLog("info", "Iteration aborted by user");
+            }
             break;
           }
 

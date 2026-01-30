@@ -1367,6 +1367,44 @@ Follow the standard loop execution flow:
   }
 
   /**
+   * Inject pending message and/or model immediately by aborting the current iteration.
+   * Unlike setPending which waits for the current iteration to complete naturally,
+   * this method interrupts the AI and starts a new iteration immediately with the
+   * injected values.
+   * 
+   * The session is preserved (conversation history maintained), only the current
+   * AI processing is interrupted.
+   * 
+   * Only works when the loop is in an active state (running, waiting, planning).
+   */
+  async injectPending(loopId: string, options: { message?: string; model?: ModelConfig }): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      return { success: false, error: "Loop is not running. Pending values can only be injected for running loops." };
+    }
+
+    // Check if the loop is in an active state
+    const status = engine.state.status;
+    if (!["running", "waiting", "planning", "starting"].includes(status)) {
+      return { success: false, error: `Loop is not in an active state (status: ${status}). Pending values can only be injected for active loops.` };
+    }
+
+    // Validate model config if provided
+    if (options.model && (!options.model.providerID || !options.model.modelID)) {
+      return { success: false, error: "Invalid model config: providerID and modelID are required" };
+    }
+
+    // Call the engine's injectPendingNow method
+    await engine.injectPendingNow(options);
+
+    return { success: true };
+  }
+
+  /**
    * Address reviewer comments on a pushed/merged loop.
    * For pushed loops: resumes on the same branch.
    * For merged loops: creates a new review branch.

@@ -569,4 +569,167 @@ describe("POST /api/loops/:id/pending", () => {
       await rm(workDir, { recursive: true, force: true });
     }
   });
+
+  test("POST with immediate: true (default) calls injectPending", async () => {
+    const workDir = await createTestWorkDir();
+    try {
+      const createRes = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Test Loop",
+          directory: workDir,
+          prompt: "Test prompt",
+        }),
+      });
+      expect(createRes.status).toBe(201);
+      const created = await createRes.json();
+      const loopId = created.config.id;
+
+      await waitForLoopStatus(loopId, ["running"]);
+
+      // Set pending message with default immediate (true)
+      const pendingRes = await fetch(`${baseUrl}/api/loops/${loopId}/pending`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Immediate injection",
+        }),
+      });
+      expect(pendingRes.status).toBe(200);
+
+      // Verify the pending message was stored
+      const loopRes = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      const loopData = await loopRes.json();
+      expect(loopData.state.pendingPrompt).toBe("Immediate injection");
+
+      await fetch(`${baseUrl}/api/loops/${loopId}/stop`, { method: "POST" });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("POST with immediate: false queues for next iteration", async () => {
+    const workDir = await createTestWorkDir();
+    try {
+      const createRes = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Test Loop",
+          directory: workDir,
+          prompt: "Test prompt",
+        }),
+      });
+      expect(createRes.status).toBe(201);
+      const created = await createRes.json();
+      const loopId = created.config.id;
+
+      await waitForLoopStatus(loopId, ["running"]);
+
+      // Set pending message with immediate: false
+      const pendingRes = await fetch(`${baseUrl}/api/loops/${loopId}/pending`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Queued for later",
+          immediate: false,
+        }),
+      });
+      expect(pendingRes.status).toBe(200);
+
+      // Verify the pending message was stored
+      const loopRes = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      const loopData = await loopRes.json();
+      expect(loopData.state.pendingPrompt).toBe("Queued for later");
+
+      await fetch(`${baseUrl}/api/loops/${loopId}/stop`, { method: "POST" });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("POST with immediate: true and model works correctly", async () => {
+    const workDir = await createTestWorkDir();
+    try {
+      const createRes = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Test Loop",
+          directory: workDir,
+          prompt: "Test prompt",
+        }),
+      });
+      expect(createRes.status).toBe(201);
+      const created = await createRes.json();
+      const loopId = created.config.id;
+
+      await waitForLoopStatus(loopId, ["running"]);
+
+      // Set both message and model with immediate: true
+      const pendingRes = await fetch(`${baseUrl}/api/loops/${loopId}/pending`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Immediate with model",
+          model: { providerID: "openai", modelID: "gpt-4o" },
+          immediate: true,
+        }),
+      });
+      expect(pendingRes.status).toBe(200);
+
+      // Verify both were stored
+      const loopRes = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      const loopData = await loopRes.json();
+      expect(loopData.state.pendingPrompt).toBe("Immediate with model");
+      expect(loopData.state.pendingModel).toEqual({
+        providerID: "openai",
+        modelID: "gpt-4o",
+      });
+
+      await fetch(`${baseUrl}/api/loops/${loopId}/stop`, { method: "POST" });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
+
+  test("POST validates immediate must be boolean", async () => {
+    const workDir = await createTestWorkDir();
+    try {
+      const createRes = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Test Loop",
+          directory: workDir,
+          prompt: "Test prompt",
+        }),
+      });
+      expect(createRes.status).toBe(201);
+      const created = await createRes.json();
+      const loopId = created.config.id;
+
+      await waitForLoopStatus(loopId, ["running"]);
+
+      // Try with invalid immediate type
+      const pendingRes = await fetch(`${baseUrl}/api/loops/${loopId}/pending`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Test",
+          immediate: "yes",  // Should be boolean
+        }),
+      });
+      expect(pendingRes.status).toBe(400);
+      const data = await pendingRes.json();
+      expect(data.error).toBe("validation_error");
+      expect(data.message).toContain("immediate");
+      expect(data.message).toContain("boolean");
+
+      await fetch(`${baseUrl}/api/loops/${loopId}/stop`, { method: "POST" });
+    } finally {
+      await rm(workDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -347,4 +347,70 @@ describe("LoopEngine Pending Model", () => {
     // Verify pending prompt was cleared
     expect(loop.state.pendingPrompt).toBeUndefined();
   });
+
+  test("injectPendingNow sets pending values and marks injection pending", async () => {
+    const loop = createTestLoop();
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    // Call injectPendingNow (without a running loop, it should just set values)
+    await engine.injectPendingNow({
+      message: "Injected message",
+      model: { providerID: "openai", modelID: "gpt-4o" },
+    });
+
+    // Verify state was updated
+    expect(loop.state.pendingPrompt).toBe("Injected message");
+    expect(loop.state.pendingModel).toEqual({
+      providerID: "openai",
+      modelID: "gpt-4o",
+    });
+
+    // Verify event was emitted
+    const pendingEvents = emittedEvents.filter((e) => e.type === "loop.pending.updated");
+    expect(pendingEvents.length).toBe(1);
+    expect(pendingEvents[0]).toMatchObject({
+      type: "loop.pending.updated",
+      loopId: "test-loop-1",
+      pendingPrompt: "Injected message",
+      pendingModel: { providerID: "openai", modelID: "gpt-4o" },
+    });
+  });
+
+  test("injectPendingNow with only message sets just the message", async () => {
+    const loop = createTestLoop();
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    await engine.injectPendingNow({ message: "Only message" });
+
+    expect(loop.state.pendingPrompt).toBe("Only message");
+    expect(loop.state.pendingModel).toBeUndefined();
+  });
+
+  test("injectPendingNow with only model sets just the model", async () => {
+    const loop = createTestLoop();
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    await engine.injectPendingNow({ model: { providerID: "openai", modelID: "gpt-4o" } });
+
+    expect(loop.state.pendingPrompt).toBeUndefined();
+    expect(loop.state.pendingModel).toEqual({
+      providerID: "openai",
+      modelID: "gpt-4o",
+    });
+  });
 });

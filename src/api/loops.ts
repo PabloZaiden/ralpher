@@ -853,20 +853,23 @@ export const loopsControlRoutes = {
     /**
      * POST /api/loops/:id/pending - Set pending message and/or model for next iteration.
      * 
-     * Queues a message and/or model change to be applied after the current iteration
-     * completes. This allows mid-loop steering without interrupting the agent's work.
+     * Queues a message and/or model change. By default (immediate: true), the current
+     * iteration is interrupted and the pending values are applied immediately in a new
+     * iteration. Set immediate: false to wait for the current iteration to complete.
      * Only works for active loops (running, waiting, planning, starting).
      * 
      * Request Body:
      * - message (optional): Message to queue for next iteration
      * - model (optional): { providerID, modelID } for model change
+     * - immediate (optional, default: true): If true, interrupt current iteration
+     *   and apply pending values immediately. If false, wait for current iteration.
      * 
      * At least one of message or model must be provided.
      * 
      * @returns Success response
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      const body = await parseBody<{ message?: string; model?: { providerID: string; modelID: string } }>(req);
+      const body = await parseBody<{ message?: string; model?: { providerID: string; modelID: string }; immediate?: boolean }>(req);
       if (!body) {
         return errorResponse("invalid_body", "Request body must be valid JSON");
       }
@@ -894,11 +897,28 @@ export const loopsControlRoutes = {
         }
       }
 
-      // Use the combined setPending method
-      const result = await loopManager.setPending(req.params.id, {
-        message: body.message,
-        model: body.model,
-      });
+      // Validate immediate if provided (must be boolean)
+      if (body.immediate !== undefined && typeof body.immediate !== "boolean") {
+        return errorResponse("validation_error", "'immediate' must be a boolean");
+      }
+
+      // Default to immediate: true
+      const immediate = body.immediate ?? true;
+
+      let result: { success: boolean; error?: string };
+      if (immediate) {
+        // Inject immediately by aborting current iteration
+        result = await loopManager.injectPending(req.params.id, {
+          message: body.message,
+          model: body.model,
+        });
+      } else {
+        // Queue for next natural iteration
+        result = await loopManager.setPending(req.params.id, {
+          message: body.message,
+          model: body.model,
+        });
+      }
 
       if (!result.success) {
         if (result.error?.includes("not found")) {
