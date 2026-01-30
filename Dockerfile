@@ -22,23 +22,11 @@ WORKDIR /app
 
 # Install required packages:
 # - ca-certificates: for HTTPS requests
-# - curl: for downloading opencode
-# - git: required for loop git operations (branch, commit, merge, etc.)
-# - openssh-client: for git operations over SSH
 # - tini: init process for proper signal handling (Ctrl+C works)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    curl \
-    git \
-    openssh-client \
     tini \
   && rm -rf /var/lib/apt/lists/*
-
-# Install opencode
-RUN curl -fsSL https://opencode.ai/install | bash
-
-# Add opencode to PATH
-ENV PATH="/root/.opencode/bin:${PATH}"
 
 # Copy the standalone binary from builder
 COPY --from=builder /app/dist/ralpher /app/ralpher
