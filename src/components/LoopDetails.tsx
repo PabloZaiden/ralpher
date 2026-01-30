@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { FileDiff, FileContentResponse, ModelInfo } from "../types";
 import type { ReviewComment } from "../types/loop";
-import { useLoop } from "../hooks";
+import { useLoop, useMarkdownPreference } from "../hooks";
 import { Badge, Button, getStatusBadgeVariant } from "./common";
 import { LogViewer } from "./LogViewer";
 import { TodoViewer } from "./TodoViewer";
@@ -110,6 +110,9 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     discardPlan,
     addressReviewComments,
   } = useLoop(loopId);
+
+  // Markdown rendering preference
+  const { enabled: markdownEnabled } = useMarkdownPreference();
 
   const [activeTab, setActiveTab] = useState<TabId>("log");
   const [planContent, setPlanContent] = useState<FileContentResponse | null>(null);
@@ -697,7 +700,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
                         </div>
                       ) : planContent?.exists ? (
-                        <MarkdownRenderer content={planContent.content} />
+                        <MarkdownRenderer content={planContent.content} rawMode={!markdownEnabled} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
                       ) : (
                         <p className="text-gray-500 dark:text-gray-400 text-center py-8">
                           No plan.md file found in the project directory.
@@ -713,7 +716,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
                         </div>
                       ) : statusContent?.exists ? (
-                        <MarkdownRenderer content={statusContent.content} />
+                        <MarkdownRenderer content={statusContent.content} rawMode={!markdownEnabled} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
                       ) : (
                         <p className="text-gray-500 dark:text-gray-400 text-center py-8">
                           No status.md file found in the project directory.
