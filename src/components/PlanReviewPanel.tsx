@@ -7,6 +7,7 @@ import { Button, Card } from "./common";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { LogViewer, type LogEntry } from "./LogViewer";
 import type { Loop, MessageData, ToolCallData } from "../types";
+import { useMarkdownPreference } from "../hooks";
 
 export interface PlanReviewPanelProps {
   /** The loop in planning mode */
@@ -46,6 +47,9 @@ export function PlanReviewPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState<PlanTab>("plan");
+
+  // Markdown rendering preference
+  const { enabled: markdownEnabled } = useMarkdownPreference();
 
   const feedbackRounds = loop.state.planMode?.feedbackRounds ?? 0;
   const hasActivity = messages.length > 0 || toolCalls.length > 0 || logs.length > 0;
@@ -126,7 +130,7 @@ export function PlanReviewPanel({
               {planContent ? (
                 !isPlanReady ? (
                   <div className="relative">
-                    <MarkdownRenderer content={planContent} dimmed className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
+                    <MarkdownRenderer content={planContent} dimmed rawMode={!markdownEnabled} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
                     <div className="absolute top-4 right-4 flex items-center gap-3 text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 px-3 py-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
                       <span className="relative flex h-3 w-3">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
@@ -136,7 +140,7 @@ export function PlanReviewPanel({
                     </div>
                   </div>
                 ) : (
-                  <MarkdownRenderer content={planContent} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
+                  <MarkdownRenderer content={planContent} rawMode={!markdownEnabled} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
                 )
               ) : (
                 <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400">

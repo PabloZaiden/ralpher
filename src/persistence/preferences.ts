@@ -19,6 +19,8 @@ export interface UserPreferences {
   lastDirectory?: string;
   /** Global server settings */
   serverSettings?: ServerSettings;
+  /** Whether markdown rendering is enabled (defaults to true) */
+  markdownRenderingEnabled?: boolean;
 }
 
 /**
@@ -102,4 +104,23 @@ export async function getLastDirectory(): Promise<string | undefined> {
  */
 export async function setLastDirectory(directory: string): Promise<void> {
   setPreference("lastDirectory", directory);
+}
+
+/**
+ * Get whether markdown rendering is enabled.
+ * Defaults to true if not set.
+ */
+export async function getMarkdownRenderingEnabled(): Promise<boolean> {
+  const value = getPreference("markdownRenderingEnabled");
+  if (value === null) {
+    return true; // Default to enabled
+  }
+  return value === "true";
+}
+
+/**
+ * Set whether markdown rendering is enabled.
+ */
+export async function setMarkdownRenderingEnabled(enabled: boolean): Promise<void> {
+  setPreference("markdownRenderingEnabled", String(enabled));
 }

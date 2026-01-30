@@ -6,6 +6,7 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Modal, Button, Badge } from "./common";
 import type { ServerSettings, ConnectionStatus } from "../types/settings";
+import { useMarkdownPreference } from "../hooks";
 
 export interface ServerSettingsModalProps {
   /** Whether the modal is open */
@@ -58,6 +59,9 @@ export function ServerSettingsModal({
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  // Markdown rendering preference
+  const { enabled: markdownEnabled, toggle: toggleMarkdown, saving: savingMarkdown } = useMarkdownPreference();
 
   // Initialize form from settings when modal opens
   useEffect(() => {
@@ -407,6 +411,33 @@ export function ServerSettingsModal({
             </div>
           </div>
         )}
+
+        {/* Display Settings */}
+        <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
+            Display Settings
+          </h3>
+          <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={markdownEnabled}
+                onChange={() => toggleMarkdown()}
+                disabled={savingMarkdown}
+                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Render Markdown
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  When enabled, markdown content (plan, status) is rendered as formatted HTML.
+                  When disabled, raw markdown text is shown.
+                </p>
+              </div>
+            </label>
+          </div>
+        </div>
 
         {/* Reset All Settings - Danger Zone */}
         {onResetAll && (
