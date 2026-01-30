@@ -856,7 +856,8 @@ export const loopsControlRoutes = {
      * Queues a message and/or model change. By default (immediate: true), the current
      * iteration is interrupted and the pending values are applied immediately in a new
      * iteration. Set immediate: false to wait for the current iteration to complete.
-     * Only works for active loops (running, waiting, planning, starting).
+     * Works for active loops (running, waiting, planning, starting) and can also
+     * jumpstart loops in supported stopped states (completed, stopped, failed, max_iterations).
      * 
      * Request Body:
      * - message (optional): Message to queue for next iteration
