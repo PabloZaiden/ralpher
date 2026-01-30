@@ -462,10 +462,3 @@ export class CommandExecutorImpl implements CommandExecutor {
     return [];
   }
 }
-
-/**
- * Backward-compatible aliases.
- * @deprecated Use CommandExecutorImpl and CommandExecutorConfig instead
- */
-export { CommandExecutorImpl as RemoteCommandExecutor };
-export type { CommandExecutorConfig as RemoteCommandExecutorConfig };

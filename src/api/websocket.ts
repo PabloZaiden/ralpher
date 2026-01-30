@@ -38,33 +38,6 @@ export interface WebSocketData {
 }
 
 /**
- * Handle WebSocket upgrade requests.
- * 
- * Extracts optional loopId query parameter for event filtering.
- * If loopId is provided, only events for that loop are streamed.
- * 
- * @param req - The incoming HTTP request with upgrade header
- * @param server - The Bun server with upgrade capability
- * @returns undefined on success, Response on failure
- */
-export function handleWebSocketUpgrade(req: Request, server: { upgrade: (req: Request, options?: { data?: WebSocketData }) => boolean }): Response | undefined {
-  const url = new URL(req.url);
-  const loopId = url.searchParams.get("loopId") ?? undefined;
-
-  const upgraded = server.upgrade(req, {
-    data: { loopId } as WebSocketData,
-  });
-
-  if (upgraded) {
-    // Return undefined to indicate successful upgrade
-    return undefined;
-  }
-
-  // Upgrade failed
-  return new Response("WebSocket upgrade failed", { status: 400 });
-}
-
-/**
  * WebSocket message handlers for Bun.serve().
  * These handlers manage the WebSocket lifecycle and event streaming.
  */

@@ -3,18 +3,8 @@
  */
 
 import { useState, useEffect, type FormEvent } from "react";
-import type { CreateLoopRequest, ModelInfo } from "../types";
+import type { CreateLoopRequest, ModelInfo, BranchInfo } from "../types";
 import { Button } from "./common";
-
-/**
- * Branch information for the branch selector.
- */
-export interface BranchInfo {
-  /** Branch name */
-  name: string;
-  /** Whether this is the current branch */
-  current: boolean;
-}
 
 export interface CreateLoopFormProps {
   /** Callback when form is submitted. Returns true if successful, false otherwise. */

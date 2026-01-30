@@ -6,9 +6,52 @@ import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import type { Loop, LoopStatus } from "../../src/types/loop";
 
 // We need to set the env var before importing the module
 let testDataDir: string;
+
+/**
+ * Helper function to create a test loop with all required fields.
+ */
+function createTestLoop(overrides: {
+  id: string;
+  name?: string;
+  directory?: string;
+  prompt?: string;
+  status?: LoopStatus;
+  currentIteration?: number;
+  createdAt?: string;
+}): Loop {
+  const now = new Date().toISOString();
+  return {
+    config: {
+      id: overrides.id,
+      name: overrides.name ?? overrides.id,
+      directory: overrides.directory ?? "/tmp/test",
+      prompt: overrides.prompt ?? "Test",
+      createdAt: overrides.createdAt ?? now,
+      updatedAt: now,
+      stopPattern: "<promise>COMPLETE</promise>$",
+      git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+      maxIterations: Infinity,
+      maxConsecutiveErrors: 10,
+      activityTimeoutSeconds: 180,
+      clearPlanningFolder: false,
+      planMode: false,
+    },
+    state: {
+      id: overrides.id,
+      status: overrides.status ?? "idle",
+      currentIteration: overrides.currentIteration ?? 0,
+      recentIterations: [],
+      logs: [],
+      messages: [],
+      toolCalls: [],
+      todos: [],
+    },
+  };
+}
 
 describe("Persistence", () => {
   beforeEach(async () => {
@@ -30,12 +73,12 @@ describe("Persistence", () => {
   describe("paths", () => {
     test("getDataDir returns env var when set", async () => {
       // Re-import to get fresh module with env var
-      const { getDataDir } = await import("../../src/persistence/paths");
+      const { getDataDir } = await import("../../src/persistence/database");
       expect(getDataDir()).toBe(testDataDir);
     });
 
     test("getDatabasePath returns correct path", async () => {
-      const { getDatabasePath } = await import("../../src/persistence/paths");
+      const { getDatabasePath } = await import("../../src/persistence/database");
       expect(getDatabasePath()).toBe(join(testDataDir, "ralpher.db"));
     });
 
@@ -56,24 +99,11 @@ describe("Persistence", () => {
 
       await ensureDataDirectories();
 
-      const testLoop = {
-        config: {
-          id: "test-loop-123",
-          name: "test-loop",
-          directory: "/tmp/test",
-          prompt: "Do something",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          stopPattern: "<promise>COMPLETE</promise>$",
-          git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
-        },
-        state: {
-          id: "test-loop-123",
-          status: "idle" as const,
-          currentIteration: 0,
-          recentIterations: [],
-        },
-      };
+      const testLoop = createTestLoop({
+        id: "test-loop-123",
+        name: "test-loop",
+        prompt: "Do something",
+      });
 
       await saveLoop(testLoop);
       const loaded = await loadLoop("test-loop-123");
@@ -98,24 +128,7 @@ describe("Persistence", () => {
 
       await ensureDataDirectories();
 
-      const testLoop = {
-        config: {
-          id: "delete-me",
-          name: "delete-me",
-          directory: "/tmp/test",
-          prompt: "Test",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          stopPattern: "<promise>COMPLETE</promise>$",
-          git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
-        },
-        state: {
-          id: "delete-me",
-          status: "idle" as const,
-          currentIteration: 0,
-          recentIterations: [],
-        },
-      };
+      const testLoop = createTestLoop({ id: "delete-me" });
 
       await saveLoop(testLoop);
       expect(await loadLoop("delete-me")).not.toBeNull();
@@ -132,43 +145,21 @@ describe("Persistence", () => {
       await ensureDataDirectories();
 
       // Save two loops
-      const loop1 = {
-        config: {
-          id: "loop-1",
-          name: "loop-1",
-          directory: "/tmp/1",
-          prompt: "Test 1",
-          createdAt: "2024-01-01T00:00:00Z",
-          updatedAt: "2024-01-01T00:00:00Z",
-          stopPattern: "<promise>COMPLETE</promise>$",
-          git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
-        },
-        state: {
-          id: "loop-1",
-          status: "idle" as const,
-          currentIteration: 0,
-          recentIterations: [],
-        },
-      };
+      const loop1 = createTestLoop({
+        id: "loop-1",
+        directory: "/tmp/1",
+        prompt: "Test 1",
+        createdAt: "2024-01-01T00:00:00Z",
+      });
 
-      const loop2 = {
-        config: {
-          id: "loop-2",
-          name: "loop-2",
-          directory: "/tmp/2",
-          prompt: "Test 2",
-          createdAt: "2024-01-02T00:00:00Z",
-          updatedAt: "2024-01-02T00:00:00Z",
-          stopPattern: "<promise>COMPLETE</promise>$",
-          git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
-        },
-        state: {
-          id: "loop-2",
-          status: "running" as const,
-          currentIteration: 3,
-          recentIterations: [],
-        },
-      };
+      const loop2 = createTestLoop({
+        id: "loop-2",
+        directory: "/tmp/2",
+        prompt: "Test 2",
+        status: "running",
+        currentIteration: 3,
+        createdAt: "2024-01-02T00:00:00Z",
+      });
 
       await saveLoop(loop1);
       await saveLoop(loop2);
@@ -198,25 +189,7 @@ describe("Persistence", () => {
 
         await ensureDataDirectories();
 
-        const draftLoop = {
-          config: {
-            id: "draft-loop",
-            name: "draft-loop",
-            directory: "/tmp/test",
-            prompt: "Test",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            stopPattern: "<promise>COMPLETE</promise>$",
-            git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
-          },
-          state: {
-            id: "draft-loop",
-            status: "draft" as const,
-            currentIteration: 0,
-            recentIterations: [],
-          },
-        };
-
+        const draftLoop = createTestLoop({ id: "draft-loop", status: "draft" });
         await saveLoop(draftLoop);
 
         const result = await getActiveLoopByDirectory("/tmp/test");
@@ -229,27 +202,14 @@ describe("Persistence", () => {
 
         await ensureDataDirectories();
 
-        const terminalStatuses = ["completed", "stopped", "failed", "max_iterations", "merged", "pushed", "deleted"] as const;
+        const terminalStatuses: LoopStatus[] = ["completed", "stopped", "failed", "max_iterations", "merged", "pushed", "deleted"];
 
         for (let i = 0; i < terminalStatuses.length; i++) {
-          await saveLoop({
-            config: {
-              id: `terminal-loop-${i}`,
-              name: `terminal-loop-${i}`,
-              directory: "/tmp/test",
-              prompt: "Test",
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              stopPattern: "<promise>COMPLETE</promise>$",
-              git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
-            },
-            state: {
-              id: `terminal-loop-${i}`,
-              status: terminalStatuses[i]!,
-              currentIteration: 0,
-              recentIterations: [],
-            },
+          const loop = createTestLoop({
+            id: `terminal-loop-${i}`,
+            status: terminalStatuses[i],
           });
+          await saveLoop(loop);
         }
 
         const result = await getActiveLoopByDirectory("/tmp/test");
@@ -262,27 +222,14 @@ describe("Persistence", () => {
 
         await ensureDataDirectories();
 
-        const activeStatuses = ["idle", "planning", "starting", "running", "waiting"] as const;
+        const activeStatuses: LoopStatus[] = ["idle", "planning", "starting", "running", "waiting"];
 
         for (const status of activeStatuses) {
-          const testLoop = {
-            config: {
-              id: `active-loop-${status}`,
-              name: `active-loop-${status}`,
-              directory: `/tmp/active-test-${status}`,
-              prompt: "Test",
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              stopPattern: "<promise>COMPLETE</promise>$",
-              git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
-            },
-            state: {
-              id: `active-loop-${status}`,
-              status: status,
-              currentIteration: 0,
-              recentIterations: [],
-            },
-          };
+          const testLoop = createTestLoop({
+            id: `active-loop-${status}`,
+            directory: `/tmp/active-test-${status}`,
+            status,
+          });
 
           await saveLoop(testLoop);
 
@@ -303,24 +250,11 @@ describe("Persistence", () => {
         await ensureDataDirectories();
 
         // Save a running loop in a different directory
-        const otherDirLoop = {
-          config: {
-            id: "other-dir-loop",
-            name: "other-dir-loop",
-            directory: "/tmp/other-dir",
-            prompt: "Test",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            stopPattern: "<promise>COMPLETE</promise>$",
-            git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
-          },
-          state: {
-            id: "other-dir-loop",
-            status: "running" as const,
-            currentIteration: 0,
-            recentIterations: [],
-          },
-        };
+        const otherDirLoop = createTestLoop({
+          id: "other-dir-loop",
+          directory: "/tmp/other-dir",
+          status: "running",
+        });
 
         await saveLoop(otherDirLoop);
 
@@ -336,64 +270,30 @@ describe("Persistence", () => {
         await ensureDataDirectories();
 
         // Save a draft loop
-        await saveLoop({
-          config: {
-            id: "draft-loop",
-            name: "draft-loop",
-            directory: "/tmp/multi-test",
-            prompt: "Test",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            stopPattern: "<promise>COMPLETE</promise>$",
-            git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
-          },
-          state: {
-            id: "draft-loop",
-            status: "draft" as const,
-            currentIteration: 0,
-            recentIterations: [],
-          },
+        const draftLoop = createTestLoop({
+          id: "draft-loop",
+          directory: "/tmp/multi-test",
+          status: "draft",
         });
+        await saveLoop(draftLoop);
 
         // Save a completed loop
-        await saveLoop({
-          config: {
-            id: "completed-loop",
-            name: "completed-loop",
-            directory: "/tmp/multi-test",
-            prompt: "Test",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            stopPattern: "<promise>COMPLETE</promise>$",
-            git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
-          },
-          state: {
-            id: "completed-loop",
-            status: "completed" as const,
-            currentIteration: 5,
-            recentIterations: [],
-          },
+        const completedLoop = createTestLoop({
+          id: "completed-loop",
+          directory: "/tmp/multi-test",
+          status: "completed",
+          currentIteration: 5,
         });
+        await saveLoop(completedLoop);
 
         // Save a running loop
-        await saveLoop({
-          config: {
-            id: "running-loop",
-            name: "running-loop",
-            directory: "/tmp/multi-test",
-            prompt: "Test",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            stopPattern: "<promise>COMPLETE</promise>$",
-            git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
-          },
-          state: {
-            id: "running-loop",
-            status: "running" as const,
-            currentIteration: 2,
-            recentIterations: [],
-          },
+        const runningLoop = createTestLoop({
+          id: "running-loop",
+          directory: "/tmp/multi-test",
+          status: "running",
+          currentIteration: 2,
         });
+        await saveLoop(runningLoop);
 
         const result = await getActiveLoopByDirectory("/tmp/multi-test");
         expect(result).not.toBeNull();

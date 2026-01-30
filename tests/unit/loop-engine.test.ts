@@ -161,6 +161,11 @@ describe("StopPatternDetector", () => {
       // Backend is now global, not per-loop config
       stopPattern: "<promise>COMPLETE</promise>$",
       git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+      maxIterations: Infinity,
+      maxConsecutiveErrors: 10,
+      activityTimeoutSeconds: 180,
+      clearPlanningFolder: false,
+      planMode: false,
       ...overrides,
     };
 
@@ -169,6 +174,10 @@ describe("StopPatternDetector", () => {
       status: "idle",
       currentIteration: 0,
       recentIterations: [],
+      logs: [],
+      messages: [],
+      toolCalls: [],
+      todos: [],
     };
 
     return { config, state };

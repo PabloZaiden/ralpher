@@ -107,6 +107,8 @@ function createTables(database: Database): void {
         git_branch_prefix TEXT NOT NULL,
         git_commit_prefix TEXT NOT NULL,
         base_branch TEXT,
+        clear_planning_folder INTEGER DEFAULT 0,
+        plan_mode INTEGER DEFAULT 0,
         -- State fields
         status TEXT NOT NULL DEFAULT 'idle',
         current_iteration INTEGER NOT NULL DEFAULT 0,
@@ -126,7 +128,21 @@ function createTables(database: Database): void {
         messages TEXT,
         tool_calls TEXT,
         consecutive_errors TEXT,
-        pending_prompt TEXT
+        pending_prompt TEXT,
+        pending_model_provider_id TEXT,
+        pending_model_model_id TEXT,
+        -- Plan mode state
+        plan_mode_active INTEGER DEFAULT 0,
+        plan_session_id TEXT,
+        plan_server_url TEXT,
+        plan_feedback_rounds INTEGER DEFAULT 0,
+        plan_content TEXT,
+        planning_folder_cleared INTEGER DEFAULT 0,
+        plan_is_ready INTEGER DEFAULT 0,
+        -- Review mode state
+        review_mode TEXT,
+        -- Todo items
+        todos TEXT
       )
     `);
 
@@ -152,9 +168,31 @@ function createTables(database: Database): void {
       )
     `);
 
+    // Review comments table - stores reviewer feedback for loops
+    database.run(`
+      CREATE TABLE IF NOT EXISTS review_comments (
+        id TEXT PRIMARY KEY,
+        loop_id TEXT NOT NULL,
+        review_cycle INTEGER NOT NULL,
+        comment_text TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        addressed_at TEXT,
+        FOREIGN KEY (loop_id) REFERENCES loops(id) ON DELETE CASCADE
+      )
+    `);
+
     // Create index for faster loop listing
     database.run(`
       CREATE INDEX IF NOT EXISTS idx_loops_created_at ON loops(created_at DESC)
+    `);
+
+    // Create indexes for review comments
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_review_comments_loop_id ON review_comments(loop_id)
+    `);
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_review_comments_loop_cycle ON review_comments(loop_id, review_cycle)
     `);
 
     // Note: No index needed for sessions - composite primary key (backend_name, loop_id)
@@ -194,6 +232,7 @@ export function resetDatabase(): void {
   
   // Wrap DROP operations in a transaction
   const dropAllTables = db.transaction(() => {
+    db!.run("DROP TABLE IF EXISTS review_comments");
     db!.run("DROP TABLE IF EXISTS loops");
     db!.run("DROP TABLE IF EXISTS sessions");
     db!.run("DROP TABLE IF EXISTS preferences");
