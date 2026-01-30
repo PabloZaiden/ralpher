@@ -42,15 +42,6 @@ export function getDefaultServerSettings(): ServerSettings {
 }
 
 /**
- * Default server settings.
- * Uses spawn mode (local server) by default.
- * @deprecated Use getDefaultServerSettings() for dynamic defaults based on env vars.
- */
-export const DEFAULT_SERVER_SETTINGS: ServerSettings = {
-  mode: "spawn",
-};
-
-/**
  * Connection status information.
  * Returned by the status endpoint and used in the UI.
  */

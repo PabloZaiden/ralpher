@@ -12,9 +12,9 @@ import type {
   FileContentResponse,
   MessageData,
   ToolCallData,
-  LogLevel,
 } from "../types";
 import type { TodoItem } from "../backends/types";
+import type { LogEntry } from "../components/LogViewer";
 import { useLoopEvents } from "./useWebSocket";
 import {
   acceptLoopApi,
@@ -36,22 +36,6 @@ import {
   type AddressCommentsResult,
   type SetPendingResult,
 } from "./loopActions";
-
-/**
- * Application log entry for display in the UI.
- */
-export interface LogEntry {
-  /** Unique ID for the log entry */
-  id: string;
-  /** Log level */
-  level: LogLevel;
-  /** Log message */
-  message: string;
-  /** Optional additional details */
-  details?: Record<string, unknown>;
-  /** ISO timestamp */
-  timestamp: string;
-}
 
 export interface UseLoopResult {
   /** The loop data */

@@ -147,6 +147,12 @@ function rowToLoop(row: Record<string, unknown>): Loop {
       branchPrefix: row["git_branch_prefix"] as string,
       commitPrefix: row["git_commit_prefix"] as string,
     },
+    // Mandatory fields with defaults for backward compatibility with old data
+    maxIterations: (row["max_iterations"] as number | null) ?? Infinity,
+    maxConsecutiveErrors: (row["max_consecutive_errors"] as number | null) ?? 10,
+    activityTimeoutSeconds: (row["activity_timeout_seconds"] as number | null) ?? 180,
+    clearPlanningFolder: row["clear_planning_folder"] === 1,
+    planMode: row["plan_mode"] === 1,
   };
 
   // Optional config fields
@@ -156,29 +162,9 @@ function rowToLoop(row: Record<string, unknown>): Loop {
       modelID: row["model_model_id"] as string,
     };
   }
-  if (row["max_iterations"] !== null) {
-    config.maxIterations = row["max_iterations"] as number;
-  }
-  if (row["max_consecutive_errors"] !== null) {
-    config.maxConsecutiveErrors = row["max_consecutive_errors"] as number;
-  }
-  if (row["activity_timeout_seconds"] !== null) {
-    config.activityTimeoutSeconds = row["activity_timeout_seconds"] as number;
-  }
   if (row["base_branch"] !== null) {
     config.baseBranch = row["base_branch"] as string;
   }
-  if (row["clear_planning_folder"] === 1) {
-    config.clearPlanningFolder = true;
-  } else {
-    config.clearPlanningFolder = false;
-  }
-  if (row["plan_mode"] === 1) {
-    config.planMode = true;
-  } else if (row["plan_mode"] === 0) {
-    config.planMode = false;
-  }
-  // If plan_mode is null (old database), leave config.planMode undefined
 
   const state: LoopState = {
     id: row["id"] as string,
@@ -187,6 +173,11 @@ function rowToLoop(row: Record<string, unknown>): Loop {
     recentIterations: row["recent_iterations"] 
       ? JSON.parse(row["recent_iterations"] as string) 
       : [],
+    // Mandatory array fields - always initialize as empty arrays if null
+    logs: row["logs"] ? JSON.parse(row["logs"] as string) : [],
+    messages: row["messages"] ? JSON.parse(row["messages"] as string) : [],
+    toolCalls: row["tool_calls"] ? JSON.parse(row["tool_calls"] as string) : [],
+    todos: row["todos"] ? JSON.parse(row["todos"] as string) : [],
   };
 
   // Optional state fields
@@ -219,15 +210,6 @@ function rowToLoop(row: Record<string, unknown>): Loop {
       commits: row["git_commits"] ? JSON.parse(row["git_commits"] as string) : [],
     };
   }
-  if (row["logs"] !== null) {
-    state.logs = JSON.parse(row["logs"] as string);
-  }
-  if (row["messages"] !== null) {
-    state.messages = JSON.parse(row["messages"] as string);
-  }
-  if (row["tool_calls"] !== null) {
-    state.toolCalls = JSON.parse(row["tool_calls"] as string);
-  }
   if (row["consecutive_errors"] !== null) {
     state.consecutiveErrors = JSON.parse(row["consecutive_errors"] as string);
   }
@@ -257,10 +239,6 @@ function rowToLoop(row: Record<string, unknown>): Loop {
   // Reconstruct reviewMode from JSON
   if (row["review_mode"] !== null) {
     state.reviewMode = JSON.parse(row["review_mode"] as string);
-  }
-  // Reconstruct todos from JSON
-  if (row["todos"] !== null) {
-    state.todos = JSON.parse(row["todos"] as string);
   }
 
   return { config, state };

@@ -7,10 +7,7 @@
  * The database path is managed in database.ts.
  */
 
-import { getDataDir, getDatabasePath, initializeDatabase, isDatabaseReady } from "./database";
-
-// Re-export from database.ts for backward compatibility
-export { getDataDir, getDatabasePath };
+import { initializeDatabase, isDatabaseReady } from "./database";
 
 /**
  * Ensure all required directories exist and database is initialized.

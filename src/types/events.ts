@@ -469,32 +469,3 @@ export interface LoopPendingUpdatedEvent {
 export function createTimestamp(): string {
   return new Date().toISOString();
 }
-
-/**
- * Type guard to check if an unknown object is a valid LoopEvent.
- * 
- * Validates that the object has the required structure for a loop event:
- * - Is an object (not null)
- * - Has a `type` property that is a string starting with "loop."
- * 
- * @param obj - The object to check
- * @returns True if the object is a valid LoopEvent
- * 
- * @example
- * ```typescript
- * const data = JSON.parse(websocketMessage);
- * if (isLoopEvent(data)) {
- *   // TypeScript now knows data is a LoopEvent
- *   handleEvent(data);
- * }
- * ```
- */
-export function isLoopEvent(obj: unknown): obj is LoopEvent {
-  return (
-    typeof obj === "object" &&
-    obj !== null &&
-    "type" in obj &&
-    typeof (obj as LoopEvent).type === "string" &&
-    (obj as LoopEvent).type.startsWith("loop.")
-  );
-}
