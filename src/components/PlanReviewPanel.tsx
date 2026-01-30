@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { Button, Card } from "./common";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 import { LogViewer, type LogEntry } from "./LogViewer";
 import type { Loop, MessageData, ToolCallData } from "../types";
 
@@ -121,13 +122,11 @@ export function PlanReviewPanel({
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
         {activeTab === "plan" && (
           <div className="p-6">
-            <div className="prose prose-sm dark:prose-invert max-w-none">
+            <div className="max-w-none">
               {planContent ? (
                 !isPlanReady ? (
                   <div className="relative">
-                    <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap opacity-60">
-                      {planContent}
-                    </pre>
+                    <MarkdownRenderer content={planContent} dimmed className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
                     <div className="absolute top-4 right-4 flex items-center gap-3 text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 px-3 py-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
                       <span className="relative flex h-3 w-3">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
@@ -137,9 +136,7 @@ export function PlanReviewPanel({
                     </div>
                   </div>
                 ) : (
-                  <pre className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg overflow-x-auto text-sm whitespace-pre-wrap">
-                    {planContent}
-                  </pre>
+                  <MarkdownRenderer content={planContent} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
                 )
               ) : (
                 <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400">

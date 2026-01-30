@@ -9,6 +9,7 @@ import { useLoop } from "../hooks";
 import { Badge, Button, getStatusBadgeVariant } from "./common";
 import { LogViewer } from "./LogViewer";
 import { TodoViewer } from "./TodoViewer";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 import {
   AcceptLoopModal,
   AddressCommentsModal,
@@ -716,9 +717,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
                         </div>
                       ) : planContent?.exists ? (
-                        <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono">
-                          {planContent.content}
-                        </pre>
+                        <MarkdownRenderer content={planContent.content} />
                       ) : (
                         <p className="text-gray-500 dark:text-gray-400 text-center py-8">
                           No plan.md file found in the project directory.
@@ -734,9 +733,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
                         </div>
                       ) : statusContent?.exists ? (
-                        <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono">
-                          {statusContent.content}
-                        </pre>
+                        <MarkdownRenderer content={statusContent.content} />
                       ) : (
                         <p className="text-gray-500 dark:text-gray-400 text-center py-8">
                           No status.md file found in the project directory.
