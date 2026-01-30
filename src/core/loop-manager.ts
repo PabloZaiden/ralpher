@@ -8,6 +8,7 @@ import type {
   Loop,
   LoopConfig,
   LoopState,
+  ModelConfig,
 } from "../types/loop";
 import type { LoopEvent } from "../types/events";
 import { createTimestamp } from "../types/events";
@@ -1241,6 +1242,126 @@ Follow the standard loop execution flow:
     }
 
     engine.clearPendingPrompt();
+
+    return { success: true };
+  }
+
+  /**
+   * Set the pending model for the next iteration.
+   * This will override config.model and become the new default after use.
+   * Only works when the loop is in an active state (running, waiting, planning).
+   */
+  async setPendingModel(loopId: string, model: ModelConfig): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      // Check if loop exists but isn't running
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      return { success: false, error: "Loop is not running. Pending model can only be set for running loops." };
+    }
+
+    // Check if the loop is in an active state
+    const status = engine.state.status;
+    if (!["running", "waiting", "planning", "starting"].includes(status)) {
+      return { success: false, error: `Loop is not in an active state (status: ${status}). Pending model can only be set for active loops.` };
+    }
+
+    // Validate model config
+    if (!model.providerID || !model.modelID) {
+      return { success: false, error: "Invalid model config: providerID and modelID are required" };
+    }
+
+    // Update the state with the pending model
+    engine.setPendingModel(model);
+
+    return { success: true };
+  }
+
+  /**
+   * Clear the pending model for a loop.
+   * Only works when the loop is in an active state.
+   */
+  async clearPendingModel(loopId: string): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      return { success: false, error: "Loop is not running. Pending model can only be cleared for running loops." };
+    }
+
+    // Check if the loop is in an active state
+    const status = engine.state.status;
+    if (!["running", "waiting", "planning", "starting"].includes(status)) {
+      return { success: false, error: `Loop is not in an active state (status: ${status}). Pending model can only be cleared for active loops.` };
+    }
+
+    engine.clearPendingModel();
+
+    return { success: true };
+  }
+
+  /**
+   * Clear all pending values (prompt and model) for a loop.
+   * Only works when the loop is in an active state.
+   */
+  async clearPending(loopId: string): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      return { success: false, error: "Loop is not running. Pending values can only be cleared for running loops." };
+    }
+
+    // Check if the loop is in an active state
+    const status = engine.state.status;
+    if (!["running", "waiting", "planning", "starting"].includes(status)) {
+      return { success: false, error: `Loop is not in an active state (status: ${status}). Pending values can only be cleared for active loops.` };
+    }
+
+    engine.clearPending();
+
+    return { success: true };
+  }
+
+  /**
+   * Set pending message and/or model for the next iteration.
+   * Convenience method to set both values at once.
+   * Only works when the loop is in an active state (running, waiting, planning).
+   */
+  async setPending(loopId: string, options: { message?: string; model?: ModelConfig }): Promise<{ success: boolean; error?: string }> {
+    const engine = this.engines.get(loopId);
+    if (!engine) {
+      const loop = await loadLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+      return { success: false, error: "Loop is not running. Pending values can only be set for running loops." };
+    }
+
+    // Check if the loop is in an active state
+    const status = engine.state.status;
+    if (!["running", "waiting", "planning", "starting"].includes(status)) {
+      return { success: false, error: `Loop is not in an active state (status: ${status}). Pending values can only be set for active loops.` };
+    }
+
+    // Validate model config if provided
+    if (options.model && (!options.model.providerID || !options.model.modelID)) {
+      return { success: false, error: "Invalid model config: providerID and modelID are required" };
+    }
+
+    // Set pending values
+    if (options.message !== undefined) {
+      engine.setPendingPrompt(options.message);
+    }
+    if (options.model !== undefined) {
+      engine.setPendingModel(options.model);
+    }
 
     return { success: true };
   }

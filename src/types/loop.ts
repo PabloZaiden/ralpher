@@ -131,6 +131,9 @@ export interface LoopState {
   /** Pending prompt that overrides config.prompt for the next iteration only */
   pendingPrompt?: string;
 
+  /** Model override for the next prompt (one-time, cleared after use) */
+  pendingModel?: ModelConfig;
+
   /** Plan mode state (active when status is "planning") */
   planMode?: {
     /** Whether plan mode is currently active */

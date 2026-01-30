@@ -48,6 +48,8 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "tool_calls",
   "consecutive_errors",
   "pending_prompt",
+  "pending_model_provider_id",
+  "pending_model_model_id",
   "plan_mode_active",
   "plan_session_id",
   "plan_server_url",
@@ -115,6 +117,8 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     tool_calls: state.toolCalls ? JSON.stringify(state.toolCalls) : null,
     consecutive_errors: state.consecutiveErrors ? JSON.stringify(state.consecutiveErrors) : null,
     pending_prompt: state.pendingPrompt ?? null,
+    pending_model_provider_id: state.pendingModel?.providerID ?? null,
+    pending_model_model_id: state.pendingModel?.modelID ?? null,
     plan_mode_active: state.planMode?.active ? 1 : 0,
     plan_session_id: state.planMode?.planSessionId ?? null,
     plan_server_url: state.planMode?.planServerUrl ?? null,
@@ -229,6 +233,13 @@ function rowToLoop(row: Record<string, unknown>): Loop {
   }
   if (row["pending_prompt"] !== null) {
     state.pendingPrompt = row["pending_prompt"] as string;
+  }
+  // Reconstruct pendingModel from provider/model columns
+  if (row["pending_model_provider_id"] !== null && row["pending_model_model_id"] !== null) {
+    state.pendingModel = {
+      providerID: row["pending_model_provider_id"] as string,
+      modelID: row["pending_model_model_id"] as string,
+    };
   }
   // Reconstruct planMode if any plan mode field is set (not just when active)
   if (row["plan_mode_active"] !== null || row["planning_folder_cleared"] === 1 || 

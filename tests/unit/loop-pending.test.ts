@@ -1,0 +1,350 @@
+/**
+ * Unit tests for pending model and message functionality.
+ * Tests the setPendingModel, clearPendingModel, setPending, and clearPending methods.
+ */
+
+import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import {
+  LoopEngine,
+  type LoopBackend,
+} from "../../src/core/loop-engine";
+import { SimpleEventEmitter } from "../../src/core/event-emitter";
+import type { Loop, LoopConfig, LoopState } from "../../src/types/loop";
+import type { LoopEvent } from "../../src/types/events";
+import type {
+  AgentSession,
+  AgentResponse,
+  AgentEvent,
+  BackendConnectionConfig,
+  CreateSessionOptions,
+  PromptInput,
+} from "../../src/backends/types";
+import { createEventStream, type EventStream } from "../../src/utils/event-stream";
+import { GitService } from "../../src/core/git-service";
+import { TestCommandExecutor } from "../mocks/mock-executor";
+import { backendManager } from "../../src/core/backend-manager";
+
+describe("LoopEngine Pending Model", () => {
+  let testDir: string;
+  let mockBackend: LoopBackend;
+  let emitter: SimpleEventEmitter<LoopEvent>;
+  let emittedEvents: LoopEvent[];
+  let gitService: GitService;
+  let capturedPrompts: PromptInput[];
+
+  // Create a mock backend that captures prompts
+  function createMockBackend(responses: string[]): LoopBackend {
+    let responseIndex = 0;
+    let connected = false;
+    const sessions = new Map<string, AgentSession>();
+    let pendingResponse: string | null = null;
+
+    return {
+      async connect(_config: BackendConnectionConfig): Promise<void> {
+        connected = true;
+      },
+
+      async disconnect(): Promise<void> {
+        connected = false;
+      },
+
+      isConnected(): boolean {
+        return connected;
+      },
+
+      async createSession(options: CreateSessionOptions): Promise<AgentSession> {
+        const session: AgentSession = {
+          id: `session-${Date.now()}`,
+          title: options.title,
+          createdAt: new Date().toISOString(),
+        };
+        sessions.set(session.id, session);
+        return session;
+      },
+
+      async sendPrompt(_sessionId: string, prompt: PromptInput): Promise<AgentResponse> {
+        // Capture the prompt for inspection
+        capturedPrompts.push(prompt);
+        const content = responses[responseIndex] ?? "Default response";
+        responseIndex++;
+        return {
+          id: `msg-${Date.now()}`,
+          content,
+          parts: [{ type: "text", text: content }],
+        };
+      },
+
+      async sendPromptAsync(_sessionId: string, prompt: PromptInput): Promise<void> {
+        capturedPrompts.push(prompt);
+        pendingResponse = responses[responseIndex] ?? "Default response";
+        responseIndex++;
+      },
+
+      async abortSession(_sessionId: string): Promise<void> {
+        // Not used in tests
+      },
+
+      async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
+        const { stream, push, end } = createEventStream<AgentEvent>();
+
+        (async () => {
+          // Wait a bit for sendPromptAsync to set pendingResponse
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          const content = pendingResponse ?? "Default";
+          pendingResponse = null;
+
+          push({ type: "message.start", messageId: `msg-${Date.now()}` });
+          push({ type: "message.delta", content });
+          push({ type: "message.complete", content });
+          end();
+        })();
+
+        return stream;
+      },
+
+      async replyToPermission(_requestId: string, _response: string): Promise<void> {
+        // No-op for basic mock
+      },
+
+      async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
+        // No-op for basic mock
+      },
+    };
+  }
+
+  function createTestLoop(overrides?: Partial<LoopConfig>): Loop {
+    const now = new Date().toISOString();
+    const config: LoopConfig = {
+      id: "test-loop-1",
+      name: "Test Loop",
+      directory: testDir,
+      prompt: "Test prompt",
+      createdAt: now,
+      updatedAt: now,
+      stopPattern: "<promise>COMPLETE</promise>$",
+      git: {
+        branchPrefix: "ralph/",
+        commitPrefix: "[Ralph]",
+      },
+      model: {
+        providerID: "anthropic",
+        modelID: "claude-sonnet-4-20250514",
+      },
+      ...overrides,
+    };
+
+    const state: LoopState = {
+      id: config.id,
+      status: "idle",
+      currentIteration: 0,
+      recentIterations: [],
+    };
+
+    return { config, state };
+  }
+
+  beforeEach(async () => {
+    // Create test directory with git repo
+    testDir = await mkdtemp(join(tmpdir(), "loop-pending-test-"));
+    const executor = new TestCommandExecutor();
+
+    // Initialize git repo using Bun.$ (like the working tests do)
+    await Bun.$`git init`.cwd(testDir).quiet();
+    await Bun.$`git config user.email "test@test.com"`.cwd(testDir).quiet();
+    await Bun.$`git config user.name "Test"`.cwd(testDir).quiet();
+    await writeFile(join(testDir, "README.md"), "# Test");
+    await Bun.$`git add .`.cwd(testDir).quiet();
+    await Bun.$`git commit -m "Initial commit"`.cwd(testDir).quiet();
+
+    // Create .planning directory
+    await mkdir(join(testDir, ".planning"), { recursive: true });
+
+    gitService = new GitService(executor);
+    emitter = new SimpleEventEmitter<LoopEvent>();
+    emittedEvents = [];
+    capturedPrompts = [];
+    mockBackend = createMockBackend(["Response 1", "Response 2", "<promise>COMPLETE</promise>"]);
+    
+    // Set up backendManager with test executor factory
+    backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
+    
+    // Collect emitted events using subscribe (not on("*", ...))
+    emitter.subscribe((event) => {
+      emittedEvents.push(event);
+    });
+  });
+
+  afterEach(async () => {
+    backendManager.resetForTesting();
+    await rm(testDir, { recursive: true, force: true });
+  });
+
+  test("setPendingModel stores the pending model", async () => {
+    const loop = createTestLoop();
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    // Set pending model
+    engine.setPendingModel({ providerID: "openai", modelID: "gpt-4o" });
+
+    // Verify state was updated
+    expect(loop.state.pendingModel).toEqual({
+      providerID: "openai",
+      modelID: "gpt-4o",
+    });
+  });
+
+  test("setPendingModel emits loop.pending.updated event", async () => {
+    const loop = createTestLoop();
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    // Set pending model
+    engine.setPendingModel({ providerID: "openai", modelID: "gpt-4o" });
+
+    // Verify event was emitted
+    const pendingEvents = emittedEvents.filter((e) => e.type === "loop.pending.updated");
+    expect(pendingEvents.length).toBe(1);
+    expect(pendingEvents[0]).toMatchObject({
+      type: "loop.pending.updated",
+      loopId: "test-loop-1",
+      pendingModel: { providerID: "openai", modelID: "gpt-4o" },
+    });
+  });
+
+  test("clearPendingModel removes the pending model", async () => {
+    const loop = createTestLoop();
+    loop.state.pendingModel = { providerID: "openai", modelID: "gpt-4o" };
+    
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    // Clear pending model
+    engine.clearPendingModel();
+
+    // Verify state was updated
+    expect(loop.state.pendingModel).toBeUndefined();
+  });
+
+  test("clearPending removes both pending model and prompt", async () => {
+    const loop = createTestLoop();
+    loop.state.pendingModel = { providerID: "openai", modelID: "gpt-4o" };
+    loop.state.pendingPrompt = "User message";
+    
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    // Clear all pending values
+    engine.clearPending();
+
+    // Verify state was updated
+    expect(loop.state.pendingModel).toBeUndefined();
+    expect(loop.state.pendingPrompt).toBeUndefined();
+  });
+
+  test("pendingModel is used in buildPrompt and then cleared", async () => {
+    const loop = createTestLoop();
+    // Set pending model before starting
+    loop.state.pendingModel = { providerID: "openai", modelID: "gpt-4o" };
+    
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    // Start the engine (which will run one iteration using sendPrompt)
+    await engine.start();
+
+    // Wait for completion
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Verify the prompt used the pending model
+    expect(capturedPrompts.length).toBeGreaterThan(0);
+    expect(capturedPrompts[0]!.model).toEqual({
+      providerID: "openai",
+      modelID: "gpt-4o",
+    });
+
+    // Verify pending model was cleared after use
+    expect(loop.state.pendingModel).toBeUndefined();
+  });
+
+  test("pendingModel updates config.model after being consumed", async () => {
+    const loop = createTestLoop({
+      model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+    });
+    // Set pending model before starting
+    loop.state.pendingModel = { providerID: "openai", modelID: "gpt-4o" };
+    
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    // Start the engine
+    await engine.start();
+
+    // Wait for completion
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Verify config.model was updated to the new model
+    expect(loop.config.model).toEqual({
+      providerID: "openai",
+      modelID: "gpt-4o",
+    });
+  });
+
+  test("setPendingPrompt overrides default prompt", async () => {
+    const loop = createTestLoop({ prompt: "Original prompt" });
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    // Set pending prompt before starting
+    engine.setPendingPrompt("Custom user message");
+
+    // Start the engine
+    await engine.start();
+
+    // Wait for completion
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Verify the prompt text contains the custom message
+    expect(capturedPrompts.length).toBeGreaterThan(0);
+    // The prompt parts should contain the pending prompt text
+    const promptText = capturedPrompts[0]!.parts
+      .filter((p) => p.type === "text")
+      .map((p) => (p as { type: "text"; text: string }).text)
+      .join("");
+    expect(promptText).toContain("Custom user message");
+
+    // Verify pending prompt was cleared
+    expect(loop.state.pendingPrompt).toBeUndefined();
+  });
+});

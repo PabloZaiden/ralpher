@@ -214,6 +214,51 @@ export async function discardPlanApi(loopId: string): Promise<boolean> {
 }
 
 /**
+ * Result of setting pending values.
+ */
+export interface SetPendingResult {
+  success: boolean;
+}
+
+/**
+ * Set pending message and/or model for a loop via the API.
+ * These values will be used for the next iteration instead of the default.
+ */
+export async function setPendingApi(
+  loopId: string,
+  options: { message?: string; model?: { providerID: string; modelID: string } }
+): Promise<SetPendingResult> {
+  const response = await fetch(`/api/loops/${loopId}/pending`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(options),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || "Failed to set pending values");
+  }
+
+  return { success: true };
+}
+
+/**
+ * Clear all pending values (message and model) for a loop via the API.
+ */
+export async function clearPendingApi(loopId: string): Promise<boolean> {
+  const response = await fetch(`/api/loops/${loopId}/pending`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || "Failed to clear pending values");
+  }
+
+  return true;
+}
+
+/**
  * Result of an address comments action.
  */
 export interface AddressCommentsResult {

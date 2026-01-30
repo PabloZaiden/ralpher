@@ -15,7 +15,7 @@
  * @module types/events
  */
 
-import type { GitCommit, LoopConfig } from "./loop";
+import type { GitCommit, LoopConfig, ModelConfig } from "./loop";
 import type { TodoItem } from "../backends/types";
 
 /**
@@ -115,7 +115,8 @@ export type LoopEvent =
   | LoopPlanFeedbackSentEvent
   | LoopPlanAcceptedEvent
   | LoopPlanDiscardedEvent
-  | LoopTodoUpdatedEvent;
+  | LoopTodoUpdatedEvent
+  | LoopPendingUpdatedEvent;
 
 /**
  * Emitted when a new loop is created.
@@ -429,6 +430,22 @@ export interface LoopTodoUpdatedEvent {
   loopId: string;
   /** Current TODO items from the session */
   todos: TodoItem[];
+  /** ISO 8601 timestamp */
+  timestamp: string;
+}
+
+/**
+ * Emitted when pending values (prompt or model) are updated.
+ * Used for real-time UI updates when user queues a message or model change.
+ */
+export interface LoopPendingUpdatedEvent {
+  type: "loop.pending.updated";
+  /** ID of the loop */
+  loopId: string;
+  /** Pending prompt (if set, undefined if cleared) */
+  pendingPrompt?: string;
+  /** Pending model (if set, undefined if cleared) */
+  pendingModel?: ModelConfig;
   /** ISO 8601 timestamp */
   timestamp: string;
 }

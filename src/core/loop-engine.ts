@@ -11,6 +11,7 @@ import type {
   IterationSummary,
   GitCommit,
   LoopLogEntry,
+  ModelConfig,
 } from "../types/loop";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import type {
@@ -209,6 +210,50 @@ export class LoopEngine {
    */
   clearPendingPrompt(): void {
     this.updateState({ pendingPrompt: undefined });
+  }
+
+  /**
+   * Set a pending model to use for the next iteration.
+   * This overrides the config.model and becomes the new default after use.
+   */
+  setPendingModel(model: ModelConfig): void {
+    this.updateState({ pendingModel: model });
+    // Emit event for UI update
+    this.emitter.emit({
+      type: "loop.pending.updated",
+      loopId: this.loop.config.id,
+      pendingModel: model,
+      timestamp: createTimestamp(),
+    });
+  }
+
+  /**
+   * Clear any pending model.
+   */
+  clearPendingModel(): void {
+    this.updateState({ pendingModel: undefined });
+    // Emit event for UI update
+    this.emitter.emit({
+      type: "loop.pending.updated",
+      loopId: this.loop.config.id,
+      pendingModel: undefined,
+      timestamp: createTimestamp(),
+    });
+  }
+
+  /**
+   * Clear all pending values (prompt and model).
+   */
+  clearPending(): void {
+    this.updateState({ pendingPrompt: undefined, pendingModel: undefined });
+    // Emit event for UI update
+    this.emitter.emit({
+      type: "loop.pending.updated",
+      loopId: this.loop.config.id,
+      pendingPrompt: undefined,
+      pendingModel: undefined,
+      timestamp: createTimestamp(),
+    });
   }
 
   /**
@@ -1351,9 +1396,25 @@ export class LoopEngine {
    * Build the prompt for an iteration.
    * Uses a consistent template that instructs the AI to follow the planning docs pattern.
    * If a pendingPrompt is set, it overrides the config.prompt for this iteration only.
+   * If a pendingModel is set, it overrides the config.model and becomes the new default.
    * If loop is in planning mode, uses the plan creation prompt instead.
    */
   private buildPrompt(_iteration: number): PromptInput {
+    // Determine the model to use (pending model takes precedence)
+    // If pendingModel is set, use it and update config.model so it persists
+    let model = this.config.model;
+    if (this.loop.state.pendingModel) {
+      model = this.loop.state.pendingModel;
+      this.emitLog("info", "Using pending model for this iteration", {
+        previousModel: this.config.model ? `${this.config.model.providerID}/${this.config.model.modelID}` : "default",
+        newModel: `${model.providerID}/${model.modelID}`,
+      });
+      // Update config.model so the new model persists for subsequent iterations
+      this.config.model = model;
+      // Clear pendingModel after consumption
+      this.updateState({ pendingModel: undefined });
+    }
+
     // Check if this is a plan mode iteration
     if (this.loop.state.status === "planning" && this.loop.state.planMode?.active) {
       // Plan mode prompt
@@ -1381,7 +1442,7 @@ export class LoopEngine {
 
         return {
           parts: [{ type: "text", text }],
-          model: this.config.model,
+          model,
         };
       } else {
         // Plan feedback prompt (uses pending prompt set by sendPlanFeedback)
@@ -1404,7 +1465,7 @@ When the updated plan is ready, end your response with:
 
         return {
           parts: [{ type: "text", text }],
-          model: this.config.model,
+          model,
         };
       }
     }
@@ -1444,7 +1505,7 @@ When the updated plan is ready, end your response with:
 
     return {
       parts: [{ type: "text", text }],
-      model: this.config.model,
+      model,
     };
   }
 

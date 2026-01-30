@@ -25,6 +25,8 @@ import {
   markMergedApi,
   setPendingPromptApi,
   clearPendingPromptApi,
+  setPendingApi,
+  clearPendingApi,
   sendPlanFeedbackApi,
   acceptPlanApi,
   discardPlanApi,
@@ -32,6 +34,7 @@ import {
   type AcceptLoopResult,
   type PushLoopResult,
   type AddressCommentsResult,
+  type SetPendingResult,
 } from "./loopActions";
 
 /**
@@ -107,6 +110,10 @@ export interface UseLoopResult {
   discardPlan: () => Promise<boolean>;
   /** Address reviewer comments (only works for pushed/merged loops with reviewMode.addressable = true) */
   addressReviewComments: (comments: string) => Promise<AddressCommentsResult>;
+  /** Set pending message and/or model for next iteration (only works when loop is active) */
+  setPending: (options: { message?: string; model?: { providerID: string; modelID: string } }) => Promise<SetPendingResult>;
+  /** Clear all pending values (message and model) */
+  clearPending: () => Promise<boolean>;
 }
 
 /**
@@ -216,6 +223,11 @@ export function useLoop(loopId: string): UseLoopResult {
       case "loop.todo.updated":
         // Update TODO list with the latest todos from the agent
         setTodos(event.todos);
+        break;
+
+      case "loop.pending.updated":
+        // Pending values changed - refresh to get updated state
+        refresh();
         break;
     }
   }
@@ -514,6 +526,33 @@ export function useLoop(loopId: string): UseLoopResult {
     [loopId, refresh]
   );
 
+  // Set pending message and/or model
+  const setPending = useCallback(
+    async (options: { message?: string; model?: { providerID: string; modelID: string } }): Promise<SetPendingResult> => {
+      try {
+        const result = await setPendingApi(loopId, options);
+        await refresh();
+        return result;
+      } catch (err) {
+        setError(String(err));
+        return { success: false };
+      }
+    },
+    [loopId, refresh]
+  );
+
+  // Clear all pending values
+  const clearPending = useCallback(async (): Promise<boolean> => {
+    try {
+      await clearPendingApi(loopId);
+      await refresh();
+      return true;
+    } catch (err) {
+      setError(String(err));
+      return false;
+    }
+  }, [loopId, refresh]);
+
   // Initial fetch
   useEffect(() => {
     refresh();
@@ -548,5 +587,7 @@ export function useLoop(loopId: string): UseLoopResult {
     acceptPlan,
     discardPlan,
     addressReviewComments,
+    setPending,
+    clearPending,
   };
 }
