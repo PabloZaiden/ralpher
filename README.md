@@ -6,47 +6,100 @@
 
 **A web dashboard for managing Ralph Loops** - an autonomous AI development pattern that solves context accumulation in AI coding assistants by using fresh context windows with filesystem-based state persistence.
 
-<p align="center">
-  <a href="https://github.com/pablozaiden/ralpher/releases/latest">
-    <img src="https://img.shields.io/badge/Download-Latest%20Release-brightgreen?style=for-the-badge" alt="Download Latest Release" />
-  </a>
-</p>
+**[Download Latest Release](https://github.com/pablozaiden/ralpher/releases/latest)**
 
 ---
 
-## Screenshots
+![Ralpher Dashboard](assets/screenshots/desktop/logs.jpg)
 
-<details open>
-<summary><strong>Desktop</strong></summary>
+*Real-time log streaming as the AI works*
 
-| Status | Logs | Diff |
-|:------:|:----:|:----:|
-| ![Status](assets/screenshots/desktop/status.jpg) | ![Logs](assets/screenshots/desktop/logs.jpg) | ![Diff](assets/screenshots/desktop/diff.jpg) |
+<details>
+<summary><strong>More Screenshots</strong></summary>
 
-| Plan | Actions |
-|:----:|:-------:|
-| ![Plan](assets/screenshots/desktop/plan.jpg) | ![Actions](assets/screenshots/desktop/actions.jpg) |
+### Desktop
 
-</details>
+![Status View](assets/screenshots/desktop/status.jpg)
 
-<details open>
-<summary><strong>Mobile</strong></summary>
+*Loop status overview with iteration progress*
 
-| Dashboard | New Loop | Status |
-|:---------:|:--------:|:------:|
-| ![Dashboard](assets/screenshots/mobile/dashboard.jpg) | ![New Loop](assets/screenshots/mobile/new-loop.jpg) | ![Status](assets/screenshots/mobile/status.jpg) |
+---
 
-| Logs | Diff | Plan |
-|:----:|:----:|:----:|
-| ![Logs](assets/screenshots/mobile/logs.jpg) | ![Diff](assets/screenshots/mobile/diff.jpg) | ![Plan](assets/screenshots/mobile/plan.jpg) |
+![Diff View](assets/screenshots/desktop/diff.jpg)
 
-| Actions | Review | Feedback |
-|:-------:|:------:|:--------:|
-| ![Actions](assets/screenshots/mobile/actions.jpg) | ![Review](assets/screenshots/mobile/review.jpg) | ![Feedback](assets/screenshots/mobile/feedback.jpg) |
+*Side-by-side diff of all changes made*
 
-| Server Settings |
-|:---------------:|
-| ![Server Settings](assets/screenshots/mobile/server-settings.jpg) |
+---
+
+![Plan View](assets/screenshots/desktop/plan.jpg)
+
+*View the planning documents*
+
+---
+
+![Actions View](assets/screenshots/desktop/actions.jpg)
+
+*Loop actions: stop, accept, push, delete*
+
+### Mobile
+
+![Mobile Dashboard](assets/screenshots/mobile/dashboard.jpg)
+
+*Dashboard with all active loops*
+
+---
+
+![New Loop](assets/screenshots/mobile/new-loop.jpg)
+
+*Create a new loop with prompt and settings*
+
+---
+
+![Mobile Status](assets/screenshots/mobile/status.jpg)
+
+*Loop status on mobile*
+
+---
+
+![Mobile Logs](assets/screenshots/mobile/logs.jpg)
+
+*Live logs on mobile*
+
+---
+
+![Mobile Diff](assets/screenshots/mobile/diff.jpg)
+
+*Code diff on mobile*
+
+---
+
+![Mobile Plan](assets/screenshots/mobile/plan.jpg)
+
+*Planning documents on mobile*
+
+---
+
+![Mobile Actions](assets/screenshots/mobile/actions.jpg)
+
+*Loop actions on mobile*
+
+---
+
+![Mobile Review](assets/screenshots/mobile/review.jpg)
+
+*Review history and comments*
+
+---
+
+![Mobile Feedback](assets/screenshots/mobile/feedback.jpg)
+
+*Address reviewer feedback*
+
+---
+
+![Server Settings](assets/screenshots/mobile/server-settings.jpg)
+
+*Server configuration settings*
 
 </details>
 
