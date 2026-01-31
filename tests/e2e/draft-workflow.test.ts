@@ -153,6 +153,7 @@ describe("Draft Loop E2E Workflow", () => {
         workspaceId: testWorkspaceId,
         prompt: "Initial task",
         draft: true,
+        planMode: false,
       }),
     });
 
@@ -338,6 +339,7 @@ describe("Draft Loop E2E Workflow", () => {
           workspaceId: uniqueWorkspaceId,
           prompt: "Quick task",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -377,6 +379,7 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         workspaceId: testWorkspaceId,
         prompt: "Task",
+        planMode: false,
       }),
     });
 
@@ -513,6 +516,7 @@ describe("Draft Loop E2E Workflow", () => {
         prompt: "Test task",
         clearPlanningFolder: true,
         draft: true,
+        planMode: false,
       }),
     });
 

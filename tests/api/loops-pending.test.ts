@@ -153,6 +153,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -196,6 +197,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -238,6 +240,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -282,6 +285,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -330,6 +334,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           draft: true,  // Create as draft - stays in idle status
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -364,6 +369,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           draft: true,
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -408,6 +414,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -444,6 +451,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -481,6 +489,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -519,6 +528,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -558,6 +568,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -598,6 +609,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -643,6 +655,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -683,6 +696,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Jumpstart Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -730,6 +744,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Jumpstart Model Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -781,6 +796,7 @@ describe("POST /api/loops/:id/pending", () => {
           name: "Branch Continuation Test",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);

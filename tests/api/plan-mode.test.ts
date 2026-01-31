@@ -494,6 +494,7 @@ describe("Plan Mode API Integration", () => {
           prompt: "Do something",
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
+          planMode: false,
         }),
       });
 

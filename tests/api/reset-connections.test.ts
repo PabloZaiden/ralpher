@@ -147,6 +147,7 @@ describe("POST /api/backend/reset-all", () => {
           name: "Reset Test Loop",
           workspaceId,
           prompt: "Test prompt",
+          planMode: false,
         }),
       });
       expect(createRes.status).toBe(201);

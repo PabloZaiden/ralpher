@@ -231,6 +231,7 @@ describe("Loops Control API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Test prompt",
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -270,6 +271,7 @@ describe("Loops Control API Integration", () => {
           workspaceId,
           prompt: "Test",
           draft: true,
+          planMode: false,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -313,6 +315,7 @@ describe("Loops Control API Integration", () => {
           workspaceId,
           prompt: "Test",
           draft: true,
+          planMode: false,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -355,6 +358,7 @@ describe("Loops Control API Integration", () => {
           workspaceId,
           prompt: "Test",
           draft: true,
+          planMode: false,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -400,6 +404,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            planMode: false,
           }),
         });
         const createBody = await createResponse.json();
@@ -443,6 +448,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            planMode: false,
           }),
         });
         const createBody = await createResponse.json();
@@ -483,6 +489,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            planMode: false,
           }),
         });
         const createBody = await createResponse.json();
@@ -524,6 +531,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            planMode: false,
           }),
         });
         const createBody = await createResponse.json();
@@ -582,6 +590,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            planMode: false,
           }),
         });
         const createBody = await createResponse.json();
@@ -627,6 +636,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            planMode: false,
           }),
         });
         const createBody = await createResponse.json();
@@ -699,6 +709,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            planMode: false,
           }),
         });
         const createBody = await createResponse.json();
@@ -755,6 +766,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            planMode: false,
           }),
         });
         const createBody = await createResponse.json();
@@ -813,6 +825,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            planMode: false,
           }),
         });
         const createBody = await createResponse.json();
