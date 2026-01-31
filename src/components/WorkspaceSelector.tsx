@@ -5,7 +5,7 @@
  * When a workspace is selected, the directory is automatically set.
  */
 
-import { useState, useEffect, type ChangeEvent } from "react";
+import { useState, type ChangeEvent } from "react";
 import type { WorkspaceWithLoopCount, CreateWorkspaceRequest } from "../types/workspace";
 import { Button } from "./common";
 
@@ -24,8 +24,6 @@ export interface WorkspaceSelectorProps {
   creating?: boolean;
   /** Error message from workspace operations */
   error?: string | null;
-  /** Initial directory to pre-fill when creating new workspace */
-  initialDirectory?: string;
 }
 
 export function WorkspaceSelector({
@@ -36,20 +34,12 @@ export function WorkspaceSelector({
   onCreateWorkspace,
   creating = false,
   error,
-  initialDirectory = "",
 }: WorkspaceSelectorProps) {
   // State for "add new workspace" mode
   const [showAddNew, setShowAddNew] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
-  const [newWorkspaceDirectory, setNewWorkspaceDirectory] = useState(initialDirectory);
+  const [newWorkspaceDirectory, setNewWorkspaceDirectory] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
-
-  // Update newWorkspaceDirectory when initialDirectory changes
-  useEffect(() => {
-    if (initialDirectory && !newWorkspaceDirectory) {
-      setNewWorkspaceDirectory(initialDirectory);
-    }
-  }, [initialDirectory, newWorkspaceDirectory]);
 
   // Handle workspace selection from dropdown
   function handleWorkspaceChange(e: ChangeEvent<HTMLSelectElement>) {
@@ -103,7 +93,7 @@ export function WorkspaceSelector({
   function handleCancelAddNew() {
     setShowAddNew(false);
     setNewWorkspaceName("");
-    setNewWorkspaceDirectory(initialDirectory);
+    setNewWorkspaceDirectory("");
     setCreateError(null);
   }
 

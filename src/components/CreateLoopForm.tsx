@@ -21,11 +21,11 @@ export interface CreateLoopFormProps {
   modelsLoading?: boolean;
   /** Last used model */
   lastModel?: { providerID: string; modelID: string } | null;
-  /** Callback when directory changes (to reload models and branches) */
-  onDirectoryChange?: (directory: string) => void;
+  /** Callback when workspace changes (to reload models and branches) */
+  onWorkspaceChange?: (workspaceId: string | null) => void;
   /** Warning about .planning directory */
   planningWarning?: string | null;
-  /** Available branches for the directory */
+  /** Available branches for the workspace's directory */
   branches?: BranchInfo[];
   /** Whether branches are loading */
   branchesLoading?: boolean;
@@ -33,8 +33,6 @@ export interface CreateLoopFormProps {
   currentBranch?: string;
   /** Default branch name (e.g., "main" or "master") */
   defaultBranch?: string;
-  /** Initial directory to pre-fill (last used) */
-  initialDirectory?: string;
   /** Loop ID if editing an existing draft */
   editLoopId?: string | null;
   /** Initial loop data for editing */
@@ -71,13 +69,12 @@ export function CreateLoopForm({
   models = [],
   modelsLoading = false,
   lastModel,
-  onDirectoryChange,
+  onWorkspaceChange,
   planningWarning,
   branches = [],
   branchesLoading = false,
   currentBranch = "",
   defaultBranch = "",
-  initialDirectory = "",
   editLoopId = null,
   initialLoopData = null,
   isEditingDraft = false,
@@ -89,13 +86,11 @@ export function CreateLoopForm({
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
   
-  // Workspace state
+  // Workspace state - the only source of truth for directory
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | undefined>(
     initialLoopData?.workspaceId
   );
-  // Only pre-fill directory if editing an existing loop, not from initialDirectory
-  // initialDirectory is only used for the "add new workspace" form, not for auto-loading models/branches
-  const [directory, setDirectory] = useState(initialLoopData?.directory ?? "");
+  
   const [prompt, setPrompt] = useState(initialLoopData?.prompt ?? "");
   const [maxIterations, setMaxIterations] = useState<string>(initialLoopData?.maxIterations?.toString() ?? "");
   const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>(initialLoopData?.maxConsecutiveErrors?.toString() ?? "10");
@@ -155,20 +150,20 @@ export function CreateLoopForm({
     }
   }, [lastModel, models, selectedModel, initialLoopData]);
 
-  // Notify parent when directory changes (debounced)
-  // Also reset the user's branch selection since we're loading a new directory's branches
+  // Notify parent when workspace changes
+  // This triggers fetching models, branches, and checking planning dir
   useEffect(() => {
-    if (!directory.trim() || !onDirectoryChange) return;
-
-    const timer = setTimeout(() => {
-      onDirectoryChange(directory.trim());
-      // Reset the manual selection flag when directory changes,
-      // so the new default branch will be used
+    if (!onWorkspaceChange) return;
+    
+    // Notify parent of workspace change (including null for no selection)
+    onWorkspaceChange(selectedWorkspaceId ?? null);
+    
+    // Reset the manual branch selection flag when workspace changes,
+    // so the new default branch will be used
+    if (!isEditing) {
       setUserChangedBranch(false);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [directory, onDirectoryChange]);
+    }
+  }, [selectedWorkspaceId, onWorkspaceChange, isEditing]);
 
   async function handleSubmit(e: FormEvent, asDraft = false) {
     e.preventDefault();
@@ -287,16 +282,11 @@ export function CreateLoopForm({
     })
     .sort((a, b) => a.localeCompare(b));
 
-  // Handle workspace selection
-  function handleWorkspaceSelect(workspaceId: string | null, workspaceDirectory: string) {
+  // Handle workspace selection - only takes workspaceId, directory is derived
+  function handleWorkspaceSelect(workspaceId: string | null, _workspaceDirectory: string) {
     setSelectedWorkspaceId(workspaceId || undefined);
-    setDirectory(workspaceDirectory);
-    // Always trigger directory change to load models and branches
-    // Even when directory is empty (entering "add new" mode), we need to notify parent
-    // to clear cached modelsDirectory so that subsequent selections will refresh
-    if (onDirectoryChange) {
-      onDirectoryChange(workspaceDirectory);
-    }
+    // Directory is now derived from workspace via selectedWorkspace
+    // The useEffect watching selectedWorkspaceId will notify parent
   }
 
   // Handle creating a new workspace
@@ -307,7 +297,7 @@ export function CreateLoopForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Workspace / Directory */}
+      {/* Workspace Selection */}
       <div>
         <WorkspaceSelector
           workspaces={workspaces}
@@ -317,7 +307,6 @@ export function CreateLoopForm({
           onCreateWorkspace={handleCreateWorkspaceWrapper}
           creating={workspaceCreating}
           error={workspaceError}
-          initialDirectory={initialDirectory}
         />
         {planningWarning && (
           <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-300">
@@ -361,7 +350,7 @@ export function CreateLoopForm({
             <option value="">Loading branches...</option>
           )}
           {!branchesLoading && branches.length === 0 && (
-            <option value="">Enter directory to load branches</option>
+            <option value="">Select a workspace to load branches</option>
           )}
           {!branchesLoading && branches.length > 0 && (
             <>
@@ -416,7 +405,7 @@ export function CreateLoopForm({
             <option value="">Loading models...</option>
           )}
           {!modelsLoading && models.length === 0 && (
-            <option value="">Enter directory to load models</option>
+            <option value="">Select a workspace to load models</option>
           )}
           {!modelsLoading && models.length > 0 && (
             <>

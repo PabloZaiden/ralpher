@@ -122,7 +122,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [lastModel, setLastModel] = useState<{ providerID: string; modelID: string } | null>(null);
-  const [modelsDirectory, setModelsDirectory] = useState("");
+  const [modelsWorkspaceId, setModelsWorkspaceId] = useState<string | null>(null);
 
   // Planning directory check state
   const [planningWarning, setPlanningWarning] = useState<string | null>(null);
@@ -147,25 +147,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       }
     }
     fetchLastModel();
-  }, []);
-
-  // Last directory state
-  const [lastDirectory, setLastDirectory] = useState<string | null>(null);
-
-  // Fetch last directory on mount
-  useEffect(() => {
-    async function fetchLastDirectory() {
-      try {
-        const response = await fetch("/api/preferences/last-directory");
-        if (response.ok) {
-          const data = await response.json();
-          setLastDirectory(data);
-        }
-      } catch {
-        // Ignore errors
-      }
-    }
-    fetchLastDirectory();
   }, []);
 
   // Fetch models when directory changes
@@ -258,24 +239,29 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     }
   }, []);
 
-  // Handle directory change from form
-  // Fetch branches, models, and check planning dir for both spawn and connect modes (unified via PTY+WebSocket)
-  const handleDirectoryChange = useCallback((directory: string) => {
-    if (directory !== modelsDirectory) {
-      setModelsDirectory(directory);
+  // Handle workspace change from form
+  // Fetch branches, models, and check planning dir based on workspace's directory
+  const handleWorkspaceChange = useCallback((workspaceId: string | null) => {
+    if (workspaceId !== modelsWorkspaceId) {
+      setModelsWorkspaceId(workspaceId);
+      
+      // Get directory from workspace
+      const workspace = workspaces.find(w => w.id === workspaceId);
+      const directory = workspace?.directory ?? "";
+      
       fetchModels(directory);
       fetchBranches(directory);
       fetchDefaultBranch(directory);
       checkPlanningDir(directory);
     }
-  }, [modelsDirectory, fetchModels, checkPlanningDir, fetchBranches, fetchDefaultBranch]);
+  }, [modelsWorkspaceId, workspaces, fetchModels, checkPlanningDir, fetchBranches, fetchDefaultBranch]);
 
   // Reset model state when modal closes
   const handleCloseCreateModal = useCallback(() => {
     setShowCreateModal(false);
     setEditDraftId(null);
     setModels([]);
-    setModelsDirectory("");
+    setModelsWorkspaceId(null);
     setPlanningWarning(null);
     setBranches([]);
     setCurrentBranch("");
@@ -867,6 +853,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                     setLastModel(request.model);
                   }
                   // Save last used directory (get it from the workspace)
+                  // Save last used directory preference (for API compatibility)
                   if (request.workspaceId) {
                     const workspace = workspaces.find(w => w.id === request.workspaceId);
                     if (workspace) {
@@ -876,7 +863,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ directory: workspace.directory }),
                         });
-                        setLastDirectory(workspace.directory);
                       } catch {
                         // Ignore errors saving preference
                       }
@@ -891,13 +877,12 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               models={models}
               modelsLoading={modelsLoading}
               lastModel={lastModel}
-              onDirectoryChange={handleDirectoryChange}
+              onWorkspaceChange={handleWorkspaceChange}
               planningWarning={planningWarning}
               branches={branches}
               branchesLoading={branchesLoading}
               currentBranch={currentBranch}
               defaultBranch={defaultBranch}
-              initialDirectory={lastDirectory ?? ""}
               workspaces={workspaces}
               workspacesLoading={workspacesLoading}
               onCreateWorkspace={async (request) => {
