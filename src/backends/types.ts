@@ -3,6 +3,20 @@
  * These types define the data structures used by OpenCodeBackend.
  */
 
+import type { EventStream } from "../utils/event-stream";
+
+/**
+ * Connection info needed for WebSocket and other direct connections.
+ */
+export interface ConnectionInfo {
+  /** Base URL for the opencode server */
+  baseUrl: string;
+  /** Auth headers to use for connections */
+  authHeaders: Record<string, string>;
+  /** Whether to allow insecure connections (self-signed certificates) */
+  allowInsecure?: boolean;
+}
+
 /**
  * Configuration for connecting to the OpenCode backend.
  */
@@ -149,3 +163,75 @@ export type AgentEvent =
   | { type: "question.asked"; requestId: string; sessionId: string; questions: QuestionInfo[] }
   | { type: "session.status"; sessionId: string; status: "idle" | "busy" | "retry"; attempt?: number; message?: string }
   | { type: "todo.updated"; sessionId: string; todos: TodoItem[] };
+
+/**
+ * Backend interface that all backend implementations must implement.
+ * This includes both the real OpenCodeBackend and MockOpenCodeBackend for tests.
+ * 
+ * The interface is split into two parts:
+ * - Core methods: Used by LoopEngine for loop execution
+ * - Manager methods: Used by BackendManager for connection management
+ */
+export interface Backend {
+  /** Backend name identifier */
+  readonly name: string;
+
+  // ============================================
+  // Core methods (used by LoopEngine)
+  // ============================================
+
+  /** Connect to the backend server */
+  connect(config: BackendConnectionConfig): Promise<void>;
+
+  /** Disconnect from the backend server */
+  disconnect(): Promise<void>;
+
+  /** Check if connected to the backend */
+  isConnected(): boolean;
+
+  /** Create a new agent session */
+  createSession(options: CreateSessionOptions): Promise<AgentSession>;
+
+  /** Send a prompt synchronously and wait for response */
+  sendPrompt(sessionId: string, prompt: PromptInput): Promise<AgentResponse>;
+
+  /** Send a prompt asynchronously (fire and forget, events come via subscription) */
+  sendPromptAsync(sessionId: string, prompt: PromptInput): Promise<void>;
+
+  /** Abort a session */
+  abortSession(sessionId: string): Promise<void>;
+
+  /** Subscribe to events from a session */
+  subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>>;
+
+  /** Reply to a permission request */
+  replyToPermission(requestId: string, response: string): Promise<void>;
+
+  /** Reply to a question request */
+  replyToQuestion(requestId: string, answers: string[][]): Promise<void>;
+
+  // ============================================
+  // Manager methods (used by BackendManager)
+  // ============================================
+
+  /** Abort all active event subscriptions */
+  abortAllSubscriptions(): void;
+
+  /** Get the SDK client (may be null for mocks) */
+  getSdkClient(): unknown;
+
+  /** Get the current working directory */
+  getDirectory(): string;
+
+  /** Get connection info for WebSocket and other direct connections */
+  getConnectionInfo(): ConnectionInfo | null;
+
+  /** Get an existing session by ID */
+  getSession(id: string): Promise<AgentSession | null>;
+
+  /** Delete a session */
+  deleteSession(id: string): Promise<void>;
+
+  /** Get available models */
+  getModels(directory: string): Promise<unknown[]>;
+}

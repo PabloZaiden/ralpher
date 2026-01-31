@@ -20,6 +20,7 @@ import {
   listLoops,
   updateLoopState,
   getActiveLoopByDirectory,
+  resetStaleLoops,
 } from "../persistence/loops";
 import { insertReviewComment } from "../persistence/database";
 import { backendManager } from "./backend-manager";
@@ -1508,10 +1509,30 @@ Follow the standard loop execution flow:
       const git = GitService.withExecutor(executor);
       const backend = backendManager.getBackend();
 
-      // Check out the existing working branch
+      // Check out the existing working branch with retry logic for lock file issues
       const workingBranch = loop.state.git!.workingBranch;
       log.info(`Jumpstarting loop ${loopId} on existing branch: ${workingBranch}`);
-      await git.checkoutBranch(loop.config.directory, workingBranch);
+      
+      // Retry checkout up to 3 times to handle race conditions with in-flight git operations
+      const maxRetries = 3;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        // Clean up any stale git lock files from previously killed processes
+        // This can happen when a loop is forcefully stopped mid-git-operation
+        await GitService.cleanupStaleLockFiles(loop.config.directory, 1, 0);
+        
+        try {
+          await git.checkoutBranch(loop.config.directory, workingBranch);
+          break; // Success - exit retry loop
+        } catch (checkoutError) {
+          const errorStr = String(checkoutError);
+          if (errorStr.includes("index.lock") && attempt < maxRetries) {
+            log.warn(`[LoopManager] Checkout failed due to lock file, retrying (${attempt}/${maxRetries})...`);
+            await new Promise(resolve => setTimeout(resolve, 100 * attempt)); // Exponential backoff
+            continue;
+          }
+          throw checkoutError; // Not a lock issue or max retries exceeded
+        }
+      }
 
       // Create and start a new loop engine with skipGitSetup
       // (branch is already checked out, no need to create a new one)
@@ -1848,6 +1869,59 @@ Instructions:
       this.stopLoop(loopId, "Server shutdown")
     );
     await Promise.allSettled(promises);
+  }
+
+  /**
+   * Force reset all connections and stale loop states.
+   * 
+   * This method:
+   * 1. Stops all running loop engines gracefully (if possible)
+   * 2. Clears the in-memory engines map
+   * 3. Clears the loopsBeingAccepted set
+   * 4. Resets stale loops in the database to "stopped" status
+   *    (except "planning" loops which can reconnect to their sessions)
+   * 5. Resets the backend connection (aborts subscriptions, disconnects)
+   * 
+   * Use this to recover from stale connections or stuck loops without
+   * restarting the server.
+   * 
+   * @returns Statistics about what was reset
+   */
+  async forceResetAll(): Promise<{
+    enginesCleared: number;
+    loopsReset: number;
+  }> {
+    const engineCount = this.engines.size;
+    
+    // Try to stop all running engines gracefully
+    const stopPromises = Array.from(this.engines.entries()).map(async ([loopId, engine]) => {
+      try {
+        await engine.stop("Force reset by user");
+        await updateLoopState(loopId, engine.state);
+      } catch (error) {
+        log.warn(`Failed to stop engine ${loopId} during force reset: ${String(error)}`);
+        // Continue anyway - we'll clear the engine
+      }
+    });
+    
+    await Promise.allSettled(stopPromises);
+    
+    // Clear all in-memory state
+    this.engines.clear();
+    this.loopsBeingAccepted.clear();
+    
+    // Reset stale loops in database (excludes "planning" which can reconnect)
+    const loopsReset = await resetStaleLoops();
+    
+    // Reset the backend connection
+    await backendManager.reset();
+    
+    log.info(`Force reset completed: ${engineCount} engines cleared, ${loopsReset} loops reset in database`);
+    
+    return {
+      enginesCleared: engineCount,
+      loopsReset,
+    };
   }
 
   /**
