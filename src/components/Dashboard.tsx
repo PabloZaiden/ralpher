@@ -18,6 +18,7 @@ import {
   UncommittedChangesModal,
   RenameLoopModal,
 } from "./LoopModals";
+import { isAwaitingFeedback } from "../utils";
 
 export interface DashboardProps {
   /** Callback when a loop is selected */
@@ -338,16 +339,14 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           loop.state.status === "starting"
       ),
       completed: loopsToGroup.filter((loop) => loop.state.status === "completed"),
-      awaitingFeedback: loopsToGroup.filter(
-        (loop) =>
-          (loop.state.status === "merged" || loop.state.status === "pushed") &&
-          loop.state.reviewMode?.addressable === true
+      awaitingFeedback: loopsToGroup.filter((loop) =>
+        isAwaitingFeedback(loop.state.status, loop.state.reviewMode?.addressable)
       ),
       archived: loopsToGroup.filter(
         (loop) =>
           loop.state.status === "deleted" ||
           ((loop.state.status === "merged" || loop.state.status === "pushed") &&
-            loop.state.reviewMode?.addressable !== true)
+            !isAwaitingFeedback(loop.state.status, loop.state.reviewMode?.addressable))
       ),
       other: loopsToGroup.filter(
         (loop) =>
