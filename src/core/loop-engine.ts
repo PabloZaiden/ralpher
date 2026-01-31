@@ -438,6 +438,37 @@ export class LoopEngine {
   }
 
   /**
+   * Abort the backend session without changing loop status.
+   * Used during force reset to preserve planning loops while cleaning up resources.
+   * The engine will be cleared from memory, but the loop status remains unchanged.
+   */
+  async abortSessionOnly(reason = "Connection reset requested"): Promise<void> {
+    this.emitLog("info", `Aborting session only (preserving status): ${reason}`);
+    this.aborted = true;
+
+    // Clear the persistence callback to prevent stale async operations
+    this.onPersistState = undefined;
+
+    if (this.sessionId) {
+      try {
+        this.emitLog("info", "Aborting backend session...");
+        await this.backend.abortSession(this.sessionId);
+      } catch {
+        // Ignore abort errors
+      }
+    }
+
+    this.emit({
+      type: "loop.session_aborted",
+      loopId: this.config.id,
+      reason,
+      timestamp: createTimestamp(),
+    });
+
+    this.emitLog("info", "Session aborted (status preserved)");
+  }
+
+  /**
    * Set up git branch for the loop (public method for plan mode acceptance).
    * This is called when transitioning from planning to execution.
    */

@@ -1896,11 +1896,24 @@ Instructions:
   }> {
     const engineCount = this.engines.size;
     
-    // Try to stop all running engines gracefully
+    // Try to stop all running engines gracefully, except planning loops
+    // Planning loops should preserve their status so users can continue the planning workflow
     const stopPromises = Array.from(this.engines.entries()).map(async ([loopId, engine]) => {
       try {
-        await engine.stop("Force reset by user");
-        await updateLoopState(loopId, engine.state);
+        if (engine.state.status === "planning") {
+          // For planning loops, persist the current state and abort the session without changing status
+          // This allows the user to continue planning after the reset
+          // The engine will be recreated when sendPlanFeedback() is called
+          log.info(`Preserving planning loop ${loopId} status during force reset`);
+          // Persist current in-memory state to database before clearing the engine
+          // This ensures isPlanReady and other state is saved
+          await updateLoopState(loopId, engine.state);
+          await engine.abortSessionOnly();
+        } else {
+          // For non-planning loops, stop completely (sets status to "stopped")
+          await engine.stop("Force reset by user");
+          await updateLoopState(loopId, engine.state);
+        }
       } catch (error) {
         log.warn(`Failed to stop engine ${loopId} during force reset: ${String(error)}`);
         // Continue anyway - we'll clear the engine

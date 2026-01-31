@@ -137,9 +137,9 @@ export async function teardownTestContext(ctx: TestContext): Promise<void> {
   // Clean up env
   delete process.env["RALPHER_DATA_DIR"];
 
-  // Remove temp directories
-  await rm(ctx.dataDir, { recursive: true });
-  await rm(ctx.workDir, { recursive: true });
+  // Remove temp directories (force: true ignores ENOENT if already deleted)
+  await rm(ctx.dataDir, { recursive: true, force: true });
+  await rm(ctx.workDir, { recursive: true, force: true });
 }
 
 /**

@@ -744,6 +744,62 @@ describe("Plan + Loop User Scenarios", () => {
       expect(status).toBe(404);
     });
 
+    test("preserves planning loop status after connection reset", async () => {
+      ctx.mockBackend.reset(createPlanModeMockResponses({ 
+        planIterations: 3, // Initial + post-reset feedback 
+        executionResponses: ["<promise>COMPLETE</promise>"],
+      }));
+
+      // Create a loop in plan mode
+      const { body } = await createLoopViaAPI(ctx.baseUrl, {
+        directory: ctx.workDir,
+        prompt: "Create a plan that survives reset",
+        planMode: true,
+      });
+      const loop = body as Loop;
+
+      // Wait for planning status and plan ready
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+      await waitForPlanReady(ctx.baseUrl, loop.config.id);
+
+      // Verify the loop is in planning status with isPlanReady = true
+      let currentLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+      expect(currentLoop.state.status).toBe("planning");
+      expect(currentLoop.state.planMode?.isPlanReady).toBe(true);
+
+      // Reset all connections via API (simulating "Reset Connections" button)
+      const resetResponse = await fetch(`${ctx.baseUrl}/api/backend/reset-all`, {
+        method: "POST",
+      });
+      expect(resetResponse.status).toBe(200);
+
+      // Verify the loop is still in planning status after reset
+      currentLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+      expect(currentLoop.state.status).toBe("planning");
+      // Note: isPlanReady should still be true since we didn't change the state
+      expect(currentLoop.state.planMode?.isPlanReady).toBe(true);
+
+      // Send feedback to continue planning (this should work after reset)
+      const { status: feedbackStatus } = await sendPlanFeedbackViaAPI(
+        ctx.baseUrl,
+        loop.config.id,
+        "Please add more details"
+      );
+      expect(feedbackStatus).toBe(200);
+
+      // Wait for plan to be ready again after feedback
+      await waitForPlanReady(ctx.baseUrl, loop.config.id);
+
+      // Verify feedback was processed
+      currentLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+      expect(currentLoop.state.status).toBe("planning");
+      expect(currentLoop.state.planMode?.feedbackRounds).toBe(1);
+
+      // Clean up
+      await discardPlanViaAPI(ctx.baseUrl, loop.config.id);
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "deleted");
+    });
+
     test("returns error when sending empty feedback", async () => {
       ctx.mockBackend.reset(createPlanModeMockResponses({ planIterations: 1 }));
 
