@@ -16,6 +16,7 @@ import {
   DeleteLoopModal,
   PurgeLoopModal,
   MarkMergedModal,
+  RenameLoopModal,
 } from "./LoopModals";
 import { PlanReviewPanel } from "./PlanReviewPanel";
 import { LoopActionBar } from "./LoopActionBar";
@@ -109,6 +110,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     acceptPlan,
     discardPlan,
     addressReviewComments,
+    update,
   } = useLoop(loopId);
 
   // Markdown rendering preference
@@ -146,6 +148,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [purgeModal, setPurgeModal] = useState(false);
   const [markMergedModal, setMarkMergedModal] = useState(false);
   const [addressCommentsModal, setAddressCommentsModal] = useState(false);
+  const [renameModal, setRenameModal] = useState(false);
 
   // Models state for LoopActionBar
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -425,6 +428,26 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
             <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
               {config.name}
             </h1>
+            <button
+              onClick={() => setRenameModal(true)}
+              className="flex-shrink-0 p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700"
+              aria-label="Rename loop"
+              title="Rename loop"
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                />
+              </svg>
+            </button>
             <Badge variant={getStatusBadgeVariant(state.status)} size="sm">
               {getStatusLabel(state.status)}
             </Badge>
@@ -1095,6 +1118,16 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         onSubmit={handleAddressComments}
         loopName={config.name}
         reviewCycle={(state.reviewMode?.reviewCycles || 0) + 1}
+      />
+
+      {/* Rename Loop modal */}
+      <RenameLoopModal
+        isOpen={renameModal}
+        onClose={() => setRenameModal(false)}
+        currentName={config.name}
+        onRename={async (newName) => {
+          await update({ name: newName });
+        }}
       />
     </div>
   );

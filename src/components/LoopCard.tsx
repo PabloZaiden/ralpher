@@ -24,6 +24,8 @@ export interface LoopCardProps {
   onPurge?: () => void;
   /** Callback when address comments button is clicked */
   onAddressComments?: () => void;
+  /** Callback when rename button is clicked */
+  onRename?: () => void;
 }
 
 /**
@@ -53,6 +55,7 @@ export function LoopCard({
   onDelete,
   onPurge,
   onAddressComments,
+  onRename,
 }: LoopCardProps) {
   const { config, state } = loop;
   const isActive = isLoopActive(state.status);
@@ -87,9 +90,36 @@ export function LoopCard({
       {/* Header */}
       <div className="mb-3">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 truncate flex-1 min-w-0">
-            {config.name}
-          </h3>
+          <div className="flex items-center gap-1 flex-1 min-w-0">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+              {config.name}
+            </h3>
+            {onRename && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRename();
+                }}
+                className="flex-shrink-0 p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700"
+                aria-label="Rename loop"
+                title="Rename loop"
+              >
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <Badge variant={getStatusBadgeVariant(state.status)}>
               {getStatusLabel(state.status)}
