@@ -56,6 +56,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Do something",
+        planMode: false,
       });
 
       expect(loop.config.id).toBeDefined();
@@ -76,6 +77,7 @@ describe("LoopManager", () => {
         prompt: "Custom task",
         // Backend options removed - now global
         maxIterations: 10,
+        planMode: false,
       });
 
       // Backend is now global, not per-loop config
@@ -88,6 +90,7 @@ describe("LoopManager", () => {
       const created = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        planMode: false,
       });
 
       const fetched = await manager.getLoop(created.config.id);
@@ -106,11 +109,13 @@ describe("LoopManager", () => {
       await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test 1",
+        planMode: false,
       });
 
       await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test 2",
+        planMode: false,
       });
 
       const loops = await manager.getAllLoops();
@@ -124,6 +129,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Original prompt",
+        planMode: false,
       });
 
       const updated = await manager.updateLoop(loop.config.id, {
@@ -138,6 +144,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        planMode: false,
       });
 
       await updateLoopState(loop.config.id, {
@@ -163,6 +170,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        planMode: false,
       });
 
       const updated = await manager.updateLoop(loop.config.id, {
@@ -184,6 +192,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        planMode: false,
       });
 
       const deleted = await manager.deleteLoop(loop.config.id);
@@ -203,6 +212,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        planMode: false,
       });
 
       // First soft delete
@@ -221,6 +231,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        planMode: false,
       });
 
       const purgeResult = await manager.purgeLoop(loop.config.id);
@@ -240,6 +251,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        planMode: false,
       });
 
       const result = await manager.markMerged(loop.config.id);
@@ -254,6 +266,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        planMode: false,
       });
 
       // Manually update the state to a final state without git
@@ -289,6 +302,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        planMode: false,
       });
 
       expect(manager.isRunning(loop.config.id)).toBe(false);
@@ -301,6 +315,7 @@ describe("LoopManager", () => {
         directory: testWorkDir,
         prompt: "Task with clearing",
         clearPlanningFolder: true,
+        planMode: false,
       });
 
       expect(loop.config.clearPlanningFolder).toBe(true);
@@ -311,6 +326,7 @@ describe("LoopManager", () => {
         directory: testWorkDir,
         prompt: "Task without clearing",
         clearPlanningFolder: false,
+        planMode: false,
       });
 
       expect(loop.config.clearPlanningFolder).toBe(false);
@@ -320,6 +336,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Task with default",
+        planMode: false,
       });
 
       // After persistence, clearPlanningFolder defaults to false (not undefined)
@@ -331,6 +348,7 @@ describe("LoopManager", () => {
         directory: testWorkDir,
         prompt: "Test persistence",
         clearPlanningFolder: true,
+        planMode: false,
       });
 
       // Fetch the loop to verify persistence
@@ -347,6 +365,7 @@ describe("LoopManager", () => {
       const runningLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Running task",
+        planMode: false,
       });
 
       // Update status to running
@@ -360,6 +379,7 @@ describe("LoopManager", () => {
         directory: testWorkDir,
         prompt: "Draft task",
         draft: true,
+        planMode: false,
       });
 
       expect(draftLoop.config.id).toBeDefined();
@@ -372,6 +392,7 @@ describe("LoopManager", () => {
         directory: testWorkDir,
         prompt: "Draft task",
         draft: true,
+        planMode: false,
       });
 
       expect(draftLoop.state.status).toBe("draft");
@@ -380,6 +401,7 @@ describe("LoopManager", () => {
       const normalLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Normal task",
+        planMode: false,
       });
 
       // Normal loop should be created
@@ -395,6 +417,7 @@ describe("LoopManager", () => {
         const terminalLoop = await manager.createLoop({
           directory: testWorkDir,
           prompt: `Terminal ${status} task`,
+          planMode: false,
         });
 
         await updateLoopState(terminalLoop.config.id, {
@@ -411,6 +434,7 @@ describe("LoopManager", () => {
       const newLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "New task after terminals",
+        planMode: false,
       });
 
       expect(newLoop.config.id).toBeDefined();
@@ -460,6 +484,7 @@ describe("LoopManager", () => {
       const runningLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Running task",
+        planMode: false,
       });
 
       // Update to running status
@@ -503,6 +528,7 @@ describe("LoopManager", () => {
       const runningLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Running task",
+        planMode: false,
       });
 
       await updateLoopState(runningLoop.config.id, {

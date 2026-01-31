@@ -61,8 +61,8 @@ export interface CreateLoopOptions {
   baseBranch?: string;
   /** Clear the .planning folder contents before starting (default: false) */
   clearPlanningFolder?: boolean;
-  /** Start in plan creation mode instead of immediate execution (default: false) */
-  planMode?: boolean;
+  /** Start in plan creation mode instead of immediate execution (required) */
+  planMode: boolean;
   /** Save as draft without starting (no git branch or session created) */
   draft?: boolean;
 }
@@ -183,9 +183,6 @@ export class LoopManager {
       generatedName = `loop-${timestamp}`;
     }
 
-    // Derive effectivePlanMode from options or default - use this consistently
-    const effectivePlanMode = options.planMode ?? DEFAULT_LOOP_CONFIG.planMode;
-
     const config: LoopConfig = {
       id,
       name: generatedName,
@@ -208,7 +205,7 @@ export class LoopManager {
       },
       baseBranch: options.baseBranch,
       clearPlanningFolder: options.clearPlanningFolder ?? DEFAULT_LOOP_CONFIG.clearPlanningFolder,
-      planMode: effectivePlanMode,
+      planMode: options.planMode,
     };
 
     const state = createInitialState(id);
@@ -217,8 +214,8 @@ export class LoopManager {
     if (options.draft) {
       state.status = "draft";
     }
-    // Else if plan mode is enabled (using resolved effectivePlanMode), initialize plan mode state
-    else if (effectivePlanMode) {
+    // Else if plan mode is enabled, initialize plan mode state
+    else if (options.planMode) {
       state.status = "planning";
       state.planMode = {
         active: true,

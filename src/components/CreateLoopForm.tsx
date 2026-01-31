@@ -181,6 +181,7 @@ export function CreateLoopForm({
     const request: CreateLoopRequest = {
       workspaceId: selectedWorkspaceId,
       prompt: prompt.trim(),
+      planMode: planMode, // planMode is required
       // Backend settings are now global (not per-loop)
       // Git is always enabled - no toggle exposed to users
     };

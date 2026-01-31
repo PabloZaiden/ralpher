@@ -34,7 +34,6 @@ import type {
   GetCommentsResponse,
 } from "../types/api";
 import { validateCreateLoopRequest } from "../types/api";
-import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 
 /**
  * Safely parse JSON body from a request.
@@ -163,9 +162,6 @@ export const loopsCrudRoutes = {
         return git;
       };
 
-      // Derive effectivePlanMode from body or default - use this consistently throughout
-      const effectivePlanMode = body.planMode ?? DEFAULT_LOOP_CONFIG.planMode;
-
       // Skip preflight check for drafts (drafts don't modify git)
       if (!body.draft) {
         // Preflight check: verify no uncommitted changes before creating the loop
@@ -178,7 +174,7 @@ export const loopsCrudRoutes = {
             const changedFiles = await gitService.getChangedFiles(directory);
             
             // If planMode and clearPlanningFolder are enabled, allow uncommitted changes in .planning/ only
-            const onlyPlanningChanges = effectivePlanMode && body.clearPlanningFolder &&
+            const onlyPlanningChanges = body.planMode && body.clearPlanningFolder &&
               changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
             
             if (!onlyPlanningChanges) {
@@ -245,7 +241,7 @@ export const loopsCrudRoutes = {
           gitCommitPrefix: body.git?.commitPrefix,
           baseBranch: effectiveBaseBranch,
           clearPlanningFolder: body.clearPlanningFolder,
-          planMode: effectivePlanMode,
+          planMode: body.planMode,
           draft: body.draft,
         });
 
@@ -266,9 +262,9 @@ export const loopsCrudRoutes = {
           return Response.json(loop, { status: 201 });
         }
 
-        // If plan mode is enabled (using resolved effectivePlanMode), start the plan mode session
+        // If plan mode is enabled, start the plan mode session
         // Otherwise, start the loop immediately
-        if (effectivePlanMode) {
+        if (body.planMode) {
           try {
             await loopManager.startPlanMode(loop.config.id);
             // Return the loop with updated state after starting plan mode

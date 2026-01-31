@@ -237,6 +237,7 @@ describe("Default Base Branch - Auto-Detection", () => {
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Do some work",
+        planMode: false, // Regular execution, not plan mode
         // Note: baseBranch is NOT specified
       });
 
@@ -293,6 +294,7 @@ describe("Default Base Branch - Auto-Detection", () => {
         directory: ctx.workDir,
         prompt: "Do some work on develop",
         baseBranch: "develop",  // Explicit override
+        planMode: false, // Regular execution, not plan mode
       });
 
       expect(status).toBe(201);

@@ -70,8 +70,8 @@ export interface CreateLoopRequest {
   baseBranch?: string;
   /** Clear the .planning folder contents before starting (default: false) */
   clearPlanningFolder?: boolean;
-  /** Start in plan creation mode instead of immediate execution (default: true) */
-  planMode?: boolean;
+  /** Start in plan creation mode instead of immediate execution (required, must be true or false) */
+  planMode: boolean;
   /** Save as draft without starting (no git branch or session created) */
   draft?: boolean;
 }
@@ -306,6 +306,11 @@ export function validateCreateLoopRequest(req: unknown): string | undefined {
 
   if (body["stopPattern"] !== undefined && typeof body["stopPattern"] !== "string") {
     return "stopPattern must be a string";
+  }
+
+  // planMode is required and must be a boolean
+  if (typeof body["planMode"] !== "boolean") {
+    return "planMode is required and must be a boolean (true or false)";
   }
 
   return undefined;

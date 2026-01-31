@@ -22,6 +22,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         // Start loop and wait for completion
@@ -66,6 +67,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -109,6 +111,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -148,6 +151,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -184,6 +188,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         // Try to address comments
@@ -212,6 +217,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -244,6 +250,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -278,6 +285,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         // Get review history
@@ -330,6 +338,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -382,6 +391,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -427,6 +437,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -468,6 +479,7 @@ describe("Review Mode", () => {
         const loop = await ctx.manager.createLoop({
           directory: ctx.workDir,
           prompt: "Make changes",
+          planMode: false,
         });
 
         await ctx.manager.startLoop(loop.config.id);

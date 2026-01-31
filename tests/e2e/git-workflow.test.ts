@@ -41,6 +41,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
       });
 
       // Get original branch
@@ -68,6 +69,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
         gitBranchPrefix: "feature/",
       });
 
@@ -82,6 +84,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
       });
 
       await ctx.manager.startLoop(loop.config.id);
@@ -117,6 +120,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
       });
 
       // Create a file to track changes
@@ -142,6 +146,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
         gitCommitPrefix: "[CustomPrefix]",
       });
 
@@ -159,6 +164,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
       });
 
       try {
@@ -178,6 +184,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
       });
 
       const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
@@ -218,6 +225,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
       });
 
       const result = await ctx.manager.acceptLoop(loop.config.id);
@@ -232,6 +240,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
       });
 
       const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
@@ -266,6 +275,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
       });
 
       const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
@@ -302,6 +312,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
       });
 
       const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
@@ -343,6 +354,7 @@ describe("Git Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Make changes",
+        planMode: false,
       });
 
       // Try to mark as merged without running the loop
