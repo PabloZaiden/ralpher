@@ -80,3 +80,11 @@ export function isLoopRunning(status: LoopStatus): boolean {
 export function canJumpstart(status: LoopStatus): boolean {
   return status === "completed" || status === "stopped" || status === "failed" || status === "max_iterations";
 }
+
+/**
+ * Check if a loop is awaiting feedback (pushed/merged but still addressable).
+ * These loops are in a final state but can still receive reviewer comments.
+ */
+export function isAwaitingFeedback(status: LoopStatus, reviewModeAddressable: boolean | undefined): boolean {
+  return (status === "merged" || status === "pushed") && reviewModeAddressable === true;
+}
