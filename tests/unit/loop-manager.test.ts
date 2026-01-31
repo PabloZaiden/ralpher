@@ -17,6 +17,7 @@ describe("LoopManager", () => {
   let manager: LoopManager;
   let emitter: SimpleEventEmitter<LoopEvent>;
   let emittedEvents: LoopEvent[];
+  const testWorkspaceId = "test-workspace-id";
 
   beforeEach(async () => {
     // Create temp directories
@@ -29,6 +30,16 @@ describe("LoopManager", () => {
     // Ensure data directories exist
     const { ensureDataDirectories } = await import("../../src/persistence/paths");
     await ensureDataDirectories();
+
+    // Create the test workspace (required for loops with workspaceId)
+    const { createWorkspace } = await import("../../src/persistence/workspaces");
+    await createWorkspace({
+      id: testWorkspaceId,
+      name: "Test Workspace",
+      directory: testWorkDir,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
 
     // Set up event emitter
     emittedEvents = [];
@@ -45,6 +56,10 @@ describe("LoopManager", () => {
     // Shutdown manager
     await manager.shutdown();
 
+    // Close database connection
+    const { closeDatabase } = await import("../../src/persistence/database");
+    closeDatabase();
+
     // Clean up
     delete process.env["RALPHER_DATA_DIR"];
     await rm(testDataDir, { recursive: true });
@@ -56,6 +71,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Do something",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -75,6 +91,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Custom task",
+        workspaceId: testWorkspaceId,
         // Backend options removed - now global
         maxIterations: 10,
         planMode: false,
@@ -90,6 +107,7 @@ describe("LoopManager", () => {
       const created = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -109,12 +127,14 @@ describe("LoopManager", () => {
       await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test 1",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
       await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test 2",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -129,6 +149,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Original prompt",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -144,6 +165,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -170,6 +192,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -192,6 +215,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -212,6 +236,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -231,6 +256,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -251,6 +277,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -266,6 +293,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -302,6 +330,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -314,6 +343,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Task with clearing",
+        workspaceId: testWorkspaceId,
         clearPlanningFolder: true,
         planMode: false,
       });
@@ -325,6 +355,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Task without clearing",
+        workspaceId: testWorkspaceId,
         clearPlanningFolder: false,
         planMode: false,
       });
@@ -336,6 +367,7 @@ describe("LoopManager", () => {
       const loop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Task with default",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -347,6 +379,7 @@ describe("LoopManager", () => {
       const created = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Test persistence",
+        workspaceId: testWorkspaceId,
         clearPlanningFolder: true,
         planMode: false,
       });
@@ -365,6 +398,7 @@ describe("LoopManager", () => {
       const runningLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Running task",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -378,6 +412,7 @@ describe("LoopManager", () => {
       const draftLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Draft task",
+        workspaceId: testWorkspaceId,
         draft: true,
         planMode: false,
       });
@@ -391,6 +426,7 @@ describe("LoopManager", () => {
       const draftLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Draft task",
+        workspaceId: testWorkspaceId,
         draft: true,
         planMode: false,
       });
@@ -401,6 +437,7 @@ describe("LoopManager", () => {
       const normalLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Normal task",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -417,6 +454,7 @@ describe("LoopManager", () => {
         const terminalLoop = await manager.createLoop({
           directory: testWorkDir,
           prompt: `Terminal ${status} task`,
+          workspaceId: testWorkspaceId,
           planMode: false,
         });
 
@@ -434,6 +472,7 @@ describe("LoopManager", () => {
       const newLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "New task after terminals",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -448,6 +487,7 @@ describe("LoopManager", () => {
       const planningLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Planning task",
+        workspaceId: testWorkspaceId,
         planMode: true,
       });
 
@@ -484,6 +524,7 @@ describe("LoopManager", () => {
       const runningLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Running task",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -510,6 +551,7 @@ describe("LoopManager", () => {
       const planningLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Planning task",
+        workspaceId: testWorkspaceId,
         planMode: true,
       });
 
@@ -528,6 +570,7 @@ describe("LoopManager", () => {
       const runningLoop = await manager.createLoop({
         directory: testWorkDir,
         prompt: "Running task",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 

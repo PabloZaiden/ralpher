@@ -10,6 +10,8 @@ import { setupTestContext, teardownTestContext, waitForPlanReady, waitForLoopSta
 import type { TestContext } from "../setup";
 import type { Loop } from "../../src/types";
 
+const testWorkspaceId = "test-workspace-id";
+
 // Helper to check if file exists
 async function exists(path: string): Promise<boolean> {
   return Bun.file(path).exists();
@@ -47,6 +49,7 @@ describe("Plan Mode E2E Workflow", () => {
       directory: ctx.workDir,
       maxIterations: 2,
       planMode: true,
+      workspaceId: testWorkspaceId,
     });
     const loopId = loop.config.id;
 
@@ -111,6 +114,7 @@ describe("Plan Mode E2E Workflow", () => {
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,
+      workspaceId: testWorkspaceId,
     });
     const loopId = loop.config.id;
 
@@ -143,6 +147,7 @@ describe("Plan Mode E2E Workflow", () => {
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,
+      workspaceId: testWorkspaceId,
     });
     const loopId = loop.config.id;
 
@@ -191,6 +196,7 @@ describe("Plan Mode E2E Workflow", () => {
       maxIterations: 1,
       clearPlanningFolder: true,
       planMode: true,
+      workspaceId: testWorkspaceId,
     });
     const loopId = loop.config.id;
 
@@ -233,6 +239,7 @@ describe("Plan Mode E2E Workflow", () => {
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,
+      workspaceId: testWorkspaceId,
     });
     const loopId = loop.config.id;
 
@@ -276,6 +283,7 @@ describe("Plan Mode E2E Workflow", () => {
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,
+      workspaceId: testWorkspaceId,
     });
     const loopId = loop.config.id;
 

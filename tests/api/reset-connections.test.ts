@@ -90,6 +90,16 @@ describe("POST /api/backend/reset-all", () => {
     // Ensure directories exist
     await ensureDataDirectories();
 
+    // Create the default test workspace (required for tests that directly call saveLoop)
+    const { createWorkspace } = await import("../../src/persistence/workspaces");
+    await createWorkspace({
+      id: "test-workspace-id",
+      name: "Test Workspace",
+      directory: "/tmp/test",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
     // Set up backend manager before starting server
     backendManager.setBackendForTesting(createStayingRunningMockBackend());
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
@@ -193,6 +203,7 @@ describe("POST /api/backend/reset-all", () => {
         prompt: "Test",
         createdAt: now,
         updatedAt: now,
+        workspaceId: "test-workspace-id",
         stopPattern: "<promise>COMPLETE</promise>$",
         git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
         maxIterations: 10,
@@ -244,6 +255,7 @@ describe("POST /api/backend/reset-all", () => {
         prompt: "Test plan",
         createdAt: now,
         updatedAt: now,
+        workspaceId: "test-workspace-id",
         stopPattern: "<promise>COMPLETE</promise>$",
         git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
         maxIterations: 10,

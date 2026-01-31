@@ -25,10 +25,10 @@ export interface ServerSettings {
   port?: number;
   /** Password for connect mode (optional, stored in plain text) */
   password?: string;
-  /** Whether to use HTTPS for connect mode (defaults to false if not set) */
-  useHttps?: boolean;
-  /** Whether to allow insecure connections (self-signed certificates) */
-  allowInsecure?: boolean;
+  /** Whether to use HTTPS for connect mode (defaults to false) */
+  useHttps: boolean;
+  /** Whether to allow insecure connections (self-signed certificates, defaults to false) */
+  allowInsecure: boolean;
 }
 
 /**
@@ -38,6 +38,8 @@ export interface ServerSettings {
 export function getDefaultServerSettings(): ServerSettings {
   return {
     mode: isRemoteOnlyMode() ? "connect" : "spawn",
+    useHttps: false,
+    allowInsecure: false,
   };
 }
 

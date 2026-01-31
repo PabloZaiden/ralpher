@@ -11,9 +11,16 @@ import { LoopManager } from "../src/core/loop-manager";
 import { backendManager } from "../src/core/backend-manager";
 import { ensureDataDirectories } from "../src/persistence/paths";
 import { closeDatabase } from "../src/persistence/database";
+import { createWorkspace } from "../src/persistence/workspaces";
 import { TestCommandExecutor } from "./mocks/mock-executor";
 import { MockOpenCodeBackend } from "./mocks/mock-backend";
 import type { LoopEvent } from "../src/types/events";
+
+/**
+ * Default test workspace ID that can be used in tests.
+ * This workspace is automatically created by setupTestContext().
+ */
+export const testWorkspaceId = "test-workspace-id";
 
 /**
  * Test context containing all test dependencies.
@@ -67,6 +74,15 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
   // Set env var for persistence
   process.env["RALPHER_DATA_DIR"] = dataDir;
   await ensureDataDirectories();
+
+  // Create the default test workspace (required for loops with workspaceId)
+  await createWorkspace({
+    id: testWorkspaceId,
+    name: "Test Workspace",
+    directory: workDir,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
 
   // Create initial files
   for (const [path, content] of Object.entries(initialFiles)) {

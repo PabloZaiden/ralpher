@@ -647,6 +647,7 @@ export const loopsControlRoutes = {
             active: true,
             feedbackRounds: 0,
             planningFolderCleared: false,
+            isPlanReady: false,
           };
           await updateLoopState(req.params.id, loop.state);
           
@@ -700,7 +701,7 @@ export const loopsControlRoutes = {
 
       const response: AcceptResponse = {
         success: true,
-        mergeCommit: result.mergeCommit,
+        mergeCommit: result.mergeCommit!,
       };
       return Response.json(response);
     },
@@ -728,7 +729,7 @@ export const loopsControlRoutes = {
 
       const response: PushResponse = {
         success: true,
-        remoteBranch: result.remoteBranch,
+        remoteBranch: result.remoteBranch!,
       };
       return Response.json(response);
     },
@@ -1312,9 +1313,9 @@ export const loopsReviewRoutes = {
 
         const responseBody: AddressCommentsResponse = {
           success: true,
-          reviewCycle: result.reviewCycle,
-          branch: result.branch,
-          commentIds: result.commentIds,
+          reviewCycle: result.reviewCycle!,
+          branch: result.branch!,
+          commentIds: result.commentIds!,
         };
         return Response.json(responseBody);
       } catch (error) {
@@ -1343,14 +1344,14 @@ export const loopsReviewRoutes = {
         if (!result.success) {
           const responseBody: ReviewHistoryResponse = {
             success: false,
-            error: result.error,
+            error: result.error!,
           };
           return Response.json(responseBody, { status: result.error === "Loop not found" ? 404 : 400 });
         }
 
         const responseBody: ReviewHistoryResponse = {
           success: true,
-          history: result.history,
+          history: result.history!,
         };
         return Response.json(responseBody);
       } catch (error) {

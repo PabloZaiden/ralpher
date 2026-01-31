@@ -158,6 +158,7 @@ describe("StopPatternDetector", () => {
       prompt: "Do something",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      workspaceId: "test-workspace-id",
       // Backend is now global, not per-loop config
       stopPattern: "<promise>COMPLETE</promise>$",
       git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },

@@ -39,8 +39,8 @@ export interface CreateLoopOptions {
   directory: string;
   /** The task prompt/PRD */
   prompt: string;
-  /** Workspace ID this loop belongs to (optional) */
-  workspaceId?: string;
+  /** Workspace ID this loop belongs to */
+  workspaceId: string;
   /** Model provider ID */
   modelProviderID?: string;
   /** Model ID */

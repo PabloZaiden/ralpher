@@ -32,8 +32,8 @@ export interface LoopConfig {
   /** ISO 8601 timestamp of the last configuration update */
   updatedAt: string;
 
-  /** Workspace ID this loop belongs to (optional for backward compatibility) */
-  workspaceId?: string;
+  /** Workspace ID this loop belongs to */
+  workspaceId: string;
 
   /** Model configuration for AI provider and model selection (optional - uses backend default if not set) */
   model?: ModelConfig;
@@ -152,7 +152,7 @@ export interface LoopState {
     /** Whether .planning folder was already cleared (prevents re-clearing) */
     planningFolderCleared: boolean;
     /** Whether the plan is ready (PLAN_READY marker detected) */
-    isPlanReady?: boolean;
+    isPlanReady: boolean;
   };
 
   /** Review mode state for addressing comments after push/merge */

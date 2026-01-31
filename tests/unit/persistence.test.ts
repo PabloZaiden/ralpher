@@ -10,6 +10,26 @@ import type { Loop, LoopStatus } from "../../src/types/loop";
 
 // We need to set the env var before importing the module
 let testDataDir: string;
+const testWorkspaceId = "test-workspace-id";
+
+/**
+ * Helper to ensure data directories and create test workspace.
+ */
+async function setupPersistence(): Promise<void> {
+  const { ensureDataDirectories } = await import("../../src/persistence/paths");
+  const { createWorkspace } = await import("../../src/persistence/workspaces");
+  
+  await ensureDataDirectories();
+  
+  // Create the test workspace (required for loops with workspaceId)
+  await createWorkspace({
+    id: testWorkspaceId,
+    name: "Test Workspace",
+    directory: "/tmp/test",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+}
 
 /**
  * Helper function to create a test loop with all required fields.
@@ -32,6 +52,7 @@ function createTestLoop(overrides: {
       prompt: overrides.prompt ?? "Test",
       createdAt: overrides.createdAt ?? now,
       updatedAt: now,
+      workspaceId: "test-workspace-id",
       stopPattern: "<promise>COMPLETE</promise>$",
       git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
       maxIterations: Infinity,
@@ -94,10 +115,9 @@ describe("Persistence", () => {
 
   describe("loops", () => {
     test("saveLoop and loadLoop work correctly", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
       const { saveLoop, loadLoop } = await import("../../src/persistence/loops");
 
-      await ensureDataDirectories();
+      await setupPersistence();
 
       const testLoop = createTestLoop({
         id: "test-loop-123",
@@ -113,20 +133,18 @@ describe("Persistence", () => {
     });
 
     test("loadLoop returns null for non-existent loop", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
       const { loadLoop } = await import("../../src/persistence/loops");
 
-      await ensureDataDirectories();
+      await setupPersistence();
 
       const loaded = await loadLoop("non-existent");
       expect(loaded).toBeNull();
     });
 
     test("deleteLoop removes the loop", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
       const { saveLoop, loadLoop, deleteLoop } = await import("../../src/persistence/loops");
 
-      await ensureDataDirectories();
+      await setupPersistence();
 
       const testLoop = createTestLoop({ id: "delete-me" });
 
@@ -139,10 +157,9 @@ describe("Persistence", () => {
     });
 
     test("listLoops returns all loops", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
       const { saveLoop, listLoops } = await import("../../src/persistence/loops");
 
-      await ensureDataDirectories();
+      await setupPersistence();
 
       // Save two loops
       const loop1 = createTestLoop({
@@ -174,20 +191,18 @@ describe("Persistence", () => {
 
     describe("getActiveLoopByDirectory", () => {
       test("returns null when no loops exist for directory", async () => {
-        const { ensureDataDirectories } = await import("../../src/persistence/paths");
         const { getActiveLoopByDirectory } = await import("../../src/persistence/loops");
 
-        await ensureDataDirectories();
+        await setupPersistence();
 
         const result = await getActiveLoopByDirectory("/tmp/test");
         expect(result).toBeNull();
       });
 
       test("returns null when only draft loops exist for directory", async () => {
-        const { ensureDataDirectories } = await import("../../src/persistence/paths");
         const { saveLoop, getActiveLoopByDirectory } = await import("../../src/persistence/loops");
 
-        await ensureDataDirectories();
+        await setupPersistence();
 
         const draftLoop = createTestLoop({ id: "draft-loop", status: "draft" });
         await saveLoop(draftLoop);
@@ -197,10 +212,9 @@ describe("Persistence", () => {
       });
 
       test("returns null when only terminal state loops exist for directory", async () => {
-        const { ensureDataDirectories } = await import("../../src/persistence/paths");
         const { saveLoop, getActiveLoopByDirectory } = await import("../../src/persistence/loops");
 
-        await ensureDataDirectories();
+        await setupPersistence();
 
         const terminalStatuses: LoopStatus[] = ["completed", "stopped", "failed", "max_iterations", "merged", "pushed", "deleted"];
 
@@ -217,10 +231,9 @@ describe("Persistence", () => {
       });
 
       test("returns the active loop when one exists", async () => {
-        const { ensureDataDirectories } = await import("../../src/persistence/paths");
         const { saveLoop, getActiveLoopByDirectory, deleteLoop } = await import("../../src/persistence/loops");
 
-        await ensureDataDirectories();
+        await setupPersistence();
 
         const activeStatuses: LoopStatus[] = ["idle", "planning", "starting", "running", "waiting"];
 
@@ -244,10 +257,9 @@ describe("Persistence", () => {
       });
 
       test("does not return loops from different directories", async () => {
-        const { ensureDataDirectories } = await import("../../src/persistence/paths");
         const { saveLoop, getActiveLoopByDirectory } = await import("../../src/persistence/loops");
 
-        await ensureDataDirectories();
+        await setupPersistence();
 
         // Save a running loop in a different directory
         const otherDirLoop = createTestLoop({
@@ -264,10 +276,9 @@ describe("Persistence", () => {
       });
 
       test("returns the active loop even when other loops exist for same directory", async () => {
-        const { ensureDataDirectories } = await import("../../src/persistence/paths");
         const { saveLoop, getActiveLoopByDirectory } = await import("../../src/persistence/loops");
 
-        await ensureDataDirectories();
+        await setupPersistence();
 
         // Save a draft loop
         const draftLoop = createTestLoop({
@@ -304,10 +315,9 @@ describe("Persistence", () => {
 
     describe("resetStaleLoops", () => {
       test("resets idle loops to stopped", async () => {
-        const { ensureDataDirectories } = await import("../../src/persistence/paths");
         const { saveLoop, loadLoop, resetStaleLoops } = await import("../../src/persistence/loops");
 
-        await ensureDataDirectories();
+        await setupPersistence();
 
         const idleLoop = createTestLoop({
           id: "idle-loop",
@@ -325,10 +335,9 @@ describe("Persistence", () => {
       });
 
       test("resets running and waiting loops to stopped", async () => {
-        const { ensureDataDirectories } = await import("../../src/persistence/paths");
         const { saveLoop, loadLoop, resetStaleLoops } = await import("../../src/persistence/loops");
 
-        await ensureDataDirectories();
+        await setupPersistence();
 
         const runningLoop = createTestLoop({
           id: "running-loop",
@@ -365,10 +374,9 @@ describe("Persistence", () => {
       });
 
       test("does NOT reset planning loops", async () => {
-        const { ensureDataDirectories } = await import("../../src/persistence/paths");
         const { saveLoop, loadLoop, resetStaleLoops } = await import("../../src/persistence/loops");
 
-        await ensureDataDirectories();
+        await setupPersistence();
 
         const planningLoop = createTestLoop({
           id: "planning-loop",
@@ -385,10 +393,9 @@ describe("Persistence", () => {
       });
 
       test("does NOT reset terminal state loops", async () => {
-        const { ensureDataDirectories } = await import("../../src/persistence/paths");
         const { saveLoop, loadLoop, resetStaleLoops } = await import("../../src/persistence/loops");
 
-        await ensureDataDirectories();
+        await setupPersistence();
 
         const completedLoop = createTestLoop({
           id: "completed-loop",
@@ -425,10 +432,9 @@ describe("Persistence", () => {
       });
 
       test("returns 0 when no stale loops exist", async () => {
-        const { ensureDataDirectories } = await import("../../src/persistence/paths");
         const { resetStaleLoops } = await import("../../src/persistence/loops");
 
-        await ensureDataDirectories();
+        await setupPersistence();
 
         const resetCount = await resetStaleLoops();
         expect(resetCount).toBe(0);
