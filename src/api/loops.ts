@@ -140,11 +140,35 @@ export const loopsCrudRoutes = {
         return errorResponse("validation_error", validationError);
       }
 
+      // Resolve workspaceId to directory if needed
+      let directory = body.directory;
+      let workspaceId = body.workspaceId;
+      
+      if (body.workspaceId && !body.directory) {
+        // Import workspace persistence dynamically to avoid circular imports
+        const { getWorkspace, touchWorkspace } = await import("../persistence/workspaces");
+        const workspace = await getWorkspace(body.workspaceId);
+        if (!workspace) {
+          return errorResponse("workspace_not_found", `Workspace not found: ${body.workspaceId}`, 404);
+        }
+        directory = workspace.directory;
+        
+        // Touch workspace to update last used timestamp
+        await touchWorkspace(workspace.id);
+      } else if (!body.directory) {
+        return errorResponse("validation_error", "Either workspaceId or directory is required");
+      }
+
+      // Ensure directory is defined (TypeScript narrowing)
+      if (!directory) {
+        return errorResponse("validation_error", "directory could not be resolved");
+      }
+
       // Create a single executor/GitService for the request to avoid duplicate setup
       let git: GitService | null = null;
       const getGitService = async (): Promise<GitService> => {
         if (!git) {
-          const executor = await backendManager.getCommandExecutorAsync(body.directory);
+          const executor = await backendManager.getCommandExecutorAsync(directory!);
           git = GitService.withExecutor(executor);
         }
         return git;
@@ -156,10 +180,10 @@ export const loopsCrudRoutes = {
         // This prevents creating loops that can never be started
         try {
           const gitService = await getGitService();
-          const hasChanges = await gitService.hasUncommittedChanges(body.directory);
+          const hasChanges = await gitService.hasUncommittedChanges(directory);
 
           if (hasChanges) {
-            const changedFiles = await gitService.getChangedFiles(body.directory);
+            const changedFiles = await gitService.getChangedFiles(directory);
             
             // If planMode and clearPlanningFolder are enabled, allow uncommitted changes in .planning/ only
             const onlyPlanningChanges = body.planMode && body.clearPlanningFolder &&
@@ -182,7 +206,7 @@ export const loopsCrudRoutes = {
 
         // Check if another active loop exists for this directory
         try {
-          const existingActiveLoop = await getActiveLoopByDirectory(body.directory);
+          const existingActiveLoop = await getActiveLoopByDirectory(directory);
           if (existingActiveLoop) {
             return Response.json(
               {
@@ -206,7 +230,7 @@ export const loopsCrudRoutes = {
       if (!effectiveBaseBranch) {
         try {
           const gitService = await getGitService();
-          effectiveBaseBranch = await gitService.getDefaultBranch(body.directory);
+          effectiveBaseBranch = await gitService.getDefaultBranch(directory);
           log.debug(`Auto-detected default branch for loop: ${effectiveBaseBranch}`);
         } catch (error) {
           log.warn(`Failed to detect default branch, will fall back to current branch: ${String(error)}`);
@@ -216,8 +240,9 @@ export const loopsCrudRoutes = {
 
       try {
         const loop = await loopManager.createLoop({
-          directory: body.directory,
+          directory,
           prompt: body.prompt,
+          workspaceId,
           modelProviderID: body.model?.providerID,
           modelID: body.model?.modelID,
           maxIterations: body.maxIterations,

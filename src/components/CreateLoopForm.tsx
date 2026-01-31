@@ -4,7 +4,9 @@
 
 import { useState, useEffect, type FormEvent } from "react";
 import type { CreateLoopRequest, ModelInfo, BranchInfo } from "../types";
+import type { WorkspaceWithLoopCount, CreateWorkspaceRequest } from "../types/workspace";
 import { Button } from "./common";
+import { WorkspaceSelector } from "./WorkspaceSelector";
 
 export interface CreateLoopFormProps {
   /** Callback when form is submitted. Returns true if successful, false otherwise. */
@@ -46,9 +48,20 @@ export interface CreateLoopFormProps {
     baseBranch?: string;
     clearPlanningFolder?: boolean;
     planMode?: boolean;
+    workspaceId?: string;
   } | null;
   /** Whether editing a draft loop (to show Update Draft button) */
   isEditingDraft?: boolean;
+  /** Available workspaces */
+  workspaces?: WorkspaceWithLoopCount[];
+  /** Whether workspaces are loading */
+  workspacesLoading?: boolean;
+  /** Callback to create a new workspace */
+  onCreateWorkspace?: (request: CreateWorkspaceRequest) => Promise<{ id: string; directory: string } | null>;
+  /** Whether workspace creation is in progress */
+  workspaceCreating?: boolean;
+  /** Workspace-related error */
+  workspaceError?: string | null;
 }
 
 export function CreateLoopForm({
@@ -68,9 +81,18 @@ export function CreateLoopForm({
   editLoopId = null,
   initialLoopData = null,
   isEditingDraft = false,
+  workspaces = [],
+  workspacesLoading = false,
+  onCreateWorkspace,
+  workspaceCreating = false,
+  workspaceError = null,
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
   
+  // Workspace state
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | undefined>(
+    initialLoopData?.workspaceId
+  );
   const [directory, setDirectory] = useState(initialLoopData?.directory ?? initialDirectory);
   const [prompt, setPrompt] = useState(initialLoopData?.prompt ?? "");
   const [maxIterations, setMaxIterations] = useState<string>(initialLoopData?.maxIterations?.toString() ?? "");
@@ -156,18 +178,33 @@ export function CreateLoopForm({
   async function handleSubmit(e: FormEvent, asDraft = false) {
     e.preventDefault();
 
-    if (!directory.trim() || !prompt.trim()) {
+    // When workspaces are available, require workspace selection (not directory)
+    const hasWorkspaces = workspaces.length > 0 || selectedWorkspaceId;
+    if (hasWorkspaces && !selectedWorkspaceId) {
+      return;
+    }
+    if (!hasWorkspaces && !directory.trim()) {
+      return;
+    }
+    if (!prompt.trim()) {
       return;
     }
 
     setSubmitting(true);
 
     const request: CreateLoopRequest = {
-      directory: directory.trim(),
       prompt: prompt.trim(),
       // Backend settings are now global (not per-loop)
       // Git is always enabled - no toggle exposed to users
     };
+
+    // Include workspaceId if selected, otherwise fall back to directory
+    if (selectedWorkspaceId) {
+      request.workspaceId = selectedWorkspaceId;
+      request.directory = directory.trim(); // Still include for reference
+    } else {
+      request.directory = directory.trim();
+    }
 
     // Add model if selected
     if (selectedModel) {
@@ -266,28 +303,36 @@ export function CreateLoopForm({
     })
     .sort((a, b) => a.localeCompare(b));
 
+  // Handle workspace selection
+  function handleWorkspaceSelect(workspaceId: string | null, workspaceDirectory: string) {
+    setSelectedWorkspaceId(workspaceId || undefined);
+    setDirectory(workspaceDirectory);
+    // Trigger directory change to load models and branches
+    if (workspaceDirectory && onDirectoryChange) {
+      onDirectoryChange(workspaceDirectory);
+    }
+  }
+
+  // Handle creating a new workspace
+  async function handleCreateWorkspaceWrapper(request: { name: string; directory: string }): Promise<{ id: string; directory: string } | null> {
+    if (!onCreateWorkspace) return null;
+    return onCreateWorkspace(request);
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Directory */}
+      {/* Workspace / Directory */}
       <div>
-        <label
-          htmlFor="directory"
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          Working Directory <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="text"
-          id="directory"
-          value={directory}
-          onChange={(e) => setDirectory(e.target.value)}
-          placeholder="/path/to/project"
-          required
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-mono text-sm placeholder:text-gray-400 dark:placeholder:text-gray-500"
+        <WorkspaceSelector
+          workspaces={workspaces}
+          loading={workspacesLoading}
+          selectedWorkspaceId={selectedWorkspaceId}
+          onSelect={handleWorkspaceSelect}
+          onCreateWorkspace={handleCreateWorkspaceWrapper}
+          creating={workspaceCreating}
+          error={workspaceError}
+          initialDirectory={initialDirectory}
         />
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Absolute path to the project directory
-        </p>
         {planningWarning && (
           <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-300">
             <svg
@@ -583,7 +628,7 @@ export function CreateLoopForm({
             type="button"
             variant="secondary"
             onClick={(e) => handleSubmit(e, true)}
-            disabled={isSubmitting || !directory.trim() || !prompt.trim()}
+            disabled={isSubmitting || (!selectedWorkspaceId && !directory.trim()) || !prompt.trim()}
             loading={isSubmitting}
           >
             {isEditingDraft ? "Update Draft" : "Save as Draft"}

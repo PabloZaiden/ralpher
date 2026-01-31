@@ -45,10 +45,15 @@ export interface ModelInfo {
  * If `planMode: true`, the loop starts in plan review mode before execution.
  * 
  * The loop name is automatically generated from the prompt using AI.
+ * 
+ * Either `workspaceId` or `directory` must be provided. If `workspaceId` is provided,
+ * the directory is automatically derived from the workspace.
  */
 export interface CreateLoopRequest {
-  /** Absolute path to the working directory (must be a git repository) */
-  directory: string;
+  /** Workspace ID to create the loop in (required if directory is not provided) */
+  workspaceId?: string;
+  /** Absolute path to the working directory (must be a git repository). Required if workspaceId is not provided. */
+  directory?: string;
   /** The task prompt/PRD describing what the loop should accomplish */
   prompt: string;
   /** Model configuration for AI provider and model selection */
@@ -275,8 +280,12 @@ export function validateCreateLoopRequest(req: unknown): string | undefined {
 
   const body = req as Record<string, unknown>;
 
-  if (typeof body["directory"] !== "string" || (body["directory"] as string).trim() === "") {
-    return "directory is required and must be a non-empty string";
+  // Either workspaceId or directory must be provided
+  const hasWorkspaceId = typeof body["workspaceId"] === "string" && (body["workspaceId"] as string).trim() !== "";
+  const hasDirectory = typeof body["directory"] === "string" && (body["directory"] as string).trim() !== "";
+  
+  if (!hasWorkspaceId && !hasDirectory) {
+    return "Either workspaceId or directory is required";
   }
 
   if (typeof body["prompt"] !== "string" || (body["prompt"] as string).trim() === "") {

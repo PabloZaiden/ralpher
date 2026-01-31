@@ -39,6 +39,8 @@ export interface CreateLoopOptions {
   directory: string;
   /** The task prompt/PRD */
   prompt: string;
+  /** Workspace ID this loop belongs to (optional) */
+  workspaceId?: string;
   /** Model provider ID */
   modelProviderID?: string;
   /** Model ID */
@@ -188,6 +190,7 @@ export class LoopManager {
       prompt: options.prompt,
       createdAt: now,
       updatedAt: now,
+      workspaceId: options.workspaceId,
       model:
         options.modelProviderID && options.modelID
           ? { providerID: options.modelProviderID, modelID: options.modelID }

@@ -7,6 +7,7 @@ export { useLoops, type UseLoopsResult, type CreateLoopResult } from "./useLoops
 export { useLoop, type UseLoopResult } from "./useLoop";
 export { useServerSettings, type UseServerSettingsResult } from "./useServerSettings";
 export { useMarkdownPreference, type UseMarkdownPreferenceResult } from "./useMarkdownPreference";
+export { useWorkspaces, type UseWorkspacesResult } from "./useWorkspaces";
 
 // Shared loop action API functions
 export {

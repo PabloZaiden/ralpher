@@ -287,6 +287,40 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 10,
+    name: "add_workspaces_table",
+    up: (db) => {
+      // Create the workspaces table (CREATE TABLE IF NOT EXISTS is idempotent)
+      db.run(`
+        CREATE TABLE IF NOT EXISTS workspaces (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          directory TEXT UNIQUE NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `);
+      
+      // Create index on directory for efficient lookups
+      db.run("CREATE INDEX IF NOT EXISTS idx_workspaces_directory ON workspaces(directory)");
+      
+      log.info("Created workspaces table with directory index");
+      
+      // Add workspace_id column to loops table
+      if (tableExists(db, "loops")) {
+        const columns = getTableColumns(db, "loops");
+        if (!columns.includes("workspace_id")) {
+          db.run("ALTER TABLE loops ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)");
+          log.info("Added workspace_id column to loops table");
+        }
+        
+        // Create index on workspace_id for efficient queries
+        db.run("CREATE INDEX IF NOT EXISTS idx_loops_workspace_id ON loops(workspace_id)");
+        log.info("Created workspace_id index on loops table");
+      }
+    },
+  },
 ];
 
 /**

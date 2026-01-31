@@ -10,6 +10,7 @@
  * - models: AI model listing and user preferences
  * - settings: Server configuration and connection management
  * - git: Git repository information
+ * - workspaces: Workspace CRUD operations
  * - websocket: Real-time event streaming (handled separately)
  * 
  * @module api
@@ -20,6 +21,7 @@ import { loopsRoutes } from "./loops";
 import { modelsAndPreferencesRoutes } from "./models";
 import { settingsRoutes } from "./settings";
 import { gitRoutes } from "./git";
+import { workspacesRoutes } from "./workspaces";
 
 /**
  * All API routes combined.
@@ -43,6 +45,7 @@ export const apiRoutes = {
   ...modelsAndPreferencesRoutes,
   ...settingsRoutes,
   ...gitRoutes,
+  ...workspacesRoutes,
 };
 
 // Re-export individual route modules
@@ -51,4 +54,5 @@ export * from "./loops";
 export * from "./models";
 export * from "./settings";
 export * from "./git";
+export * from "./workspaces";
 export * from "./websocket";

@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import type { UncommittedChangesError, ModelInfo, HealthResponse, BranchInfo } from "../types";
-import { useLoops, useServerSettings } from "../hooks";
+import { useLoops, useServerSettings, useWorkspaces } from "../hooks";
 import { Button, Modal } from "./common";
 import { LoopCard } from "./LoopCard";
 import { CreateLoopForm } from "./CreateLoopForm";
@@ -52,6 +52,15 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     resetConnections: resetServerConnections,
     resetAll: resetAllSettings,
   } = useServerSettings();
+
+  // Workspace state
+  const {
+    workspaces,
+    loading: workspacesLoading,
+    saving: workspaceCreating,
+    error: workspaceError,
+    createWorkspace,
+  } = useWorkspaces();
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
@@ -668,7 +677,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                       headers: { "Content-Type": "application/json" },
                       body: JSON.stringify({ directory: request.directory }),
                     });
-                    setLastDirectory(request.directory);
+                    setLastDirectory(request.directory ?? null);
                   } catch {
                     // Ignore errors saving preference
                   }
@@ -688,6 +697,17 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               currentBranch={currentBranch}
               defaultBranch={defaultBranch}
               initialDirectory={lastDirectory ?? ""}
+              workspaces={workspaces}
+              workspacesLoading={workspacesLoading}
+              onCreateWorkspace={async (request) => {
+                const result = await createWorkspace(request);
+                if (result) {
+                  return { id: result.id, directory: result.directory };
+                }
+                return null;
+              }}
+              workspaceCreating={workspaceCreating}
+              workspaceError={workspaceError}
             />
           </Modal>
         );
