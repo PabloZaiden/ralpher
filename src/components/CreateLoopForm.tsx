@@ -93,7 +93,9 @@ export function CreateLoopForm({
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | undefined>(
     initialLoopData?.workspaceId
   );
-  const [directory, setDirectory] = useState(initialLoopData?.directory ?? initialDirectory);
+  // Only pre-fill directory if editing an existing loop, not from initialDirectory
+  // initialDirectory is only used for the "add new workspace" form, not for auto-loading models/branches
+  const [directory, setDirectory] = useState(initialLoopData?.directory ?? "");
   const [prompt, setPrompt] = useState(initialLoopData?.prompt ?? "");
   const [maxIterations, setMaxIterations] = useState<string>(initialLoopData?.maxIterations?.toString() ?? "");
   const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>(initialLoopData?.maxConsecutiveErrors?.toString() ?? "10");
@@ -106,13 +108,6 @@ export function CreateLoopForm({
   const [userChangedBranch, setUserChangedBranch] = useState(!!initialLoopData?.baseBranch);
   const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
   const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? false);
-
-  // Update directory when initialDirectory prop changes (e.g., after async fetch)
-  useEffect(() => {
-    if (initialDirectory && !directory) {
-      setDirectory(initialDirectory);
-    }
-  }, [initialDirectory, directory]);
 
   // Reset selected branch when default branch changes (directory changed)
   useEffect(() => {
