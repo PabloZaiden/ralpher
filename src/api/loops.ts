@@ -346,7 +346,16 @@ export const loopsCrudRoutes = {
         // Transform request body to match LoopConfig format
         const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};
         
-        if (body["name"] !== undefined) updates.name = body["name"] as string;
+        if (body["name"] !== undefined) {
+          if (typeof body["name"] !== "string") {
+            return errorResponse("validation_error", "Name must be a string");
+          }
+          const trimmedName = body["name"].trim();
+          if (trimmedName === "") {
+            return errorResponse("validation_error", "Name cannot be empty");
+          }
+          updates.name = trimmedName;
+        }
         if (body["directory"] !== undefined) updates.directory = body["directory"] as string;
         if (body["prompt"] !== undefined) updates.prompt = body["prompt"] as string;
         if (body["maxIterations"] !== undefined) updates.maxIterations = body["maxIterations"] as number;

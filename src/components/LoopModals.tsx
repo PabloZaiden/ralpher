@@ -220,3 +220,4 @@ export function UncommittedChangesModal({
 
 export { AcceptLoopModal, type AcceptLoopModalProps } from "./AcceptLoopModal";
 export { AddressCommentsModal, type AddressCommentsModalProps } from "./AddressCommentsModal";
+export { RenameLoopModal, type RenameLoopModalProps } from "./RenameLoopModal";

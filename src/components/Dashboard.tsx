@@ -16,6 +16,7 @@ import {
   DeleteLoopModal,
   PurgeLoopModal,
   UncommittedChangesModal,
+  RenameLoopModal,
 } from "./LoopModals";
 
 export interface DashboardProps {
@@ -36,6 +37,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     pushLoop,
     purgeLoop,
     addressReviewComments,
+    updateLoop,
   } = useLoops();
 
   // Server settings state
@@ -116,6 +118,10 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     open: false,
     loopId: null,
     error: null,
+  });
+  const [renameModal, setRenameModal] = useState<{ open: boolean; loopId: string | null }>({
+    open: false,
+    loopId: null,
   });
 
   // Model selection state
@@ -489,6 +495,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                           loop={loop}
                           onClick={() => handleEditDraft(loop.config.id)}
                           onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                         />
                       ))}
                     </div>
@@ -508,6 +515,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                           loop={loop}
                           onClick={() => onSelectLoop?.(loop.config.id)}
                           onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                         />
                       ))}
                     </div>
@@ -528,6 +536,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                           onClick={() => onSelectLoop?.(loop.config.id)}
                           onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
                           onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                         />
                       ))}
                     </div>
@@ -548,6 +557,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                           onClick={() => onSelectLoop?.(loop.config.id)}
                           onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
                           onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                         />
                       ))}
                     </div>
@@ -568,6 +578,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                           onClick={() => onSelectLoop?.(loop.config.id)}
                           onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
                           onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
+                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                         />
                       ))}
                     </div>
@@ -611,6 +622,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                         loop={loop}
                         onClick={() => handleEditDraft(loop.config.id)}
                         onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                       />
                     ))}
                   </div>
@@ -630,6 +642,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                         loop={loop}
                         onClick={() => onSelectLoop?.(loop.config.id)}
                         onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                       />
                     ))}
                   </div>
@@ -650,6 +663,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                         onClick={() => onSelectLoop?.(loop.config.id)}
                         onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
                         onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                       />
                     ))}
                   </div>
@@ -670,6 +684,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                         onClick={() => onSelectLoop?.(loop.config.id)}
                         onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
                         onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                       />
                     ))}
                   </div>
@@ -690,6 +705,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                         onClick={() => onSelectLoop?.(loop.config.id)}
                         onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
                         onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
+                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                       />
                     ))}
                   </div>
@@ -955,6 +971,18 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         resettingConnections={serverResettingConnections}
         resetting={serverResetting}
         remoteOnly={remoteOnly}
+      />
+
+      {/* Rename Loop modal */}
+      <RenameLoopModal
+        isOpen={renameModal.open}
+        onClose={() => setRenameModal({ open: false, loopId: null })}
+        currentName={loops.find(l => l.config.id === renameModal.loopId)?.config.name ?? ""}
+        onRename={async (newName) => {
+          if (renameModal.loopId) {
+            await updateLoop(renameModal.loopId, { name: newName });
+          }
+        }}
       />
     </div>
   );

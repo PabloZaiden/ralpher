@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type { FileDiff, FileContentResponse, ModelInfo } from "../types";
 import type { ReviewComment } from "../types/loop";
 import { useLoop, useMarkdownPreference } from "../hooks";
-import { Badge, Button, getStatusBadgeVariant } from "./common";
+import { Badge, Button, getStatusBadgeVariant, EditIcon } from "./common";
 import { LogViewer } from "./LogViewer";
 import { TodoViewer } from "./TodoViewer";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -16,6 +16,7 @@ import {
   DeleteLoopModal,
   PurgeLoopModal,
   MarkMergedModal,
+  RenameLoopModal,
 } from "./LoopModals";
 import { PlanReviewPanel } from "./PlanReviewPanel";
 import { LoopActionBar } from "./LoopActionBar";
@@ -109,6 +110,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     acceptPlan,
     discardPlan,
     addressReviewComments,
+    update,
   } = useLoop(loopId);
 
   // Markdown rendering preference
@@ -146,6 +148,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [purgeModal, setPurgeModal] = useState(false);
   const [markMergedModal, setMarkMergedModal] = useState(false);
   const [addressCommentsModal, setAddressCommentsModal] = useState(false);
+  const [renameModal, setRenameModal] = useState(false);
 
   // Models state for LoopActionBar
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -425,6 +428,14 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
             <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
               {config.name}
             </h1>
+            <button
+              onClick={() => setRenameModal(true)}
+              className="flex-shrink-0 p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700"
+              aria-label="Rename loop"
+              title="Rename loop"
+            >
+              <EditIcon />
+            </button>
             <Badge variant={getStatusBadgeVariant(state.status)} size="sm">
               {getStatusLabel(state.status)}
             </Badge>
@@ -1095,6 +1106,16 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         onSubmit={handleAddressComments}
         loopName={config.name}
         reviewCycle={(state.reviewMode?.reviewCycles || 0) + 1}
+      />
+
+      {/* Rename Loop modal */}
+      <RenameLoopModal
+        isOpen={renameModal}
+        onClose={() => setRenameModal(false)}
+        currentName={config.name}
+        onRename={async (newName) => {
+          await update({ name: newName });
+        }}
       />
     </div>
   );

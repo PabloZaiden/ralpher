@@ -899,4 +899,175 @@ describe("Loops CRUD API Integration", () => {
       expect(getBody.state.status).toBe("deleted");
     });
   });
+
+  describe("Rename loops via PATCH", () => {
+    test("renames a draft loop", async () => {
+      // Create a draft loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Test rename task",
+          draft: true,
+          planMode: false,
+        }),
+      });
+      expect(createResponse.status).toBe(201);
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+      // Name is auto-generated from prompt, so we just verify it exists
+      expect(createBody.config.name).toBeDefined();
+
+      // Rename the loop
+      const renameResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Renamed Loop" }),
+      });
+      expect(renameResponse.status).toBe(200);
+      const renameBody = await renameResponse.json();
+      expect(renameBody.config.name).toBe("Renamed Loop");
+
+      // Verify the name persists
+      const getResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      expect(getResponse.status).toBe(200);
+      const getBody = await getResponse.json();
+      expect(getBody.config.name).toBe("Renamed Loop");
+    });
+
+    test("renames a completed loop", async () => {
+      // Create a unique directory for this test
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-rename-test-"));
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
+
+      try {
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
+        // Create and complete a loop
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspaceId,
+            prompt: "Complete me",
+            name: "Before Completion",
+            planMode: false,
+          }),
+        });
+        expect(createResponse.status).toBe(201);
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
+
+        // Wait for completion
+        await waitForLoopCompletion(loopId);
+
+        // Rename after completion
+        const renameResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "After Completion" }),
+        });
+        expect(renameResponse.status).toBe(200);
+        const renameBody = await renameResponse.json();
+        expect(renameBody.config.name).toBe("After Completion");
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+      }
+    });
+
+    test("trims whitespace from name", async () => {
+      // Create a draft loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Test trim",
+          draft: true,
+          planMode: false,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Rename with whitespace
+      const renameResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "  Trimmed Name  " }),
+      });
+      expect(renameResponse.status).toBe(200);
+      const renameBody = await renameResponse.json();
+      expect(renameBody.config.name).toBe("Trimmed Name");
+    });
+
+    test("returns 404 for renaming non-existent loop", async () => {
+      const response = await fetch(`${baseUrl}/api/loops/non-existent-id`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "New Name" }),
+      });
+      expect(response.status).toBe(404);
+    });
+
+    test("returns 400 for empty name", async () => {
+      // Create a draft loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Test empty name",
+          draft: true,
+          planMode: false,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Try to rename with empty string
+      const renameResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "" }),
+      });
+      expect(renameResponse.status).toBe(400);
+      const renameBody = await renameResponse.json();
+      expect(renameBody.error).toBe("validation_error");
+      expect(renameBody.message).toContain("empty");
+    });
+
+    test("returns 400 for whitespace-only name", async () => {
+      // Create a draft loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Test whitespace name",
+          draft: true,
+          planMode: false,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Try to rename with whitespace-only string
+      const renameResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "   " }),
+      });
+      expect(renameResponse.status).toBe(400);
+      const renameBody = await renameResponse.json();
+      expect(renameBody.error).toBe("validation_error");
+      expect(renameBody.message).toContain("empty");
+    });
+  });
 });
