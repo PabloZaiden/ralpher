@@ -60,7 +60,12 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     saving: workspaceCreating,
     error: workspaceError,
     createWorkspace,
+    deleteWorkspace,
+    refresh: refreshWorkspaces,
   } = useWorkspaces();
+  
+  // Selected workspace filter (null = "All Workspaces")
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
@@ -331,21 +336,28 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     }
   }
 
-  // Group loops by status
-  const draftLoops = loops.filter((loop) => loop.state.status === "draft");
-  const activeLoops = loops.filter(
+  // Filter loops by selected workspace first
+  const filteredLoops = selectedWorkspaceId === null
+    ? loops // "All" - show all loops
+    : selectedWorkspaceId === "__unassigned__"
+      ? loops.filter((loop) => !loop.config.workspaceId) // Unassigned - no workspace
+      : loops.filter((loop) => loop.config.workspaceId === selectedWorkspaceId);
+
+  // Group filtered loops by status
+  const draftLoops = filteredLoops.filter((loop) => loop.state.status === "draft");
+  const activeLoops = filteredLoops.filter(
     (loop) =>
       loop.state.status === "running" ||
       loop.state.status === "waiting" ||
       loop.state.status === "starting"
   );
-  const completedLoops = loops.filter(
+  const completedLoops = filteredLoops.filter(
     (loop) => loop.state.status === "completed"
   );
-  const archivedLoops = loops.filter(
+  const archivedLoops = filteredLoops.filter(
     (loop) => loop.state.status === "merged" || loop.state.status === "pushed" || loop.state.status === "deleted"
   );
-  const otherLoops = loops.filter(
+  const otherLoops = filteredLoops.filter(
     (loop) =>
       !["draft", "running", "waiting", "starting", "completed", "merged", "pushed", "deleted"].includes(
         loop.state.status
@@ -413,6 +425,90 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           </div>
         )}
 
+        {/* Workspace filter */}
+        {workspaces.length > 0 && (
+          <div className="mb-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Workspace:</span>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setSelectedWorkspaceId(null)}
+                  className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                    selectedWorkspaceId === null
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                  }`}
+                >
+                  All ({loops.length})
+                </button>
+                {workspaces.map((workspace) => {
+                  const workspaceLoopCount = loops.filter(l => l.config.workspaceId === workspace.id).length;
+                  const isSelected = selectedWorkspaceId === workspace.id;
+                  const isEmpty = workspaceLoopCount === 0;
+                  return (
+                    <div key={workspace.id} className="flex items-center gap-1">
+                      <button
+                        onClick={() => setSelectedWorkspaceId(workspace.id)}
+                        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                          isSelected
+                            ? "bg-blue-600 text-white"
+                            : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                        }`}
+                        title={workspace.directory}
+                      >
+                        {workspace.name} ({workspaceLoopCount})
+                      </button>
+                      {isEmpty && (
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (confirm(`Delete workspace "${workspace.name}"?`)) {
+                              const result = await deleteWorkspace(workspace.id);
+                              if (!result.success) {
+                                alert(result.error || "Failed to delete workspace");
+                              } else {
+                                // If we were viewing this workspace, go back to "All"
+                                if (selectedWorkspaceId === workspace.id) {
+                                  setSelectedWorkspaceId(null);
+                                }
+                                await refreshWorkspaces();
+                              }
+                            }
+                          }}
+                          className="p-1 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
+                          title="Delete empty workspace"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                {/* Unassigned loops indicator */}
+                {(() => {
+                  const unassignedCount = loops.filter(l => !l.config.workspaceId).length;
+                  if (unassignedCount === 0) return null;
+                  return (
+                    <button
+                      onClick={() => setSelectedWorkspaceId("__unassigned__")}
+                      className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                        selectedWorkspaceId === "__unassigned__"
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600"
+                      }`}
+                      title="Loops without a workspace"
+                    >
+                      Unassigned ({unassignedCount})
+                    </button>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Loading state */}
         {loading && loops.length === 0 && (
           <div className="flex items-center justify-center py-12">
@@ -420,7 +516,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           </div>
         )}
 
-        {/* Empty state */}
+        {/* Empty state - no loops at all */}
         {!loading && loops.length === 0 && (
           <div className="text-center py-12">
             <div className="text-gray-400 dark:text-gray-500 mb-4">
@@ -443,6 +539,35 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
             </h3>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Click "New Loop" to create your first Ralph Loop.
+            </p>
+          </div>
+        )}
+
+        {/* Empty state - workspace selected but no loops in this workspace */}
+        {!loading && loops.length > 0 && filteredLoops.length === 0 && selectedWorkspaceId !== null && (
+          <div className="text-center py-12">
+            <div className="text-gray-400 dark:text-gray-500 mb-4">
+              <svg
+                className="mx-auto h-12 w-12"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+              No loops in this workspace
+            </h3>
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {selectedWorkspaceId === "__unassigned__"
+                ? "All loops are assigned to a workspace."
+                : "Create a new loop in this workspace or switch to \"All\"."}
             </p>
           </div>
         )}
