@@ -347,8 +347,14 @@ export const loopsCrudRoutes = {
         const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};
         
         if (body["name"] !== undefined) {
-          const name = body["name"] as string;
-          updates.name = typeof name === "string" ? name.trim() : name;
+          if (typeof body["name"] !== "string") {
+            return errorResponse("validation_error", "Name must be a string");
+          }
+          const trimmedName = body["name"].trim();
+          if (trimmedName === "") {
+            return errorResponse("validation_error", "Name cannot be empty");
+          }
+          updates.name = trimmedName;
         }
         if (body["directory"] !== undefined) updates.directory = body["directory"] as string;
         if (body["prompt"] !== undefined) updates.prompt = body["prompt"] as string;

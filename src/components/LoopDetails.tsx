@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type { FileDiff, FileContentResponse, ModelInfo } from "../types";
 import type { ReviewComment } from "../types/loop";
 import { useLoop, useMarkdownPreference } from "../hooks";
-import { Badge, Button, getStatusBadgeVariant } from "./common";
+import { Badge, Button, getStatusBadgeVariant, EditIcon } from "./common";
 import { LogViewer } from "./LogViewer";
 import { TodoViewer } from "./TodoViewer";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -434,19 +434,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
               aria-label="Rename loop"
               title="Rename loop"
             >
-              <svg
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                />
-              </svg>
+              <EditIcon />
             </button>
             <Badge variant={getStatusBadgeVariant(state.status)} size="sm">
               {getStatusLabel(state.status)}

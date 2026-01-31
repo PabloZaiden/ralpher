@@ -1015,5 +1015,59 @@ describe("Loops CRUD API Integration", () => {
       });
       expect(response.status).toBe(404);
     });
+
+    test("returns 400 for empty name", async () => {
+      // Create a draft loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Test empty name",
+          draft: true,
+          planMode: false,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Try to rename with empty string
+      const renameResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "" }),
+      });
+      expect(renameResponse.status).toBe(400);
+      const renameBody = await renameResponse.json();
+      expect(renameBody.error).toBe("validation_error");
+      expect(renameBody.message).toContain("empty");
+    });
+
+    test("returns 400 for whitespace-only name", async () => {
+      // Create a draft loop
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Test whitespace name",
+          draft: true,
+          planMode: false,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      // Try to rename with whitespace-only string
+      const renameResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "   " }),
+      });
+      expect(renameResponse.status).toBe(400);
+      const renameBody = await renameResponse.json();
+      expect(renameBody.error).toBe("validation_error");
+      expect(renameBody.message).toContain("empty");
+    });
   });
 });
