@@ -2,11 +2,31 @@
  * CreateLoopForm component for creating new Ralph Loops.
  */
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
 import type { CreateLoopRequest, ModelInfo, BranchInfo } from "../types";
 import type { WorkspaceWithLoopCount, CreateWorkspaceRequest } from "../types/workspace";
 import { Button } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
+
+/** State for action buttons, exposed via renderActions prop */
+export interface CreateLoopFormActionState {
+  /** Whether the form is currently submitting */
+  isSubmitting: boolean;
+  /** Whether the form can be submitted (has required fields) */
+  canSubmit: boolean;
+  /** Whether we're editing an existing loop */
+  isEditing: boolean;
+  /** Whether we're editing a draft loop */
+  isEditingDraft: boolean;
+  /** Whether plan mode is enabled */
+  planMode: boolean;
+  /** Handler for cancel button */
+  onCancel: () => void;
+  /** Handler for submit button (creates/starts the loop) */
+  onSubmit: () => void;
+  /** Handler for save as draft button */
+  onSaveAsDraft: () => void;
+}
 
 export interface CreateLoopFormProps {
   /** Callback when form is submitted. Returns true if successful, false otherwise. */
@@ -60,6 +80,12 @@ export interface CreateLoopFormProps {
   workspaceCreating?: boolean;
   /** Workspace-related error */
   workspaceError?: string | null;
+  /** 
+   * Optional render prop for action buttons. When provided, action buttons 
+   * are NOT rendered inside the form - caller is responsible for rendering them.
+   * This is useful for rendering actions in a Modal footer (sticky position).
+   */
+  renderActions?: (state: CreateLoopFormActionState) => void;
 }
 
 export function CreateLoopForm({
@@ -83,6 +109,7 @@ export function CreateLoopForm({
   onCreateWorkspace,
   workspaceCreating = false,
   workspaceError = null,
+  renderActions,
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
   
@@ -248,6 +275,44 @@ export function CreateLoopForm({
 
   const isSubmitting = loading || submitting;
 
+  // Form ref for programmatic submission
+  const formRef = useRef<HTMLFormElement>(null);
+  
+  // Check if form can be submitted
+  const canSubmit = !!selectedWorkspaceId && !!prompt.trim();
+  
+  // Handler for submit button click (when rendered externally)
+  const handleSubmitClick = useCallback(() => {
+    if (formRef.current) {
+      formRef.current.requestSubmit();
+    }
+  }, []);
+  
+  // Handler for save as draft click (when rendered externally)
+  const handleSaveAsDraftClick = useCallback(() => {
+    if (formRef.current && canSubmit) {
+      // Create a synthetic event and call handleSubmit with draft flag
+      const syntheticEvent = { preventDefault: () => {} } as FormEvent;
+      handleSubmit(syntheticEvent, true);
+    }
+  }, [canSubmit, handleSubmit]);
+  
+  // Call renderActions whenever action state changes
+  useEffect(() => {
+    if (renderActions) {
+      renderActions({
+        isSubmitting,
+        canSubmit,
+        isEditing,
+        isEditingDraft,
+        planMode,
+        onCancel,
+        onSubmit: handleSubmitClick,
+        onSaveAsDraft: handleSaveAsDraftClick,
+      });
+    }
+  }, [renderActions, isSubmitting, canSubmit, isEditing, isEditingDraft, planMode, onCancel, handleSubmitClick, handleSaveAsDraftClick]);
+
   // Group models by provider and sort by name
   const modelsByProvider = models.reduce<Record<string, ModelInfo[]>>(
     (acc, model) => {
@@ -297,7 +362,7 @@ export function CreateLoopForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
       {/* Workspace Selection */}
       <div>
         <WorkspaceSelector
@@ -468,8 +533,8 @@ export function CreateLoopForm({
           onChange={(e) => setPrompt(e.target.value)}
           placeholder={planMode ? "Describe what you want to achieve. The AI will create a detailed plan based on this." : "Do everything that's pending in the plan"}
           required
-          rows={5}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+          rows={3}
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 min-h-[76px] sm:min-h-[120px] resize-y"
         />
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           The prompt sent to the AI agent at the start of each iteration
@@ -489,7 +554,11 @@ export function CreateLoopForm({
             <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Plan Mode
             </span>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {/* Short description on mobile, full description on desktop */}
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 sm:hidden">
+              Review AI plan before execution
+            </p>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
               Create and review a plan before starting the loop. The AI will generate a plan based on your prompt, and you can provide feedback before execution begins.
             </p>
           </div>
@@ -596,39 +665,41 @@ export function CreateLoopForm({
         </div>
       )}
 
-      {/* Actions */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-        {/* Left side - Save as Draft / Update Draft button */}
-        {(!isEditing || isEditingDraft) && (
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={(e) => handleSubmit(e, true)}
-            disabled={isSubmitting || !selectedWorkspaceId || !prompt.trim()}
-            loading={isSubmitting}
-          >
-            {isEditingDraft ? "Update Draft" : "Save as Draft"}
-          </Button>
-        )}
-        
-        {/* Right side - Cancel and Create/Start buttons */}
-        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 sm:ml-auto">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onCancel}
-            disabled={isSubmitting}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" loading={isSubmitting}>
-            {isEditing 
-              ? (planMode ? "Start Plan" : "Start Loop")
-              : (planMode ? "Create Plan" : "Create Loop")
-            }
-          </Button>
+      {/* Actions - only render inline if renderActions prop is not provided */}
+      {!renderActions && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          {/* Left side - Save as Draft / Update Draft button */}
+          {(!isEditing || isEditingDraft) && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={(e) => handleSubmit(e, true)}
+              disabled={isSubmitting || !selectedWorkspaceId || !prompt.trim()}
+              loading={isSubmitting}
+            >
+              {isEditingDraft ? "Update Draft" : "Save as Draft"}
+            </Button>
+          )}
+          
+          {/* Right side - Cancel and Create/Start buttons */}
+          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 sm:ml-auto">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onCancel}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" loading={isSubmitting}>
+              {isEditing 
+                ? (planMode ? "Start Plan" : "Start Loop")
+                : (planMode ? "Create Plan" : "Create Loop")
+              }
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </form>
   );
 }

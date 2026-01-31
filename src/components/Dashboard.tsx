@@ -7,7 +7,7 @@ import type { UncommittedChangesError, ModelInfo, HealthResponse, BranchInfo } f
 import { useLoops, useServerSettings, useWorkspaces } from "../hooks";
 import { Button, Modal } from "./common";
 import { LoopCard } from "./LoopCard";
-import { CreateLoopForm } from "./CreateLoopForm";
+import { CreateLoopForm, type CreateLoopFormActionState } from "./CreateLoopForm";
 import { ConnectionStatusBar } from "./ConnectionStatusBar";
 import { ServerSettingsModal } from "./ServerSettingsModal";
 import {
@@ -123,6 +123,9 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     open: false,
     loopId: null,
   });
+
+  // State for create loop form actions (for rendering in modal footer)
+  const [formActionState, setFormActionState] = useState<CreateLoopFormActionState | null>(null);
 
   // Model selection state
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -779,11 +782,50 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
             title={isEditing ? "Edit Draft Loop" : "Create New Loop"}
             description={isEditing ? "Update your draft loop configuration." : "Configure a new Ralph Loop for autonomous AI development."}
             size="lg"
+            footer={formActionState && (
+              <>
+                {/* Left side - Save as Draft / Update Draft button */}
+                {(!formActionState.isEditing || formActionState.isEditingDraft) && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={formActionState.onSaveAsDraft}
+                    disabled={formActionState.isSubmitting || !formActionState.canSubmit}
+                    loading={formActionState.isSubmitting}
+                    className="sm:mr-auto"
+                  >
+                    {formActionState.isEditingDraft ? "Update Draft" : "Save as Draft"}
+                  </Button>
+                )}
+                
+                {/* Right side - Cancel and Create/Start buttons */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={formActionState.onCancel}
+                  disabled={formActionState.isSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="button"
+                  onClick={formActionState.onSubmit} 
+                  loading={formActionState.isSubmitting}
+                  disabled={!formActionState.canSubmit}
+                >
+                  {formActionState.isEditing 
+                    ? (formActionState.planMode ? "Start Plan" : "Start Loop")
+                    : (formActionState.planMode ? "Create Plan" : "Create Loop")
+                  }
+                </Button>
+              </>
+            )}
           >
             <CreateLoopForm
               editLoopId={isEditing ? editLoop.config.id : undefined}
               initialLoopData={initialLoopData}
               isEditingDraft={isEditingDraft}
+              renderActions={setFormActionState}
               onSubmit={async (request) => {
                 // If editing a draft
                 if (isEditing) {
