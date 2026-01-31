@@ -32,6 +32,9 @@ export interface LoopConfig {
   /** ISO 8601 timestamp of the last configuration update */
   updatedAt: string;
 
+  /** Workspace ID this loop belongs to (optional for backward compatibility) */
+  workspaceId?: string;
+
   /** Model configuration for AI provider and model selection (optional - uses backend default if not set) */
   model?: ModelConfig;
 

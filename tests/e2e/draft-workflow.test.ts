@@ -19,6 +19,7 @@ describe("Draft Loop E2E Workflow", () => {
   let testWorkDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
+  let testWorkspaceId: string;
 
   // Helper function to poll for loop status
   async function waitForLoopStatus(
@@ -38,6 +39,29 @@ describe("Draft Loop E2E Workflow", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     return false;
+  }
+
+  // Helper to create or get a workspace for a directory
+  async function getOrCreateWorkspace(directory: string, name?: string): Promise<string> {
+    const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name || directory.split("/").pop() || "Test",
+        directory,
+      }),
+    });
+    const data = await createResponse.json();
+    
+    if (createResponse.status === 409 && data.existingWorkspace) {
+      return data.existingWorkspace.id;
+    }
+    
+    if (createResponse.ok && data.id) {
+      return data.id;
+    }
+    
+    throw new Error(`Failed to create workspace: ${JSON.stringify(data)}`);
   }
 
   beforeAll(async () => {
@@ -71,6 +95,9 @@ describe("Draft Loop E2E Workflow", () => {
       },
     });
     baseUrl = server.url.toString().replace(/\/$/, "");
+
+    // Create workspace for tests
+    testWorkspaceId = await getOrCreateWorkspace(testWorkDir, "Draft E2E Test Workspace");
   });
 
   afterAll(async () => {
@@ -123,7 +150,7 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        directory: testWorkDir,
+        workspaceId: testWorkspaceId,
         prompt: "Initial task",
         draft: true,
       }),
@@ -212,7 +239,7 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        directory: testWorkDir,
+        workspaceId: testWorkspaceId,
         prompt: "Create a plan for feature X",
         planMode: true,
         draft: true,
@@ -300,12 +327,15 @@ describe("Draft Loop E2E Workflow", () => {
     await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
     
     try {
+      // Create workspace for the unique directory
+      const uniqueWorkspaceId = await getOrCreateWorkspace(uniqueWorkDir, "Quick Test Workspace");
+
       // Step 1: Create draft
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: uniqueWorkDir,
+          workspaceId: uniqueWorkspaceId,
           prompt: "Quick task",
           draft: true,
         }),
@@ -345,7 +375,7 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        directory: testWorkDir,
+        workspaceId: testWorkspaceId,
         prompt: "Task",
       }),
     });
@@ -374,7 +404,7 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        directory: testWorkDir,
+        workspaceId: testWorkspaceId,
         prompt: "Test task",
         planMode: true,
         draft: true,
@@ -418,7 +448,7 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        directory: testWorkDir,
+        workspaceId: testWorkspaceId,
         prompt: "Test task",
         planMode: true,
         draft: true,
@@ -479,7 +509,7 @@ describe("Draft Loop E2E Workflow", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        directory: testWorkDir,
+        workspaceId: testWorkspaceId,
         prompt: "Test task",
         clearPlanningFolder: true,
         draft: true,

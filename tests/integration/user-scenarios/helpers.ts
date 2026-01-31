@@ -43,6 +43,8 @@ export interface TestServerContext {
   mockBackend: ConfigurableMockBackend;
   /** Local git remote path (for push tests) */
   remoteDir?: string;
+  /** Default workspace ID for this test context */
+  workspaceId: string;
 }
 
 /**
@@ -355,6 +357,9 @@ export async function setupTestServer(options: SetupServerOptions = {}): Promise
 
   const baseUrl = server.url.toString().replace(/\/$/, "");
 
+  // Create a default workspace for the test work directory
+  const workspaceId = await getOrCreateWorkspace(baseUrl, workDir, "Test Workspace");
+
   return {
     dataDir,
     workDir,
@@ -363,6 +368,7 @@ export async function setupTestServer(options: SetupServerOptions = {}): Promise
     baseUrl,
     mockBackend,
     remoteDir,
+    workspaceId,
   };
 }
 
@@ -398,6 +404,36 @@ export async function teardownTestServer(ctx?: TestServerContext | null): Promis
 }
 
 /**
+ * Get or create a workspace for a directory.
+ * Returns the workspace ID.
+ */
+export async function getOrCreateWorkspace(
+  baseUrl: string,
+  directory: string,
+  name?: string
+): Promise<string> {
+  const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: name || directory.split("/").pop() || "Test",
+      directory,
+    }),
+  });
+  const data = await createResponse.json();
+
+  if (createResponse.status === 409 && data.existingWorkspace) {
+    return data.existingWorkspace.id;
+  }
+
+  if (createResponse.ok && data.id) {
+    return data.id;
+  }
+
+  throw new Error(`Failed to create workspace: ${JSON.stringify(data)}`);
+}
+
+/**
  * Create a loop via the API.
  */
 export async function createLoopViaAPI(
@@ -411,10 +447,15 @@ export async function createLoopViaAPI(
     baseBranch?: string;
   }
 ): Promise<{ status: number; body: Loop | { error: string; message: string } }> {
+  // First, get or create a workspace for the directory
+  const workspaceId = await getOrCreateWorkspace(baseUrl, options.directory);
+
+  // Now create the loop with workspaceId instead of directory
+  const { directory: _directory, ...restOptions } = options;
   const response = await fetch(`${baseUrl}/api/loops`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(options),
+    body: JSON.stringify({ ...restOptions, workspaceId }),
   });
 
   const body = await response.json();

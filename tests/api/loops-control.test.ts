@@ -22,6 +22,7 @@ describe("Loops Control API Integration", () => {
   let testBareRepoDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
+  let testWorkspaceId: string;
 
   // Helper function to poll for loop completion
   async function waitForLoopCompletion(loopId: string, timeoutMs = 10000): Promise<void> {
@@ -41,6 +42,32 @@ describe("Loops Control API Integration", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     throw new Error(`Loop ${loopId} did not complete within ${timeoutMs}ms. Last status: ${lastStatus}`);
+  }
+
+  // Helper to create or get a workspace for a directory
+  async function getOrCreateWorkspace(directory: string, name?: string): Promise<string> {
+    // Try to create a workspace for this directory
+    const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name || directory.split("/").pop() || "Test",
+        directory,
+      }),
+    });
+    const data = await createResponse.json();
+    
+    // If conflict (workspace exists), return the existing workspace ID
+    if (createResponse.status === 409 && data.existingWorkspace) {
+      return data.existingWorkspace.id;
+    }
+    
+    // If created successfully, return the new workspace ID
+    if (createResponse.ok && data.id) {
+      return data.id;
+    }
+    
+    throw new Error(`Failed to create workspace: ${JSON.stringify(data)}`);
   }
 
   beforeAll(async () => {
@@ -87,6 +114,9 @@ describe("Loops Control API Integration", () => {
       },
     });
     baseUrl = server.url.toString().replace(/\/$/, "");
+
+    // Create a workspace for the testWorkDir
+    testWorkspaceId = await getOrCreateWorkspace(testWorkDir, "Test Workspace");
   });
 
   afterAll(async () => {
@@ -159,10 +189,9 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Test prompt",
           planMode: true,
-          backend: { type: "mock" },
         }),
       });
       const createBody = await createResponse.json();
@@ -199,7 +228,7 @@ describe("Loops Control API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Test prompt",
           draft: true,
         }),
@@ -230,12 +259,15 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${planTestDir} add .`.quiet();
       await Bun.$`git -C ${planTestDir} commit -m "Initial commit"`.quiet();
 
+      // Create workspace for this directory
+      const workspaceId = await getOrCreateWorkspace(planTestDir);
+
       // Use draft mode to avoid starting the loop in the background
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: planTestDir,
+          workspaceId,
           prompt: "Test",
           draft: true,
         }),
@@ -270,12 +302,15 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${emptyWorkDir} add .`.quiet();
       await Bun.$`git -C ${emptyWorkDir} commit -m "Initial commit"`.quiet();
 
+      // Create workspace for this directory
+      const workspaceId = await getOrCreateWorkspace(emptyWorkDir);
+
       // Use draft mode to avoid starting the loop in the background
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: emptyWorkDir,
+          workspaceId,
           prompt: "Test",
           draft: true,
         }),
@@ -309,12 +344,15 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${statusTestDir} add .`.quiet();
       await Bun.$`git -C ${statusTestDir} commit -m "Initial commit"`.quiet();
 
+      // Create workspace for this directory
+      const workspaceId = await getOrCreateWorkspace(statusTestDir);
+
       // Use draft mode to avoid starting the loop in the background
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: statusTestDir,
+          workspaceId,
           prompt: "Test",
           draft: true,
         }),
@@ -352,12 +390,15 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         // Create a loop - it will auto-start and complete immediately with mock backend
         const createResponse = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Test prompt",
           }),
         });
@@ -393,11 +434,14 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         const createResponse = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Test prompt",
           }),
         });
@@ -430,11 +474,14 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         const createResponse = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Test prompt",
           }),
         });
@@ -467,12 +514,15 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         // Create a loop - it will auto-start and complete immediately with mock backend
         const createResponse = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Test prompt",
           }),
         });
@@ -523,11 +573,14 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         const createResponse = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Test prompt",
           }),
         });
@@ -564,12 +617,15 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         // Create a loop
         const createResponse = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Test prompt",
           }),
         });
@@ -633,12 +689,15 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         // Create a loop without review mode
         const createResponse = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Test prompt",
           }),
         });
@@ -686,12 +745,15 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         // Create a loop
         const createResponse = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Test prompt",
           }),
         });
@@ -741,12 +803,15 @@ describe("Loops Control API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         // Create a loop
         const createResponse = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Test prompt",
           }),
         });

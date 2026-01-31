@@ -45,10 +45,13 @@ export interface ModelInfo {
  * If `planMode: true`, the loop starts in plan review mode before execution.
  * 
  * The loop name is automatically generated from the prompt using AI.
+ * 
+ * The `workspaceId` is required - loops must be created within a workspace.
+ * The directory is automatically derived from the workspace.
  */
 export interface CreateLoopRequest {
-  /** Absolute path to the working directory (must be a git repository) */
-  directory: string;
+  /** Workspace ID to create the loop in (required) */
+  workspaceId: string;
   /** The task prompt/PRD describing what the loop should accomplish */
   prompt: string;
   /** Model configuration for AI provider and model selection */
@@ -275,8 +278,9 @@ export function validateCreateLoopRequest(req: unknown): string | undefined {
 
   const body = req as Record<string, unknown>;
 
-  if (typeof body["directory"] !== "string" || (body["directory"] as string).trim() === "") {
-    return "directory is required and must be a non-empty string";
+  // workspaceId is required
+  if (typeof body["workspaceId"] !== "string" || (body["workspaceId"] as string).trim() === "") {
+    return "workspaceId is required";
   }
 
   if (typeof body["prompt"] !== "string" || (body["prompt"] as string).trim() === "") {

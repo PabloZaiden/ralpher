@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import type { UncommittedChangesError, ModelInfo, HealthResponse, BranchInfo } from "../types";
-import { useLoops, useServerSettings } from "../hooks";
+import { useLoops, useServerSettings, useWorkspaces } from "../hooks";
 import { Button, Modal } from "./common";
 import { LoopCard } from "./LoopCard";
 import { CreateLoopForm } from "./CreateLoopForm";
@@ -52,6 +52,16 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     resetConnections: resetServerConnections,
     resetAll: resetAllSettings,
   } = useServerSettings();
+
+  // Workspace state
+  const {
+    workspaces,
+    loading: workspacesLoading,
+    saving: workspaceCreating,
+    error: workspaceError,
+    createWorkspace,
+    deleteWorkspace,
+  } = useWorkspaces();
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
@@ -112,7 +122,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [lastModel, setLastModel] = useState<{ providerID: string; modelID: string } | null>(null);
-  const [modelsDirectory, setModelsDirectory] = useState("");
+  const [modelsWorkspaceId, setModelsWorkspaceId] = useState<string | null>(null);
 
   // Planning directory check state
   const [planningWarning, setPlanningWarning] = useState<string | null>(null);
@@ -137,25 +147,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       }
     }
     fetchLastModel();
-  }, []);
-
-  // Last directory state
-  const [lastDirectory, setLastDirectory] = useState<string | null>(null);
-
-  // Fetch last directory on mount
-  useEffect(() => {
-    async function fetchLastDirectory() {
-      try {
-        const response = await fetch("/api/preferences/last-directory");
-        if (response.ok) {
-          const data = await response.json();
-          setLastDirectory(data);
-        }
-      } catch {
-        // Ignore errors
-      }
-    }
-    fetchLastDirectory();
   }, []);
 
   // Fetch models when directory changes
@@ -248,24 +239,29 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     }
   }, []);
 
-  // Handle directory change from form
-  // Fetch branches, models, and check planning dir for both spawn and connect modes (unified via PTY+WebSocket)
-  const handleDirectoryChange = useCallback((directory: string) => {
-    if (directory !== modelsDirectory) {
-      setModelsDirectory(directory);
+  // Handle workspace change from form
+  // Fetch branches, models, and check planning dir based on workspace's directory
+  const handleWorkspaceChange = useCallback((workspaceId: string | null) => {
+    if (workspaceId !== modelsWorkspaceId) {
+      setModelsWorkspaceId(workspaceId);
+      
+      // Get directory from workspace
+      const workspace = workspaces.find(w => w.id === workspaceId);
+      const directory = workspace?.directory ?? "";
+      
       fetchModels(directory);
       fetchBranches(directory);
       fetchDefaultBranch(directory);
       checkPlanningDir(directory);
     }
-  }, [modelsDirectory, fetchModels, checkPlanningDir, fetchBranches, fetchDefaultBranch]);
+  }, [modelsWorkspaceId, workspaces, fetchModels, checkPlanningDir, fetchBranches, fetchDefaultBranch]);
 
   // Reset model state when modal closes
   const handleCloseCreateModal = useCallback(() => {
     setShowCreateModal(false);
     setEditDraftId(null);
     setModels([]);
-    setModelsDirectory("");
+    setModelsWorkspaceId(null);
     setPlanningWarning(null);
     setBranches([]);
     setCurrentBranch("");
@@ -322,26 +318,42 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     }
   }
 
-  // Group loops by status
-  const draftLoops = loops.filter((loop) => loop.state.status === "draft");
-  const activeLoops = loops.filter(
-    (loop) =>
-      loop.state.status === "running" ||
-      loop.state.status === "waiting" ||
-      loop.state.status === "starting"
-  );
-  const completedLoops = loops.filter(
-    (loop) => loop.state.status === "completed"
-  );
-  const archivedLoops = loops.filter(
-    (loop) => loop.state.status === "merged" || loop.state.status === "pushed" || loop.state.status === "deleted"
-  );
-  const otherLoops = loops.filter(
-    (loop) =>
-      !["draft", "running", "waiting", "starting", "completed", "merged", "pushed", "deleted"].includes(
-        loop.state.status
-      )
-  );
+  // Helper function to group loops by status
+  const groupLoopsByStatus = (loopsToGroup: typeof loops) => {
+    return {
+      draft: loopsToGroup.filter((loop) => loop.state.status === "draft"),
+      active: loopsToGroup.filter(
+        (loop) =>
+          loop.state.status === "running" ||
+          loop.state.status === "waiting" ||
+          loop.state.status === "starting"
+      ),
+      completed: loopsToGroup.filter((loop) => loop.state.status === "completed"),
+      archived: loopsToGroup.filter(
+        (loop) => loop.state.status === "merged" || loop.state.status === "pushed" || loop.state.status === "deleted"
+      ),
+      other: loopsToGroup.filter(
+        (loop) =>
+          !["draft", "running", "waiting", "starting", "completed", "merged", "pushed", "deleted"].includes(
+            loop.state.status
+          )
+      ),
+    };
+  };
+
+  // Group loops by workspace first, then by status within each workspace
+  const workspaceGroups = workspaces.map((workspace) => {
+    const workspaceLoops = loops.filter((loop) => loop.config.workspaceId === workspace.id);
+    return {
+      workspace,
+      loops: workspaceLoops,
+      statusGroups: groupLoopsByStatus(workspaceLoops),
+    };
+  });
+
+  // Unassigned loops (no workspace)
+  const unassignedLoops = loops.filter((loop) => !loop.config.workspaceId);
+  const unassignedStatusGroups = groupLoopsByStatus(unassignedLoops);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -411,7 +423,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           </div>
         )}
 
-        {/* Empty state */}
+        {/* Empty state - no loops at all */}
         {!loading && loops.length === 0 && (
           <div className="text-center py-12">
             <div className="text-gray-400 dark:text-gray-500 mb-4">
@@ -438,110 +450,289 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           </div>
         )}
 
-        {/* Drafts section */}
-        {draftLoops.length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Drafts ({draftLoops.length})
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-              {draftLoops.map((loop) => (
-                <LoopCard
-                  key={loop.config.id}
-                  loop={loop}
-                  onClick={() => handleEditDraft(loop.config.id)}
-                  onDelete={() =>
-                    setDeleteModal({ open: true, loopId: loop.config.id })
-                  }
-                />
-              ))}
+        {/* Workspace-grouped loop sections */}
+        {workspaceGroups.map(({ workspace, loops: workspaceLoops, statusGroups }) => {
+          if (workspaceLoops.length === 0) return null;
+          
+          return (
+            <div key={workspace.id} className="mb-10">
+              {/* Workspace header */}
+              <div className="flex items-center gap-3 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                  </svg>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    {workspace.name}
+                  </h2>
+                </div>
+                <span className="text-sm text-gray-500 dark:text-gray-400" title={workspace.directory}>
+                  {workspace.directory}
+                </span>
+                <span className="text-sm text-gray-400 dark:text-gray-500">
+                  ({workspaceLoops.length} {workspaceLoops.length === 1 ? "loop" : "loops"})
+                </span>
+              </div>
+
+              {/* Status sections within workspace */}
+              <div className="space-y-6 pl-2">
+                {/* Drafts */}
+                {statusGroups.draft.length > 0 && (
+                  <section>
+                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      Drafts ({statusGroups.draft.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                      {statusGroups.draft.map((loop) => (
+                        <LoopCard
+                          key={loop.config.id}
+                          loop={loop}
+                          onClick={() => handleEditDraft(loop.config.id)}
+                          onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Active */}
+                {statusGroups.active.length > 0 && (
+                  <section>
+                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      Active ({statusGroups.active.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                      {statusGroups.active.map((loop) => (
+                        <LoopCard
+                          key={loop.config.id}
+                          loop={loop}
+                          onClick={() => onSelectLoop?.(loop.config.id)}
+                          onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Completed */}
+                {statusGroups.completed.length > 0 && (
+                  <section>
+                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      Completed ({statusGroups.completed.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                      {statusGroups.completed.map((loop) => (
+                        <LoopCard
+                          key={loop.config.id}
+                          loop={loop}
+                          onClick={() => onSelectLoop?.(loop.config.id)}
+                          onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
+                          onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Other */}
+                {statusGroups.other.length > 0 && (
+                  <section>
+                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      Other ({statusGroups.other.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                      {statusGroups.other.map((loop) => (
+                        <LoopCard
+                          key={loop.config.id}
+                          loop={loop}
+                          onClick={() => onSelectLoop?.(loop.config.id)}
+                          onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
+                          onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Archived */}
+                {statusGroups.archived.length > 0 && (
+                  <section>
+                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      Archived ({statusGroups.archived.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                      {statusGroups.archived.map((loop) => (
+                        <LoopCard
+                          key={loop.config.id}
+                          loop={loop}
+                          onClick={() => onSelectLoop?.(loop.config.id)}
+                          onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
+                          onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
             </div>
-          </section>
+          );
+        })}
+
+        {/* Unassigned loops section */}
+        {unassignedLoops.length > 0 && (
+          <div className="mb-10">
+            {/* Unassigned header */}
+            <div className="flex items-center gap-3 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                  Unassigned
+                </h2>
+              </div>
+              <span className="text-sm text-gray-400 dark:text-gray-500">
+                ({unassignedLoops.length} {unassignedLoops.length === 1 ? "loop" : "loops"})
+              </span>
+            </div>
+
+            {/* Status sections within unassigned */}
+            <div className="space-y-6 pl-2">
+              {/* Drafts */}
+              {unassignedStatusGroups.draft.length > 0 && (
+                <section>
+                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                    Drafts ({unassignedStatusGroups.draft.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                    {unassignedStatusGroups.draft.map((loop) => (
+                      <LoopCard
+                        key={loop.config.id}
+                        loop={loop}
+                        onClick={() => handleEditDraft(loop.config.id)}
+                        onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Active */}
+              {unassignedStatusGroups.active.length > 0 && (
+                <section>
+                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                    Active ({unassignedStatusGroups.active.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                    {unassignedStatusGroups.active.map((loop) => (
+                      <LoopCard
+                        key={loop.config.id}
+                        loop={loop}
+                        onClick={() => onSelectLoop?.(loop.config.id)}
+                        onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Completed */}
+              {unassignedStatusGroups.completed.length > 0 && (
+                <section>
+                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                    Completed ({unassignedStatusGroups.completed.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                    {unassignedStatusGroups.completed.map((loop) => (
+                      <LoopCard
+                        key={loop.config.id}
+                        loop={loop}
+                        onClick={() => onSelectLoop?.(loop.config.id)}
+                        onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
+                        onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Other */}
+              {unassignedStatusGroups.other.length > 0 && (
+                <section>
+                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                    Other ({unassignedStatusGroups.other.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                    {unassignedStatusGroups.other.map((loop) => (
+                      <LoopCard
+                        key={loop.config.id}
+                        loop={loop}
+                        onClick={() => onSelectLoop?.(loop.config.id)}
+                        onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
+                        onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Archived */}
+              {unassignedStatusGroups.archived.length > 0 && (
+                <section>
+                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                    Archived ({unassignedStatusGroups.archived.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                    {unassignedStatusGroups.archived.map((loop) => (
+                      <LoopCard
+                        key={loop.config.id}
+                        loop={loop}
+                        onClick={() => onSelectLoop?.(loop.config.id)}
+                        onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
+                        onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </div>
+          </div>
         )}
 
-        {/* Active loops section */}
-        {activeLoops.length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Active ({activeLoops.length})
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-              {activeLoops.map((loop) => (
-                <LoopCard
-                  key={loop.config.id}
-                  loop={loop}
-                  onClick={() => onSelectLoop?.(loop.config.id)}
-                  onDelete={() =>
-                    setDeleteModal({ open: true, loopId: loop.config.id })
-                  }
-                />
-              ))}
+        {/* Empty workspaces section - show workspaces with no loops that can be deleted */}
+        {workspaceGroups.filter(g => g.loops.length === 0).length > 0 && (
+          <div className="mb-10">
+            <div className="flex items-center gap-3 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
+              <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-300">
+                Empty Workspaces
+              </h2>
             </div>
-          </section>
-        )}
-
-        {/* Completed loops section */}
-        {completedLoops.length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Completed ({completedLoops.length})
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-              {completedLoops.map((loop) => (
-                <LoopCard
-                  key={loop.config.id}
-                  loop={loop}
-                  onClick={() => onSelectLoop?.(loop.config.id)}
-                  onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
-                  onDelete={() =>
-                    setDeleteModal({ open: true, loopId: loop.config.id })
-                  }
-                />
-              ))}
+            <div className="flex flex-wrap gap-2">
+              {workspaceGroups
+                .filter(g => g.loops.length === 0)
+                .map(({ workspace }) => (
+                  <div key={workspace.id} className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-md">
+                    <span className="text-sm text-gray-700 dark:text-gray-300">{workspace.name}</span>
+                    <button
+                      onClick={async () => {
+                        if (confirm(`Delete workspace "${workspace.name}"?`)) {
+                          const result = await deleteWorkspace(workspace.id);
+                          if (!result.success) {
+                            alert(result.error || "Failed to delete workspace");
+                          }
+                        }
+                      }}
+                      className="p-1 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
+                      title="Delete empty workspace"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
             </div>
-          </section>
-        )}
-
-        {/* Other loops section */}
-        {otherLoops.length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Other ({otherLoops.length})
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-              {otherLoops.map((loop) => (
-                <LoopCard
-                  key={loop.config.id}
-                  loop={loop}
-                  onClick={() => onSelectLoop?.(loop.config.id)}
-                  onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
-                  onDelete={() =>
-                    setDeleteModal({ open: true, loopId: loop.config.id })
-                  }
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Archived loops section (merged/deleted) */}
-        {archivedLoops.length > 0 && (
-          <section>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Archived ({archivedLoops.length})
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-              {archivedLoops.map((loop) => (
-                <LoopCard
-                  key={loop.config.id}
-                  loop={loop}
-                  onClick={() => onSelectLoop?.(loop.config.id)}
-                  onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
-                  onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
-                />
-              ))}
-            </div>
-          </section>
+          </div>
         )}
       </main>
 
@@ -661,16 +852,21 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   if (request.model) {
                     setLastModel(request.model);
                   }
-                  // Save last used directory
-                  try {
-                    await fetch("/api/preferences/last-directory", {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ directory: request.directory }),
-                    });
-                    setLastDirectory(request.directory);
-                  } catch {
-                    // Ignore errors saving preference
+                  // Save last used directory (get it from the workspace)
+                  // Save last used directory preference (for API compatibility)
+                  if (request.workspaceId) {
+                    const workspace = workspaces.find(w => w.id === request.workspaceId);
+                    if (workspace) {
+                      try {
+                        await fetch("/api/preferences/last-directory", {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ directory: workspace.directory }),
+                        });
+                      } catch {
+                        // Ignore errors saving preference
+                      }
+                    }
                   }
                   return true; // Success - close the modal
                 }
@@ -681,13 +877,23 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               models={models}
               modelsLoading={modelsLoading}
               lastModel={lastModel}
-              onDirectoryChange={handleDirectoryChange}
+              onWorkspaceChange={handleWorkspaceChange}
               planningWarning={planningWarning}
               branches={branches}
               branchesLoading={branchesLoading}
               currentBranch={currentBranch}
               defaultBranch={defaultBranch}
-              initialDirectory={lastDirectory ?? ""}
+              workspaces={workspaces}
+              workspacesLoading={workspacesLoading}
+              onCreateWorkspace={async (request) => {
+                const result = await createWorkspace(request);
+                if (result) {
+                  return { id: result.id, directory: result.directory };
+                }
+                return null;
+              }}
+              workspaceCreating={workspaceCreating}
+              workspaceError={workspaceError}
             />
           </Modal>
         );

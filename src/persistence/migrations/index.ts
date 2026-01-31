@@ -287,6 +287,104 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 10,
+    name: "add_workspaces_table",
+    up: (db) => {
+      // Create the workspaces table (CREATE TABLE IF NOT EXISTS is idempotent)
+      db.run(`
+        CREATE TABLE IF NOT EXISTS workspaces (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          directory TEXT UNIQUE NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `);
+      
+      // Create index on directory for efficient lookups
+      db.run("CREATE INDEX IF NOT EXISTS idx_workspaces_directory ON workspaces(directory)");
+      
+      log.info("Created workspaces table with directory index");
+      
+      // Add workspace_id column to loops table
+      if (tableExists(db, "loops")) {
+        const columns = getTableColumns(db, "loops");
+        if (!columns.includes("workspace_id")) {
+          db.run("ALTER TABLE loops ADD COLUMN workspace_id TEXT REFERENCES workspaces(id)");
+          log.info("Added workspace_id column to loops table");
+        }
+        
+        // Create index on workspace_id for efficient queries
+        db.run("CREATE INDEX IF NOT EXISTS idx_loops_workspace_id ON loops(workspace_id)");
+        log.info("Created workspace_id index on loops table");
+      }
+    },
+  },
+  {
+    version: 11,
+    name: "migrate_existing_loops_to_workspaces",
+    up: (db) => {
+      // This migration creates workspaces for existing loops that don't have a workspace_id
+      // It groups loops by directory and creates a workspace for each unique directory
+      
+      if (!tableExists(db, "loops") || !tableExists(db, "workspaces")) {
+        log.debug("loops or workspaces table does not exist, skipping migration 11");
+        return;
+      }
+      
+      // Find all distinct directories from loops without a workspace_id
+      const orphanedDirectories = db.query(`
+        SELECT DISTINCT directory 
+        FROM loops 
+        WHERE workspace_id IS NULL AND directory IS NOT NULL AND directory != ''
+      `).all() as Array<{ directory: string }>;
+      
+      if (orphanedDirectories.length === 0) {
+        log.debug("No orphaned loops found, skipping workspace migration");
+        return;
+      }
+      
+      log.info(`Found ${orphanedDirectories.length} directories with orphaned loops, creating workspaces...`);
+      
+      const now = new Date().toISOString();
+      
+      for (const { directory } of orphanedDirectories) {
+        // Check if a workspace already exists for this directory
+        const existing = db.query("SELECT id FROM workspaces WHERE directory = ?").get(directory) as { id: string } | null;
+        
+        let workspaceId: string;
+        
+        if (existing) {
+          workspaceId = existing.id;
+          log.debug(`Workspace already exists for directory: ${directory}`);
+        } else {
+          // Generate a workspace ID (simple UUID-like format)
+          workspaceId = `ws_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          
+          // Create workspace name from the directory path (use last path segment)
+          const pathParts = directory.replace(/\/$/, "").split("/");
+          const name = pathParts[pathParts.length - 1] || directory;
+          
+          // Create the workspace
+          db.run(
+            "INSERT INTO workspaces (id, name, directory, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            [workspaceId, name, directory, now, now]
+          );
+          log.info(`Created workspace "${name}" for directory: ${directory}`);
+        }
+        
+        // Update all loops in this directory to point to the workspace
+        const result = db.run(
+          "UPDATE loops SET workspace_id = ? WHERE directory = ? AND workspace_id IS NULL",
+          [workspaceId, directory]
+        );
+        log.info(`Updated ${result.changes} loops to use workspace: ${workspaceId}`);
+      }
+      
+      log.info("Completed migration of existing loops to workspaces");
+    },
+  },
 ];
 
 /**
