@@ -417,4 +417,113 @@ describe("LoopManager", () => {
       expect(newLoop.state.status).toBe("idle");
     });
   });
+
+  describe("forceResetAll", () => {
+    test("preserves planning loops during reset", async () => {
+      // Create a loop and set it to planning status
+      const planningLoop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Planning task",
+        planMode: true,
+      });
+
+      expect(planningLoop.state.status).toBe("planning");
+      
+      // Set up plan mode state with isPlanReady = true
+      await updateLoopState(planningLoop.config.id, {
+        ...planningLoop.state,
+        status: "planning",
+        planMode: {
+          active: true,
+          feedbackRounds: 0,
+          planningFolderCleared: false,
+          isPlanReady: true,
+          planContent: "Test plan content",
+        },
+      });
+
+      // Call forceResetAll
+      const result = await manager.forceResetAll();
+      
+      expect(result.enginesCleared).toBe(0); // No engines in memory since we didn't start
+      expect(result.loopsReset).toBe(0); // Planning loops should not be reset
+
+      // Verify the planning loop still has planning status
+      const fetchedLoop = await manager.getLoop(planningLoop.config.id);
+      expect(fetchedLoop).not.toBeNull();
+      expect(fetchedLoop!.state.status).toBe("planning");
+      expect(fetchedLoop!.state.planMode?.isPlanReady).toBe(true);
+    });
+
+    test("stops non-planning loops during reset", async () => {
+      // Create a loop and set it to running status
+      const runningLoop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Running task",
+      });
+
+      // Update to running status
+      await updateLoopState(runningLoop.config.id, {
+        ...runningLoop.state,
+        status: "running",
+      });
+
+      // Call forceResetAll
+      const result = await manager.forceResetAll();
+      
+      // Running loops should be reset to stopped
+      expect(result.loopsReset).toBe(1);
+
+      // Verify the running loop is now stopped
+      const fetchedLoop = await manager.getLoop(runningLoop.config.id);
+      expect(fetchedLoop).not.toBeNull();
+      expect(fetchedLoop!.state.status).toBe("stopped");
+    });
+
+    test("preserves planning loops while stopping running loops", async () => {
+      // Create a planning loop
+      const planningLoop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Planning task",
+        planMode: true,
+      });
+
+      await updateLoopState(planningLoop.config.id, {
+        ...planningLoop.state,
+        status: "planning",
+        planMode: {
+          active: true,
+          feedbackRounds: 1,
+          planningFolderCleared: true,
+          isPlanReady: true,
+        },
+      });
+
+      // Create a running loop
+      const runningLoop = await manager.createLoop({
+        directory: testWorkDir,
+        prompt: "Running task",
+      });
+
+      await updateLoopState(runningLoop.config.id, {
+        ...runningLoop.state,
+        status: "running",
+      });
+
+      // Call forceResetAll
+      const result = await manager.forceResetAll();
+      
+      // Only running loop should be reset
+      expect(result.loopsReset).toBe(1);
+
+      // Planning loop should still be in planning status
+      const fetchedPlanningLoop = await manager.getLoop(planningLoop.config.id);
+      expect(fetchedPlanningLoop!.state.status).toBe("planning");
+      expect(fetchedPlanningLoop!.state.planMode?.isPlanReady).toBe(true);
+
+      // Running loop should be stopped
+      const fetchedRunningLoop = await manager.getLoop(runningLoop.config.id);
+      expect(fetchedRunningLoop!.state.status).toBe("stopped");
+    });
+  });
 });

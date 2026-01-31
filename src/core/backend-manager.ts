@@ -93,6 +93,8 @@ class BackendManager {
   private initialized = false;
   /** Custom executor factory for testing */
   private testExecutorFactory: CommandExecutorFactory | null = null;
+  /** Flag to indicate a test backend is being used (should be preserved on reset) */
+  private isTestBackend = false;
 
   /**
    * Initialize the backend manager.
@@ -171,11 +173,29 @@ class BackendManager {
   }
 
   /**
-   * Reset the backend connection.
-   * Aborts all active subscriptions, disconnects, and clears state.
-   * Useful for recovering from stale connections.
+   * Reset all connection state.
+   * Disconnects the backend and clears the cached instance.
+   * Used for recovery when connections become stale.
+   * 
+   * Note: Test backends set via setBackendForTesting() are preserved
+   * so that tests can simulate connection reset without losing their mock.
    */
   async reset(): Promise<void> {
+    // Preserve test backends - they should survive reset
+    // This allows tests to simulate "Reset Connections" without losing the mock
+    if (this.isTestBackend) {
+      // Just abort subscriptions but keep the backend
+      if (this.backend) {
+        this.backend.abortAllSubscriptions();
+      }
+      this.connectionError = null;
+      this.emitEvent({
+        type: "server.reset",
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
     if (this.backend) {
       // Abort all active subscriptions first
       this.backend.abortAllSubscriptions();
@@ -374,6 +394,7 @@ class BackendManager {
   setBackendForTesting(backend: Backend): void {
     this.backend = backend;
     this.initialized = true;
+    this.isTestBackend = true;
   }
 
   /**
@@ -394,6 +415,7 @@ class BackendManager {
     this.connectionError = null;
     this.initialized = false;
     this.testExecutorFactory = null;
+    this.isTestBackend = false;
   }
 
   /**
