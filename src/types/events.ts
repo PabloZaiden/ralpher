@@ -87,7 +87,7 @@ export interface ToolCallData {
  * in the loop lifecycle.
  * 
  * Event categories:
- * - **Lifecycle events**: created, started, completed, stopped, error, deleted
+ * - **Lifecycle events**: created, started, completed, stopped, session_aborted, error, deleted
  * - **Iteration events**: iteration.start, iteration.end
  * - **Activity events**: message, tool_call, progress, log, git.commit
  * - **Completion events**: accepted (merged), discarded, pushed
@@ -106,6 +106,7 @@ export type LoopEvent =
   | LoopGitCommitEvent
   | LoopCompletedEvent
   | LoopStoppedEvent
+  | LoopSessionAbortedEvent
   | LoopErrorEvent
   | LoopDeletedEvent
   | LoopAcceptedEvent
@@ -297,6 +298,21 @@ export interface LoopStoppedEvent {
   /** ID of the loop that was stopped */
   loopId: string;
   /** Reason for stopping (e.g., "User requested stop") */
+  reason: string;
+  /** ISO 8601 timestamp */
+  timestamp: string;
+}
+
+/**
+ * Emitted when a loop's session is aborted without changing status.
+ * Used during connection resets to clean up backend resources while
+ * preserving the loop's current state (e.g., planning loops stay in planning).
+ */
+export interface LoopSessionAbortedEvent {
+  type: "loop.session_aborted";
+  /** ID of the loop whose session was aborted */
+  loopId: string;
+  /** Reason for the session abort (e.g., "Connection reset requested") */
   reason: string;
   /** ISO 8601 timestamp */
   timestamp: string;

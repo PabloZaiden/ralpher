@@ -442,8 +442,8 @@ export class LoopEngine {
    * Used during force reset to preserve planning loops while cleaning up resources.
    * The engine will be cleared from memory, but the loop status remains unchanged.
    */
-  async abortSessionOnly(): Promise<void> {
-    this.emitLog("info", "Aborting session only (preserving status)");
+  async abortSessionOnly(reason = "Connection reset requested"): Promise<void> {
+    this.emitLog("info", `Aborting session only (preserving status): ${reason}`);
     this.aborted = true;
 
     // Clear the persistence callback to prevent stale async operations
@@ -457,6 +457,13 @@ export class LoopEngine {
         // Ignore abort errors
       }
     }
+
+    this.emit({
+      type: "loop.session_aborted",
+      loopId: this.config.id,
+      reason,
+      timestamp: createTimestamp(),
+    });
 
     this.emitLog("info", "Session aborted (status preserved)");
   }

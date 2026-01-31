@@ -1283,4 +1283,88 @@ describe("StopPatternDetector", () => {
       expect(gitIndex).toBeLessThan(clearIndex);
     }, 10000);
   });
+
+  describe("abortSessionOnly", () => {
+    test("emits loop.session_aborted event", async () => {
+      const loop = createTestLoop();
+      mockBackend = createMockBackend([]);
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      // Call abortSessionOnly
+      await engine.abortSessionOnly("Test abort reason");
+
+      // Verify the event was emitted
+      const sessionAbortedEvents = emittedEvents.filter(
+        (e) => e.type === "loop.session_aborted"
+      );
+      expect(sessionAbortedEvents.length).toBe(1);
+      
+      const event = sessionAbortedEvents[0]!;
+      expect(event.type).toBe("loop.session_aborted");
+      if (event.type === "loop.session_aborted") {
+        expect(event.loopId).toBe(loop.config.id);
+        expect(event.reason).toBe("Test abort reason");
+        expect(event.timestamp).toBeDefined();
+      }
+    });
+
+    test("uses default reason when not provided", async () => {
+      const loop = createTestLoop();
+      mockBackend = createMockBackend([]);
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      // Call abortSessionOnly without reason
+      await engine.abortSessionOnly();
+
+      // Verify the event was emitted with default reason
+      const sessionAbortedEvents = emittedEvents.filter(
+        (e) => e.type === "loop.session_aborted"
+      );
+      expect(sessionAbortedEvents.length).toBe(1);
+      
+      const event = sessionAbortedEvents[0]!;
+      if (event.type === "loop.session_aborted") {
+        expect(event.reason).toBe("Connection reset requested");
+      }
+    });
+
+    test("does not change loop status", async () => {
+      const loop = createTestLoop();
+      // Set status to planning
+      loop.state.status = "planning";
+      mockBackend = createMockBackend([]);
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      // Verify initial status
+      expect(engine.state.status).toBe("planning");
+
+      // Call abortSessionOnly
+      await engine.abortSessionOnly();
+
+      // Verify status is unchanged
+      expect(engine.state.status).toBe("planning");
+      
+      // Verify no loop.stopped event was emitted
+      const stoppedEvents = emittedEvents.filter((e) => e.type === "loop.stopped");
+      expect(stoppedEvents.length).toBe(0);
+    });
+  });
 });
