@@ -183,20 +183,20 @@ export function LoopActionBar({
 
       {/* Action bar form */}
       <form onSubmit={handleSubmit} className="p-3 sm:p-4">
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+        <div className="flex flex-row gap-2 sm:gap-3">
           {/* Model selector */}
           <select
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
             disabled={disabled || isSubmitting || modelsLoading}
-            className="w-full sm:w-48 h-11 sm:h-9 text-sm rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+            className="w-auto min-w-32 flex-shrink sm:w-48 h-9 text-sm rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
           >
             {modelsLoading ? (
               <option value="">Loading...</option>
             ) : (
               <>
                 <option value="">
-                  {currentModelKey ? `Current: ${getModelDisplayName(currentModelKey)}` : "Select model..."}
+                  {currentModelKey ? getModelDisplayName(currentModelKey) : "Select model..."}
                 </option>
                 {/* Connected providers first */}
                 {connectedProviders.map((provider) => {
@@ -247,7 +247,7 @@ export function LoopActionBar({
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Send a message to steer the agent..."
             disabled={disabled || isSubmitting}
-            className="flex-1 min-w-0 h-11 sm:h-9 text-sm px-3 rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+            className="flex-1 min-w-0 h-9 text-sm px-3 rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
           />
 
           {/* Submit button */}
@@ -256,13 +256,13 @@ export function LoopActionBar({
             size="sm"
             disabled={disabled || isSubmitting || !hasLocalChanges}
             loading={isSubmitting}
-            className="w-full sm:w-auto h-11 sm:h-9"
+            className="flex-shrink-0 h-9"
           >
             Queue
           </Button>
         </div>
 
-        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+        <p className="hidden sm:block mt-2 text-xs text-gray-500 dark:text-gray-400">
           Message will be sent after current step completes. Model change takes effect on next prompt.
         </p>
       </form>

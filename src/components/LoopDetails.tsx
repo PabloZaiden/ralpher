@@ -35,10 +35,11 @@ export interface LoopDetailsProps {
   onBack?: () => void;
 }
 
-type TabId = "log" | "prompt" | "plan" | "status" | "diff" | "review" | "actions";
+type TabId = "log" | "info" | "prompt" | "plan" | "status" | "diff" | "review" | "actions";
 
 const tabs: { id: TabId; label: string }[] = [
   { id: "log", label: "Log" },
+  { id: "info", label: "Info" },
   { id: "prompt", label: "Prompt" },
   { id: "plan", label: "Plan" },
   { id: "status", label: "Status" },
@@ -469,8 +470,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         </div>
       </header>
 
-      {/* Compact info bar with Stats and Git */}
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 lg:px-8 py-1.5 flex-shrink-0">
+      {/* Compact info bar with Stats and Git - hidden on mobile, shown in Info tab instead */}
+      <div className="hidden sm:block bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 lg:px-8 py-1.5 flex-shrink-0">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
           {/* Statistics */}
           <span className="text-gray-500 dark:text-gray-400">
@@ -644,6 +645,66 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                             />
                             <span>Autoscroll</span>
                           </label>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === "info" && (
+                    <div className="p-4 space-y-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Loop Information</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Statistics */}
+                        <div className="space-y-2">
+                          <div className="text-sm">
+                            <span className="text-gray-500 dark:text-gray-400">Iteration: </span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">
+                              {state.currentIteration}{config.maxIterations ? ` / ${config.maxIterations}` : ""}
+                            </span>
+                          </div>
+                          <div className="text-sm">
+                            <span className="text-gray-500 dark:text-gray-400">Started: </span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.startedAt)}</span>
+                          </div>
+                          <div className="text-sm">
+                            <span className="text-gray-500 dark:text-gray-400">Last Activity: </span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.lastActivityAt)}</span>
+                          </div>
+                          {state.completedAt && (
+                            <div className="text-sm">
+                              <span className="text-gray-500 dark:text-gray-400">Completed: </span>
+                              <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.completedAt)}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Git and Model info */}
+                        <div className="space-y-2">
+                          {state.git && (
+                            <>
+                              <div className="text-sm">
+                                <span className="text-gray-500 dark:text-gray-400">Branch: </span>
+                                <span className="font-mono font-medium text-gray-900 dark:text-gray-100">{state.git.originalBranch}</span>
+                                <span className="text-gray-400 dark:text-gray-500"> → </span>
+                                <span className="font-mono font-medium text-gray-900 dark:text-gray-100">{state.git.workingBranch}</span>
+                              </div>
+                              <div className="text-sm">
+                                <span className="text-gray-500 dark:text-gray-400">Commits: </span>
+                                <span className="font-medium text-gray-900 dark:text-gray-100">{state.git.commits.length}</span>
+                              </div>
+                            </>
+                          )}
+                          <div className="text-sm">
+                            <span className="text-gray-500 dark:text-gray-400">Model: </span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">
+                              {config.model ? config.model.modelID : "Default"}
+                            </span>
+                            {state.pendingModel && (
+                              <span className="ml-1 text-yellow-600 dark:text-yellow-400">
+                                → {state.pendingModel.modelID}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
