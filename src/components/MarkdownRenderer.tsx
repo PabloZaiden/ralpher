@@ -13,16 +13,33 @@ export interface MarkdownRendererProps {
   className?: string;
   /** Whether to apply reduced opacity (for in-progress content) */
   dimmed?: boolean;
+  /** Whether to display raw markdown text instead of rendered content */
+  rawMode?: boolean;
 }
 
 /**
  * Renders markdown content as React elements using react-markdown.
  * Supports GitHub Flavored Markdown features including tables, strikethrough,
  * task lists, and autolinks.
+ * 
+ * When rawMode is true, displays the raw markdown text in a preformatted block.
  */
-export function MarkdownRenderer({ content, className = "", dimmed = false }: MarkdownRendererProps) {
+export function MarkdownRenderer({ content, className = "", dimmed = false, rawMode = false }: MarkdownRendererProps) {
   if (!content) {
     return null;
+  }
+
+  // Raw mode: display raw markdown text in a preformatted block
+  if (rawMode) {
+    return (
+      <div
+        className={`${dimmed ? "opacity-60" : ""} ${className}`.trim()}
+      >
+        <pre className="whitespace-pre-wrap break-words font-mono text-sm text-gray-900 dark:text-gray-100 overflow-x-auto">
+          {content}
+        </pre>
+      </div>
+    );
   }
 
   return (

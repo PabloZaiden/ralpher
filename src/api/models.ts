@@ -12,7 +12,7 @@
 
 import { backendManager } from "../core/backend-manager";
 import { OpenCodeBackend } from "../backends/opencode";
-import { getLastModel, setLastModel, getLastDirectory, setLastDirectory } from "../persistence/preferences";
+import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled } from "../persistence/preferences";
 import type { ErrorResponse } from "../types/api";
 
 /**
@@ -88,6 +88,7 @@ export const modelsRoutes = {
  * Provides endpoints for managing user preferences:
  * - GET/PUT /api/preferences/last-model - Last used AI model
  * - GET/PUT /api/preferences/last-directory - Last used working directory
+ * - GET/PUT /api/preferences/markdown-rendering - Markdown rendering preference
  */
 export const preferencesRoutes = {
   "/api/preferences/last-model": {
@@ -169,6 +170,47 @@ export const preferencesRoutes = {
         }
 
         await setLastDirectory(body.directory);
+
+        return Response.json({ success: true });
+      } catch (error) {
+        return errorResponse("save_failed", String(error), 500);
+      }
+    },
+  },
+
+  "/api/preferences/markdown-rendering": {
+    /**
+     * GET /api/preferences/markdown-rendering - Get markdown rendering preference.
+     * 
+     * Returns whether markdown rendering is enabled (true) or disabled (false).
+     * Defaults to true if not set.
+     * 
+     * @returns Boolean indicating if markdown rendering is enabled
+     */
+    async GET(): Promise<Response> {
+      const enabled = await getMarkdownRenderingEnabled();
+      return Response.json({ enabled });
+    },
+
+    /**
+     * PUT /api/preferences/markdown-rendering - Set markdown rendering preference.
+     * 
+     * Enables or disables markdown rendering across the application.
+     * 
+     * Request Body:
+     * - enabled (required): Boolean - true to enable, false to disable
+     * 
+     * @returns Success response
+     */
+    async PUT(req: Request): Promise<Response> {
+      try {
+        const body = await req.json() as { enabled: boolean };
+        
+        if (typeof body.enabled !== "boolean") {
+          return errorResponse("invalid_body", "enabled must be a boolean");
+        }
+
+        await setMarkdownRenderingEnabled(body.enabled);
 
         return Response.json({ success: true });
       } catch (error) {
