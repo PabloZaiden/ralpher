@@ -102,7 +102,7 @@ export function CreateLoopForm({
   // Track whether user has manually changed the branch selection
   const [userChangedBranch, setUserChangedBranch] = useState(!!initialLoopData?.baseBranch);
   const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
-  const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? false);
+  const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? true);
 
   // Reset selected branch when default branch changes (directory changed)
   useEffect(() => {

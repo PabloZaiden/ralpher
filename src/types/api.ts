@@ -70,7 +70,7 @@ export interface CreateLoopRequest {
   baseBranch?: string;
   /** Clear the .planning folder contents before starting (default: false) */
   clearPlanningFolder?: boolean;
-  /** Start in plan creation mode instead of immediate execution (default: false) */
+  /** Start in plan creation mode instead of immediate execution (default: true) */
   planMode?: boolean;
   /** Save as draft without starting (no git branch or session created) */
   draft?: boolean;
