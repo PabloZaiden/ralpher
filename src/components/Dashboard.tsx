@@ -773,6 +773,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           baseBranch: editLoop.config.baseBranch,
           clearPlanningFolder: editLoop.config.clearPlanningFolder,
           planMode: editLoop.config.planMode ?? false,
+          workspaceId: editLoop.config.workspaceId,
         } : null;
         
         return (
