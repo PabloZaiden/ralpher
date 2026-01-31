@@ -81,24 +81,28 @@ export const workspacesRoutes = {
         );
       }
 
-      if (!body.name || typeof body.name !== "string") {
+      if (!body.name || typeof body.name !== "string" || !body.name.trim()) {
         return Response.json(
-          { message: "name is required and must be a string" },
+          { message: "name is required and must be a non-empty string" },
           { status: 400 }
         );
       }
 
-      if (!body.directory || typeof body.directory !== "string") {
+      if (!body.directory || typeof body.directory !== "string" || !body.directory.trim()) {
         return Response.json(
-          { message: "directory is required and must be a string" },
+          { message: "directory is required and must be a non-empty string" },
           { status: 400 }
         );
       }
+
+      // Trim name and directory to prevent whitespace issues
+      const trimmedName = body.name.trim();
+      const trimmedDirectory = body.directory.trim();
 
       try {
         // Check if directory is a valid git repository
-        const gitService = await getGitService(body.directory);
-        const isGitRepo = await gitService.isGitRepo(body.directory);
+        const gitService = await getGitService(trimmedDirectory);
+        const isGitRepo = await gitService.isGitRepo(trimmedDirectory);
         if (!isGitRepo) {
           return Response.json(
             { message: "Directory must be a git repository" },
@@ -107,7 +111,7 @@ export const workspacesRoutes = {
         }
 
         // Check if a workspace already exists for this directory
-        const existingWorkspace = await getWorkspaceByDirectory(body.directory);
+        const existingWorkspace = await getWorkspaceByDirectory(trimmedDirectory);
         if (existingWorkspace) {
           return Response.json(
             { message: "A workspace already exists for this directory", existingWorkspace },
@@ -118,8 +122,8 @@ export const workspacesRoutes = {
         const now = new Date().toISOString();
         const workspace: Workspace = {
           id: crypto.randomUUID(),
-          name: body.name.trim(),
-          directory: body.directory,
+          name: trimmedName,
+          directory: trimmedDirectory,
           createdAt: now,
           updatedAt: now,
         };
