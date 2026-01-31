@@ -20,6 +20,7 @@ describe("Loops CRUD API Integration", () => {
   let testWorkDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
+  let testWorkspaceId: string;
 
   // Helper function to poll for loop completion
   async function waitForLoopCompletion(loopId: string, timeoutMs = 10000): Promise<void> {
@@ -37,6 +38,29 @@ describe("Loops CRUD API Integration", () => {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
     throw new Error(`Loop ${loopId} did not complete within ${timeoutMs}ms. Last status: ${lastStatus}`);
+  }
+
+  // Helper to create or get a workspace for a directory
+  async function getOrCreateWorkspace(directory: string, name?: string): Promise<string> {
+    const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name || directory.split("/").pop() || "Test",
+        directory,
+      }),
+    });
+    const data = await createResponse.json();
+    
+    if (createResponse.status === 409 && data.existingWorkspace) {
+      return data.existingWorkspace.id;
+    }
+    
+    if (createResponse.ok && data.id) {
+      return data.id;
+    }
+    
+    throw new Error(`Failed to create workspace: ${JSON.stringify(data)}`);
   }
 
   beforeAll(async () => {
@@ -70,6 +94,9 @@ describe("Loops CRUD API Integration", () => {
       },
     });
     baseUrl = server.url.toString().replace(/\/$/, "");
+
+    // Create a workspace for the testWorkDir
+    testWorkspaceId = await getOrCreateWorkspace(testWorkDir, "Test Workspace");
   });
 
   afterAll(async () => {
@@ -134,7 +161,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Build something",
         }),
       });
@@ -153,7 +180,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Custom task",
           maxIterations: 10,
           stopPattern: "<done>FINISHED</done>$",
@@ -184,7 +211,7 @@ describe("Loops CRUD API Integration", () => {
       const response = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: "Missing directory" }),
+        body: JSON.stringify({ prompt: "Missing workspaceId" }),
       });
 
       expect(response.status).toBe(400);
@@ -197,7 +224,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "",
         }),
       });
@@ -228,7 +255,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Test prompt",
           draft: true,
         }),
@@ -260,7 +287,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Original prompt",
           draft: true,
         }),
@@ -297,7 +324,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Test",
           draft: true,
         }),
@@ -325,7 +352,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Test prompt",
           draft: true,
         }),
@@ -355,7 +382,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Purge me",
           draft: true,
         }),
@@ -394,7 +421,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Task with clearing",
           clearPlanningFolder: true,
           draft: true,
@@ -411,7 +438,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Task without clearing",
           clearPlanningFolder: false,
           draft: true,
@@ -428,7 +455,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Task with default",
           draft: true,
         }),
@@ -446,7 +473,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Test",
           clearPlanningFolder: true,
           draft: true,
@@ -470,7 +497,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Draft task",
           draft: true,
         }),
@@ -494,11 +521,14 @@ describe("Loops CRUD API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         const response = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Normal task",
             draft: false,
           }),
@@ -522,7 +552,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Original prompt",
           draft: true,
         }),
@@ -556,12 +586,15 @@ describe("Loops CRUD API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         // Create regular loop
         const createResponse = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Task",
           }),
         });
@@ -594,7 +627,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Task",
           draft: true,
         }),
@@ -631,7 +664,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Task",
           draft: true,
         }),
@@ -664,12 +697,15 @@ describe("Loops CRUD API Integration", () => {
       await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
       
       try {
+        // Create workspace for this directory
+        const workspaceId = await getOrCreateWorkspace(uniqueWorkDir);
+
         // Create a draft loop
         const draftResponse = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: uniqueWorkDir,
+            workspaceId,
             prompt: "Task",
             draft: true,
           }),
@@ -711,7 +747,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Task",
           draft: true,
         }),
@@ -751,7 +787,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Test mark merged",
           draft: true,
         }),
@@ -776,7 +812,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Test no git",
         }),
       });
@@ -814,7 +850,7 @@ describe("Loops CRUD API Integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Test mark merged",
         }),
       });

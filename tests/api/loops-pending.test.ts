@@ -21,8 +21,31 @@ describe("POST /api/loops/:id/pending", () => {
   let server: Server<unknown>;
   let baseUrl: string;
 
-  // Helper to create a unique work directory with git initialized
-  async function createTestWorkDir(): Promise<string> {
+  // Helper to get or create a workspace for a directory
+  async function getOrCreateWorkspace(directory: string, name?: string): Promise<string> {
+    const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name || directory.split("/").pop() || "Test",
+        directory,
+      }),
+    });
+    const data = await createResponse.json();
+
+    if (createResponse.status === 409 && data.existingWorkspace) {
+      return data.existingWorkspace.id;
+    }
+
+    if (createResponse.ok && data.id) {
+      return data.id;
+    }
+
+    throw new Error(`Failed to create workspace: ${JSON.stringify(data)}`);
+  }
+
+  // Helper to create a unique work directory with git AND workspace
+  async function createTestWorkDirWithWorkspace(): Promise<{ workDir: string; workspaceId: string }> {
     const workDir = await mkdtemp(join(tmpdir(), "ralpher-pending-test-work-"));
     await Bun.$`git init ${workDir}`.quiet();
     await Bun.$`git -C ${workDir} config user.email "test@test.com"`.quiet();
@@ -31,7 +54,8 @@ describe("POST /api/loops/:id/pending", () => {
     await Bun.$`git -C ${workDir} add .`.quiet();
     await Bun.$`git -C ${workDir} commit -m "Initial commit"`.quiet();
     await mkdir(join(workDir, ".planning"), { recursive: true });
-    return workDir;
+    const workspaceId = await getOrCreateWorkspace(workDir, "Test Workspace");
+    return { workDir, workspaceId };
   }
 
   // Helper to wait for loop to reach a specific status
@@ -119,7 +143,7 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST with message succeeds for running loop", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       // Create a loop - it auto-starts when created without draft: true
       const createRes = await fetch(`${baseUrl}/api/loops`, {
@@ -127,7 +151,7 @@ describe("POST /api/loops/:id/pending", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -163,14 +187,14 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST with model succeeds for running loop", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       const createRes = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -205,14 +229,14 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST with both message and model succeeds", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       const createRes = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -249,14 +273,14 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("DELETE clears pending values", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       const createRes = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -295,7 +319,7 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST returns 409 for idle loop", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       // Create a draft loop (doesn't auto-start)
       const createRes = await fetch(`${baseUrl}/api/loops`, {
@@ -303,7 +327,7 @@ describe("POST /api/loops/:id/pending", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
           draft: true,  // Create as draft - stays in idle status
         }),
@@ -329,7 +353,7 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("DELETE returns 409 for idle loop", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       // Create a draft loop
       const createRes = await fetch(`${baseUrl}/api/loops`, {
@@ -337,7 +361,7 @@ describe("POST /api/loops/:id/pending", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
           draft: true,
         }),
@@ -375,14 +399,14 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST requires at least message or model", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       const createRes = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -411,14 +435,14 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST validates model format", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       const createRes = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -448,14 +472,14 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST validates message type", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       const createRes = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -486,14 +510,14 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST with immediate: true (default) calls injectPending", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       const createRes = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -525,14 +549,14 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST with immediate: false queues for next iteration", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       const createRes = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -565,14 +589,14 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST with immediate: true and model works correctly", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       const createRes = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -610,14 +634,14 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST validates immediate must be boolean", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       const createRes = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -649,7 +673,7 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST with message jumpstarts a stopped loop", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       // Create a loop and let it start
       const createRes = await fetch(`${baseUrl}/api/loops`, {
@@ -657,7 +681,7 @@ describe("POST /api/loops/:id/pending", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Jumpstart Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -697,14 +721,14 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST with model jumpstarts a stopped loop and updates config model", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       const createRes = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Jumpstart Model Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });
@@ -747,7 +771,7 @@ describe("POST /api/loops/:id/pending", () => {
   });
 
   test("POST jumpstart continues on existing branch instead of creating new one", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       // Create and start a loop
       const createRes = await fetch(`${baseUrl}/api/loops`, {
@@ -755,7 +779,7 @@ describe("POST /api/loops/:id/pending", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Branch Continuation Test",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });

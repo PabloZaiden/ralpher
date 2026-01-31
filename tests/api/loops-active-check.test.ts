@@ -20,6 +20,30 @@ describe("Active Loop Directory Check API", () => {
   let testWorkDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
+  let testWorkspaceId: string;
+
+  // Helper to create or get a workspace for a directory
+  async function getOrCreateWorkspace(directory: string, name?: string): Promise<string> {
+    const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name || directory.split("/").pop() || "Test",
+        directory,
+      }),
+    });
+    const data = await createResponse.json();
+    
+    if (createResponse.status === 409 && data.existingWorkspace) {
+      return data.existingWorkspace.id;
+    }
+    
+    if (createResponse.ok && data.id) {
+      return data.id;
+    }
+    
+    throw new Error(`Failed to create workspace: ${JSON.stringify(data)}`);
+  }
 
   beforeAll(async () => {
     // Create temp directories
@@ -52,6 +76,9 @@ describe("Active Loop Directory Check API", () => {
       },
     });
     baseUrl = server.url.toString().replace(/\/$/, "");
+
+    // Create a workspace for the testWorkDir
+    testWorkspaceId = await getOrCreateWorkspace(testWorkDir, "Test Workspace");
   });
 
   afterAll(async () => {
@@ -105,7 +132,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "First task",
           draft: true,
         }),
@@ -125,7 +152,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Second task",
         }),
       });
@@ -144,7 +171,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Active task",
           draft: true,
         }),
@@ -161,7 +188,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Draft task",
           draft: true,
         }),
@@ -178,7 +205,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Will be stopped",
           draft: true,
         }),
@@ -201,7 +228,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "After stopped",
           draft: true, // Use draft to avoid triggering the loop
         }),
@@ -216,7 +243,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Planning task with a specific name",
           draft: true,
         }),
@@ -233,7 +260,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Another task",
         }),
       });
@@ -252,7 +279,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Running loop",
           draft: true,
         }),
@@ -269,7 +296,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Draft to start",
           draft: true,
         }),
@@ -297,7 +324,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Completed loop",
           draft: true,
         }),
@@ -314,7 +341,7 @@ describe("Active Loop Directory Check API", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          directory: testWorkDir,
+          workspaceId: testWorkspaceId,
           prompt: "Draft to start after completion",
           draft: true,
         }),
@@ -344,7 +371,7 @@ describe("Active Loop Directory Check API", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: testWorkDir,
+            workspaceId: testWorkspaceId,
             prompt: `Terminal ${status} loop`,
             draft: true,
           }),
@@ -361,7 +388,7 @@ describe("Active Loop Directory Check API", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: testWorkDir,
+            workspaceId: testWorkspaceId,
             prompt: `New loop after ${status}`,
             draft: true,
           }),
@@ -382,7 +409,7 @@ describe("Active Loop Directory Check API", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: testWorkDir,
+            workspaceId: testWorkspaceId,
             prompt: `Active ${status} loop`,
             draft: true,
           }),
@@ -399,7 +426,7 @@ describe("Active Loop Directory Check API", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directory: testWorkDir,
+            workspaceId: testWorkspaceId,
             prompt: `Blocked by ${status}`,
             // Not a draft
           }),

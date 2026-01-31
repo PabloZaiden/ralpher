@@ -23,6 +23,30 @@ describe("Plan Mode API Integration", () => {
   
   // Per-test work directory to avoid conflicts between tests
   let currentTestWorkDir: string;
+  let currentWorkspaceId: string;
+
+  // Helper to get or create a workspace for a directory
+  async function getOrCreateWorkspace(directory: string, name?: string): Promise<string> {
+    const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name || directory.split("/").pop() || "Test",
+        directory,
+      }),
+    });
+    const data = await createResponse.json();
+
+    if (createResponse.status === 409 && data.existingWorkspace) {
+      return data.existingWorkspace.id;
+    }
+
+    if (createResponse.ok && data.id) {
+      return data.id;
+    }
+
+    throw new Error(`Failed to create workspace: ${JSON.stringify(data)}`);
+  }
 
   // Helper to check if file exists
   async function exists(path: string): Promise<boolean> {
@@ -130,6 +154,13 @@ describe("Plan Mode API Integration", () => {
     return workDir;
   }
 
+  // Helper to create a unique work directory with git initialized AND workspace
+  async function createTestWorkDirWithWorkspace(): Promise<{ workDir: string; workspaceId: string }> {
+    const workDir = await createTestWorkDir();
+    const workspaceId = await getOrCreateWorkspace(workDir, "Test Workspace");
+    return { workDir, workspaceId };
+  }
+
   // Clean up any active loops and reset state before/after each test
   const setupAndCleanup = async () => {
     const { listLoops, updateLoopState, loadLoop } = await import("../../src/persistence/loops");
@@ -158,8 +189,10 @@ describe("Plan Mode API Integration", () => {
       }
     }
     
-    // Create a fresh work directory for this test
-    currentTestWorkDir = await createTestWorkDir();
+    // Create a fresh work directory and workspace for this test
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
+    currentTestWorkDir = workDir;
+    currentWorkspaceId = workspaceId;
   };
   
   const teardownTest = async () => {
@@ -202,7 +235,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: currentTestWorkDir,
+          workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,
         }),
@@ -231,7 +264,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: currentTestWorkDir,
+          workspaceId: currentWorkspaceId,
           maxIterations: 1,
           clearPlanningFolder: true,
           planMode: true,
@@ -275,7 +308,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: currentTestWorkDir,
+          workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,
         }),
@@ -317,7 +350,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Do something",
-          directory: currentTestWorkDir,
+          workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: false,
         }),
@@ -361,7 +394,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: currentTestWorkDir,
+          workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,
         }),
@@ -409,7 +442,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: currentTestWorkDir,
+          workspaceId: currentWorkspaceId,
           planningFolderPath: ".planning-test2",
           maxIterations: 1,
           clearPlanningFolder: true,
@@ -459,7 +492,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Do something",
-          directory: currentTestWorkDir,
+          workspaceId: currentWorkspaceId,
           maxIterations: 1,
         }),
       });
@@ -494,7 +527,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
-          directory: currentTestWorkDir,
+          workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,
         }),

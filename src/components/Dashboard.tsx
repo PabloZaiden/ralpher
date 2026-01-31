@@ -866,16 +866,21 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   if (request.model) {
                     setLastModel(request.model);
                   }
-                  // Save last used directory
-                  try {
-                    await fetch("/api/preferences/last-directory", {
-                      method: "PUT",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ directory: request.directory }),
-                    });
-                    setLastDirectory(request.directory ?? null);
-                  } catch {
-                    // Ignore errors saving preference
+                  // Save last used directory (get it from the workspace)
+                  if (request.workspaceId) {
+                    const workspace = workspaces.find(w => w.id === request.workspaceId);
+                    if (workspace) {
+                      try {
+                        await fetch("/api/preferences/last-directory", {
+                          method: "PUT",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ directory: workspace.directory }),
+                        });
+                        setLastDirectory(workspace.directory);
+                      } catch {
+                        // Ignore errors saving preference
+                      }
+                    }
                   }
                   return true; // Success - close the modal
                 }

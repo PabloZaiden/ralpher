@@ -321,6 +321,70 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 11,
+    name: "migrate_existing_loops_to_workspaces",
+    up: (db) => {
+      // This migration creates workspaces for existing loops that don't have a workspace_id
+      // It groups loops by directory and creates a workspace for each unique directory
+      
+      if (!tableExists(db, "loops") || !tableExists(db, "workspaces")) {
+        log.debug("loops or workspaces table does not exist, skipping migration 11");
+        return;
+      }
+      
+      // Find all distinct directories from loops without a workspace_id
+      const orphanedDirectories = db.query(`
+        SELECT DISTINCT directory 
+        FROM loops 
+        WHERE workspace_id IS NULL AND directory IS NOT NULL AND directory != ''
+      `).all() as Array<{ directory: string }>;
+      
+      if (orphanedDirectories.length === 0) {
+        log.debug("No orphaned loops found, skipping workspace migration");
+        return;
+      }
+      
+      log.info(`Found ${orphanedDirectories.length} directories with orphaned loops, creating workspaces...`);
+      
+      const now = new Date().toISOString();
+      
+      for (const { directory } of orphanedDirectories) {
+        // Check if a workspace already exists for this directory
+        const existing = db.query("SELECT id FROM workspaces WHERE directory = ?").get(directory) as { id: string } | null;
+        
+        let workspaceId: string;
+        
+        if (existing) {
+          workspaceId = existing.id;
+          log.debug(`Workspace already exists for directory: ${directory}`);
+        } else {
+          // Generate a workspace ID (simple UUID-like format)
+          workspaceId = `ws_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+          
+          // Create workspace name from the directory path (use last path segment)
+          const pathParts = directory.replace(/\/$/, "").split("/");
+          const name = pathParts[pathParts.length - 1] || directory;
+          
+          // Create the workspace
+          db.run(
+            "INSERT INTO workspaces (id, name, directory, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+            [workspaceId, name, directory, now, now]
+          );
+          log.info(`Created workspace "${name}" for directory: ${directory}`);
+        }
+        
+        // Update all loops in this directory to point to the workspace
+        const result = db.run(
+          "UPDATE loops SET workspace_id = ? WHERE directory = ? AND workspace_id IS NULL",
+          [workspaceId, directory]
+        );
+        log.info(`Updated ${result.changes} loops to use workspace: ${workspaceId}`);
+      }
+      
+      log.info("Completed migration of existing loops to workspaces");
+    },
+  },
 ];
 
 /**

@@ -761,3 +761,205 @@ describe("migrations - todos with fresh database", () => {
     expect(columnsAfter).toContain("todos");
   });
 });
+
+describe("migrations - migrate existing loops to workspaces (migration #11)", () => {
+  let tempDir: string;
+  let db: Database;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "ralpher-migration-loop-workspace-test-"));
+    db = new Database(join(tempDir, "test.db"));
+    
+    // Create the full schema without workspace_id column (old database before migration #10)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS loops (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        directory TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        model_provider_id TEXT,
+        model_model_id TEXT,
+        max_iterations INTEGER,
+        max_consecutive_errors INTEGER,
+        activity_timeout_seconds INTEGER,
+        stop_pattern TEXT NOT NULL,
+        git_branch_prefix TEXT NOT NULL,
+        git_commit_prefix TEXT NOT NULL,
+        base_branch TEXT,
+        status TEXT NOT NULL DEFAULT 'idle',
+        current_iteration INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT,
+        completed_at TEXT,
+        last_activity_at TEXT,
+        session_id TEXT,
+        session_server_url TEXT,
+        error_message TEXT,
+        error_iteration INTEGER,
+        error_timestamp TEXT,
+        git_original_branch TEXT,
+        git_working_branch TEXT,
+        git_commits TEXT,
+        recent_iterations TEXT,
+        logs TEXT,
+        messages TEXT,
+        tool_calls TEXT,
+        consecutive_errors TEXT,
+        pending_prompt TEXT,
+        clear_planning_folder INTEGER DEFAULT 0,
+        todos TEXT
+      )
+    `);
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(tempDir, { recursive: true });
+  });
+
+  test("migration creates workspaces from existing loops grouped by directory", () => {
+    // Insert existing loops without workspace_id
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-1', 'Loop 1', '/home/user/project1', 'test prompt', '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z', 'STOP', 'loop/', '[Loop]')
+    `);
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-2', 'Loop 2', '/home/user/project1', 'test prompt 2', '2026-01-26T11:00:00Z', '2026-01-26T11:00:00Z', 'STOP', 'loop/', '[Loop]')
+    `);
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-3', 'Loop 3', '/home/user/project2', 'test prompt 3', '2026-01-26T12:00:00Z', '2026-01-26T12:00:00Z', 'STOP', 'loop/', '[Loop]')
+    `);
+
+    // Run migrations - this will create workspaces table and migrate loops
+    runMigrations(db);
+
+    // Verify workspaces were created
+    expect(tableExists(db, "workspaces")).toBe(true);
+    const workspaces = db.query("SELECT * FROM workspaces ORDER BY directory").all() as Array<{
+      id: string;
+      name: string;
+      directory: string;
+    }>;
+    
+    // Should have 2 workspaces (one for each unique directory)
+    expect(workspaces.length).toBe(2);
+    expect(workspaces[0]!.directory).toBe("/home/user/project1");
+    expect(workspaces[0]!.name).toBe("project1");
+    expect(workspaces[1]!.directory).toBe("/home/user/project2");
+    expect(workspaces[1]!.name).toBe("project2");
+
+    // Verify loops are linked to workspaces
+    const loops = db.query("SELECT id, directory, workspace_id FROM loops ORDER BY id").all() as Array<{
+      id: string;
+      directory: string;
+      workspace_id: string;
+    }>;
+
+    // loop-1 and loop-2 should share the same workspace
+    expect(loops[0]!.workspace_id).toBe(loops[1]!.workspace_id);
+    expect(loops[0]!.workspace_id).toBe(workspaces[0]!.id);
+    
+    // loop-3 should have a different workspace
+    expect(loops[2]!.workspace_id).toBe(workspaces[1]!.id);
+  });
+
+  test("migration is idempotent - does not create duplicate workspaces", () => {
+    // Insert an existing loop
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-1', 'Loop 1', '/home/user/project1', 'test prompt', '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z', 'STOP', 'loop/', '[Loop]')
+    `);
+
+    // Run migrations
+    runMigrations(db);
+
+    // Count workspaces
+    const countBefore = db.query("SELECT COUNT(*) as count FROM workspaces").get() as { count: number };
+    expect(countBefore.count).toBe(1);
+
+    // Run migrations again
+    runMigrations(db);
+
+    // Should still have only 1 workspace
+    const countAfter = db.query("SELECT COUNT(*) as count FROM workspaces").get() as { count: number };
+    expect(countAfter.count).toBe(1);
+  });
+
+  test("migration skips loops that already have workspace_id", () => {
+    // Run migrations to set up schema
+    runMigrations(db);
+
+    // Create a workspace manually
+    db.run(`
+      INSERT INTO workspaces (id, name, directory, created_at, updated_at)
+      VALUES ('ws-existing', 'Existing Workspace', '/home/user/project1', '2026-01-26T09:00:00Z', '2026-01-26T09:00:00Z')
+    `);
+
+    // Insert a loop that already has a workspace_id
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix, workspace_id)
+      VALUES ('loop-1', 'Loop 1', '/home/user/project1', 'test prompt', '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z', 'STOP', 'loop/', '[Loop]', 'ws-existing')
+    `);
+
+    // Run migrations again
+    runMigrations(db);
+
+    // Should still have only 1 workspace
+    const workspaces = db.query("SELECT COUNT(*) as count FROM workspaces").get() as { count: number };
+    expect(workspaces.count).toBe(1);
+
+    // Loop should still have the original workspace_id
+    const loop = db.query("SELECT workspace_id FROM loops WHERE id = 'loop-1'").get() as { workspace_id: string };
+    expect(loop.workspace_id).toBe("ws-existing");
+  });
+
+  test("migration handles empty directory correctly", () => {
+    // Insert a loop with empty directory
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-1', 'Loop 1', '', 'test prompt', '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z', 'STOP', 'loop/', '[Loop]')
+    `);
+
+    // Run migrations
+    runMigrations(db);
+
+    // Should not create workspace for empty directory
+    const workspaces = db.query("SELECT COUNT(*) as count FROM workspaces").get() as { count: number };
+    expect(workspaces.count).toBe(0);
+
+    // Loop should still have no workspace_id
+    const loop = db.query("SELECT workspace_id FROM loops WHERE id = 'loop-1'").get() as { workspace_id: string | null };
+    expect(loop.workspace_id).toBeNull();
+  });
+
+  test("migration uses last path segment as workspace name", () => {
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-1', 'Loop 1', '/home/user/my-awesome-project', 'test prompt', '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z', 'STOP', 'loop/', '[Loop]')
+    `);
+
+    // Run migrations
+    runMigrations(db);
+
+    // Check workspace name
+    const workspace = db.query("SELECT name FROM workspaces LIMIT 1").get() as { name: string };
+    expect(workspace.name).toBe("my-awesome-project");
+  });
+
+  test("migration handles trailing slash in directory", () => {
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-1', 'Loop 1', '/home/user/project/', 'test prompt', '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z', 'STOP', 'loop/', '[Loop]')
+    `);
+
+    // Run migrations
+    runMigrations(db);
+
+    // Check workspace name (should handle trailing slash)
+    const workspace = db.query("SELECT name FROM workspaces LIMIT 1").get() as { name: string };
+    expect(workspace.name).toBe("project");
+  });
+});

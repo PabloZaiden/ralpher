@@ -344,4 +344,91 @@ describe("Workspace API Integration", () => {
       expect(response.status).toBe(400);
     });
   });
+
+  describe("Loop creation with workspaceId", () => {
+    test("creates a loop using workspaceId and touches the workspace", async () => {
+      // Step 1: Create a workspace
+      const workspaceResponse = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Loop Test Workspace",
+          directory: testWorkDir,
+        }),
+      });
+      expect(workspaceResponse.ok).toBe(true);
+      const workspace = await workspaceResponse.json();
+      const originalUpdatedAt = workspace.updatedAt;
+
+      // Wait a bit to ensure timestamp difference
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Step 2: Create a loop using the workspaceId (draft to avoid git operations)
+      const loopResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          prompt: "Test prompt for loop creation",
+          draft: true,
+        }),
+      });
+      expect(loopResponse.ok).toBe(true);
+      const loop = await loopResponse.json();
+
+      // Verify the loop was created with the workspace's directory
+      expect(loop.config.directory).toBe(testWorkDir);
+      expect(loop.config.workspaceId).toBe(workspace.id);
+      expect(loop.state.status).toBe("draft");
+
+      // Step 3: Verify the workspace was touched (updatedAt should be updated)
+      const updatedWorkspaceResponse = await fetch(`${baseUrl}/api/workspaces/${workspace.id}`);
+      expect(updatedWorkspaceResponse.ok).toBe(true);
+      const updatedWorkspace = await updatedWorkspaceResponse.json();
+      expect(new Date(updatedWorkspace.updatedAt).getTime()).toBeGreaterThan(
+        new Date(originalUpdatedAt).getTime()
+      );
+
+      // Step 4: Verify the workspace's loop count increased
+      const workspacesListResponse = await fetch(`${baseUrl}/api/workspaces`);
+      expect(workspacesListResponse.ok).toBe(true);
+      const workspacesList = await workspacesListResponse.json();
+      const workspaceWithCount = workspacesList.find((w: { id: string }) => w.id === workspace.id);
+      expect(workspaceWithCount.loopCount).toBe(1);
+    });
+
+    test("fails when creating loop with non-existent workspaceId", async () => {
+      const response = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "non-existent-workspace-id",
+          prompt: "Test prompt",
+          draft: true,
+        }),
+      });
+
+      expect(response.ok).toBe(false);
+      expect(response.status).toBe(404);
+      const data = await response.json();
+      expect(data.error).toBe("workspace_not_found");
+    });
+
+    test("fails when creating loop without workspaceId", async () => {
+      const response = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: "Test prompt",
+          draft: true,
+        }),
+      });
+
+      expect(response.ok).toBe(false);
+      expect(response.status).toBe(400);
+      const data = await response.json();
+      expect(data.error).toBe("validation_error");
+      expect(data.message).toContain("workspaceId");
+    });
+  });
 });

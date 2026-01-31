@@ -178,12 +178,8 @@ export function CreateLoopForm({
   async function handleSubmit(e: FormEvent, asDraft = false) {
     e.preventDefault();
 
-    // When workspaces are available, require workspace selection (not directory)
-    const hasWorkspaces = workspaces.length > 0 || selectedWorkspaceId;
-    if (hasWorkspaces && !selectedWorkspaceId) {
-      return;
-    }
-    if (!hasWorkspaces && !directory.trim()) {
+    // Workspace selection is required
+    if (!selectedWorkspaceId) {
       return;
     }
     if (!prompt.trim()) {
@@ -193,18 +189,11 @@ export function CreateLoopForm({
     setSubmitting(true);
 
     const request: CreateLoopRequest = {
+      workspaceId: selectedWorkspaceId,
       prompt: prompt.trim(),
       // Backend settings are now global (not per-loop)
       // Git is always enabled - no toggle exposed to users
     };
-
-    // Include workspaceId if selected, otherwise fall back to directory
-    if (selectedWorkspaceId) {
-      request.workspaceId = selectedWorkspaceId;
-      request.directory = directory.trim(); // Still include for reference
-    } else {
-      request.directory = directory.trim();
-    }
 
     // Add model if selected
     if (selectedModel) {
@@ -628,7 +617,7 @@ export function CreateLoopForm({
             type="button"
             variant="secondary"
             onClick={(e) => handleSubmit(e, true)}
-            disabled={isSubmitting || (!selectedWorkspaceId && !directory.trim()) || !prompt.trim()}
+            disabled={isSubmitting || !selectedWorkspaceId || !prompt.trim()}
             loading={isSubmitting}
           >
             {isEditingDraft ? "Update Draft" : "Save as Draft"}

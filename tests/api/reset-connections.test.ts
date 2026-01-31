@@ -27,8 +27,31 @@ describe("POST /api/backend/reset-all", () => {
     return new MockOpenCodeBackend({ responses: ["Working on it..."] });
   }
 
-  // Helper to create a unique work directory with git initialized
-  async function createTestWorkDir(): Promise<string> {
+  // Helper to get or create a workspace for a directory
+  async function getOrCreateWorkspace(directory: string, name?: string): Promise<string> {
+    const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name || directory.split("/").pop() || "Test",
+        directory,
+      }),
+    });
+    const data = await createResponse.json();
+
+    if (createResponse.status === 409 && data.existingWorkspace) {
+      return data.existingWorkspace.id;
+    }
+
+    if (createResponse.ok && data.id) {
+      return data.id;
+    }
+
+    throw new Error(`Failed to create workspace: ${JSON.stringify(data)}`);
+  }
+
+  // Helper to create a unique work directory with git AND workspace
+  async function createTestWorkDirWithWorkspace(): Promise<{ workDir: string; workspaceId: string }> {
     const workDir = await mkdtemp(join(tmpdir(), "ralpher-reset-test-work-"));
     await Bun.$`git init ${workDir}`.quiet();
     await Bun.$`git -C ${workDir} config user.email "test@test.com"`.quiet();
@@ -37,7 +60,8 @@ describe("POST /api/backend/reset-all", () => {
     await Bun.$`git -C ${workDir} add .`.quiet();
     await Bun.$`git -C ${workDir} commit -m "Initial commit"`.quiet();
     await mkdir(join(workDir, ".planning"), { recursive: true });
-    return workDir;
+    const workspaceId = await getOrCreateWorkspace(workDir, "Test Workspace");
+    return { workDir, workspaceId };
   }
 
   // Helper to wait for loop to reach a specific status
@@ -113,7 +137,7 @@ describe("POST /api/backend/reset-all", () => {
   });
 
   test("stops running loops and resets them", async () => {
-    const workDir = await createTestWorkDir();
+    const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
     try {
       // Create and start a loop
       const createRes = await fetch(`${baseUrl}/api/loops`, {
@@ -121,7 +145,7 @@ describe("POST /api/backend/reset-all", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Reset Test Loop",
-          directory: workDir,
+          workspaceId,
           prompt: "Test prompt",
         }),
       });

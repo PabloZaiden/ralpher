@@ -140,29 +140,17 @@ export const loopsCrudRoutes = {
         return errorResponse("validation_error", validationError);
       }
 
-      // Resolve workspaceId to directory if needed
-      let directory = body.directory;
-      let workspaceId = body.workspaceId;
+      // Resolve workspaceId to directory - workspaceId is required
+      const { getWorkspace, touchWorkspace } = await import("../persistence/workspaces");
+      const workspace = await getWorkspace(body.workspaceId);
+      if (!workspace) {
+        return errorResponse("workspace_not_found", `Workspace not found: ${body.workspaceId}`, 404);
+      }
+      const directory = workspace.directory;
+      const workspaceId = body.workspaceId;
       
-      if (body.workspaceId && !body.directory) {
-        // Import workspace persistence dynamically to avoid circular imports
-        const { getWorkspace, touchWorkspace } = await import("../persistence/workspaces");
-        const workspace = await getWorkspace(body.workspaceId);
-        if (!workspace) {
-          return errorResponse("workspace_not_found", `Workspace not found: ${body.workspaceId}`, 404);
-        }
-        directory = workspace.directory;
-        
-        // Touch workspace to update last used timestamp
-        await touchWorkspace(workspace.id);
-      } else if (!body.directory) {
-        return errorResponse("validation_error", "Either workspaceId or directory is required");
-      }
-
-      // Ensure directory is defined (TypeScript narrowing)
-      if (!directory) {
-        return errorResponse("validation_error", "directory could not be resolved");
-      }
+      // Touch workspace to update last used timestamp
+      await touchWorkspace(workspace.id);
 
       // Create a single executor/GitService for the request to avoid duplicate setup
       let git: GitService | null = null;
