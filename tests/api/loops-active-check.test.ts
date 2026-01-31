@@ -135,6 +135,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "First task",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -154,6 +155,7 @@ describe("Active Loop Directory Check API", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Second task",
+          planMode: false,
         }),
       });
 
@@ -174,6 +176,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "Active task",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -191,6 +194,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "Draft task",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -208,6 +212,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "Will be stopped",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -231,6 +236,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "After stopped",
           draft: true, // Use draft to avoid triggering the loop
+          planMode: false,
         }),
       });
 
@@ -246,6 +252,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "Planning task with a specific name",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -262,6 +269,7 @@ describe("Active Loop Directory Check API", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Another task",
+          planMode: false,
         }),
       });
 
@@ -282,6 +290,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "Running loop",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -299,6 +308,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "Draft to start",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -327,6 +337,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "Completed loop",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -344,6 +355,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "Draft to start after completion",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -374,6 +386,7 @@ describe("Active Loop Directory Check API", () => {
             workspaceId: testWorkspaceId,
             prompt: `Terminal ${status} loop`,
             draft: true,
+            planMode: false,
           }),
         });
 
@@ -391,6 +404,7 @@ describe("Active Loop Directory Check API", () => {
             workspaceId: testWorkspaceId,
             prompt: `New loop after ${status}`,
             draft: true,
+            planMode: false,
           }),
         });
 
@@ -412,6 +426,7 @@ describe("Active Loop Directory Check API", () => {
             workspaceId: testWorkspaceId,
             prompt: `Active ${status} loop`,
             draft: true,
+            planMode: false,
           }),
         });
 
@@ -428,6 +443,7 @@ describe("Active Loop Directory Check API", () => {
           body: JSON.stringify({
             workspaceId: testWorkspaceId,
             prompt: `Blocked by ${status}`,
+            planMode: false,
             // Not a draft
           }),
         });

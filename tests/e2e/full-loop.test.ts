@@ -38,6 +38,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Implement a feature",
+        planMode: false,
       });
 
       expect(loop.config.id).toBeDefined();
@@ -56,6 +57,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Custom task",
+        planMode: false,
         // Backend options removed - now global
         maxIterations: 10,
       });
@@ -68,6 +70,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Test persistence",
+        planMode: false,
       });
 
       // Get the loop back from the manager
@@ -81,6 +84,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Do the work",
+        planMode: false,
       });
 
       // Start the loop
@@ -127,6 +131,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Work forever",
+        planMode: false,
         maxIterations: 2,
       });
 
@@ -159,6 +164,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Do work",
+        planMode: false,
       });
 
       // Start the loop
@@ -191,6 +197,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Cause error",
+        planMode: false,
         // Set maxConsecutiveErrors to 1 so it fails after first error
         maxConsecutiveErrors: 1,
       });
@@ -211,16 +218,19 @@ describe("Full Loop Workflow", () => {
       await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Task 1",
+        planMode: false,
       });
 
       await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Task 2",
+        planMode: false,
       });
 
       await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Task 3",
+        planMode: false,
       });
 
       const loops = await ctx.manager.getAllLoops();
@@ -231,6 +241,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Original prompt",
+        planMode: false,
       });
 
       const updated = await ctx.manager.updateLoop(loop.config.id, {
@@ -249,6 +260,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Delete me",
+        planMode: false,
       });
 
       const deleted = await ctx.manager.deleteLoop(loop.config.id);
@@ -267,6 +279,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Purge me",
+        planMode: false,
       });
 
       // Soft delete first
@@ -298,6 +311,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Track me",
+        planMode: false,
       });
 
       // Before start
@@ -319,6 +333,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Track iterations",
+        planMode: false,
       });
 
       await ctx.manager.startLoop(loop.config.id);

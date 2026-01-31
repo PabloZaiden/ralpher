@@ -61,8 +61,8 @@ export interface CreateLoopOptions {
   baseBranch?: string;
   /** Clear the .planning folder contents before starting (default: false) */
   clearPlanningFolder?: boolean;
-  /** Start in plan creation mode instead of immediate execution (default: false) */
-  planMode?: boolean;
+  /** Start in plan creation mode instead of immediate execution (required) */
+  planMode: boolean;
   /** Save as draft without starting (no git branch or session created) */
   draft?: boolean;
 }
@@ -205,7 +205,7 @@ export class LoopManager {
       },
       baseBranch: options.baseBranch,
       clearPlanningFolder: options.clearPlanningFolder ?? DEFAULT_LOOP_CONFIG.clearPlanningFolder,
-      planMode: options.planMode ?? DEFAULT_LOOP_CONFIG.planMode,
+      planMode: options.planMode,
     };
 
     const state = createInitialState(id);

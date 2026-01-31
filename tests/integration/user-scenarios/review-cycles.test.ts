@@ -43,6 +43,7 @@ describe("Review Cycle User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Implement a feature",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -126,6 +127,7 @@ describe("Review Cycle User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Build a complex feature",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -209,6 +211,7 @@ describe("Review Cycle User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Implement a feature",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -293,6 +296,7 @@ describe("Review Cycle User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Complex feature",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -378,6 +382,7 @@ describe("Review Cycle User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Build a feature",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -503,6 +508,7 @@ describe("Review Cycle User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Do something",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -523,6 +529,7 @@ describe("Review Cycle User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Do something",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -547,6 +554,7 @@ describe("Review Cycle User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Do something",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -588,6 +596,7 @@ describe("Review Cycle User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Implement a feature",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 

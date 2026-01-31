@@ -163,6 +163,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Build something",
+          planMode: false,
         }),
       });
 
@@ -185,6 +186,7 @@ describe("Loops CRUD API Integration", () => {
           maxIterations: 10,
           stopPattern: "<done>FINISHED</done>$",
           git: { branchPrefix: "custom/" },
+          planMode: false,
         }),
       });
 
@@ -211,7 +213,7 @@ describe("Loops CRUD API Integration", () => {
       const response = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: "Missing workspaceId" }),
+        body: JSON.stringify({ prompt: "Missing workspaceId", planMode: false }),
       });
 
       expect(response.status).toBe(400);
@@ -226,6 +228,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "",
+          planMode: false,
         }),
       });
 
@@ -258,6 +261,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Test prompt",
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -290,6 +294,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Original prompt",
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -327,6 +332,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Test",
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -355,6 +361,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Test prompt",
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -385,6 +392,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Purge me",
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -425,6 +433,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Task with clearing",
           clearPlanningFolder: true,
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -442,6 +451,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Task without clearing",
           clearPlanningFolder: false,
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -458,6 +468,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Task with default",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -477,6 +488,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Test",
           clearPlanningFolder: true,
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -500,6 +512,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Draft task",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -531,6 +544,7 @@ describe("Loops CRUD API Integration", () => {
             workspaceId,
             prompt: "Normal task",
             draft: false,
+            planMode: false,
           }),
         });
 
@@ -555,6 +569,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Original prompt",
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -596,6 +611,7 @@ describe("Loops CRUD API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Task",
+            planMode: false,
           }),
         });
         expect(createResponse.status).toBe(201);
@@ -630,6 +646,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Task",
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -667,6 +684,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Task",
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -708,6 +726,7 @@ describe("Loops CRUD API Integration", () => {
             workspaceId,
             prompt: "Task",
             draft: true,
+            planMode: false,
           }),
         });
         const draftBody = await draftResponse.json();
@@ -750,6 +769,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Task",
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -790,6 +810,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Test mark merged",
           draft: true,
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -814,6 +835,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test no git",
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();
@@ -852,6 +874,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test mark merged",
+          planMode: false,
         }),
       });
       const createBody = await createResponse.json();

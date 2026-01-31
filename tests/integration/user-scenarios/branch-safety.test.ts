@@ -52,6 +52,7 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Complete a multi-step task",
+        planMode: false, // Regular execution, not plan mode
       });
 
       expect(status).toBe(201);
@@ -102,6 +103,7 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Make some changes",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -158,6 +160,7 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Make some changes",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -212,6 +215,7 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Make some changes",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -275,6 +279,7 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Make some changes",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 

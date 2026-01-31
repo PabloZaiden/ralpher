@@ -102,7 +102,7 @@ export function CreateLoopForm({
   // Track whether user has manually changed the branch selection
   const [userChangedBranch, setUserChangedBranch] = useState(!!initialLoopData?.baseBranch);
   const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
-  const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? false);
+  const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? true);
 
   // Reset selected branch when default branch changes (directory changed)
   useEffect(() => {
@@ -181,6 +181,7 @@ export function CreateLoopForm({
     const request: CreateLoopRequest = {
       workspaceId: selectedWorkspaceId,
       prompt: prompt.trim(),
+      planMode: planMode, // planMode is required
       // Backend settings are now global (not per-loop)
       // Git is always enabled - no toggle exposed to users
     };

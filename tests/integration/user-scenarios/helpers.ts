@@ -441,8 +441,8 @@ export async function createLoopViaAPI(
   options: {
     directory: string;
     prompt: string;
+    planMode: boolean;
     maxIterations?: number;
-    planMode?: boolean;
     clearPlanningFolder?: boolean;
     baseBranch?: string;
   }

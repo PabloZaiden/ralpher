@@ -347,7 +347,7 @@ export const DEFAULT_LOOP_CONFIG = {
   maxConsecutiveErrors: 10,
   activityTimeoutSeconds: 180, // 3 minutes
   clearPlanningFolder: false,
-  planMode: false,
+  planMode: true,
   git: {
     branchPrefix: "ralph/",
     commitPrefix: "[Ralph]",

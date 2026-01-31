@@ -371,6 +371,7 @@ describe("Workspace API Integration", () => {
           workspaceId: workspace.id,
           prompt: "Test prompt for loop creation",
           draft: true,
+          planMode: false,
         }),
       });
       expect(loopResponse.ok).toBe(true);
@@ -405,6 +406,7 @@ describe("Workspace API Integration", () => {
           workspaceId: "non-existent-workspace-id",
           prompt: "Test prompt",
           draft: true,
+          planMode: false,
         }),
       });
 
@@ -421,6 +423,7 @@ describe("Workspace API Integration", () => {
         body: JSON.stringify({
           prompt: "Test prompt",
           draft: true,
+          planMode: false,
         }),
       });
 

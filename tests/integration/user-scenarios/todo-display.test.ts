@@ -41,6 +41,7 @@ describe("TODO Display User Scenarios", () => {
         directory: ctx.workDir,
         prompt: "Write a function",
         clearPlanningFolder: false,
+        planMode: false, // Regular execution, not plan mode
       });
 
       expect(status).toBe(201);
@@ -98,6 +99,7 @@ describe("TODO Display User Scenarios", () => {
         directory: ctx.workDir,
         prompt: "Implement feature",
         clearPlanningFolder: false,
+        planMode: false, // Regular execution, not plan mode
       });
 
       expect(status).toBe(201);
@@ -158,6 +160,7 @@ describe("TODO Display User Scenarios", () => {
         directory: ctx.workDir,
         prompt: "Do something simple",
         clearPlanningFolder: false,
+        planMode: false, // Regular execution, not plan mode
       });
 
       expect(status).toBe(201);
@@ -192,6 +195,7 @@ describe("TODO Display User Scenarios", () => {
         directory: ctx.workDir,
         prompt: "Complex task",
         clearPlanningFolder: false,
+        planMode: false, // Regular execution, not plan mode
       });
 
       expect(status).toBe(201);
