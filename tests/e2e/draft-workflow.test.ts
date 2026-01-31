@@ -401,6 +401,57 @@ describe("Draft Loop E2E Workflow", () => {
     expect(errorBody.error).toBe("not_draft");
   });
 
+  test("workspaceId is included when fetching draft loop for editing", async () => {
+    // This test ensures that when fetching a draft loop (e.g., to edit it),
+    // the workspaceId is correctly included in the response.
+    // This is critical for the UI to auto-select the correct workspace in the dropdown.
+
+    // Step 1: Create draft
+    const createResponse = await fetch(`${baseUrl}/api/loops`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: testWorkspaceId,
+        prompt: "Test task for workspace selection",
+        draft: true,
+        planMode: false,
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const createBody = await createResponse.json();
+    const loopId = createBody.config.id;
+
+    // Verify draft was created with correct workspaceId
+    expect(createBody.state.status).toBe("draft");
+    expect(createBody.config.workspaceId).toBe(testWorkspaceId);
+
+    // Step 2: Fetch the draft loop (simulating opening the edit dialog)
+    const fetchResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+    expect(fetchResponse.status).toBe(200);
+    const fetchBody = await fetchResponse.json();
+
+    // Verify workspaceId is included in the fetched draft
+    // This is what the UI uses to populate the workspace dropdown
+    expect(fetchBody.config.workspaceId).toBe(testWorkspaceId);
+    expect(fetchBody.state.status).toBe("draft");
+
+    // Step 3: Verify workspaceId persists after editing other fields
+    const editResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "Updated prompt",
+      }),
+    });
+
+    expect(editResponse.status).toBe(200);
+    const editBody = await editResponse.json();
+
+    // workspaceId should still be present after edit
+    expect(editBody.config.workspaceId).toBe(testWorkspaceId);
+  });
+
   test("plan mode checkbox persists when editing draft", async () => {
     // Step 1: Create draft with plan mode enabled
     const createResponse = await fetch(`${baseUrl}/api/loops`, {
