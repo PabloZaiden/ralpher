@@ -57,6 +57,7 @@ describe("Regular Loop User Scenarios", () => {
         directory: ctx.workDir,
         prompt: "Implement a feature",
         clearPlanningFolder: false,
+        planMode: false, // Regular execution, not plan mode
       });
 
       expect(status).toBe(201);
@@ -107,6 +108,7 @@ describe("Regular Loop User Scenarios", () => {
         directory: ctx.workDir,
         prompt: "Implement a feature",
         clearPlanningFolder: true,
+        planMode: false, // Regular execution, not plan mode
       });
 
       expect(status).toBe(201);
@@ -161,6 +163,7 @@ describe("Regular Loop User Scenarios", () => {
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Complete a multi-step task",
+        planMode: false, // Regular execution, not plan mode
       });
 
       expect(status).toBe(201);
@@ -237,6 +240,7 @@ describe("Regular Loop User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Make some changes",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -302,6 +306,7 @@ describe("Regular Loop User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Make some changes",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -356,6 +361,7 @@ describe("Regular Loop User Scenarios", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Make some changes",
+        planMode: false, // Regular execution, not plan mode
       });
       const loop = body as Loop;
 
@@ -410,6 +416,7 @@ describe("Regular Loop User Scenarios", () => {
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "This should fail",
+        planMode: false, // Regular execution, not plan mode
       });
 
       expect(status).toBe(409);
@@ -446,6 +453,7 @@ describe("Regular Loop User Scenarios", () => {
       const { status: createStatus, body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Long running task",
+        planMode: false, // Regular execution, not plan mode
       });
       
       // If creation fails due to some issue, skip the rest of the test

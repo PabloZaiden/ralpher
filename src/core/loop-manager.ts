@@ -183,6 +183,9 @@ export class LoopManager {
       generatedName = `loop-${timestamp}`;
     }
 
+    // Derive effectivePlanMode from options or default - use this consistently
+    const effectivePlanMode = options.planMode ?? DEFAULT_LOOP_CONFIG.planMode;
+
     const config: LoopConfig = {
       id,
       name: generatedName,
@@ -205,7 +208,7 @@ export class LoopManager {
       },
       baseBranch: options.baseBranch,
       clearPlanningFolder: options.clearPlanningFolder ?? DEFAULT_LOOP_CONFIG.clearPlanningFolder,
-      planMode: options.planMode ?? DEFAULT_LOOP_CONFIG.planMode,
+      planMode: effectivePlanMode,
     };
 
     const state = createInitialState(id);
@@ -214,8 +217,8 @@ export class LoopManager {
     if (options.draft) {
       state.status = "draft";
     }
-    // Else if plan mode is enabled, initialize plan mode state
-    else if (options.planMode) {
+    // Else if plan mode is enabled (using resolved effectivePlanMode), initialize plan mode state
+    else if (effectivePlanMode) {
       state.status = "planning";
       state.planMode = {
         active: true,
