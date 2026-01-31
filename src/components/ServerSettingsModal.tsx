@@ -21,13 +21,17 @@ export interface ServerSettingsModalProps {
   onSave: (settings: ServerSettings) => Promise<boolean>;
   /** Callback to test connection */
   onTest: (settings: ServerSettings) => Promise<{ success: boolean; error?: string }>;
-  /** Callback to reset all settings */
+  /** Callback to reset all connections and stale loops (non-destructive) */
+  onResetConnections?: () => Promise<{ success: boolean; enginesCleared: number; loopsReset: number }>;
+  /** Callback to reset all settings (destructive - deletes database) */
   onResetAll?: () => Promise<boolean>;
   /** Whether saving is in progress */
   saving?: boolean;
   /** Whether testing is in progress */
   testing?: boolean;
-  /** Whether resetting is in progress */
+  /** Whether resetting connections is in progress */
+  resettingConnections?: boolean;
+  /** Whether resetting all is in progress */
   resetting?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
   remoteOnly?: boolean;
@@ -43,9 +47,11 @@ export function ServerSettingsModal({
   status,
   onSave,
   onTest,
+  onResetConnections,
   onResetAll,
   saving = false,
   testing = false,
+  resettingConnections = false,
   resetting = false,
   remoteOnly = false,
 }: ServerSettingsModalProps) {
@@ -57,6 +63,8 @@ export function ServerSettingsModal({
   const [useHttps, setUseHttps] = useState(false);
   const [allowInsecure, setAllowInsecure] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [showResetConnectionsConfirm, setShowResetConnectionsConfirm] = useState(false);
+  const [resetConnectionsResult, setResetConnectionsResult] = useState<{ success: boolean; enginesCleared: number; loopsReset: number } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Markdown rendering preference
@@ -429,6 +437,83 @@ export function ServerSettingsModal({
           </div>
         </div>
 
+        {/* Reset Connections - Non-destructive reset for stuck loops */}
+        {onResetConnections && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+            <div className="p-4 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/20">
+              <h3 className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-2">
+                Troubleshooting
+              </h3>
+              <p className="text-sm text-amber-700 dark:text-amber-300 mb-4">
+                If loops appear stuck or not responding, reset all connections. This stops running loops
+                and clears stale state. Your loop history is preserved and stopped loops can be resumed.
+              </p>
+              {!showResetConnectionsConfirm ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowResetConnectionsConfirm(true)}
+                  disabled={resettingConnections}
+                >
+                  <RefreshIcon className="w-4 h-4 mr-2" />
+                  Reset Connections
+                </Button>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-amber-600 dark:text-amber-400">
+                    This will stop all running loops. They can be resumed by sending a new message. Continue?
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={async () => {
+                        const result = await onResetConnections();
+                        setResetConnectionsResult(result);
+                        setShowResetConnectionsConfirm(false);
+                      }}
+                      loading={resettingConnections}
+                    >
+                      Yes, reset connections
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowResetConnectionsConfirm(false)}
+                      disabled={resettingConnections}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {/* Show result after reset */}
+              {resetConnectionsResult && (
+                <div className="mt-3 flex items-center gap-2">
+                  {resetConnectionsResult.success ? (
+                    <>
+                      <CheckIcon className="w-5 h-5 text-green-500 flex-shrink-0" />
+                      <span className="text-sm text-green-600 dark:text-green-400">
+                        Reset complete: {resetConnectionsResult.enginesCleared} engines cleared, {resetConnectionsResult.loopsReset} stale loops stopped
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <XIcon className="w-5 h-5 text-red-500 flex-shrink-0" />
+                      <span className="text-sm text-red-600 dark:text-red-400">
+                        Reset failed
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Reset All Settings - Danger Zone */}
         {onResetAll && (
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
@@ -518,6 +603,27 @@ function XIcon({ className }: { className?: string }) {
       strokeWidth={2}
     >
       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
+/**
+ * Simple refresh icon.
+ */
+function RefreshIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+      />
     </svg>
   );
 }

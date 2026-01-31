@@ -19,7 +19,9 @@ export interface UseServerSettingsResult {
   saving: boolean;
   /** Whether a test operation is in progress */
   testing: boolean;
-  /** Whether a reset operation is in progress */
+  /** Whether a reset connections operation is in progress */
+  resettingConnections: boolean;
+  /** Whether a reset all operation is in progress */
   resetting: boolean;
   /** Refresh settings from the server */
   refresh: () => Promise<void>;
@@ -27,6 +29,8 @@ export interface UseServerSettingsResult {
   updateSettings: (settings: ServerSettings) => Promise<boolean>;
   /** Test connection with provided settings */
   testConnection: (settings: ServerSettings, directory?: string) => Promise<{ success: boolean; error?: string }>;
+  /** Reset all connections and stale loops (non-destructive) */
+  resetConnections: () => Promise<{ success: boolean; enginesCleared: number; loopsReset: number }>;
   /** Reset all settings (delete database and reinitialize) */
   resetAll: () => Promise<boolean>;
 }
@@ -41,6 +45,7 @@ export function useServerSettings(): UseServerSettingsResult {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [resettingConnections, setResettingConnections] = useState(false);
   const [resetting, setResetting] = useState(false);
 
   // Fetch current settings
@@ -136,6 +141,44 @@ export function useServerSettings(): UseServerSettingsResult {
     []
   );
 
+  // Reset all connections and stale loops (non-destructive)
+  const resetConnections = useCallback(async (): Promise<{ success: boolean; enginesCleared: number; loopsReset: number }> => {
+    try {
+      setResettingConnections(true);
+      setError(null);
+
+      const response = await fetch("/api/backend/reset-all", {
+        method: "POST",
+      });
+
+      const data = (await response.json()) as { 
+        success: boolean; 
+        message?: string;
+        enginesCleared?: number; 
+        loopsReset?: number;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(data.message || data.error || "Failed to reset connections");
+      }
+
+      // Refresh status after reset
+      await fetchStatus();
+
+      return { 
+        success: true, 
+        enginesCleared: data.enginesCleared ?? 0, 
+        loopsReset: data.loopsReset ?? 0 
+      };
+    } catch (err) {
+      setError(String(err));
+      return { success: false, enginesCleared: 0, loopsReset: 0 };
+    } finally {
+      setResettingConnections(false);
+    }
+  }, [fetchStatus]);
+
   // Reset all settings (delete database and reinitialize)
   const resetAll = useCallback(async (): Promise<boolean> => {
     try {
@@ -172,10 +215,12 @@ export function useServerSettings(): UseServerSettingsResult {
     error,
     saving,
     testing,
+    resettingConnections,
     resetting,
     refresh,
     updateSettings,
     testConnection,
+    resetConnections,
     resetAll,
   };
 }

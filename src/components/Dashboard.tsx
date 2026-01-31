@@ -45,9 +45,11 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     loading: serverLoading,
     saving: serverSaving,
     testing: serverTesting,
+    resettingConnections: serverResettingConnections,
     resetting: serverResetting,
     updateSettings: updateServerSettings,
     testConnection: testServerConnection,
+    resetConnections: resetServerConnections,
     resetAll: resetAllSettings,
   } = useServerSettings();
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
@@ -740,9 +742,11 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         status={serverStatus}
         onSave={updateServerSettings}
         onTest={testServerConnection}
+        onResetConnections={resetServerConnections}
         onResetAll={resetAllSettings}
         saving={serverSaving}
         testing={serverTesting}
+        resettingConnections={serverResettingConnections}
         resetting={serverResetting}
         remoteOnly={remoteOnly}
       />

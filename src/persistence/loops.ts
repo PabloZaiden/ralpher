@@ -449,3 +449,51 @@ export async function updateLoopConfig(loopId: string, config: LoopConfig): Prom
   
   return updateInTransaction();
 }
+
+/**
+ * Stale loop statuses that should be reset when force-resetting connections.
+ * These are non-planning active states where the loop appears to be running
+ * but may have a stale in-memory engine.
+ * 
+ * Note: "planning" is excluded because planning loops can reconnect to their
+ * session when the user sends feedback. We don't want to break their state.
+ */
+const STALE_LOOP_STATUSES = [
+  "idle",      // Created but not started (transitional)
+  "starting",  // Initializing backend connection and git branch
+  "running",   // Actively executing an iteration
+  "waiting",   // Between iterations, preparing for next
+];
+
+/**
+ * Reset all stale loops to "stopped" status.
+ * 
+ * This is used when force-resetting connections to clear loops that appear
+ * active in the database but have no running engine (e.g., after a crash or
+ * when connections become stale).
+ * 
+ * Loops in "planning" status are NOT reset because they can reconnect to
+ * their existing session when the user sends feedback.
+ * 
+ * @returns The number of loops that were reset
+ */
+export async function resetStaleLoops(): Promise<number> {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+  
+  // Build placeholders for the IN clause
+  const placeholders = STALE_LOOP_STATUSES.map(() => "?").join(", ");
+  
+  const stmt = db.prepare(`
+    UPDATE loops 
+    SET status = 'stopped',
+        error_message = 'Forcefully stopped by connection reset',
+        error_timestamp = ?,
+        completed_at = ?
+    WHERE status IN (${placeholders})
+  `);
+  
+  const result = stmt.run(now, now, ...STALE_LOOP_STATUSES);
+  
+  return result.changes;
+}

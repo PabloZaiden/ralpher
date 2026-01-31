@@ -17,6 +17,7 @@
  */
 
 import { backendManager } from "../core/backend-manager";
+import { loopManager } from "../core/loop-manager";
 import { getAppConfig, isRemoteOnlyMode } from "../core/config";
 import { deleteAndReinitializeDatabase } from "../persistence/database";
 import type { ServerSettings } from "../types/settings";
@@ -243,6 +244,46 @@ export const settingsRoutes = {
         return Response.json({ 
           success: true, 
           message: "Backend connection reset successfully" 
+        });
+      } catch (error) {
+        return errorResponse("reset_failed", String(error), 500);
+      }
+    },
+  },
+
+  "/api/backend/reset-all": {
+    /**
+     * POST /api/backend/reset-all - Force reset all connections and stale loops.
+     * 
+     * This is a comprehensive reset that:
+     * 1. Stops all running loop engines
+     * 2. Clears in-memory loop state
+     * 3. Resets stale loops in the database to "stopped" status
+     *    (except "planning" loops which can reconnect)
+     * 4. Aborts all active subscriptions
+     * 5. Disconnects from the backend
+     * 
+     * Does NOT delete the database or loop history.
+     * 
+     * Use this to recover from:
+     * - Stale connections where loops appear stuck
+     * - Hung loops that aren't responding
+     * - State mismatches between memory and database
+     * 
+     * After reset:
+     * - Stopped loops can be resumed by sending a new message
+     * - Planning loops can continue by sending feedback
+     * 
+     * @returns Success response with reset statistics
+     */
+    async POST(): Promise<Response> {
+      try {
+        const result = await loopManager.forceResetAll();
+        return Response.json({ 
+          success: true, 
+          message: "All connections and stale loops have been reset",
+          enginesCleared: result.enginesCleared,
+          loopsReset: result.loopsReset,
         });
       } catch (error) {
         return errorResponse("reset_failed", String(error), 500);

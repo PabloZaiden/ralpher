@@ -13,93 +13,13 @@ import { ensureDataDirectories } from "../../src/persistence/paths";
 import { backendManager } from "../../src/core/backend-manager";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 import { updateLoopState } from "../../src/persistence/loops";
-import type { LoopBackend } from "../../src/core/loop-engine";
-import type {
-  AgentSession,
-  AgentResponse,
-  AgentEvent,
-  BackendConnectionConfig,
-  CreateSessionOptions,
-  PromptInput,
-} from "../../src/backends/types";
-import { createEventStream, type EventStream } from "../../src/utils/event-stream";
+import { NeverCompletingMockBackend } from "../mocks/mock-backend";
 
 describe("Active Loop Directory Check API", () => {
   let testDataDir: string;
   let testWorkDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
-
-  // Create a mock backend that stays in running state (doesn't complete)
-  function createMockBackend(): LoopBackend {
-    let connected = false;
-    const sessions = new Map<string, AgentSession>();
-
-    return {
-      async connect(_config: BackendConnectionConfig): Promise<void> {
-        connected = true;
-      },
-
-      async disconnect(): Promise<void> {
-        connected = false;
-      },
-
-      isConnected(): boolean {
-        return connected;
-      },
-
-      async createSession(options: CreateSessionOptions): Promise<AgentSession> {
-        const session: AgentSession = {
-          id: `session-${Date.now()}`,
-          title: options.title,
-          createdAt: new Date().toISOString(),
-        };
-        sessions.set(session.id, session);
-        return session;
-      },
-
-      async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
-        // Return a non-completion response to keep loops running
-        return {
-          id: `msg-${Date.now()}`,
-          content: "Still working...",
-          parts: [{ type: "text", text: "Still working..." }],
-        };
-      },
-
-      async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
-        // No-op for async version
-      },
-
-      async abortSession(_sessionId: string): Promise<void> {
-        // Not used in tests
-      },
-
-      async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
-        const { stream, push, end } = createEventStream<AgentEvent>();
-
-        // Emit events but don't complete
-        (async () => {
-          push({ type: "message.start", messageId: `msg-${Date.now()}` });
-          push({ type: "message.delta", content: "Still working..." });
-          // Don't end the stream - let the loop stay running
-          // We'll use timeout or the test will manually change status
-          await new Promise((resolve) => setTimeout(resolve, 100000));
-          end();
-        })();
-
-        return stream;
-      },
-
-      async replyToPermission(_requestId: string, _response: string): Promise<void> {
-        // Not used in tests
-      },
-
-      async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
-        // Not used in tests
-      },
-    };
-  }
 
   beforeAll(async () => {
     // Create temp directories
@@ -121,7 +41,7 @@ describe("Active Loop Directory Check API", () => {
     await Bun.$`git -C ${testWorkDir} commit -m "Initial commit"`.quiet();
 
     // Set up backend manager with test executor factory
-    backendManager.setBackendForTesting(createMockBackend());
+    backendManager.setBackendForTesting(new NeverCompletingMockBackend());
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
 
     // Start test server on random port

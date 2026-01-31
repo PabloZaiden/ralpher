@@ -4,7 +4,8 @@
  */
 
 import { OpenCodeBackend } from "../backends/opencode";
-import type { BackendConnectionConfig } from "../backends/types";
+import type { BackendConnectionConfig, Backend } from "../backends/types";
+import type { OpencodeClient } from "@opencode-ai/sdk/v2";
 import { getServerSettings, setServerSettings } from "../persistence/preferences";
 import {
   getDefaultServerSettings,
@@ -16,7 +17,6 @@ import type { LoopEvent } from "../types/events";
 import type { CommandExecutor } from "./command-executor";
 import { CommandExecutorImpl } from "./remote-command-executor";
 import { log } from "./logger";
-import type { LoopBackend } from "./loop-engine";
 
 /**
  * Factory function type for creating command executors.
@@ -87,7 +87,7 @@ export function buildConnectionConfig(settings: ServerSettings, directory: strin
  * Maintains a single backend connection based on server settings.
  */
 class BackendManager {
-  private backend: OpenCodeBackend | null = null;
+  private backend: Backend | null = null;
   private settings: ServerSettings = getDefaultServerSettings();
   private connectionError: string | null = null;
   private initialized = false;
@@ -279,7 +279,7 @@ class BackendManager {
    * Get the backend instance.
    * Throws if not initialized.
    */
-  getBackend(): OpenCodeBackend {
+  getBackend(): Backend {
     if (!this.backend) {
       // Create backend on demand
       this.backend = new OpenCodeBackend();
@@ -316,8 +316,8 @@ class BackendManager {
       throw new Error("[BackendManager] Backend not connected! Call connect() first.");
     }
 
-    // Get the SDK client
-    const client = this.backend.getSdkClient();
+    // Get the SDK client (cast to OpencodeClient since Backend interface is agnostic)
+    const client = this.backend.getSdkClient() as OpencodeClient | null;
     if (!client) {
       throw new Error("[BackendManager] No SDK client available");
     }
@@ -369,12 +369,10 @@ class BackendManager {
   /**
    * Set a custom backend instance (for testing).
    * This bypasses the normal OpenCodeBackend creation.
-   * Accepts OpenCodeBackend or MockOpenCodeBackend (both implement LoopBackend).
+   * Accepts OpenCodeBackend or MockOpenCodeBackend (both implement Backend).
    */
-  setBackendForTesting(backend: LoopBackend): void {
-    // Store as OpenCodeBackend since that's what the private field type is.
-    // This works because LoopBackend is a structural type that matches OpenCodeBackend.
-    this.backend = backend as OpenCodeBackend;
+  setBackendForTesting(backend: Backend): void {
+    this.backend = backend;
     this.initialized = true;
   }
 

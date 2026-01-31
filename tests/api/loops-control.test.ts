@@ -14,16 +14,7 @@ import { backendManager } from "../../src/core/backend-manager";
 import { loopManager } from "../../src/core/loop-manager";
 import { closeDatabase } from "../../src/persistence/database";
 import { TestCommandExecutor } from "../mocks/mock-executor";
-import type { LoopBackend } from "../../src/core/loop-engine";
-import type {
-  AgentSession,
-  AgentResponse,
-  AgentEvent,
-  BackendConnectionConfig,
-  CreateSessionOptions,
-  PromptInput,
-} from "../../src/backends/types";
-import { createEventStream, type EventStream } from "../../src/utils/event-stream";
+import { createMockBackend } from "../mocks/mock-backend";
 
 describe("Loops Control API Integration", () => {
   let testDataDir: string;
@@ -31,85 +22,6 @@ describe("Loops Control API Integration", () => {
   let testBareRepoDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
-
-  // Create a mock backend that completes immediately
-  function createMockBackend(): LoopBackend {
-    let connected = false;
-    let pendingPrompt = false;
-    const sessions = new Map<string, AgentSession>();
-
-    return {
-      async connect(_config: BackendConnectionConfig): Promise<void> {
-        connected = true;
-      },
-
-      async disconnect(): Promise<void> {
-        connected = false;
-      },
-
-      isConnected(): boolean {
-        return connected;
-      },
-
-      async createSession(options: CreateSessionOptions): Promise<AgentSession> {
-        const session: AgentSession = {
-          id: `session-${Date.now()}`,
-          title: options.title,
-          createdAt: new Date().toISOString(),
-        };
-        sessions.set(session.id, session);
-        return session;
-      },
-
-      async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
-        return {
-          id: `msg-${Date.now()}`,
-          content: "<promise>COMPLETE</promise>",
-          parts: [{ type: "text", text: "<promise>COMPLETE</promise>" }],
-        };
-      },
-
-      async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
-        // Signal that we're ready for events
-        pendingPrompt = true;
-      },
-
-      async abortSession(_sessionId: string): Promise<void> {
-        // Not used in tests
-      },
-
-      async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
-        // Return a stream that yields complete message with stop pattern
-        const { stream, push, end } = createEventStream<AgentEvent>();
-
-        // Push events asynchronously AFTER sendPromptAsync sets pendingPrompt
-        (async () => {
-          // Wait for sendPromptAsync to set pendingPrompt
-          let attempts = 0;
-          while (!pendingPrompt && attempts < 100) {
-            await new Promise((resolve) => setTimeout(resolve, 10));
-            attempts++;
-          }
-          pendingPrompt = false;
-
-          push({ type: "message.start", messageId: `msg-${Date.now()}` });
-          push({ type: "message.delta", content: "<promise>COMPLETE</promise>" });
-          push({ type: "message.complete", content: "<promise>COMPLETE</promise>" });
-          end();
-        })();
-
-        return stream;
-      },
-
-      async replyToPermission(_requestId: string, _response: string): Promise<void> {
-        // Not used in tests
-      },
-
-      async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
-        // Not used in tests
-      },
-    };
-  }
 
   // Helper function to poll for loop completion
   async function waitForLoopCompletion(loopId: string, timeoutMs = 10000): Promise<void> {

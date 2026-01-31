@@ -842,4 +842,57 @@ describe("GitService", () => {
       expect(content).toBe("original content\n");
     });
   });
+
+  describe("cleanupStaleLockFiles", () => {
+    test("removes existing lock file", async () => {
+      const { stat } = await import("fs/promises");
+      
+      // Ensure .git directory exists (it should from beforeEach)
+      const lockFile = join(testDir, ".git", "index.lock");
+      
+      // Create a stale lock file
+      await writeFile(lockFile, "");
+      
+      // Verify lock file exists
+      const statBefore = await stat(lockFile).catch(() => null);
+      expect(statBefore).not.toBeNull();
+      
+      // Clean up
+      const cleaned = await GitService.cleanupStaleLockFiles(testDir);
+      expect(cleaned).toBe(true);
+      
+      // Verify lock file is removed
+      const statAfter = await stat(lockFile).catch(() => null);
+      expect(statAfter).toBeNull();
+    });
+
+    test("returns false when no lock file exists", async () => {
+      // No lock file exists by default
+      const cleaned = await GitService.cleanupStaleLockFiles(testDir);
+      expect(cleaned).toBe(false);
+    });
+
+    test("handles repeated cleanup with retries", async () => {
+      const { stat } = await import("fs/promises");
+      
+      const lockFile = join(testDir, ".git", "index.lock");
+      
+      // Create a stale lock file
+      await writeFile(lockFile, "");
+      
+      // Clean up with retries
+      const cleaned = await GitService.cleanupStaleLockFiles(testDir, 3, 10);
+      expect(cleaned).toBe(true);
+      
+      // Verify lock file is removed
+      const statAfter = await stat(lockFile).catch(() => null);
+      expect(statAfter).toBeNull();
+    });
+
+    test("works on non-existent directory gracefully", async () => {
+      // Should not throw for non-existent directory
+      const cleaned = await GitService.cleanupStaleLockFiles("/tmp/nonexistent-dir-12345");
+      expect(cleaned).toBe(false);
+    });
+  });
 });

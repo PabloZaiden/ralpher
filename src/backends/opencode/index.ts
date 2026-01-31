@@ -34,18 +34,6 @@ export interface ModelInfo {
   connected: boolean;
 }
 
-/**
- * Connection info needed for WebSocket and other direct connections.
- */
-export interface ConnectionInfo {
-  /** Base URL for the opencode server */
-  baseUrl: string;
-  /** Auth headers to use for connections */
-  authHeaders: Record<string, string>;
-  /** Whether to allow insecure connections (self-signed certificates) */
-  allowInsecure?: boolean;
-}
-
 import type {
   BackendConnectionConfig,
   CreateSessionOptions,
@@ -54,14 +42,19 @@ import type {
   AgentResponse,
   AgentPart,
   AgentEvent,
+  Backend,
+  ConnectionInfo,
 } from "../types";
 import { createEventStream, type EventStream } from "../../utils/event-stream";
+
+// Re-export ConnectionInfo for backward compatibility
+export type { ConnectionInfo } from "../types";
 
 /**
  * OpenCode backend implementation.
  * Supports both spawn mode (creates a new server) and connect mode (connects to existing).
  */
-export class OpenCodeBackend {
+export class OpenCodeBackend implements Backend {
   readonly name = "opencode";
 
   private client: OpencodeClient | null = null;

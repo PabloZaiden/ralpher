@@ -301,5 +301,138 @@ describe("Persistence", () => {
         expect(result!.state.status).toBe("running");
       });
     });
+
+    describe("resetStaleLoops", () => {
+      test("resets idle loops to stopped", async () => {
+        const { ensureDataDirectories } = await import("../../src/persistence/paths");
+        const { saveLoop, loadLoop, resetStaleLoops } = await import("../../src/persistence/loops");
+
+        await ensureDataDirectories();
+
+        const idleLoop = createTestLoop({
+          id: "idle-loop",
+          status: "idle",
+        });
+        await saveLoop(idleLoop);
+
+        const resetCount = await resetStaleLoops();
+        expect(resetCount).toBe(1);
+
+        const loaded = await loadLoop("idle-loop");
+        expect(loaded).not.toBeNull();
+        expect(loaded!.state.status).toBe("stopped");
+        expect(loaded!.state.error?.message).toBe("Forcefully stopped by connection reset");
+      });
+
+      test("resets running and waiting loops to stopped", async () => {
+        const { ensureDataDirectories } = await import("../../src/persistence/paths");
+        const { saveLoop, loadLoop, resetStaleLoops } = await import("../../src/persistence/loops");
+
+        await ensureDataDirectories();
+
+        const runningLoop = createTestLoop({
+          id: "running-loop",
+          directory: "/tmp/test-running",
+          status: "running",
+        });
+        await saveLoop(runningLoop);
+
+        const waitingLoop = createTestLoop({
+          id: "waiting-loop",
+          directory: "/tmp/test-waiting",
+          status: "waiting",
+        });
+        await saveLoop(waitingLoop);
+
+        const startingLoop = createTestLoop({
+          id: "starting-loop",
+          directory: "/tmp/test-starting",
+          status: "starting",
+        });
+        await saveLoop(startingLoop);
+
+        const resetCount = await resetStaleLoops();
+        expect(resetCount).toBe(3);
+
+        const loadedRunning = await loadLoop("running-loop");
+        expect(loadedRunning!.state.status).toBe("stopped");
+
+        const loadedWaiting = await loadLoop("waiting-loop");
+        expect(loadedWaiting!.state.status).toBe("stopped");
+
+        const loadedStarting = await loadLoop("starting-loop");
+        expect(loadedStarting!.state.status).toBe("stopped");
+      });
+
+      test("does NOT reset planning loops", async () => {
+        const { ensureDataDirectories } = await import("../../src/persistence/paths");
+        const { saveLoop, loadLoop, resetStaleLoops } = await import("../../src/persistence/loops");
+
+        await ensureDataDirectories();
+
+        const planningLoop = createTestLoop({
+          id: "planning-loop",
+          status: "planning",
+        });
+        await saveLoop(planningLoop);
+
+        const resetCount = await resetStaleLoops();
+        expect(resetCount).toBe(0);
+
+        const loaded = await loadLoop("planning-loop");
+        expect(loaded).not.toBeNull();
+        expect(loaded!.state.status).toBe("planning");
+      });
+
+      test("does NOT reset terminal state loops", async () => {
+        const { ensureDataDirectories } = await import("../../src/persistence/paths");
+        const { saveLoop, loadLoop, resetStaleLoops } = await import("../../src/persistence/loops");
+
+        await ensureDataDirectories();
+
+        const completedLoop = createTestLoop({
+          id: "completed-loop",
+          directory: "/tmp/test-completed",
+          status: "completed",
+        });
+        await saveLoop(completedLoop);
+
+        const stoppedLoop = createTestLoop({
+          id: "stopped-loop",
+          directory: "/tmp/test-stopped",
+          status: "stopped",
+        });
+        await saveLoop(stoppedLoop);
+
+        const failedLoop = createTestLoop({
+          id: "failed-loop",
+          directory: "/tmp/test-failed",
+          status: "failed",
+        });
+        await saveLoop(failedLoop);
+
+        const resetCount = await resetStaleLoops();
+        expect(resetCount).toBe(0);
+
+        const loadedCompleted = await loadLoop("completed-loop");
+        expect(loadedCompleted!.state.status).toBe("completed");
+
+        const loadedStopped = await loadLoop("stopped-loop");
+        expect(loadedStopped!.state.status).toBe("stopped");
+
+        const loadedFailed = await loadLoop("failed-loop");
+        expect(loadedFailed!.state.status).toBe("failed");
+      });
+
+      test("returns 0 when no stale loops exist", async () => {
+        const { ensureDataDirectories } = await import("../../src/persistence/paths");
+        const { resetStaleLoops } = await import("../../src/persistence/loops");
+
+        await ensureDataDirectories();
+
+        const resetCount = await resetStaleLoops();
+        expect(resetCount).toBe(0);
+      });
+    });
   });
 });

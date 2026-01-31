@@ -1,7 +1,6 @@
 /**
  * Mock OpenCodeBackend for testing.
- * Provides the same interface as OpenCodeBackend but with mock implementations.
- * This avoids the need for a separate Backend interface and ensures type safety.
+ * Implements the Backend interface to ensure type safety and API compatibility.
  */
 
 import type {
@@ -11,8 +10,9 @@ import type {
   BackendConnectionConfig,
   CreateSessionOptions,
   PromptInput,
+  Backend,
+  ConnectionInfo,
 } from "../../src/backends/types";
-import type { ConnectionInfo } from "../../src/backends/opencode";
 import { createEventStream, type EventStream } from "../../src/utils/event-stream";
 
 /**
@@ -24,15 +24,15 @@ export interface MockBackendOptions {
 }
 
 /**
- * MockOpenCodeBackend provides a mock implementation of OpenCodeBackend.
+ * MockOpenCodeBackend provides a mock implementation of the Backend interface.
  * It implements all methods that OpenCodeBackend has, ensuring no runtime errors
- * when BackendManager calls OpenCode-specific methods like getSdkClient, getConnectionInfo, etc.
+ * when BackendManager calls any Backend methods.
  *
  * Supports special response patterns:
  * - "ERROR:message" - Throws an error with the given message
  * - Any other string - Returns as normal response
  */
-export class MockOpenCodeBackend {
+export class MockOpenCodeBackend implements Backend {
   readonly name = "opencode";
 
   private connected = false;
@@ -221,4 +221,243 @@ export class MockOpenCodeBackend {
  */
 export function createMockBackend(responses: string[] = ["<promise>COMPLETE</promise>"]): MockOpenCodeBackend {
   return new MockOpenCodeBackend({ responses });
+}
+
+/**
+ * A mock backend that never completes - useful for testing active loop checks,
+ * pending message handling, and other scenarios where loops need to stay running.
+ */
+export class NeverCompletingMockBackend implements Backend {
+  readonly name = "opencode";
+
+  private connected = false;
+  private directory = "";
+  private readonly sessions = new Map<string, AgentSession>();
+
+  async connect(config: BackendConnectionConfig): Promise<void> {
+    this.connected = true;
+    this.directory = config.directory;
+  }
+
+  async disconnect(): Promise<void> {
+    this.connected = false;
+    this.directory = "";
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  async createSession(options: CreateSessionOptions): Promise<AgentSession> {
+    const session: AgentSession = {
+      id: `mock-session-${Date.now()}`,
+      title: options.title,
+      createdAt: new Date().toISOString(),
+    };
+    this.sessions.set(session.id, session);
+    return session;
+  }
+
+  async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
+    return {
+      id: `msg-${Date.now()}`,
+      content: "Still working...",
+      parts: [{ type: "text", text: "Still working..." }],
+    };
+  }
+
+  async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
+    // No-op
+  }
+
+  async abortSession(_sessionId: string): Promise<void> {
+    // No-op
+  }
+
+  async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
+    const { stream, push } = createEventStream<AgentEvent>();
+
+    (async () => {
+      push({ type: "message.start", messageId: `msg-${Date.now()}` });
+      push({ type: "message.delta", content: "Still working..." });
+      // Never end the stream - keep loop running forever
+      await new Promise((resolve) => setTimeout(resolve, 100000));
+    })();
+
+    return stream;
+  }
+
+  async replyToPermission(_requestId: string, _response: string): Promise<void> {
+    // No-op
+  }
+
+  async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
+    // No-op
+  }
+
+  // Backend-specific methods
+  getSdkClient(): null {
+    return null;
+  }
+
+  getDirectory(): string {
+    return this.directory;
+  }
+
+  getConnectionInfo(): ConnectionInfo | null {
+    if (!this.connected) return null;
+    return { baseUrl: "http://mock-server:4096", authHeaders: {} };
+  }
+
+  abortAllSubscriptions(): void {
+    // No-op
+  }
+
+  async getModels(_directory: string): Promise<[]> {
+    return [];
+  }
+
+  async getSession(id: string): Promise<AgentSession | null> {
+    return this.sessions.get(id) ?? null;
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    this.sessions.delete(id);
+  }
+}
+
+/**
+ * Plan Mode mock backend with per-session response tracking.
+ * Uses sendPrompt for name generation and subscribeToEvents for planning/execution.
+ */
+export class PlanModeMockBackend implements Backend {
+  readonly name = "opencode";
+
+  private connected = false;
+  private directory = "";
+  private pendingPrompt = false;
+  private nameCounter = 0;
+  private sessions = new Map<string, AgentSession>();
+  private sessionResponseIndex = new Map<string, number>();
+
+  reset(): void {
+    this.sessionResponseIndex.clear();
+    this.pendingPrompt = false;
+  }
+
+  private getNextStreamResponse(sessionId: string): string {
+    const idx = this.sessionResponseIndex.get(sessionId) ?? 0;
+    this.sessionResponseIndex.set(sessionId, idx + 1);
+    
+    // Response sequence per session for streaming:
+    // 0-8: PLAN_READY for planning phase
+    // 9+: COMPLETE for execution phase
+    if (idx < 9) {
+      return "<promise>PLAN_READY</promise>";
+    }
+    return "<promise>COMPLETE</promise>";
+  }
+
+  async connect(config: BackendConnectionConfig): Promise<void> {
+    this.connected = true;
+    this.directory = config.directory;
+  }
+
+  async disconnect(): Promise<void> {
+    this.connected = false;
+    this.directory = "";
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
+
+  async createSession(options: CreateSessionOptions): Promise<AgentSession> {
+    const session: AgentSession = {
+      id: `session-${Date.now()}-${Math.random()}`,
+      title: options.title,
+      createdAt: new Date().toISOString(),
+    };
+    this.sessions.set(session.id, session);
+    this.sessionResponseIndex.set(session.id, 0);
+    return session;
+  }
+
+  async sendPrompt(_sessionId: string, _prompt: PromptInput): Promise<AgentResponse> {
+    // sendPrompt is used for name generation
+    const uniqueName = `test-loop-name-${++this.nameCounter}`;
+    return {
+      id: `msg-${Date.now()}`,
+      content: uniqueName,
+      parts: [{ type: "text", text: uniqueName }],
+    };
+  }
+
+  async sendPromptAsync(_sessionId: string, _prompt: PromptInput): Promise<void> {
+    this.pendingPrompt = true;
+  }
+
+  async abortSession(_sessionId: string): Promise<void> {
+    // No-op
+  }
+
+  async subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>> {
+    const { stream, push, end } = createEventStream<AgentEvent>();
+    const self = this;
+
+    (async () => {
+      let attempts = 0;
+      while (!self.pendingPrompt && attempts < 100) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        attempts++;
+      }
+      self.pendingPrompt = false;
+
+      const response = self.getNextStreamResponse(sessionId);
+      push({ type: "message.start", messageId: `msg-${Date.now()}` });
+      push({ type: "message.delta", content: response });
+      push({ type: "message.complete", content: response });
+      end();
+    })();
+
+    return stream;
+  }
+
+  async replyToPermission(_requestId: string, _response: string): Promise<void> {
+    // No-op
+  }
+
+  async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
+    // No-op
+  }
+
+  // Backend-specific methods
+  getSdkClient(): null {
+    return null;
+  }
+
+  getDirectory(): string {
+    return this.directory;
+  }
+
+  getConnectionInfo(): ConnectionInfo | null {
+    if (!this.connected) return null;
+    return { baseUrl: "http://mock-server:4096", authHeaders: {} };
+  }
+
+  abortAllSubscriptions(): void {
+    // No-op
+  }
+
+  async getModels(_directory: string): Promise<[]> {
+    return [];
+  }
+
+  async getSession(id: string): Promise<AgentSession | null> {
+    return this.sessions.get(id) ?? null;
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    this.sessions.delete(id);
+  }
 }

@@ -146,6 +146,49 @@ export class GitService {
   static withExecutor(executor: CommandExecutor): GitService {
     return new GitService(executor);
   }
+
+  /**
+   * Clean up stale git lock files that may have been left behind by crashed processes.
+   * This is especially important when a loop is forcefully stopped while git operations
+   * are in progress.
+   * 
+   * @param directory - The git repository directory
+   * @param retries - Number of times to retry cleanup (default: 3)
+   * @param delayMs - Delay between retries in milliseconds (default: 100)
+   * @returns true if any lock files were cleaned up, false otherwise
+   */
+  static async cleanupStaleLockFiles(directory: string, retries = 3, delayMs = 100): Promise<boolean> {
+    const path = await import("path");
+    const { rm, stat } = await import("fs/promises");
+    
+    const lockFile = path.join(directory, ".git", "index.lock");
+    let cleaned = false;
+    
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        // Check if lock file exists
+        await stat(lockFile);
+        
+        // Lock file exists - try to remove it
+        // We assume it's stale since we're only calling this before starting new operations
+        // when the loop engine is not running
+        log.info(`[GitService] Removing stale lock file: ${lockFile} (attempt ${attempt + 1}/${retries})`);
+        await rm(lockFile, { force: true });
+        cleaned = true;
+        
+        // Wait a bit to let any in-flight operations complete
+        if (attempt < retries - 1) {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+      } catch {
+        // Lock file doesn't exist - we're done
+        break;
+      }
+    }
+    
+    return cleaned;
+  }
+
   /**
    * Check if a directory is a git repository.
    */
