@@ -7,6 +7,8 @@ import { test, expect, describe } from "bun:test";
 import { setupTestContext, teardownTestContext, waitForEvent, waitForLoopStatus } from "../setup";
 import { join } from "path";
 
+const testWorkspaceId = "test-workspace-id";
+
 describe("Review Mode", () => {
   describe("acceptLoop with review mode", () => {
     test("initializes review mode after accepting (merging) a loop", async () => {
@@ -23,6 +25,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         // Start loop and wait for completion
@@ -68,6 +71,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -112,6 +116,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -152,6 +157,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -189,6 +195,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         // Try to address comments
@@ -218,6 +225,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -251,6 +259,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -286,6 +295,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         // Get review history
@@ -339,6 +349,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -392,6 +403,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -438,6 +450,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -480,6 +493,7 @@ describe("Review Mode", () => {
           directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
+          workspaceId: testWorkspaceId,
         });
 
         await ctx.manager.startLoop(loop.config.id);

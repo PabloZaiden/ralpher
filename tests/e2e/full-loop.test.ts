@@ -13,6 +13,8 @@ import {
   type TestContext,
 } from "../setup";
 
+const testWorkspaceId = "test-workspace-id";
+
 describe("Full Loop Workflow", () => {
   let ctx: TestContext;
 
@@ -38,6 +40,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Implement a feature",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -57,6 +60,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Custom task",
+        workspaceId: testWorkspaceId,
         planMode: false,
         // Backend options removed - now global
         maxIterations: 10,
@@ -70,6 +74,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Test persistence",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -84,6 +89,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Do the work",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -131,6 +137,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Work forever",
+        workspaceId: testWorkspaceId,
         planMode: false,
         maxIterations: 2,
       });
@@ -164,6 +171,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Do work",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -197,6 +205,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Cause error",
+        workspaceId: testWorkspaceId,
         planMode: false,
         // Set maxConsecutiveErrors to 1 so it fails after first error
         maxConsecutiveErrors: 1,
@@ -218,18 +227,21 @@ describe("Full Loop Workflow", () => {
       await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Task 1",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
       await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Task 2",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
       await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Task 3",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -241,6 +253,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Original prompt",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -260,6 +273,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Delete me",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -279,6 +293,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Purge me",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -311,6 +326,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Track me",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 
@@ -333,6 +349,7 @@ describe("Full Loop Workflow", () => {
       const loop = await ctx.manager.createLoop({
         directory: ctx.workDir,
         prompt: "Track iterations",
+        workspaceId: testWorkspaceId,
         planMode: false,
       });
 

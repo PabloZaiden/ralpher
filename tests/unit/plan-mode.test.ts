@@ -14,6 +14,8 @@ async function exists(path: string): Promise<boolean> {
   return Bun.file(path).exists();
 }
 
+const testWorkspaceId = "test-workspace-id";
+
 describe("Plan Mode - Clear Planning Folder", () => {
   let ctx: TestContext;
 
@@ -43,6 +45,7 @@ describe("Plan Mode - Clear Planning Folder", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a simple plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       clearPlanningFolder: true,
       planMode: true,
@@ -80,6 +83,7 @@ describe("Plan Mode - Clear Planning Folder", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       clearPlanningFolder: false,
       planMode: true,
@@ -107,6 +111,7 @@ describe("Plan Mode - Clear Planning Folder", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       clearPlanningFolder: true,
       planMode: true,
@@ -142,6 +147,7 @@ describe("Plan Mode - Clear Planning Folder", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       clearPlanningFolder: true,
       planMode: true,
@@ -210,6 +216,7 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a simple plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       clearPlanningFolder: false,
       planMode: true,
@@ -242,6 +249,7 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a simple plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       clearPlanningFolder: true,
       planMode: true,
@@ -272,6 +280,7 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a simple plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       clearPlanningFolder: false,
       planMode: true,
@@ -314,6 +323,7 @@ describe("Plan Mode - State Transitions", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       planMode: true,
     });
@@ -329,6 +339,7 @@ describe("Plan Mode - State Transitions", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       planMode: true,
     });
@@ -357,6 +368,7 @@ describe("Plan Mode - State Transitions", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       planMode: true,
     });
@@ -387,6 +399,7 @@ describe("Plan Mode - State Transitions", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       planMode: true,
     });
@@ -411,6 +424,7 @@ describe("Plan Mode - State Transitions", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       planMode: true,
     });
@@ -462,6 +476,7 @@ describe("Plan Mode - isPlanReady Flag", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a simple plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       planMode: true,
     });
@@ -476,6 +491,7 @@ describe("Plan Mode - isPlanReady Flag", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a simple plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       planMode: true,
     });
@@ -493,6 +509,7 @@ describe("Plan Mode - isPlanReady Flag", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a simple plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 5, // Increase max iterations to allow feedback iteration
       planMode: true,
     });
@@ -520,6 +537,7 @@ describe("Plan Mode - isPlanReady Flag", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a simple plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 1,
       planMode: true,
     });
@@ -567,6 +585,7 @@ describe("Plan Mode - Rejection Paths", () => {
     const loop = await ctx.manager.createLoop({
       prompt: "Create a simple plan",
       directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
       maxIterations: 5,  // Allow multiple iterations
       planMode: true,
     });

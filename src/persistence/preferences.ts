@@ -71,6 +71,7 @@ export async function setLastModel(model: {
 /**
  * Get the server settings.
  * Returns default settings if not set.
+ * Applies defaults for any missing fields to handle schema migrations.
  */
 export async function getServerSettings(): Promise<ServerSettings> {
   const serverSettingsJson = getPreference("serverSettings");
@@ -79,7 +80,16 @@ export async function getServerSettings(): Promise<ServerSettings> {
   }
   
   try {
-    return JSON.parse(serverSettingsJson);
+    const parsed = JSON.parse(serverSettingsJson);
+    const defaults = getDefaultServerSettings();
+    // Merge parsed settings with defaults to ensure all required fields are present
+    return {
+      ...defaults,
+      ...parsed,
+      // Ensure boolean fields have explicit values (not undefined)
+      useHttps: parsed.useHttps ?? defaults.useHttps,
+      allowInsecure: parsed.allowInsecure ?? defaults.allowInsecure,
+    };
   } catch {
     return getDefaultServerSettings();
   }

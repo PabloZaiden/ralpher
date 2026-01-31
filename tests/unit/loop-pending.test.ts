@@ -124,6 +124,7 @@ describe("LoopEngine Pending Model", () => {
       prompt: "Test prompt",
       createdAt: now,
       updatedAt: now,
+      workspaceId: "test-workspace-id",
       stopPattern: "<promise>COMPLETE</promise>$",
       git: {
         branchPrefix: "ralph/",

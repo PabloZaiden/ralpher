@@ -91,12 +91,12 @@ export function ServerSettingsModal({
 
     const newSettings: ServerSettings = {
       mode,
+      useHttps: mode === "connect" ? useHttps : false,
+      allowInsecure: mode === "connect" && useHttps ? allowInsecure : false,
       ...(mode === "connect" && {
         hostname: hostname.trim(),
         port: parseInt(port, 10) || 4096,
         password: password.trim() || undefined,
-        useHttps,
-        allowInsecure: useHttps ? allowInsecure : undefined,
       }),
     };
 
@@ -112,12 +112,12 @@ export function ServerSettingsModal({
     
     const testSettings: ServerSettings = {
       mode,
+      useHttps: mode === "connect" ? useHttps : false,
+      allowInsecure: mode === "connect" && useHttps ? allowInsecure : false,
       ...(mode === "connect" && {
         hostname: hostname.trim(),
         port: parseInt(port, 10) || 4096,
         password: password.trim() || undefined,
-        useHttps,
-        allowInsecure: useHttps ? allowInsecure : undefined,
       }),
     };
 

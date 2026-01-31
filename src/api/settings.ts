@@ -129,8 +129,8 @@ export const settingsRoutes = {
           hostname: body.hostname,
           port: body.port,
           password: body.password,
-          useHttps: body.useHttps,
-          allowInsecure: body.allowInsecure,
+          useHttps: body.useHttps ?? false,
+          allowInsecure: body.allowInsecure ?? false,
         };
 
         await backendManager.updateSettings(settings);

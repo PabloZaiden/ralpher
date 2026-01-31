@@ -110,31 +110,39 @@ export interface AddressCommentsRequest {
 
 /**
  * Response from POST /api/loops/:id/address-comments endpoint.
+ * Uses discriminated union for type-safe success/error handling.
  */
-export interface AddressCommentsResponse {
-  /** Whether the operation succeeded */
-  success: boolean;
-  /** The review cycle number (1-based, increments each time comments are addressed) */
-  reviewCycle?: number;
-  /** The branch being worked on */
-  branch?: string;
-  /** IDs of the comment records created */
-  commentIds?: string[];
-  /** Error message if success is false */
-  error?: string;
-}
+export type AddressCommentsResponse =
+  | {
+      success: true;
+      /** The review cycle number (1-based, increments each time comments are addressed) */
+      reviewCycle: number;
+      /** The branch being worked on */
+      branch: string;
+      /** IDs of the comment records created */
+      commentIds: string[];
+    }
+  | {
+      success: false;
+      /** Error message describing what went wrong */
+      error: string;
+    };
 
 /**
  * Response from GET /api/loops/:id/comments endpoint.
+ * Uses discriminated union for type-safe success/error handling.
  */
-export interface GetCommentsResponse {
-  /** Whether the operation succeeded */
-  success: boolean;
-  /** Array of review comments for the loop */
-  comments?: ReviewComment[];
-  /** Error message if success is false */
-  error?: string;
-}
+export type GetCommentsResponse =
+  | {
+      success: true;
+      /** Array of review comments for the loop */
+      comments: ReviewComment[];
+    }
+  | {
+      success: false;
+      /** Error message describing what went wrong */
+      error: string;
+    };
 
 /**
  * Review history information for a loop.
@@ -153,35 +161,51 @@ export interface ReviewHistory {
 
 /**
  * Response from GET /api/loops/:id/review-history endpoint.
+ * Uses discriminated union for type-safe success/error handling.
  */
-export interface ReviewHistoryResponse {
-  /** Whether the operation succeeded */
-  success: boolean;
-  /** The review history data */
-  history?: ReviewHistory;
-  /** Error message if success is false */
-  error?: string;
-}
+export type ReviewHistoryResponse =
+  | {
+      success: true;
+      /** The review history data */
+      history: ReviewHistory;
+    }
+  | {
+      success: false;
+      /** Error message describing what went wrong */
+      error: string;
+    };
 
 /**
  * Response from POST /api/loops/:id/accept endpoint.
+ * Uses discriminated union for type-safe success/error handling.
  */
-export interface AcceptResponse {
-  /** Whether the merge operation succeeded */
-  success: boolean;
-  /** The SHA of the merge commit created */
-  mergeCommit?: string;
-}
+export type AcceptResponse =
+  | {
+      success: true;
+      /** The SHA of the merge commit created */
+      mergeCommit: string;
+    }
+  | {
+      success: false;
+      /** Error message describing what went wrong */
+      error: string;
+    };
 
 /**
  * Response from POST /api/loops/:id/push endpoint.
+ * Uses discriminated union for type-safe success/error handling.
  */
-export interface PushResponse {
-  /** Whether the push operation succeeded */
-  success: boolean;
-  /** The name of the remote branch that was pushed */
-  remoteBranch?: string;
-}
+export type PushResponse =
+  | {
+      success: true;
+      /** The name of the remote branch that was pushed */
+      remoteBranch: string;
+    }
+  | {
+      success: false;
+      /** Error message describing what went wrong */
+      error: string;
+    };
 
 /**
  * Error response returned when directory has uncommitted changes.

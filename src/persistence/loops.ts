@@ -87,7 +87,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     prompt: config.prompt,
     created_at: config.createdAt,
     updated_at: config.updatedAt,
-    workspace_id: config.workspaceId ?? null,
+    workspace_id: config.workspaceId,
     model_provider_id: config.model?.providerID ?? null,
     model_model_id: config.model?.modelID ?? null,
     max_iterations: config.maxIterations ?? null,
@@ -144,6 +144,7 @@ function rowToLoop(row: Record<string, unknown>): Loop {
     prompt: row["prompt"] as string,
     createdAt: row["created_at"] as string,
     updatedAt: row["updated_at"] as string,
+    workspaceId: row["workspace_id"] as string,
     stopPattern: row["stop_pattern"] as string,
     git: {
       branchPrefix: row["git_branch_prefix"] as string,
@@ -166,9 +167,6 @@ function rowToLoop(row: Record<string, unknown>): Loop {
   }
   if (row["base_branch"] !== null) {
     config.baseBranch = row["base_branch"] as string;
-  }
-  if (row["workspace_id"] !== null) {
-    config.workspaceId = row["workspace_id"] as string;
   }
 
   const state: LoopState = {

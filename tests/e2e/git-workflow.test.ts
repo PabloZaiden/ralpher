@@ -15,6 +15,8 @@ import {
   type TestContext,
 } from "../setup";
 
+const testWorkspaceId = "test-workspace-id";
+
 describe("Git Workflow", () => {
   let ctx: TestContext;
 
@@ -42,6 +44,7 @@ describe("Git Workflow", () => {
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
+        workspaceId: testWorkspaceId,
       });
 
       // Get original branch
@@ -71,6 +74,7 @@ describe("Git Workflow", () => {
         prompt: "Make changes",
         planMode: false,
         gitBranchPrefix: "feature/",
+        workspaceId: testWorkspaceId,
       });
 
       await ctx.manager.startLoop(loop.config.id);
@@ -85,6 +89,7 @@ describe("Git Workflow", () => {
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
+        workspaceId: testWorkspaceId,
       });
 
       await ctx.manager.startLoop(loop.config.id);
@@ -121,6 +126,7 @@ describe("Git Workflow", () => {
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
+        workspaceId: testWorkspaceId,
       });
 
       // Create a file to track changes
@@ -148,6 +154,7 @@ describe("Git Workflow", () => {
         prompt: "Make changes",
         planMode: false,
         gitCommitPrefix: "[CustomPrefix]",
+        workspaceId: testWorkspaceId,
       });
 
       // Verify the config is set correctly
@@ -165,6 +172,7 @@ describe("Git Workflow", () => {
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
+        workspaceId: testWorkspaceId,
       });
 
       try {
@@ -185,6 +193,7 @@ describe("Git Workflow", () => {
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
+        workspaceId: testWorkspaceId,
       });
 
       const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
@@ -226,6 +235,7 @@ describe("Git Workflow", () => {
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
+        workspaceId: testWorkspaceId,
       });
 
       const result = await ctx.manager.acceptLoop(loop.config.id);
@@ -241,6 +251,7 @@ describe("Git Workflow", () => {
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
+        workspaceId: testWorkspaceId,
       });
 
       const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
@@ -276,6 +287,7 @@ describe("Git Workflow", () => {
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
+        workspaceId: testWorkspaceId,
       });
 
       const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
@@ -313,6 +325,7 @@ describe("Git Workflow", () => {
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
+        workspaceId: testWorkspaceId,
       });
 
       const originalBranch = await ctx.git.getCurrentBranch(ctx.workDir);
@@ -355,6 +368,7 @@ describe("Git Workflow", () => {
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
+        workspaceId: testWorkspaceId,
       });
 
       // Try to mark as merged without running the loop
