@@ -295,7 +295,7 @@ export function CreateLoopForm({
       const syntheticEvent = { preventDefault: () => {} } as FormEvent;
       handleSubmit(syntheticEvent, true);
     }
-  }, [canSubmit, selectedWorkspaceId, prompt, selectedModel, maxIterations, maxConsecutiveErrors, activityTimeoutSeconds, selectedBranch, currentBranch, clearPlanningFolder, planMode]);
+  }, [canSubmit, handleSubmit]);
   
   // Call renderActions whenever action state changes
   useEffect(() => {

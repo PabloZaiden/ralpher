@@ -808,6 +808,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   Cancel
                 </Button>
                 <Button 
+                  type="button"
                   onClick={formActionState.onSubmit} 
                   loading={formActionState.isSubmitting}
                   disabled={!formActionState.canSubmit}
