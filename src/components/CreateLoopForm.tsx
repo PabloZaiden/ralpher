@@ -296,8 +296,10 @@ export function CreateLoopForm({
   function handleWorkspaceSelect(workspaceId: string | null, workspaceDirectory: string) {
     setSelectedWorkspaceId(workspaceId || undefined);
     setDirectory(workspaceDirectory);
-    // Trigger directory change to load models and branches
-    if (workspaceDirectory && onDirectoryChange) {
+    // Always trigger directory change to load models and branches
+    // Even when directory is empty (entering "add new" mode), we need to notify parent
+    // to clear cached modelsDirectory so that subsequent selections will refresh
+    if (onDirectoryChange) {
       onDirectoryChange(workspaceDirectory);
     }
   }
