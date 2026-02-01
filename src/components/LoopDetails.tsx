@@ -559,7 +559,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                       <button
                         key={tab.id}
                         onClick={() => handleTabChange(tab.id)}
-                        className={`relative px-2 sm:px-4 py-1.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                        className={`relative px-1.5 sm:px-4 py-1.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                           activeTab === tab.id
                             ? "border-blue-500 text-blue-600 dark:text-blue-400"
                             : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
