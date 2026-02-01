@@ -25,8 +25,13 @@ export interface WorkspaceSelectorProps {
   creating?: boolean;
   /** Error message from workspace operations */
   error?: string | null;
-  /** Whether running in remote-only mode (affects default server settings) */
+  /** 
+   * Whether running in remote-only mode (affects default server settings).
+   * Pass undefined while config is loading to disable workspace creation.
+   */
   remoteOnly?: boolean;
+  /** Whether app config is still loading (disables workspace creation) */
+  configLoading?: boolean;
 }
 
 export function WorkspaceSelector({
@@ -38,6 +43,7 @@ export function WorkspaceSelector({
   creating = false,
   error,
   remoteOnly = false,
+  configLoading = false,
 }: WorkspaceSelectorProps) {
   // State for "add new workspace" mode
   const [showAddNew, setShowAddNew] = useState(false);
@@ -164,11 +170,11 @@ export function WorkspaceSelector({
         <Button
           type="button"
           onClick={handleCreateWorkspace}
-          disabled={creating || !newWorkspaceName.trim() || !newWorkspaceDirectory.trim()}
+          disabled={creating || configLoading || !newWorkspaceName.trim() || !newWorkspaceDirectory.trim()}
           variant="primary"
           size="sm"
         >
-          {creating ? "Creating..." : "Create Workspace"}
+          {creating ? "Creating..." : configLoading ? "Loading config..." : "Create Workspace"}
         </Button>
       </div>
     );
