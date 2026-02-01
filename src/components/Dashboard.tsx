@@ -67,6 +67,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     error: workspaceError,
     createWorkspace,
     deleteWorkspace,
+    refresh: refreshWorkspaces,
   } = useWorkspaces();
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
   // Create workspace modal state
@@ -1122,7 +1123,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         status={workspaceStatus}
         onSave={async (name, settings) => {
           if (!workspaceSettingsModal.workspaceId) return false;
-          // Update workspace name
+          // Update workspace name and server settings
           try {
             const response = await fetch(`/api/workspaces/${workspaceSettingsModal.workspaceId}`, {
               method: "PUT",
@@ -1130,8 +1131,12 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               body: JSON.stringify({ name, serverSettings: settings }),
             });
             if (!response.ok) return false;
-            // Refresh workspace settings and refresh workspaces list
-            await refreshWorkspaceSettings();
+            // Refresh workspace settings hook and the workspaces list
+            // Both are needed: settings hook for connection status, workspaces for the list/modal props
+            await Promise.all([
+              refreshWorkspaceSettings(),
+              refreshWorkspaces(),
+            ]);
             return true;
           } catch {
             return false;
