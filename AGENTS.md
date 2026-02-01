@@ -293,6 +293,7 @@ expect(loop.state.status).toBe("completed");
 - Always prefer simplicity, usability and top level type safety over cleverness.
 - Before doing something, check the patterns used in the rest of the codebase.
 - Keep the `.planning/status.md` file updated with progress.
+- **Never use time estimates** in plans, documentation, or task descriptions. Time estimates are inherently inaccurate and create false expectations. Use complexity levels (Low, Medium, High) instead.
 
 ## Common Patterns
 
