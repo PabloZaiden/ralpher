@@ -10,6 +10,7 @@ import { LoopCard } from "./LoopCard";
 import { CreateLoopForm, type CreateLoopFormActionState } from "./CreateLoopForm";
 import { AppSettingsModal } from "./AppSettingsModal";
 import { WorkspaceSettingsModal } from "./WorkspaceSettingsModal";
+import { CreateWorkspaceModal } from "./CreateWorkspaceModal";
 import { useWorkspaceServerSettings } from "../hooks";
 import {
   AcceptLoopModal,
@@ -68,6 +69,8 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     deleteWorkspace,
   } = useWorkspaces();
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
+  // Create workspace modal state
+  const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
   // Workspace settings modal state
   const [workspaceSettingsModal, setWorkspaceSettingsModal] = useState<{ open: boolean; workspaceId: string | null }>({
     open: false,
@@ -437,6 +440,13 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                     : "Disconnected"}
                 </span>
               </div>
+              <Button 
+                variant="secondary" 
+                onClick={() => setShowCreateWorkspaceModal(true)} 
+                className="flex-1 sm:flex-none"
+              >
+                New Workspace
+              </Button>
               <Button onClick={() => setShowCreateModal(true)} className="flex-1 sm:flex-none">
                 New Loop
               </Button>
@@ -1033,16 +1043,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               defaultBranch={defaultBranch}
               workspaces={workspaces}
               workspacesLoading={workspacesLoading}
-              onCreateWorkspace={async (request) => {
-                const result = await createWorkspace(request);
-                if (result) {
-                  return { id: result.id, directory: result.directory };
-                }
-                return null;
-              }}
-              workspaceCreating={workspaceCreating}
               workspaceError={workspaceError}
-              remoteOnly={remoteOnly}
             />
           </Modal>
         );
@@ -1141,6 +1142,19 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         saving={workspaceSettingsSaving}
         testing={workspaceSettingsTesting}
         resettingConnection={workspaceSettingsResetting}
+        remoteOnly={remoteOnly}
+      />
+
+      {/* Create Workspace modal */}
+      <CreateWorkspaceModal
+        isOpen={showCreateWorkspaceModal}
+        onClose={() => setShowCreateWorkspaceModal(false)}
+        onCreate={async (request) => {
+          const result = await createWorkspace(request);
+          return !!result;
+        }}
+        creating={workspaceCreating}
+        error={workspaceError}
         remoteOnly={remoteOnly}
       />
     </div>

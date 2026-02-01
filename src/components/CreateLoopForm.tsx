@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
 import type { CreateLoopRequest, ModelInfo, BranchInfo } from "../types";
-import type { WorkspaceWithLoopCount, CreateWorkspaceRequest } from "../types/workspace";
+import type { WorkspaceWithLoopCount } from "../types/workspace";
 import { Button } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
 
@@ -74,16 +74,8 @@ export interface CreateLoopFormProps {
   workspaces?: WorkspaceWithLoopCount[];
   /** Whether workspaces are loading */
   workspacesLoading?: boolean;
-  /** Callback to create a new workspace */
-  onCreateWorkspace?: (request: CreateWorkspaceRequest) => Promise<{ id: string; directory: string } | null>;
-  /** Whether workspace creation is in progress */
-  workspaceCreating?: boolean;
   /** Workspace-related error */
   workspaceError?: string | null;
-  /** Whether running in remote-only mode (affects default server settings for new workspaces) */
-  remoteOnly?: boolean;
-  /** Whether app config is still loading (disables workspace creation) */
-  configLoading?: boolean;
   /** 
    * Optional render prop for action buttons. When provided, action buttons 
    * are NOT rendered inside the form - caller is responsible for rendering them.
@@ -110,11 +102,7 @@ export function CreateLoopForm({
   isEditingDraft = false,
   workspaces = [],
   workspacesLoading = false,
-  onCreateWorkspace,
-  workspaceCreating = false,
   workspaceError = null,
-  remoteOnly = false,
-  configLoading = false,
   renderActions,
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
@@ -361,12 +349,6 @@ export function CreateLoopForm({
     // The useEffect watching selectedWorkspaceId will notify parent
   }
 
-  // Handle creating a new workspace
-  async function handleCreateWorkspaceWrapper(request: CreateWorkspaceRequest): Promise<{ id: string; directory: string } | null> {
-    if (!onCreateWorkspace) return null;
-    return onCreateWorkspace(request);
-  }
-
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
       {/* Workspace Selection */}
@@ -376,11 +358,7 @@ export function CreateLoopForm({
           loading={workspacesLoading}
           selectedWorkspaceId={selectedWorkspaceId}
           onSelect={handleWorkspaceSelect}
-          onCreateWorkspace={handleCreateWorkspaceWrapper}
-          creating={workspaceCreating}
           error={workspaceError}
-          remoteOnly={remoteOnly}
-          configLoading={configLoading}
         />
         {planningWarning && (
           <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-300">
