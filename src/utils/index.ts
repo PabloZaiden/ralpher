@@ -9,6 +9,7 @@ export {
   isLoopActive,
   isLoopRunning,
   canJumpstart,
+  isAwaitingFeedback,
 } from "./loop-status";
 
 /**

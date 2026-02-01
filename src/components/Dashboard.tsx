@@ -18,6 +18,7 @@ import {
   UncommittedChangesModal,
   RenameLoopModal,
 } from "./LoopModals";
+import { isAwaitingFeedback } from "../utils";
 
 export interface DashboardProps {
   /** Callback when a loop is selected */
@@ -338,8 +339,14 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           loop.state.status === "starting"
       ),
       completed: loopsToGroup.filter((loop) => loop.state.status === "completed"),
+      awaitingFeedback: loopsToGroup.filter((loop) =>
+        isAwaitingFeedback(loop.state.status, loop.state.reviewMode?.addressable)
+      ),
       archived: loopsToGroup.filter(
-        (loop) => loop.state.status === "merged" || loop.state.status === "pushed" || loop.state.status === "deleted"
+        (loop) =>
+          loop.state.status === "deleted" ||
+          ((loop.state.status === "merged" || loop.state.status === "pushed") &&
+            !isAwaitingFeedback(loop.state.status, loop.state.reviewMode?.addressable))
       ),
       other: loopsToGroup.filter(
         (loop) =>
@@ -550,6 +557,27 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   </section>
                 )}
 
+                {/* Awaiting Feedback */}
+                {statusGroups.awaitingFeedback.length > 0 && (
+                  <section>
+                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                      Awaiting Feedback ({statusGroups.awaitingFeedback.length})
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                      {statusGroups.awaitingFeedback.map((loop) => (
+                        <LoopCard
+                          key={loop.config.id}
+                          loop={loop}
+                          onClick={() => onSelectLoop?.(loop.config.id)}
+                          onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
+                          onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
+                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                )}
+
                 {/* Other */}
                 {statusGroups.other.length > 0 && (
                   <section>
@@ -584,7 +612,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                           loop={loop}
                           onClick={() => onSelectLoop?.(loop.config.id)}
                           onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
-                          onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
                           onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                         />
                       ))}
@@ -677,6 +704,27 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                 </section>
               )}
 
+              {/* Awaiting Feedback */}
+              {unassignedStatusGroups.awaitingFeedback.length > 0 && (
+                <section>
+                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                    Awaiting Feedback ({unassignedStatusGroups.awaitingFeedback.length})
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+                    {unassignedStatusGroups.awaitingFeedback.map((loop) => (
+                      <LoopCard
+                        key={loop.config.id}
+                        loop={loop}
+                        onClick={() => onSelectLoop?.(loop.config.id)}
+                        onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
+                        onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
+                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
+                      />
+                    ))}
+                  </div>
+                </section>
+              )}
+
               {/* Other */}
               {unassignedStatusGroups.other.length > 0 && (
                 <section>
@@ -711,7 +759,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                         loop={loop}
                         onClick={() => onSelectLoop?.(loop.config.id)}
                         onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
-                        onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
                         onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
                       />
                     ))}
