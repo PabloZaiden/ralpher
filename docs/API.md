@@ -786,11 +786,13 @@ Check if a directory has a `.planning` folder with files.
 
 ### Server Settings
 
+Server settings are configured per-workspace. Each workspace can have different connection settings, allowing you to connect to different remote servers or use different modes for different projects.
+
 Ralpher supports two modes for connecting to the opencode backend. Both modes provide identical functionality - all commands (git, file operations, etc.) are executed via PTY over WebSocket regardless of mode.
 
-#### GET /api/settings/server
+#### GET /api/workspaces/:id/server-settings
 
-Get current server settings.
+Get server settings for a specific workspace.
 
 **Response**
 
@@ -799,13 +801,21 @@ Get current server settings.
   "mode": "spawn",
   "hostname": null,
   "port": null,
-  "password": null
+  "password": null,
+  "useHttps": false,
+  "allowInsecure": false
 }
 ```
 
-#### PUT /api/settings/server
+**Errors**
 
-Update server settings.
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Workspace not found |
+
+#### PUT /api/workspaces/:id/server-settings
+
+Update server settings for a workspace.
 
 **Request Body**
 
@@ -815,18 +825,19 @@ Update server settings.
 | `hostname` | string | For connect | Hostname for connect mode |
 | `port` | number | No | Port for connect mode |
 | `password` | string | No | Password for Basic auth in connect mode |
+| `useHttps` | boolean | No | Use HTTPS for connect mode (default: false) |
+| `allowInsecure` | boolean | No | Allow self-signed certificates (default: false) |
 
 **Response**
 
 ```json
 {
-  "success": true,
-  "settings": {
-    "mode": "connect",
-    "hostname": "remote.example.com",
-    "port": 8080,
-    "password": "***"
-  }
+  "mode": "connect",
+  "hostname": "remote.example.com",
+  "port": 8080,
+  "password": "***",
+  "useHttps": true,
+  "allowInsecure": false
 }
 ```
 
@@ -835,12 +846,11 @@ Update server settings.
 | Status | Error | Description |
 |--------|-------|-------------|
 | 400 | `invalid_mode` | mode must be "spawn" or "connect" |
-| 400 | `missing_hostname` | hostname is required for connect mode |
-| 400 | `spawn_disabled` | Spawn mode disabled (RALPHER_REMOTE_ONLY is set) |
+| 404 | `not_found` | Workspace not found |
 
-#### GET /api/settings/server/status
+#### GET /api/workspaces/:id/server-settings/status
 
-Get connection status.
+Get connection status for a workspace.
 
 **Response**
 
@@ -852,9 +862,15 @@ Get connection status.
 }
 ```
 
-#### POST /api/settings/server/test
+**Errors**
 
-Test connection with provided settings.
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Workspace not found |
+
+#### POST /api/workspaces/:id/server-settings/test
+
+Test connection with provided settings for a workspace.
 
 **Request Body**
 
@@ -864,7 +880,10 @@ Test connection with provided settings.
 | `hostname` | string | For connect | Hostname for connect mode |
 | `port` | number | No | Port for connect mode |
 | `password` | string | No | Password for Basic auth |
-| `directory` | string | No | Directory to test with (defaults to current) |
+| `useHttps` | boolean | No | Use HTTPS |
+| `allowInsecure` | boolean | No | Allow self-signed certificates |
+
+If no body is provided, tests with the workspace's current settings.
 
 **Response**
 
@@ -875,22 +894,46 @@ Test connection with provided settings.
 }
 ```
 
-#### POST /api/backend/reset
+**Errors**
 
-Force reset the backend connection. Aborts all active subscriptions and clears connection state. Useful for recovering from stale/hung connections.
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Workspace not found |
+
+#### POST /api/workspaces/:id/server-settings/reset
+
+Reset the connection for a specific workspace. Clears connection state so the next operation will establish a fresh connection.
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Workspace not found |
+
+#### POST /api/backend/reset-all
+
+Reset all workspace connections. Useful for recovering from stale/hung connections across all workspaces.
 
 **Response**
 
 ```json
 {
   "success": true,
-  "message": "Backend connection reset successfully"
+  "message": "All backend connections reset successfully"
 }
 ```
 
 #### POST /api/settings/reset-all
 
-Delete database and reinitialize. This is a destructive operation that deletes all loops, sessions, and preferences. The database is recreated fresh with all migrations applied.
+Delete database and reinitialize. This is a destructive operation that deletes all loops, workspaces, sessions, and preferences. The database is recreated fresh with all migrations applied.
 
 **Response**
 

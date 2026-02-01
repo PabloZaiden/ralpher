@@ -1,61 +1,58 @@
 /**
- * ServerSettingsModal component for configuring global server settings.
- * Allows switching between spawn (local) and connect (remote) modes.
+ * WorkspaceSettingsModal component for editing workspace settings.
+ * Allows editing workspace name and server connection settings.
  */
 
 import { useState, useEffect, type FormEvent } from "react";
 import { Modal, Button, Badge } from "./common";
 import type { ServerSettings, ConnectionStatus } from "../types/settings";
-import { useMarkdownPreference } from "../hooks";
+import type { Workspace } from "../types/workspace";
 
-export interface ServerSettingsModalProps {
+export interface WorkspaceSettingsModalProps {
   /** Whether the modal is open */
   isOpen: boolean;
   /** Callback when modal should close */
   onClose: () => void;
-  /** Current server settings */
-  settings: ServerSettings | null;
-  /** Current connection status */
+  /** The workspace being edited */
+  workspace: Workspace | null;
+  /** Current connection status for the workspace */
   status: ConnectionStatus | null;
-  /** Callback to save settings */
-  onSave: (settings: ServerSettings) => Promise<boolean>;
+  /** Callback to save workspace (name and server settings) */
+  onSave: (name: string, settings: ServerSettings) => Promise<boolean>;
   /** Callback to test connection */
   onTest: (settings: ServerSettings) => Promise<{ success: boolean; error?: string }>;
-  /** Callback to reset all connections and stale loops (non-destructive) */
-  onResetConnections?: () => Promise<{ success: boolean; enginesCleared: number; loopsReset: number }>;
-  /** Callback to reset all settings (destructive - deletes database) */
-  onResetAll?: () => Promise<boolean>;
+  /** Callback to reset connection for this workspace */
+  onResetConnection?: () => Promise<boolean>;
   /** Whether saving is in progress */
   saving?: boolean;
   /** Whether testing is in progress */
   testing?: boolean;
-  /** Whether resetting connections is in progress */
-  resettingConnections?: boolean;
-  /** Whether resetting all is in progress */
-  resetting?: boolean;
+  /** Whether resetting connection is in progress */
+  resettingConnection?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
   remoteOnly?: boolean;
 }
 
 /**
- * ServerSettingsModal provides UI for configuring server connection settings.
+ * WorkspaceSettingsModal provides UI for editing workspace and server connection settings.
  */
-export function ServerSettingsModal({
+export function WorkspaceSettingsModal({
   isOpen,
   onClose,
-  settings,
+  workspace,
   status,
   onSave,
   onTest,
-  onResetConnections,
-  onResetAll,
+  onResetConnection,
   saving = false,
   testing = false,
-  resettingConnections = false,
-  resetting = false,
+  resettingConnection = false,
   remoteOnly = false,
-}: ServerSettingsModalProps) {
-  // Form state
+}: WorkspaceSettingsModalProps) {
+  // Workspace name state
+  const [name, setName] = useState("");
+  
+  // Server settings form state
   const [mode, setMode] = useState<"spawn" | "connect">("spawn");
   const [hostname, setHostname] = useState("localhost");
   const [port, setPort] = useState("4096");
@@ -63,16 +60,13 @@ export function ServerSettingsModal({
   const [useHttps, setUseHttps] = useState(false);
   const [allowInsecure, setAllowInsecure] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
-  const [showResetConnectionsConfirm, setShowResetConnectionsConfirm] = useState(false);
-  const [resetConnectionsResult, setResetConnectionsResult] = useState<{ success: boolean; enginesCleared: number; loopsReset: number } | null>(null);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  // Markdown rendering preference
-  const { enabled: markdownEnabled, toggle: toggleMarkdown, saving: savingMarkdown } = useMarkdownPreference();
-
-  // Initialize form from settings when modal opens
+  // Initialize form from workspace when modal opens
   useEffect(() => {
-    if (isOpen && settings) {
+    if (isOpen && workspace) {
+      setName(workspace.name);
+      
+      const settings = workspace.serverSettings;
       // If remote-only mode is enabled, force connect mode
       const initialMode = remoteOnly ? "connect" : settings.mode;
       setMode(initialMode);
@@ -83,7 +77,7 @@ export function ServerSettingsModal({
       setAllowInsecure(settings.allowInsecure ?? false);
       setTestResult(null);
     }
-  }, [isOpen, settings, remoteOnly]);
+  }, [isOpen, workspace, remoteOnly]);
 
   // Handle form submission
   async function handleSubmit(e: FormEvent) {
@@ -100,7 +94,7 @@ export function ServerSettingsModal({
       }),
     };
 
-    const success = await onSave(newSettings);
+    const success = await onSave(name.trim(), newSettings);
     if (success) {
       onClose();
     }
@@ -160,14 +154,16 @@ export function ServerSettingsModal({
   }
 
   // Validation
-  const isValid = mode === "spawn" || (hostname.trim().length > 0);
+  const isNameValid = name.trim().length > 0;
+  const isConnectionValid = mode === "spawn" || (hostname.trim().length > 0);
+  const isValid = isNameValid && isConnectionValid;
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Server Settings"
-      description="Configure how Ralpher connects to the OpenCode server"
+      title="Workspace Settings"
+      description={workspace ? `Edit settings for "${workspace.name}"` : "Edit workspace settings"}
       size="md"
       footer={
         <>
@@ -176,7 +172,7 @@ export function ServerSettingsModal({
           </Button>
           <Button
             type="submit"
-            form="server-settings-form"
+            form="workspace-settings-form"
             loading={saving}
             disabled={!isValid}
           >
@@ -185,10 +181,44 @@ export function ServerSettingsModal({
         </>
       }
     >
-      <form id="server-settings-form" onSubmit={handleSubmit} className="space-y-6">
+      <form id="workspace-settings-form" onSubmit={handleSubmit} className="space-y-6">
+        {/* Workspace Name */}
+        <div>
+          <label
+            htmlFor="workspace-name"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
+            Workspace Name
+          </label>
+          <input
+            type="text"
+            id="workspace-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="My Workspace"
+            required
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+          />
+        </div>
+
+        {/* Directory (read-only) */}
+        {workspace && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Directory
+            </label>
+            <div className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400 font-mono">
+              {workspace.directory}
+            </div>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Directory cannot be changed after workspace creation
+            </p>
+          </div>
+        )}
+
         {/* Connection Status */}
         <div className="flex items-center gap-2 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Current Status:</span>
+          <span className="text-sm text-gray-600 dark:text-gray-400">Connection Status:</span>
           {status?.connected ? (
             <Badge variant="success">Connected</Badge>
           ) : status?.error ? (
@@ -410,161 +440,27 @@ export function ServerSettingsModal({
           </div>
         )}
 
-        {/* Display Settings */}
-        <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
-          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
-            Display Settings
-          </h3>
-          <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={markdownEnabled}
-                onChange={() => toggleMarkdown()}
-                disabled={savingMarkdown}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
-              />
-              <div>
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Render Markdown
-                </span>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  When enabled, markdown content (plan, status) is rendered as formatted HTML.
-                  When disabled, raw markdown text is shown.
-                </p>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        {/* Reset Connections - Non-destructive reset for stuck loops */}
-        {onResetConnections && (
+        {/* Reset Connection */}
+        {onResetConnection && (
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
             <div className="p-4 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/20">
               <h3 className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-2">
                 Troubleshooting
               </h3>
               <p className="text-sm text-amber-700 dark:text-amber-300 mb-4">
-                If loops appear stuck or not responding, reset all connections. This stops running loops
-                and clears stale state. Your loop history is preserved and stopped loops can be resumed.
+                If the connection appears stuck or not responding, reset the connection for this workspace.
+                Running loops will be stopped and can be resumed.
               </p>
-              {!showResetConnectionsConfirm ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setShowResetConnectionsConfirm(true)}
-                  disabled={resettingConnections}
-                >
-                  <RefreshIcon className="w-4 h-4 mr-2" />
-                  Reset Connections
-                </Button>
-              ) : (
-                <div className="space-y-3">
-                  <p className="text-sm text-amber-600 dark:text-amber-400">
-                    This will stop all running loops. They can be resumed by sending a new message. Continue?
-                  </p>
-                  <div className="flex items-center gap-3">
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={async () => {
-                        const result = await onResetConnections();
-                        setResetConnectionsResult(result);
-                        setShowResetConnectionsConfirm(false);
-                      }}
-                      loading={resettingConnections}
-                    >
-                      Yes, reset connections
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowResetConnectionsConfirm(false)}
-                      disabled={resettingConnections}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
-              {/* Show result after reset */}
-              {resetConnectionsResult && (
-                <div className="mt-3 flex items-center gap-2">
-                  {resetConnectionsResult.success ? (
-                    <>
-                      <CheckIcon className="w-5 h-5 text-green-500 flex-shrink-0" />
-                      <span className="text-sm text-green-600 dark:text-green-400">
-                        Reset complete: {resetConnectionsResult.enginesCleared} engines cleared, {resetConnectionsResult.loopsReset} stale loops stopped
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <XIcon className="w-5 h-5 text-red-500 flex-shrink-0" />
-                      <span className="text-sm text-red-600 dark:text-red-400">
-                        Reset failed
-                      </span>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Reset All Settings - Danger Zone */}
-        {onResetAll && (
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
-            <div className="p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
-              <h3 className="text-sm font-medium text-red-800 dark:text-red-200 mb-2">
-                Danger Zone
-              </h3>
-              <p className="text-sm text-red-600 dark:text-red-400 mb-4">
-                This will delete all loops, sessions, and preferences. This action cannot be undone.
-              </p>
-              {!showResetConfirm ? (
-                <Button
-                  type="button"
-                  variant="danger"
-                  size="sm"
-                  onClick={() => setShowResetConfirm(true)}
-                  disabled={resetting}
-                >
-                  Reset all settings
-                </Button>
-              ) : (
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-red-600 dark:text-red-400">Are you sure?</span>
-                  <Button
-                    type="button"
-                    variant="danger"
-                    size="sm"
-                    onClick={async () => {
-                      const success = await onResetAll();
-                      if (success) {
-                        setShowResetConfirm(false);
-                        onClose();
-                        // Reload the page to get fresh state
-                        window.location.reload();
-                      }
-                    }}
-                    loading={resetting}
-                  >
-                    Yes, delete everything
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowResetConfirm(false)}
-                    disabled={resetting}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              )}
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={onResetConnection}
+                loading={resettingConnection}
+              >
+                <RefreshIcon className="w-4 h-4 mr-2" />
+                Reset Connection
+              </Button>
             </div>
           </div>
         )}
@@ -628,4 +524,4 @@ function RefreshIcon({ className }: { className?: string }) {
   );
 }
 
-export default ServerSettingsModal;
+export default WorkspaceSettingsModal;

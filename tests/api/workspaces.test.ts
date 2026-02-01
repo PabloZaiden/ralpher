@@ -434,4 +434,371 @@ describe("Workspace API Integration", () => {
       expect(data.message).toContain("workspaceId");
     });
   });
+
+  describe("Workspace Server Settings Endpoints", () => {
+    describe("GET /api/workspaces/:id/server-settings", () => {
+      test("returns workspace server settings", async () => {
+        // Create a workspace
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Server Settings Test",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        // Get server settings
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings`);
+        expect(response.ok).toBe(true);
+        const settings = await response.json();
+
+        // Should have default settings
+        expect(settings.mode).toBe("spawn");
+        expect(settings.useHttps).toBe(false);
+        expect(settings.allowInsecure).toBe(false);
+      });
+
+      test("returns 404 for non-existent workspace", async () => {
+        const response = await fetch(`${baseUrl}/api/workspaces/non-existent-id/server-settings`);
+        expect(response.status).toBe(404);
+      });
+    });
+
+    describe("PUT /api/workspaces/:id/server-settings", () => {
+      test("updates workspace server settings", async () => {
+        // Create a workspace
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Update Settings Test",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        // Update server settings
+        const newSettings = {
+          mode: "connect",
+          hostname: "example.com",
+          port: 8080,
+          useHttps: true,
+          allowInsecure: true,
+        };
+
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newSettings),
+        });
+        expect(response.ok).toBe(true);
+        const updatedSettings = await response.json();
+
+        expect(updatedSettings.mode).toBe("connect");
+        expect(updatedSettings.hostname).toBe("example.com");
+        expect(updatedSettings.port).toBe(8080);
+        expect(updatedSettings.useHttps).toBe(true);
+        expect(updatedSettings.allowInsecure).toBe(true);
+
+        // Verify persistence by fetching again
+        const getResponse = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings`);
+        const fetchedSettings = await getResponse.json();
+        expect(fetchedSettings.mode).toBe("connect");
+        expect(fetchedSettings.hostname).toBe("example.com");
+      });
+
+      test("rejects invalid mode", async () => {
+        // Create a workspace
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Invalid Mode Test",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        // Try to update with invalid mode
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "invalid-mode",
+            useHttps: false,
+            allowInsecure: false,
+          }),
+        });
+        expect(response.ok).toBe(false);
+        expect(response.status).toBe(400);
+      });
+
+      test("returns 404 for non-existent workspace", async () => {
+        const response = await fetch(`${baseUrl}/api/workspaces/non-existent-id/server-settings`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "spawn",
+            useHttps: false,
+            allowInsecure: false,
+          }),
+        });
+        expect(response.status).toBe(404);
+      });
+    });
+
+    describe("GET /api/workspaces/:id/server-settings/status", () => {
+      test("returns connection status for workspace", async () => {
+        // Create a workspace
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Status Test",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        // Get connection status
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings/status`);
+        expect(response.ok).toBe(true);
+        const status = await response.json();
+
+        // Should return a valid status object
+        expect(status).toHaveProperty("connected");
+        expect(status).toHaveProperty("mode");
+      });
+
+      test("returns 404 for non-existent workspace", async () => {
+        const response = await fetch(`${baseUrl}/api/workspaces/non-existent-id/server-settings/status`);
+        expect(response.status).toBe(404);
+      });
+    });
+
+    describe("POST /api/workspaces/:id/server-settings/test", () => {
+      test("tests connection with current settings", async () => {
+        // Create a workspace
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Test Connection Test",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        // Test connection (with spawn mode and mock backend, this should succeed)
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings/test`, {
+          method: "POST",
+        });
+        expect(response.ok).toBe(true);
+        const result = await response.json();
+
+        expect(result).toHaveProperty("success");
+      });
+
+      test("tests connection with proposed settings", async () => {
+        // Create a workspace
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Test Proposed Settings",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        // Test with proposed settings
+        const proposedSettings = {
+          mode: "spawn",
+          useHttps: false,
+          allowInsecure: false,
+        };
+
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings/test`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(proposedSettings),
+        });
+        expect(response.ok).toBe(true);
+        const result = await response.json();
+
+        expect(result).toHaveProperty("success");
+      });
+
+      test("returns 404 for non-existent workspace", async () => {
+        const response = await fetch(`${baseUrl}/api/workspaces/non-existent-id/server-settings/test`, {
+          method: "POST",
+        });
+        expect(response.status).toBe(404);
+      });
+    });
+
+    describe("POST /api/workspaces/:id/server-settings/reset", () => {
+      test("resets connection for workspace", async () => {
+        // Create a workspace
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Reset Connection Test",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        // Reset connection
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings/reset`, {
+          method: "POST",
+        });
+        expect(response.ok).toBe(true);
+        const result = await response.json();
+
+        expect(result.success).toBe(true);
+      });
+
+      test("returns 404 for non-existent workspace", async () => {
+        const response = await fetch(`${baseUrl}/api/workspaces/non-existent-id/server-settings/reset`, {
+          method: "POST",
+        });
+        expect(response.status).toBe(404);
+      });
+    });
+
+    describe("Workspace creation with serverSettings", () => {
+      test("creates workspace with default server settings when not provided", async () => {
+        const response = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Default Settings Workspace",
+            directory: testWorkDir,
+          }),
+        });
+
+        expect(response.ok).toBe(true);
+        const workspace = await response.json();
+
+        expect(workspace.serverSettings).toBeDefined();
+        expect(workspace.serverSettings.mode).toBe("spawn");
+        expect(workspace.serverSettings.useHttps).toBe(false);
+        expect(workspace.serverSettings.allowInsecure).toBe(false);
+      });
+
+      test("creates workspace with custom server settings when provided", async () => {
+        const customSettings = {
+          mode: "connect",
+          hostname: "custom.server.com",
+          port: 9000,
+          useHttps: true,
+          allowInsecure: false,
+        };
+
+        const response = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Custom Settings Workspace",
+            directory: testWorkDir,
+            serverSettings: customSettings,
+          }),
+        });
+
+        expect(response.ok).toBe(true);
+        const workspace = await response.json();
+
+        expect(workspace.serverSettings).toBeDefined();
+        expect(workspace.serverSettings.mode).toBe("connect");
+        expect(workspace.serverSettings.hostname).toBe("custom.server.com");
+        expect(workspace.serverSettings.port).toBe(9000);
+        expect(workspace.serverSettings.useHttps).toBe(true);
+        expect(workspace.serverSettings.allowInsecure).toBe(false);
+      });
+    });
+
+    describe("Workspace update with serverSettings", () => {
+      test("updates workspace name and server settings together", async () => {
+        // Create a workspace
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Original Name",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        // Update both name and server settings
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "New Name",
+            serverSettings: {
+              mode: "connect",
+              hostname: "new-server.com",
+              port: 7000,
+              useHttps: false,
+              allowInsecure: true,
+            },
+          }),
+        });
+
+        expect(response.ok).toBe(true);
+        const updated = await response.json();
+
+        expect(updated.name).toBe("New Name");
+        expect(updated.serverSettings.mode).toBe("connect");
+        expect(updated.serverSettings.hostname).toBe("new-server.com");
+        expect(updated.serverSettings.port).toBe(7000);
+        expect(updated.serverSettings.allowInsecure).toBe(true);
+      });
+
+      test("updates only name, keeping server settings", async () => {
+        // Create a workspace with custom settings
+        const customSettings = {
+          mode: "connect",
+          hostname: "original.server.com",
+          port: 5000,
+          useHttps: true,
+          allowInsecure: false,
+        };
+
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Original Name",
+            directory: testWorkDir,
+            serverSettings: customSettings,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        // Update only name
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Updated Name Only",
+          }),
+        });
+
+        expect(response.ok).toBe(true);
+        const updated = await response.json();
+
+        expect(updated.name).toBe("Updated Name Only");
+        // Server settings should remain unchanged
+        expect(updated.serverSettings.mode).toBe("connect");
+        expect(updated.serverSettings.hostname).toBe("original.server.com");
+        expect(updated.serverSettings.port).toBe(5000);
+      });
+    });
+  });
 });

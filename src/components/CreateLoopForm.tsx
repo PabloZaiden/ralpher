@@ -356,7 +356,7 @@ export function CreateLoopForm({
   }
 
   // Handle creating a new workspace
-  async function handleCreateWorkspaceWrapper(request: { name: string; directory: string }): Promise<{ id: string; directory: string } | null> {
+  async function handleCreateWorkspaceWrapper(request: CreateWorkspaceRequest): Promise<{ id: string; directory: string } | null> {
     if (!onCreateWorkspace) return null;
     return onCreateWorkspace(request);
   }

@@ -15,6 +15,7 @@ import { createWorkspace } from "../src/persistence/workspaces";
 import { TestCommandExecutor } from "./mocks/mock-executor";
 import { MockOpenCodeBackend } from "./mocks/mock-backend";
 import type { LoopEvent } from "../src/types/events";
+import { getDefaultServerSettings } from "../src/types/settings";
 
 /**
  * Default test workspace ID that can be used in tests.
@@ -82,6 +83,7 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
     directory: workDir,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    serverSettings: getDefaultServerSettings(),
   });
 
   // Create initial files

@@ -4,6 +4,8 @@
  */
 
 import type { Workspace, WorkspaceWithLoopCount } from "../types/workspace";
+import type { ServerSettings } from "../types/settings";
+import { getDefaultServerSettings } from "../types/settings";
 import { getDatabase } from "./database";
 
 /**
@@ -14,9 +16,31 @@ function workspaceToRow(workspace: Workspace): Record<string, unknown> {
     id: workspace.id,
     name: workspace.name,
     directory: workspace.directory,
+    server_settings: JSON.stringify(workspace.serverSettings),
     created_at: workspace.createdAt,
     updated_at: workspace.updatedAt,
   };
+}
+
+/**
+ * Parse server settings from database, with fallback to defaults.
+ */
+function parseServerSettings(jsonString: string | null): ServerSettings {
+  if (!jsonString) {
+    return getDefaultServerSettings();
+  }
+  try {
+    const parsed = JSON.parse(jsonString);
+    const defaults = getDefaultServerSettings();
+    return {
+      ...defaults,
+      ...parsed,
+      useHttps: parsed.useHttps ?? defaults.useHttps,
+      allowInsecure: parsed.allowInsecure ?? defaults.allowInsecure,
+    };
+  } catch {
+    return getDefaultServerSettings();
+  }
 }
 
 /**
@@ -27,6 +51,7 @@ function rowToWorkspace(row: Record<string, unknown>): Workspace {
     id: row["id"] as string,
     name: row["name"] as string,
     directory: row["directory"] as string,
+    serverSettings: parseServerSettings(row["server_settings"] as string | null),
     createdAt: row["created_at"] as string,
     updatedAt: row["updated_at"] as string,
   };
@@ -92,7 +117,7 @@ export async function listWorkspaces(): Promise<WorkspaceWithLoopCount[]> {
  */
 export async function updateWorkspace(
   id: string, 
-  updates: Partial<Pick<Workspace, "name">>
+  updates: Partial<Pick<Workspace, "name" | "serverSettings">>
 ): Promise<Workspace | null> {
   const db = getDatabase();
   
@@ -103,6 +128,11 @@ export async function updateWorkspace(
   if (updates.name !== undefined) {
     setClauses.push("name = ?");
     values.push(updates.name);
+  }
+  
+  if (updates.serverSettings !== undefined) {
+    setClauses.push("server_settings = ?");
+    values.push(JSON.stringify(updates.serverSettings));
   }
   
   if (setClauses.length === 0) {

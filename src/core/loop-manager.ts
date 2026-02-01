@@ -146,8 +146,8 @@ export class LoopManager {
     // Generate loop name from prompt using opencode
     let generatedName: string;
     try {
-      // Get backend from global manager
-      const backend = backendManager.getBackend();
+      // Get backend from global manager for this workspace
+      const backend = backendManager.getBackend(options.workspaceId);
       
       // Create a temporary session for name generation
       const tempSession = await backend.createSession({
@@ -265,7 +265,7 @@ export class LoopManager {
     await this.validateNoActiveLoopForDirectory(loop.config.directory, loopId);
 
     // Get the appropriate command executor
-    const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
     const git = GitService.withExecutor(executor);
 
     // Check for uncommitted changes
@@ -329,8 +329,8 @@ export class LoopManager {
       log.warn(`Failed to clear plan.md: ${String(error)}`);
     }
 
-    // Get backend from global manager
-    const backend = backendManager.getBackend();
+    // Get backend from global manager for this workspace
+    const backend = backendManager.getBackend(loop.config.workspaceId);
 
     // Create engine with plan mode prompt
     const engine = new LoopEngine({
@@ -374,9 +374,9 @@ export class LoopManager {
       }
       
       // Recreate the engine for this planning loop
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const git = GitService.withExecutor(executor);
-      const backend = backendManager.getBackend();
+      const backend = backendManager.getBackend(loop.config.workspaceId);
       
       engine = new LoopEngine({
         loop,
@@ -715,7 +715,7 @@ Follow the standard loop execution flow:
     // Get the appropriate command executor for the current mode
     // (local for spawn mode, remote for connect mode)
     // Use async version to ensure connection is established in connect mode
-    const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
     const git = GitService.withExecutor(executor);
 
     // Check for uncommitted changes - fail immediately if found
@@ -741,8 +741,8 @@ Follow the standard loop execution flow:
       }
     }
 
-    // Get backend from global manager
-    const backend = backendManager.getBackend();
+    // Get backend from global manager for this workspace
+    const backend = backendManager.getBackend(loop.config.workspaceId);
 
     // Create engine with persistence callback
     // Pass the git service with the appropriate executor
@@ -828,7 +828,7 @@ Follow the standard loop execution flow:
 
     try {
       // Get the appropriate command executor for the current mode
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const git = GitService.withExecutor(executor);
 
       // Merge working branch into original branch
@@ -930,7 +930,7 @@ Follow the standard loop execution flow:
 
     try {
       // Get the appropriate command executor for the current mode
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const git = GitService.withExecutor(executor);
 
       // Push the working branch to remote
@@ -1004,7 +1004,7 @@ Follow the standard loop execution flow:
 
     try {
       // Get the appropriate command executor for the current mode
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const git = GitService.withExecutor(executor);
 
       // First, reset any uncommitted changes on the working branch
@@ -1068,7 +1068,7 @@ Follow the standard loop execution flow:
     // Clean up review branches if review mode is active
     if (loop.state.reviewMode?.addressable && loop.state.reviewMode.reviewBranches.length > 0) {
       try {
-        const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+        const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
         const git = GitService.withExecutor(executor);
         
         // Try to delete review branches (ignore errors - they might already be deleted)
@@ -1139,7 +1139,7 @@ Follow the standard loop execution flow:
 
     try {
       // Get the appropriate command executor for the current mode
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const git = GitService.withExecutor(executor);
 
       // First, reset any uncommitted changes on the working branch
@@ -1508,9 +1508,9 @@ Follow the standard loop execution flow:
   private async jumpstartOnExistingBranch(loopId: string, loop: Loop): Promise<{ success: boolean; error?: string }> {
     try {
       // Get the appropriate command executor for the current mode
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const git = GitService.withExecutor(executor);
-      const backend = backendManager.getBackend();
+      const backend = backendManager.getBackend(loop.config.workspaceId);
 
       // Check out the existing working branch with retry logic for lock file issues
       const workingBranch = loop.state.git!.workingBranch;
@@ -1603,11 +1603,11 @@ Follow the standard loop execution flow:
     }
 
     try {
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const git = GitService.withExecutor(executor);
 
       // Get backend instance
-      const backend = backendManager.getBackend();
+      const backend = backendManager.getBackend(loop.config.workspaceId);
 
       // Calculate the next review cycle number
       const nextReviewCycle = loop.state.reviewMode.reviewCycles + 1;

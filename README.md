@@ -339,6 +339,24 @@ Ralpher supports two modes for connecting to the opencode backend:
 
 Both modes work identically from the user's perspective.
 
+### Per-Workspace Server Configuration
+
+Each workspace has its own server configuration, allowing you to:
+
+- **Run multiple workspaces in parallel** with different server settings
+- **Connect to different remote servers** for different projects
+- **Mix spawn and connect modes** across your workspaces
+
+To configure server settings for a workspace:
+
+1. Click the **gear icon** next to a workspace name in the dashboard header
+2. Select **Spawn** mode (local) or **Connect** mode (remote server)
+3. For Connect mode, enter the hostname, port, and authentication details
+4. Click **Test Connection** to verify the settings
+5. Click **Save Changes** to apply
+
+Changes take effect immediately - the workspace connection will be reset to use the new settings.
+
 ---
 
 ## Docker

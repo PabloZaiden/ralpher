@@ -523,7 +523,7 @@ export class LoopEngine {
     
     try {
       // Get command executor for the directory
-      const executor = await backendManager.getCommandExecutorAsync(this.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(this.config.workspaceId, this.config.directory);
       
       // Check if .planning directory exists
       const exists = await executor.directoryExists(planningDir);

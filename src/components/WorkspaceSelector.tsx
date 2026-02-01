@@ -7,6 +7,7 @@
 
 import { useState, type ChangeEvent } from "react";
 import type { WorkspaceWithLoopCount, CreateWorkspaceRequest } from "../types/workspace";
+import { getDefaultServerSettings } from "../types/settings";
 import { Button } from "./common";
 
 export interface WorkspaceSelectorProps {
@@ -77,6 +78,7 @@ export function WorkspaceSelector({
     const result = await onCreateWorkspace({
       name: newWorkspaceName.trim(),
       directory: newWorkspaceDirectory.trim(),
+      serverSettings: getDefaultServerSettings(),
     });
     
     if (result) {

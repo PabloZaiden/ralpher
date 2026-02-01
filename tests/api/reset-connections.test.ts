@@ -15,6 +15,7 @@ import { loopManager } from "../../src/core/loop-manager";
 import { closeDatabase } from "../../src/persistence/database";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 import { MockOpenCodeBackend } from "../mocks/mock-backend";
+import { getDefaultServerSettings } from "../../src/types/settings";
 
 describe("POST /api/backend/reset-all", () => {
   let testDataDir: string;
@@ -98,6 +99,7 @@ describe("POST /api/backend/reset-all", () => {
       directory: "/tmp/test",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      serverSettings: getDefaultServerSettings(),
     });
 
     // Set up backend manager before starting server
