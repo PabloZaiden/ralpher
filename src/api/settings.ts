@@ -3,16 +3,16 @@
  * 
  * This module provides endpoints for:
  * - Getting application configuration
- * - Resetting backend connections and database
+ * - Resetting database
  * 
- * Note: Server settings are now per-workspace. Use the workspace API
- * to get/update server settings for a specific workspace.
+ * Note: Server settings and connection management are now per-workspace.
+ * Use the workspace API to get/update server settings or reset connections
+ * for a specific workspace.
  * 
  * @module api/settings
  */
 
 import { backendManager } from "../core/backend-manager";
-import { loopManager } from "../core/loop-manager";
 import { getAppConfig } from "../core/config";
 import { deleteAndReinitializeDatabase } from "../persistence/database";
 import type { ErrorResponse } from "../types/api";
@@ -35,12 +35,10 @@ function errorResponse(error: string, message: string, status = 400): Response {
  * 
  * Provides endpoints for application configuration and management:
  * - GET /api/config - Get application configuration
- * - POST /api/backend/reset - Force reset all backend connections
- * - POST /api/backend/reset-all - Reset all connections and stale loops
  * - POST /api/settings/reset-all - Delete and reinitialize database
  * 
- * Note: Global server settings endpoints have been removed.
- * Server settings are now configured per-workspace via the workspace API.
+ * Note: Global server settings and connection reset endpoints have been removed.
+ * Server settings and connection management are now per-workspace via the workspace API.
  */
 export const settingsRoutes = {
   "/api/config": {
@@ -55,69 +53,6 @@ export const settingsRoutes = {
      */
     async GET(): Promise<Response> {
       return Response.json(getAppConfig());
-    },
-  },
-
-  "/api/backend/reset": {
-    /**
-     * POST /api/backend/reset - Force reset all backend connections.
-     * 
-     * Aborts all active subscriptions and clears connection state
-     * for all workspaces. Useful for recovering from stale or hung
-     * connections.
-     * 
-     * @returns Success response with message
-     */
-    async POST(): Promise<Response> {
-      try {
-        await backendManager.resetAllConnections();
-        return Response.json({ 
-          success: true, 
-          message: "All backend connections reset successfully" 
-        });
-      } catch (error) {
-        return errorResponse("reset_failed", String(error), 500);
-      }
-    },
-  },
-
-  "/api/backend/reset-all": {
-    /**
-     * POST /api/backend/reset-all - Force reset all connections and stale loops.
-     * 
-     * This is a comprehensive reset that:
-     * 1. Stops all running loop engines
-     * 2. Clears in-memory loop state
-     * 3. Resets stale loops in the database to "stopped" status
-     *    (except "planning" loops which can reconnect)
-     * 4. Aborts all active subscriptions
-     * 5. Disconnects from all backends
-     * 
-     * Does NOT delete the database or loop history.
-     * 
-     * Use this to recover from:
-     * - Stale connections where loops appear stuck
-     * - Hung loops that aren't responding
-     * - State mismatches between memory and database
-     * 
-     * After reset:
-     * - Stopped loops can be resumed by sending a new message
-     * - Planning loops can continue by sending feedback
-     * 
-     * @returns Success response with reset statistics
-     */
-    async POST(): Promise<Response> {
-      try {
-        const result = await loopManager.forceResetAll();
-        return Response.json({ 
-          success: true, 
-          message: "All connections and stale loops have been reset",
-          enginesCleared: result.enginesCleared,
-          loopsReset: result.loopsReset,
-        });
-      } catch (error) {
-        return errorResponse("reset_failed", String(error), 500);
-      }
     },
   },
 

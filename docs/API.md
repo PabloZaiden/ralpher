@@ -918,19 +918,6 @@ Reset the connection for a specific workspace. Clears connection state so the ne
 |--------|-------|-------------|
 | 404 | `not_found` | Workspace not found |
 
-#### POST /api/backend/reset-all
-
-Reset all workspace connections. Useful for recovering from stale/hung connections across all workspaces.
-
-**Response**
-
-```json
-{
-  "success": true,
-  "message": "All backend connections reset successfully"
-}
-```
-
 #### POST /api/settings/reset-all
 
 Delete database and reinitialize. This is a destructive operation that deletes all loops, workspaces, sessions, and preferences. The database is recreated fresh with all migrations applied.

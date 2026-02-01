@@ -43,26 +43,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   } = useLoops();
 
   // App settings state (reset functions)
-  const [appSettingsResettingConnections, setAppSettingsResettingConnections] = useState(false);
   const [appSettingsResetting, setAppSettingsResetting] = useState(false);
-
-  // Reset connections function
-  const resetServerConnections = useCallback(async () => {
-    setAppSettingsResettingConnections(true);
-    try {
-      const response = await fetch("/api/backend/reset-all", { method: "POST" });
-      const data = await response.json();
-      return {
-        success: data.success ?? false,
-        enginesCleared: data.enginesCleared ?? 0,
-        loopsReset: data.loopsReset ?? 0,
-      };
-    } catch {
-      return { success: false, enginesCleared: 0, loopsReset: 0 };
-    } finally {
-      setAppSettingsResettingConnections(false);
-    }
-  }, []);
 
   // Reset all settings function
   const resetAllSettings = useCallback(async () => {
@@ -1103,9 +1084,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       <AppSettingsModal
         isOpen={showServerSettingsModal}
         onClose={() => setShowServerSettingsModal(false)}
-        onResetConnections={resetServerConnections}
         onResetAll={resetAllSettings}
-        resettingConnections={appSettingsResettingConnections}
         resetting={appSettingsResetting}
       />
 
