@@ -54,29 +54,47 @@ export function ServerSettingsForm({
     setTestResult(null);
   }, [initialSettings, remoteOnly]);
 
-  // Build current settings
-  function buildSettings(): ServerSettings {
+  // Build current settings with optional overrides for values being changed
+  function buildSettings(overrides?: {
+    newMode?: "spawn" | "connect";
+    newHostname?: string;
+    newPort?: string;
+    newPassword?: string;
+    newUseHttps?: boolean;
+    newAllowInsecure?: boolean;
+  }): ServerSettings {
+    const currentMode = overrides?.newMode ?? mode;
+    const currentHostname = overrides?.newHostname ?? hostname;
+    const currentPort = overrides?.newPort ?? port;
+    const currentPassword = overrides?.newPassword ?? password;
+    const currentUseHttps = overrides?.newUseHttps ?? useHttps;
+    const currentAllowInsecure = overrides?.newAllowInsecure ?? allowInsecure;
+
     return {
-      mode,
-      useHttps: mode === "connect" ? useHttps : false,
-      allowInsecure: mode === "connect" && useHttps ? allowInsecure : false,
-      ...(mode === "connect" && {
-        hostname: hostname.trim(),
-        port: parseInt(port, 10) || 4096,
-        password: password.trim() || undefined,
+      mode: currentMode,
+      useHttps: currentMode === "connect" ? currentUseHttps : false,
+      allowInsecure: currentMode === "connect" && currentUseHttps ? currentAllowInsecure : false,
+      ...(currentMode === "connect" && {
+        hostname: currentHostname.trim(),
+        port: parseInt(currentPort, 10) || 4096,
+        password: currentPassword.trim() || undefined,
       }),
     };
   }
 
-  // Notify parent of changes
-  function notifyChange(newMode: "spawn" | "connect", newHostname: string) {
-    const isValid = newMode === "spawn" || newHostname.trim().length > 0;
-    const settings = buildSettings();
-    // Update the settings object with the new values before calling onChange
-    settings.mode = newMode;
-    if (newMode === "connect") {
-      settings.hostname = newHostname.trim();
-    }
+  // Notify parent of changes with optional overrides
+  function notifyChange(overrides?: {
+    newMode?: "spawn" | "connect";
+    newHostname?: string;
+    newPort?: string;
+    newPassword?: string;
+    newUseHttps?: boolean;
+    newAllowInsecure?: boolean;
+  }) {
+    const currentMode = overrides?.newMode ?? mode;
+    const currentHostname = overrides?.newHostname ?? hostname;
+    const isValid = currentMode === "spawn" || currentHostname.trim().length > 0;
+    const settings = buildSettings(overrides);
     onChange(settings, isValid);
   }
 
@@ -93,27 +111,25 @@ export function ServerSettingsForm({
   function handleModeChange(newMode: "spawn" | "connect") {
     setMode(newMode);
     setTestResult(null);
-    notifyChange(newMode, hostname);
+    notifyChange({ newMode });
   }
 
   function handleHostnameChange(value: string) {
     setHostname(value);
     setTestResult(null);
-    notifyChange(mode, value);
+    notifyChange({ newHostname: value });
   }
 
   function handlePortChange(value: string) {
     setPort(value);
     setTestResult(null);
-    const isValid = mode === "spawn" || hostname.trim().length > 0;
-    onChange(buildSettings(), isValid);
+    notifyChange({ newPort: value });
   }
 
   function handlePasswordChange(value: string) {
     setPassword(value);
     setTestResult(null);
-    const isValid = mode === "spawn" || hostname.trim().length > 0;
-    onChange(buildSettings(), isValid);
+    notifyChange({ newPassword: value });
   }
 
   function handleUseHttpsChange(checked: boolean) {
@@ -123,15 +139,14 @@ export function ServerSettingsForm({
       setAllowInsecure(false);
     }
     setTestResult(null);
-    const isValid = mode === "spawn" || hostname.trim().length > 0;
-    onChange(buildSettings(), isValid);
+    // When disabling HTTPS, also reset allowInsecure in the notification
+    notifyChange({ newUseHttps: checked, newAllowInsecure: checked ? allowInsecure : false });
   }
 
   function handleAllowInsecureChange(checked: boolean) {
     setAllowInsecure(checked);
     setTestResult(null);
-    const isValid = mode === "spawn" || hostname.trim().length > 0;
-    onChange(buildSettings(), isValid);
+    notifyChange({ newAllowInsecure: checked });
   }
 
   return (
