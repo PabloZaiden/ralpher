@@ -1042,6 +1042,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               }}
               workspaceCreating={workspaceCreating}
               workspaceError={workspaceError}
+              remoteOnly={remoteOnly}
             />
           </Modal>
         );

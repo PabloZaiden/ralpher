@@ -25,6 +25,8 @@ export interface WorkspaceSelectorProps {
   creating?: boolean;
   /** Error message from workspace operations */
   error?: string | null;
+  /** Whether running in remote-only mode (affects default server settings) */
+  remoteOnly?: boolean;
 }
 
 export function WorkspaceSelector({
@@ -35,6 +37,7 @@ export function WorkspaceSelector({
   onCreateWorkspace,
   creating = false,
   error,
+  remoteOnly = false,
 }: WorkspaceSelectorProps) {
   // State for "add new workspace" mode
   const [showAddNew, setShowAddNew] = useState(false);
@@ -78,7 +81,7 @@ export function WorkspaceSelector({
     const result = await onCreateWorkspace({
       name: newWorkspaceName.trim(),
       directory: newWorkspaceDirectory.trim(),
-      serverSettings: getDefaultServerSettings(),
+      serverSettings: getDefaultServerSettings(remoteOnly),
     });
     
     if (result) {

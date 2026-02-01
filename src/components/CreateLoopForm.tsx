@@ -80,6 +80,8 @@ export interface CreateLoopFormProps {
   workspaceCreating?: boolean;
   /** Workspace-related error */
   workspaceError?: string | null;
+  /** Whether running in remote-only mode (affects default server settings for new workspaces) */
+  remoteOnly?: boolean;
   /** 
    * Optional render prop for action buttons. When provided, action buttons 
    * are NOT rendered inside the form - caller is responsible for rendering them.
@@ -109,6 +111,7 @@ export function CreateLoopForm({
   onCreateWorkspace,
   workspaceCreating = false,
   workspaceError = null,
+  remoteOnly = false,
   renderActions,
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
@@ -373,6 +376,7 @@ export function CreateLoopForm({
           onCreateWorkspace={handleCreateWorkspaceWrapper}
           creating={workspaceCreating}
           error={workspaceError}
+          remoteOnly={remoteOnly}
         />
         {planningWarning && (
           <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-300">
