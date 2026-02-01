@@ -3,7 +3,7 @@
  * Allows setting workspace name, directory, and server connection settings.
  */
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useCallback, type FormEvent } from "react";
 import { Modal, Button } from "./common";
 import { ServerSettingsForm } from "./ServerSettingsForm";
 import { getDefaultServerSettings } from "../types/settings";
@@ -17,12 +17,8 @@ export interface CreateWorkspaceModalProps {
   onClose: () => void;
   /** Callback to create the workspace */
   onCreate: (request: CreateWorkspaceRequest) => Promise<boolean>;
-  /** Callback to test connection */
-  onTestConnection?: (settings: ServerSettings) => Promise<{ success: boolean; error?: string }>;
   /** Whether creation is in progress */
   creating?: boolean;
-  /** Whether testing connection is in progress */
-  testing?: boolean;
   /** Error message from workspace creation */
   error?: string | null;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
@@ -36,9 +32,7 @@ export function CreateWorkspaceModal({
   isOpen,
   onClose,
   onCreate,
-  onTestConnection,
   creating = false,
-  testing = false,
   error,
   remoteOnly = false,
 }: CreateWorkspaceModalProps) {
@@ -51,6 +45,9 @@ export function CreateWorkspaceModal({
     getDefaultServerSettings(remoteOnly)
   );
   const [isServerSettingsValid, setIsServerSettingsValid] = useState(true);
+  
+  // Test connection state (managed internally)
+  const [testing, setTesting] = useState(false);
 
   // Reset form when modal opens
   useEffect(() => {
@@ -59,6 +56,7 @@ export function CreateWorkspaceModal({
       setDirectory("");
       setServerSettings(getDefaultServerSettings(remoteOnly));
       setIsServerSettingsValid(true);
+      setTesting(false);
     }
   }, [isOpen, remoteOnly]);
 
@@ -83,6 +81,29 @@ export function CreateWorkspaceModal({
     setServerSettings(settings);
     setIsServerSettingsValid(isValid);
   }
+
+  // Handle test connection - uses the directory from the form
+  const handleTestConnection = useCallback(async (settings: ServerSettings): Promise<{ success: boolean; error?: string }> => {
+    const trimmedDirectory = directory.trim();
+    if (!trimmedDirectory) {
+      return { success: false, error: "Please enter a directory first" };
+    }
+
+    setTesting(true);
+    try {
+      const res = await fetch("/api/server-settings/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings, directory: trimmedDirectory }),
+      });
+      const result = await res.json();
+      return result;
+    } catch (error) {
+      return { success: false, error: String(error) };
+    } finally {
+      setTesting(false);
+    }
+  }, [directory]);
 
   // Validation
   const isNameValid = name.trim().length > 0;
@@ -157,7 +178,7 @@ export function CreateWorkspaceModal({
         {/* Server Settings Form (shared component) */}
         <ServerSettingsForm
           onChange={handleServerSettingsChange}
-          onTest={onTestConnection}
+          onTest={handleTestConnection}
           testing={testing}
           remoteOnly={remoteOnly}
         />

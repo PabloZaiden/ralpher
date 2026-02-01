@@ -80,18 +80,6 @@ export function AppSettingsModal({
           </div>
         </div>
 
-        {/* Server Settings Info */}
-        <div className="p-4 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-900/20">
-          <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
-            Server Settings
-          </h3>
-          <p className="text-sm text-blue-700 dark:text-blue-300">
-            Server connection settings are now configured per workspace.
-            Click the gear icon next to a workspace name to edit its connection settings.
-            You can also reset a workspace's connection from its settings modal.
-          </p>
-        </div>
-
         {/* Reset All Settings - Danger Zone */}
         {onResetAll && (
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
