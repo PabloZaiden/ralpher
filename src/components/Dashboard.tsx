@@ -814,6 +814,14 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   <div key={workspace.id} className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-md">
                     <span className="text-sm text-gray-700 dark:text-gray-300">{workspace.name}</span>
                     <button
+                      type="button"
+                      onClick={() => setWorkspaceSettingsModal({ open: true, workspaceId: workspace.id })}
+                      className="p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
+                      title="Workspace Settings"
+                    >
+                      <WorkspaceGearIcon />
+                    </button>
+                    <button
                       onClick={async () => {
                         if (confirm(`Delete workspace "${workspace.name}"?`)) {
                           const result = await deleteWorkspace(workspace.id);
