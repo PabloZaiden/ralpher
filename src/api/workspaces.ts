@@ -447,4 +447,33 @@ export const workspacesRoutes = {
       );
     }
   },
+
+  /**
+   * POST /api/server-settings/test - Test connection without requiring a workspace
+   * Used by the create workspace modal to test connection before creating the workspace.
+   * Expects { settings: ServerSettings, directory: string } in the body.
+   */
+  "/api/server-settings/test": {
+    async POST(req: Request) {
+      try {
+        const body = await parseBody<{ settings: ServerSettings; directory: string }>(req);
+        if (!body || !body.settings || !body.directory) {
+          return Response.json(
+            { message: "Missing settings or directory in request body" },
+            { status: 400 }
+          );
+        }
+
+        const { settings, directory } = body;
+        const result = await backendManager.testConnection(settings, directory);
+        return Response.json(result);
+      } catch (error) {
+        log.error("Failed to test connection:", String(error));
+        return Response.json(
+          { success: false, error: String(error) },
+          { status: 500 }
+        );
+      }
+    },
+  },
 };
