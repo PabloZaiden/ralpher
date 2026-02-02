@@ -175,12 +175,12 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
   // Fetch models when loop directory is available
   useEffect(() => {
-    if (!loop?.config.directory) return;
+    if (!loop?.config.directory || !loop?.config.workspaceId) return;
 
     async function fetchModels() {
       setModelsLoading(true);
       try {
-        const response = await fetch(`/api/models?directory=${encodeURIComponent(loop!.config.directory)}`);
+        const response = await fetch(`/api/models?directory=${encodeURIComponent(loop!.config.directory)}&workspaceId=${encodeURIComponent(loop!.config.workspaceId)}`);
         if (response.ok) {
           const data = await response.json() as ModelInfo[];
           setModels(data);
@@ -193,7 +193,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     }
 
     fetchModels();
-  }, [loop?.config.directory]);
+  }, [loop?.config.directory, loop?.config.workspaceId]);
 
   // Clear update indicator when switching to a tab
   function handleTabChange(tabId: TabId) {

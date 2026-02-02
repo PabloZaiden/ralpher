@@ -1929,8 +1929,8 @@ Instructions:
     // Reset stale loops in database (excludes "planning" which can reconnect)
     const loopsReset = await resetStaleLoops();
     
-    // Reset the backend connection
-    await backendManager.reset();
+    // Reset all backend connections
+    await backendManager.resetAllConnections();
     
     log.info(`Force reset completed: ${engineCount} engines cleared, ${loopsReset} loops reset in database`);
     

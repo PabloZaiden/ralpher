@@ -26,7 +26,7 @@ import type {
   AgentEvent,
 } from "../backends/types";
 import { OpenCodeBackend } from "../backends/opencode";
-import { backendManager } from "./backend-manager";
+import { backendManager, buildConnectionConfig } from "./backend-manager";
 import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 import { log } from "./logger";
@@ -704,13 +704,14 @@ export class LoopEngine {
 
   /**
    * Set up the backend session.
-   * Uses global backend settings from backendManager.
+   * Uses workspace-specific server settings.
    */
   private async setupSession(): Promise<void> {
     log.trace("[LoopEngine] setupSession: Entry point");
-    // Get global server settings from backendManager
-    const settings = backendManager.getSettings();
-    log.trace("[LoopEngine] setupSession: Got settings", { mode: settings.mode });
+    
+    // Get workspace-specific server settings (uses test settings in test mode)
+    const settings = await backendManager.getWorkspaceSettings(this.config.workspaceId);
+    log.trace("[LoopEngine] setupSession: Got settings", { mode: settings.mode, workspaceId: this.config.workspaceId });
     
     // Connect to backend if not already connected
     const isConnected = this.backend.isConnected();
@@ -722,7 +723,7 @@ export class LoopEngine {
         port: settings.port,
       });
       log.trace("[LoopEngine] setupSession: About to call backend.connect");
-      await this.backend.connect(backendManager.getConnectionConfig(this.config.directory));
+      await this.backend.connect(buildConnectionConfig(settings, this.config.directory));
       log.trace("[LoopEngine] setupSession: backend.connect completed");
       this.emitLog("info", "Backend connection established");
     } else {
@@ -779,8 +780,8 @@ export class LoopEngine {
         serverUrl: existingSession.serverUrl,
       });
       
-      // Make sure the backend is connected
-      const settings = backendManager.getSettings();
+      // Get workspace-specific server settings (uses test settings in test mode)
+      const settings = await backendManager.getWorkspaceSettings(this.config.workspaceId);
       const isConnected = this.backend.isConnected();
       
       if (!isConnected) {
@@ -789,7 +790,7 @@ export class LoopEngine {
           hostname: settings.hostname,
           port: settings.port,
         });
-        await this.backend.connect(backendManager.getConnectionConfig(this.config.directory));
+        await this.backend.connect(buildConnectionConfig(settings, this.config.directory));
         this.emitLog("info", "Backend connection re-established");
       }
       

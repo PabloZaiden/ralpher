@@ -195,7 +195,9 @@ describe("StopPatternDetector", () => {
     gitService = new GitService(executor);
     
     // Set up backendManager with test executor factory for clearPlanningFolder
+    // Also enable test mode so getWorkspaceSettings returns test settings instead of querying the database
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
+    backendManager.enableTestMode();
     
     // Initialize git in the test directory (git is always required)
     await Bun.$`git init`.cwd(testDir).quiet();

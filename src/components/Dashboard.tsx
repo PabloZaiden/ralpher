@@ -185,15 +185,15 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   }, []);
 
   // Fetch models when directory changes
-  const fetchModels = useCallback(async (directory: string) => {
-    if (!directory) {
+  const fetchModels = useCallback(async (directory: string, workspaceId: string | null) => {
+    if (!directory || !workspaceId) {
       setModels([]);
       return;
     }
 
     setModelsLoading(true);
     try {
-      const response = await fetch(`/api/models?directory=${encodeURIComponent(directory)}`);
+      const response = await fetch(`/api/models?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`);
       if (response.ok) {
         const data = await response.json() as ModelInfo[];
         setModels(data);
@@ -284,7 +284,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       const workspace = workspaces.find(w => w.id === workspaceId);
       const directory = workspace?.directory ?? "";
       
-      fetchModels(directory);
+      fetchModels(directory, workspaceId);
       fetchBranches(directory);
       fetchDefaultBranch(directory);
       checkPlanningDir(directory);

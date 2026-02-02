@@ -370,6 +370,29 @@ class BackendManager {
   }
 
   /**
+   * Get server settings for a workspace.
+   * In test mode (when setBackendForTesting was called), returns test settings.
+   * In production, fetches the workspace from the database.
+   * 
+   * @param workspaceId - The workspace ID
+   * @returns The server settings for the workspace
+   * @throws Error if workspace not found (in non-test mode)
+   */
+  async getWorkspaceSettings(workspaceId: string): Promise<ServerSettings> {
+    // In test mode, return test settings
+    if (this.isTestBackend) {
+      return this.testSettings;
+    }
+
+    // In production, fetch from database
+    const workspace = await getWorkspace(workspaceId);
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
+    }
+    return workspace.serverSettings;
+  }
+
+  /**
    * Get the backend instance for a workspace.
    * Creates a new backend if one doesn't exist.
    */
@@ -489,9 +512,24 @@ class BackendManager {
 
   /**
    * Set test settings (for testing).
+   * Also enables test mode if not already enabled.
    */
   setSettingsForTesting(settings: ServerSettings): void {
     this.testSettings = settings;
+    this.isTestBackend = true;
+    this.initialized = true;
+  }
+
+  /**
+   * Enable test mode without setting a specific backend.
+   * This causes getWorkspaceSettings() to return test settings instead
+   * of querying the database.
+   * Useful when tests create their own mock backends but still need
+   * the backend manager to return test settings.
+   */
+  enableTestMode(): void {
+    this.isTestBackend = true;
+    this.initialized = true;
   }
 
   /**
@@ -522,76 +560,6 @@ class BackendManager {
     // Cast to LoopEvent since the emitter accepts that type
     // The WebSocket handler will pass through any event with a type property
     loopEventEmitter.emit(event as unknown as LoopEvent);
-  }
-
-  // ============================================
-  // DEPRECATED METHODS - For backward compatibility during migration
-  // These will be removed after all callers are updated
-  // ============================================
-
-  /**
-   * @deprecated Use getWorkspaceStatus() instead
-   */
-  getStatus(): ConnectionStatus {
-    // Return a default status - callers should migrate to getWorkspaceStatus
-    return {
-      connected: false,
-      mode: "spawn",
-    };
-  }
-
-  /**
-   * @deprecated Server settings are now per-workspace
-   */
-  getSettings(): ServerSettings {
-    return getDefaultServerSettings();
-  }
-
-  /**
-   * @deprecated Use connect(workspaceId, directory) instead
-   */
-  getConnectionConfig(directory: string): BackendConnectionConfig {
-    // Return default config - callers should migrate
-    return buildConnectionConfig(getDefaultServerSettings(), directory);
-  }
-
-  /**
-   * @deprecated Use getBackend(workspaceId) instead
-   */
-  getBackendLegacy(): Backend {
-    // Use test backend if available
-    if (this.testBackend) {
-      return this.testBackend;
-    }
-    // Create a new one - callers should migrate
-    return new OpenCodeBackend();
-  }
-
-  /**
-   * @deprecated Use isWorkspaceConnected(workspaceId) instead
-   */
-  isConnected(): boolean {
-    // Check if any workspace is connected
-    for (const state of this.connections.values()) {
-      if (state.backend.isConnected()) {
-        return true;
-      }
-    }
-    return this.testBackend?.isConnected() ?? false;
-  }
-
-  /**
-   * @deprecated Use resetAllConnections() instead
-   */
-  async reset(): Promise<void> {
-    await this.resetAllConnections();
-  }
-
-  /**
-   * @deprecated Use disconnectWorkspace(workspaceId) instead
-   */
-  async disconnect(): Promise<void> {
-    await this.resetAllConnections();
   }
 }
 

@@ -2,16 +2,17 @@
  * Models and preferences API endpoints for Ralph Loops Management System.
  * 
  * This module provides endpoints for:
- * - Fetching available AI models for a directory
+ * - Fetching available AI models for a workspace
  * - Managing user preferences (last used model, last used directory)
  * 
- * Uses the global backend manager settings to connect to the opencode backend.
+ * Uses workspace-specific server settings to connect to the opencode backend.
  * 
  * @module api/models
  */
 
-import { backendManager } from "../core/backend-manager";
+import { buildConnectionConfig } from "../core/backend-manager";
 import { OpenCodeBackend } from "../backends/opencode";
+import { getWorkspace } from "../persistence/workspaces";
 import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled } from "../persistence/preferences";
 import type { ErrorResponse } from "../types/api";
 
@@ -32,7 +33,7 @@ function errorResponse(error: string, message: string, status = 400): Response {
  * Models API routes.
  * 
  * Provides endpoint for fetching available AI models:
- * - GET /api/models - Get available models for a directory
+ * - GET /api/models - Get available models for a workspace
  */
 export const modelsRoutes = {
   "/api/models": {
@@ -40,19 +41,31 @@ export const modelsRoutes = {
      * GET /api/models - Get available AI models.
      * 
      * Fetches the list of available AI models from the opencode backend.
-     * Creates a temporary connection to avoid interfering with running loops.
+     * Creates a temporary connection using workspace-specific server settings.
      * 
      * Query Parameters:
      * - directory (required): Working directory path for model context
+     * - workspaceId (required): Workspace ID to use for server settings
      * 
      * @returns Array of ModelInfo objects with provider and model details
      */
     async GET(req: Request): Promise<Response> {
       const url = new URL(req.url);
       const directory = url.searchParams.get("directory");
+      const workspaceId = url.searchParams.get("workspaceId");
 
       if (!directory) {
         return errorResponse("missing_directory", "directory query parameter is required");
+      }
+
+      if (!workspaceId) {
+        return errorResponse("missing_workspace_id", "workspaceId query parameter is required");
+      }
+
+      // Get workspace-specific server settings
+      const workspace = await getWorkspace(workspaceId);
+      if (!workspace) {
+        return errorResponse("workspace_not_found", `Workspace not found: ${workspaceId}`, 404);
       }
 
       // Create a temporary backend to get models (don't reuse the global one)
@@ -60,8 +73,8 @@ export const modelsRoutes = {
       const backend = new OpenCodeBackend();
       
       try {
-        // Connect using global settings
-        await backend.connect(backendManager.getConnectionConfig(directory));
+        // Connect using workspace-specific settings
+        await backend.connect(buildConnectionConfig(workspace.serverSettings, directory));
 
         const models = await backend.getModels(directory);
         
