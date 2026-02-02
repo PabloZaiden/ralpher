@@ -7,6 +7,7 @@ import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import type { Loop, LoopStatus } from "../../src/types/loop";
+import { getDefaultServerSettings } from "../../src/types/settings";
 
 // We need to set the env var before importing the module
 let testDataDir: string;
@@ -28,6 +29,7 @@ async function setupPersistence(): Promise<void> {
     directory: "/tmp/test",
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    serverSettings: getDefaultServerSettings(),
   });
 }
 

@@ -1,10 +1,12 @@
 /**
  * User preferences persistence for Ralph Loops Management System.
  * Stores user preferences in SQLite database using a key-value pattern.
+ * 
+ * Note: Server settings are now stored per-workspace, not globally.
+ * See src/persistence/workspaces.ts for workspace-specific server settings.
  */
 
 import { getDatabase } from "./database";
-import { getDefaultServerSettings, type ServerSettings } from "../types/settings";
 
 /**
  * User preferences structure.
@@ -17,8 +19,6 @@ export interface UserPreferences {
   };
   /** Last used working directory for loop creation */
   lastDirectory?: string;
-  /** Global server settings */
-  serverSettings?: ServerSettings;
   /** Whether markdown rendering is enabled (defaults to true) */
   markdownRenderingEnabled?: boolean;
 }
@@ -66,40 +66,6 @@ export async function setLastModel(model: {
   modelID: string;
 }): Promise<void> {
   setPreference("lastModel", JSON.stringify(model));
-}
-
-/**
- * Get the server settings.
- * Returns default settings if not set.
- * Applies defaults for any missing fields to handle schema migrations.
- */
-export async function getServerSettings(): Promise<ServerSettings> {
-  const serverSettingsJson = getPreference("serverSettings");
-  if (!serverSettingsJson) {
-    return getDefaultServerSettings();
-  }
-  
-  try {
-    const parsed = JSON.parse(serverSettingsJson);
-    const defaults = getDefaultServerSettings();
-    // Merge parsed settings with defaults to ensure all required fields are present
-    return {
-      ...defaults,
-      ...parsed,
-      // Ensure boolean fields have explicit values (not undefined)
-      useHttps: parsed.useHttps ?? defaults.useHttps,
-      allowInsecure: parsed.allowInsecure ?? defaults.allowInsecure,
-    };
-  } catch {
-    return getDefaultServerSettings();
-  }
-}
-
-/**
- * Set the server settings.
- */
-export async function setServerSettings(settings: ServerSettings): Promise<void> {
-  setPreference("serverSettings", JSON.stringify(settings));
 }
 
 /**

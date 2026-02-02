@@ -21,6 +21,7 @@ import { GitService } from "../core/git-service";
 import { setLastModel } from "../persistence/preferences";
 import { updateLoopState, getActiveLoopByDirectory } from "../persistence/loops";
 import { getReviewComments } from "../persistence/database";
+import { getWorkspaceByDirectory } from "../persistence/workspaces";
 import { log } from "../core/logger";
 import type {
   CreateLoopRequest,
@@ -156,7 +157,7 @@ export const loopsCrudRoutes = {
       let git: GitService | null = null;
       const getGitService = async (): Promise<GitService> => {
         if (!git) {
-          const executor = await backendManager.getCommandExecutorAsync(directory!);
+          const executor = await backendManager.getCommandExecutorAsync(workspaceId, directory!);
           git = GitService.withExecutor(executor);
         }
         return git;
@@ -611,7 +612,7 @@ export const loopsControlRoutes = {
 
       // Preflight check: verify no uncommitted changes before starting
       try {
-        const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+        const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
         const git = GitService.withExecutor(executor);
         const hasChanges = await git.hasUncommittedChanges(loop.config.directory);
 
@@ -1110,7 +1111,7 @@ export const loopsDataRoutes = {
 
       try {
         // Get mode-appropriate git service
-        const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+        const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
         const git = GitService.withExecutor(executor);
 
         const diffs = await git.getDiffWithContent(
@@ -1140,7 +1141,7 @@ export const loopsDataRoutes = {
       }
 
       // Get mode-appropriate command executor
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const planPath = `${loop.config.directory}/.planning/plan.md`;
 
       const response: FileContentResponse = {
@@ -1174,7 +1175,7 @@ export const loopsDataRoutes = {
       }
 
       // Get mode-appropriate command executor
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.directory);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const statusPath = `${loop.config.directory}/.planning/status.md`;
 
       const response: FileContentResponse = {
@@ -1212,11 +1213,17 @@ export const loopsDataRoutes = {
         return errorResponse("invalid_request", "directory query parameter is required", 400);
       }
 
+      // Look up workspace by directory to get workspaceId
+      const workspace = await getWorkspaceByDirectory(directory);
+      if (!workspace) {
+        return errorResponse("workspace_not_found", `No workspace found for directory: ${directory}`, 404);
+      }
+
       const planningDir = `${directory}/.planning`;
       
       try {
         // Get mode-appropriate command executor
-        const executor = await backendManager.getCommandExecutorAsync(directory);
+        const executor = await backendManager.getCommandExecutorAsync(workspace.id, directory);
 
         // Check if directory exists
         const exists = await executor.directoryExists(planningDir);

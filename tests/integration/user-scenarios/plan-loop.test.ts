@@ -767,8 +767,8 @@ describe("Plan + Loop User Scenarios", () => {
       expect(currentLoop.state.status).toBe("planning");
       expect(currentLoop.state.planMode?.isPlanReady).toBe(true);
 
-      // Reset all connections via API (simulating "Reset Connections" button)
-      const resetResponse = await fetch(`${ctx.baseUrl}/api/backend/reset-all`, {
+      // Reset workspace connection via API (simulating "Reset Connection" button in workspace settings)
+      const resetResponse = await fetch(`${ctx.baseUrl}/api/workspaces/${ctx.workspaceId}/server-settings/reset`, {
         method: "POST",
       });
       expect(resetResponse.status).toBe(200);

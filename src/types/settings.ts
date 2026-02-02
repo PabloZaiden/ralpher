@@ -3,8 +3,6 @@
  * Defines global server configuration that applies to all loops.
  */
 
-import { isRemoteOnlyMode } from "../core/config";
-
 /**
  * Server connection mode.
  * - "spawn": Spawn a local opencode server on demand
@@ -33,11 +31,12 @@ export interface ServerSettings {
 
 /**
  * Get default server settings.
- * Uses connect mode when RALPHER_REMOTE_ONLY is set, otherwise spawn mode.
+ * @param remoteOnly - If true, defaults to "connect" mode instead of "spawn" mode.
+ *                     This should be passed from the server config (RALPHER_REMOTE_ONLY env var).
  */
-export function getDefaultServerSettings(): ServerSettings {
+export function getDefaultServerSettings(remoteOnly: boolean = false): ServerSettings {
   return {
-    mode: isRemoteOnlyMode() ? "connect" : "spawn",
+    mode: remoteOnly ? "connect" : "spawn",
     useHttps: false,
     allowInsecure: false,
   };

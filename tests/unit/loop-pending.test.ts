@@ -178,8 +178,10 @@ describe("LoopEngine Pending Model", () => {
     capturedPrompts = [];
     mockBackend = createMockBackend(["Response 1", "Response 2", "<promise>COMPLETE</promise>"]);
     
-    // Set up backendManager with test executor factory
+    // Set up backendManager with test executor factory and enable test mode
+    // so getWorkspaceSettings returns test settings instead of querying the database
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
+    backendManager.enableTestMode();
     
     // Collect emitted events using subscribe (not on("*", ...))
     emitter.subscribe((event) => {

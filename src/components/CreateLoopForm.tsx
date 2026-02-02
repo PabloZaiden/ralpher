@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
 import type { CreateLoopRequest, ModelInfo, BranchInfo } from "../types";
-import type { WorkspaceWithLoopCount, CreateWorkspaceRequest } from "../types/workspace";
+import type { WorkspaceWithLoopCount } from "../types/workspace";
 import { Button } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
 
@@ -74,10 +74,6 @@ export interface CreateLoopFormProps {
   workspaces?: WorkspaceWithLoopCount[];
   /** Whether workspaces are loading */
   workspacesLoading?: boolean;
-  /** Callback to create a new workspace */
-  onCreateWorkspace?: (request: CreateWorkspaceRequest) => Promise<{ id: string; directory: string } | null>;
-  /** Whether workspace creation is in progress */
-  workspaceCreating?: boolean;
   /** Workspace-related error */
   workspaceError?: string | null;
   /** 
@@ -106,8 +102,6 @@ export function CreateLoopForm({
   isEditingDraft = false,
   workspaces = [],
   workspacesLoading = false,
-  onCreateWorkspace,
-  workspaceCreating = false,
   workspaceError = null,
   renderActions,
 }: CreateLoopFormProps) {
@@ -355,12 +349,6 @@ export function CreateLoopForm({
     // The useEffect watching selectedWorkspaceId will notify parent
   }
 
-  // Handle creating a new workspace
-  async function handleCreateWorkspaceWrapper(request: { name: string; directory: string }): Promise<{ id: string; directory: string } | null> {
-    if (!onCreateWorkspace) return null;
-    return onCreateWorkspace(request);
-  }
-
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
       {/* Workspace Selection */}
@@ -370,8 +358,6 @@ export function CreateLoopForm({
           loading={workspacesLoading}
           selectedWorkspaceId={selectedWorkspaceId}
           onSelect={handleWorkspaceSelect}
-          onCreateWorkspace={handleCreateWorkspaceWrapper}
-          creating={workspaceCreating}
           error={workspaceError}
         />
         {planningWarning && (

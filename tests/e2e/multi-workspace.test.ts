@@ -1,0 +1,402 @@
+/**
+ * E2E tests for multi-workspace operations.
+ * Tests that multiple workspaces can operate with different server configs
+ * in parallel without interfering with each other.
+ */
+
+import { test, expect, describe, beforeEach, beforeAll, afterAll } from "bun:test";
+import { mkdtemp, rm } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import { serve, type Server } from "bun";
+import { apiRoutes } from "../../src/api";
+import { ensureDataDirectories } from "../../src/persistence/paths";
+import { backendManager } from "../../src/core/backend-manager";
+import { createMockBackend } from "../mocks/mock-backend";
+import { TestCommandExecutor } from "../mocks/mock-executor";
+
+describe("Multi-Workspace E2E", () => {
+  let testDataDir: string;
+  let testWorkDir1: string;
+  let testWorkDir2: string;
+  let server: Server<unknown>;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    // Create temp directories
+    testDataDir = await mkdtemp(join(tmpdir(), "ralpher-multi-workspace-test-data-"));
+    testWorkDir1 = await mkdtemp(join(tmpdir(), "ralpher-multi-workspace-test-work1-"));
+    testWorkDir2 = await mkdtemp(join(tmpdir(), "ralpher-multi-workspace-test-work2-"));
+
+    // Set env var for persistence before importing modules
+    process.env["RALPHER_DATA_DIR"] = testDataDir;
+
+    // Ensure directories exist
+    await ensureDataDirectories();
+
+    // Initialize git repos in test work directories
+    await Bun.$`git init ${testWorkDir1}`.quiet();
+    await Bun.$`git -C ${testWorkDir1} config user.email "test@test.com"`.quiet();
+    await Bun.$`git -C ${testWorkDir1} config user.name "Test User"`.quiet();
+    await Bun.$`touch ${testWorkDir1}/README.md`.quiet();
+    await Bun.$`git -C ${testWorkDir1} add .`.quiet();
+    await Bun.$`git -C ${testWorkDir1} commit -m "Initial commit"`.quiet();
+
+    await Bun.$`git init ${testWorkDir2}`.quiet();
+    await Bun.$`git -C ${testWorkDir2} config user.email "test@test.com"`.quiet();
+    await Bun.$`git -C ${testWorkDir2} config user.name "Test User"`.quiet();
+    await Bun.$`touch ${testWorkDir2}/README.md`.quiet();
+    await Bun.$`git -C ${testWorkDir2} add .`.quiet();
+    await Bun.$`git -C ${testWorkDir2} commit -m "Initial commit"`.quiet();
+
+    // Set up backend manager with test executor factory
+    backendManager.setBackendForTesting(createMockBackend());
+    backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
+
+    // Start test server on random port
+    server = serve({
+      port: 0, // Random available port
+      routes: {
+        ...apiRoutes,
+      },
+    });
+    baseUrl = server.url.toString().replace(/\/$/, "");
+  });
+
+  afterAll(async () => {
+    // Stop server
+    server.stop();
+
+    // Reset backend manager
+    backendManager.resetForTesting();
+
+    // Cleanup temp directories
+    await rm(testDataDir, { recursive: true, force: true });
+    await rm(testWorkDir1, { recursive: true, force: true });
+    await rm(testWorkDir2, { recursive: true, force: true });
+
+    // Clear env
+    delete process.env["RALPHER_DATA_DIR"];
+  });
+
+  // Clean up workspaces before each test
+  beforeEach(async () => {
+    const { getDatabase } = await import("../../src/persistence/database");
+    // Clear the workspaces and loops tables
+    const db = getDatabase();
+    db.run("DELETE FROM loops WHERE workspace_id IS NOT NULL");
+    db.run("DELETE FROM workspaces");
+  });
+
+  describe("Multiple workspaces with different server settings", () => {
+    test("creates two workspaces with different server settings", async () => {
+      // Create workspace 1 with spawn mode
+      const ws1Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 1 - Spawn",
+          directory: testWorkDir1,
+          serverSettings: {
+            mode: "spawn",
+            useHttps: false,
+            allowInsecure: false,
+          },
+        }),
+      });
+      expect(ws1Response.ok).toBe(true);
+      const ws1 = await ws1Response.json();
+
+      // Create workspace 2 with connect mode
+      const ws2Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 2 - Connect",
+          directory: testWorkDir2,
+          serverSettings: {
+            mode: "connect",
+            hostname: "example-server.com",
+            port: 8080,
+            useHttps: true,
+            allowInsecure: false,
+          },
+        }),
+      });
+      expect(ws2Response.ok).toBe(true);
+      const ws2 = await ws2Response.json();
+
+      // Verify both workspaces exist with correct settings
+      const listResponse = await fetch(`${baseUrl}/api/workspaces`);
+      expect(listResponse.ok).toBe(true);
+      const workspaces = await listResponse.json();
+
+      expect(workspaces.length).toBe(2);
+
+      // Verify workspace 1 settings
+      const fetchedWs1 = workspaces.find((w: { id: string }) => w.id === ws1.id);
+      expect(fetchedWs1.serverSettings.mode).toBe("spawn");
+
+      // Verify workspace 2 settings
+      const fetchedWs2 = workspaces.find((w: { id: string }) => w.id === ws2.id);
+      expect(fetchedWs2.serverSettings.mode).toBe("connect");
+      expect(fetchedWs2.serverSettings.hostname).toBe("example-server.com");
+      expect(fetchedWs2.serverSettings.port).toBe(8080);
+    });
+
+    test("updating one workspace settings does not affect another", async () => {
+      // Create two workspaces with identical settings
+      const ws1Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 1",
+          directory: testWorkDir1,
+          serverSettings: {
+            mode: "spawn",
+            useHttps: false,
+            allowInsecure: false,
+          },
+        }),
+      });
+      const ws1 = await ws1Response.json();
+
+      const ws2Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 2",
+          directory: testWorkDir2,
+          serverSettings: {
+            mode: "spawn",
+            useHttps: false,
+            allowInsecure: false,
+          },
+        }),
+      });
+      const ws2 = await ws2Response.json();
+
+      // Update workspace 1 settings
+      const updateResponse = await fetch(`${baseUrl}/api/workspaces/${ws1.id}/server-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "connect",
+          hostname: "new-server.com",
+          port: 9000,
+          useHttps: true,
+          allowInsecure: true,
+        }),
+      });
+      expect(updateResponse.ok).toBe(true);
+
+      // Verify workspace 1 was updated
+      const ws1GetResponse = await fetch(`${baseUrl}/api/workspaces/${ws1.id}/server-settings`);
+      const ws1Settings = await ws1GetResponse.json();
+      expect(ws1Settings.mode).toBe("connect");
+      expect(ws1Settings.hostname).toBe("new-server.com");
+
+      // Verify workspace 2 was NOT affected
+      const ws2GetResponse = await fetch(`${baseUrl}/api/workspaces/${ws2.id}/server-settings`);
+      const ws2Settings = await ws2GetResponse.json();
+      expect(ws2Settings.mode).toBe("spawn");
+      expect(ws2Settings.hostname).toBeUndefined();
+    });
+
+    test("resetting one workspace connection does not affect another", async () => {
+      // Create two workspaces
+      const ws1Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 1",
+          directory: testWorkDir1,
+        }),
+      });
+      const ws1 = await ws1Response.json();
+
+      const ws2Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 2",
+          directory: testWorkDir2,
+        }),
+      });
+      const ws2 = await ws2Response.json();
+
+      // Reset connection for workspace 1
+      const resetResponse = await fetch(`${baseUrl}/api/workspaces/${ws1.id}/server-settings/reset`, {
+        method: "POST",
+      });
+      expect(resetResponse.ok).toBe(true);
+
+      // Both workspaces should still be accessible
+      const ws1GetResponse = await fetch(`${baseUrl}/api/workspaces/${ws1.id}`);
+      expect(ws1GetResponse.ok).toBe(true);
+
+      const ws2GetResponse = await fetch(`${baseUrl}/api/workspaces/${ws2.id}`);
+      expect(ws2GetResponse.ok).toBe(true);
+    });
+
+    test("loops are isolated to their workspace", async () => {
+      // Create two workspaces
+      const ws1Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 1",
+          directory: testWorkDir1,
+        }),
+      });
+      const ws1 = await ws1Response.json();
+
+      const ws2Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 2",
+          directory: testWorkDir2,
+        }),
+      });
+      const ws2 = await ws2Response.json();
+
+      // Create a loop in workspace 1
+      const loop1Response = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: ws1.id,
+          prompt: "Test loop for workspace 1",
+          draft: true,
+          planMode: false,
+        }),
+      });
+      expect(loop1Response.ok).toBe(true);
+      const loop1 = await loop1Response.json();
+
+      // Create a loop in workspace 2
+      const loop2Response = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: ws2.id,
+          prompt: "Test loop for workspace 2",
+          draft: true,
+          planMode: false,
+        }),
+      });
+      expect(loop2Response.ok).toBe(true);
+      const loop2 = await loop2Response.json();
+
+      // Verify loops are in different workspaces
+      expect(loop1.config.workspaceId).toBe(ws1.id);
+      expect(loop2.config.workspaceId).toBe(ws2.id);
+
+      // Verify loops use correct directories
+      expect(loop1.config.directory).toBe(testWorkDir1);
+      expect(loop2.config.directory).toBe(testWorkDir2);
+
+      // Verify workspace loop counts
+      const listResponse = await fetch(`${baseUrl}/api/workspaces`);
+      const workspaces = await listResponse.json();
+
+      const fetchedWs1 = workspaces.find((w: { id: string }) => w.id === ws1.id);
+      const fetchedWs2 = workspaces.find((w: { id: string }) => w.id === ws2.id);
+
+      expect(fetchedWs1.loopCount).toBe(1);
+      expect(fetchedWs2.loopCount).toBe(1);
+    });
+
+    test("deleting one workspace does not affect another", async () => {
+      // Create two workspaces
+      const ws1Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 1",
+          directory: testWorkDir1,
+        }),
+      });
+      const ws1 = await ws1Response.json();
+
+      const ws2Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 2",
+          directory: testWorkDir2,
+        }),
+      });
+      const ws2 = await ws2Response.json();
+
+      // Delete workspace 1
+      const deleteResponse = await fetch(`${baseUrl}/api/workspaces/${ws1.id}`, {
+        method: "DELETE",
+      });
+      expect(deleteResponse.ok).toBe(true);
+
+      // Verify workspace 1 is gone
+      const ws1GetResponse = await fetch(`${baseUrl}/api/workspaces/${ws1.id}`);
+      expect(ws1GetResponse.status).toBe(404);
+
+      // Verify workspace 2 still exists
+      const ws2GetResponse = await fetch(`${baseUrl}/api/workspaces/${ws2.id}`);
+      expect(ws2GetResponse.ok).toBe(true);
+      const ws2Fetched = await ws2GetResponse.json();
+      expect(ws2Fetched.name).toBe("Workspace 2");
+    });
+  });
+
+  describe("Connection status isolation", () => {
+    test("each workspace has independent connection status", async () => {
+      // Create two workspaces with different modes
+      const ws1Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 1 - Spawn",
+          directory: testWorkDir1,
+          serverSettings: {
+            mode: "spawn",
+            useHttps: false,
+            allowInsecure: false,
+          },
+        }),
+      });
+      const ws1 = await ws1Response.json();
+
+      const ws2Response = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Workspace 2 - Connect",
+          directory: testWorkDir2,
+          serverSettings: {
+            mode: "connect",
+            hostname: "example.com",
+            port: 8080,
+            useHttps: true,
+            allowInsecure: false,
+          },
+        }),
+      });
+      const ws2 = await ws2Response.json();
+
+      // Get connection status for each workspace
+      const status1Response = await fetch(`${baseUrl}/api/workspaces/${ws1.id}/server-settings/status`);
+      expect(status1Response.ok).toBe(true);
+      const status1 = await status1Response.json();
+
+      const status2Response = await fetch(`${baseUrl}/api/workspaces/${ws2.id}/server-settings/status`);
+      expect(status2Response.ok).toBe(true);
+      const status2 = await status2Response.json();
+
+      // Both should have independent status
+      expect(status1).toHaveProperty("connected");
+      expect(status1).toHaveProperty("mode");
+      expect(status2).toHaveProperty("connected");
+      expect(status2).toHaveProperty("mode");
+    });
+  });
+});

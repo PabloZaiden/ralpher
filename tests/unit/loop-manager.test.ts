@@ -10,6 +10,7 @@ import { LoopManager } from "../../src/core/loop-manager";
 import { SimpleEventEmitter } from "../../src/core/event-emitter";
 import type { LoopEvent } from "../../src/types/events";
 import { updateLoopState } from "../../src/persistence/loops";
+import { getDefaultServerSettings } from "../../src/types/settings";
 
 describe("LoopManager", () => {
   let testDataDir: string;
@@ -39,6 +40,7 @@ describe("LoopManager", () => {
       directory: testWorkDir,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      serverSettings: getDefaultServerSettings(),
     });
 
     // Set up event emitter

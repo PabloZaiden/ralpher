@@ -8,6 +8,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { randomUUID } from "crypto";
 import type { Workspace } from "../../src/types/workspace";
+import { getDefaultServerSettings } from "../../src/types/settings";
 
 // We need to set the env var before importing the module
 let testDataDir: string;
@@ -27,6 +28,7 @@ function createTestWorkspace(overrides: {
     directory: overrides.directory ?? "/tmp/test-project",
     createdAt: now,
     updatedAt: now,
+    serverSettings: getDefaultServerSettings(),
   };
 }
 
@@ -81,31 +83,28 @@ describe("Workspace Persistence", () => {
       expect(workspace).toBeNull();
     });
 
-    test("listWorkspaces returns all workspaces sorted by updatedAt DESC", async () => {
+    test("listWorkspaces returns all workspaces sorted by name alphabetically", async () => {
       const { ensureDataDirectories } = await import("../../src/persistence/paths");
       const { createWorkspace, listWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
 
-      // Create workspaces with different updatedAt timestamps
-      const ws1 = createTestWorkspace({ name: "First Workspace", directory: "/tmp/first" });
-      ws1.updatedAt = "2024-01-01T00:00:00Z";
+      // Create workspaces with different names (out of alphabetical order)
+      const ws1 = createTestWorkspace({ name: "Zeta Workspace", directory: "/tmp/zeta" });
       await createWorkspace(ws1);
 
-      const ws2 = createTestWorkspace({ name: "Second Workspace", directory: "/tmp/second" });
-      ws2.updatedAt = "2024-01-03T00:00:00Z";
+      const ws2 = createTestWorkspace({ name: "Alpha Workspace", directory: "/tmp/alpha" });
       await createWorkspace(ws2);
 
-      const ws3 = createTestWorkspace({ name: "Third Workspace", directory: "/tmp/third" });
-      ws3.updatedAt = "2024-01-02T00:00:00Z";
+      const ws3 = createTestWorkspace({ name: "beta workspace", directory: "/tmp/beta" });
       await createWorkspace(ws3);
 
       const workspaces = await listWorkspaces();
       expect(workspaces.length).toBe(3);
-      // Should be sorted by updatedAt DESC
-      expect(workspaces[0]!.name).toBe("Second Workspace");
-      expect(workspaces[1]!.name).toBe("Third Workspace");
-      expect(workspaces[2]!.name).toBe("First Workspace");
+      // Should be sorted alphabetically by name (case-insensitive)
+      expect(workspaces[0]!.name).toBe("Alpha Workspace");
+      expect(workspaces[1]!.name).toBe("beta workspace");
+      expect(workspaces[2]!.name).toBe("Zeta Workspace");
     });
 
     test("updateWorkspace updates workspace name", async () => {
@@ -371,6 +370,148 @@ describe("Workspace Persistence", () => {
 
       // Workspace should still exist
       expect(await getWorkspace(workspace.id)).not.toBeNull();
+    });
+  });
+
+  describe("Server Settings Operations", () => {
+    test("createWorkspace stores server settings", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { createWorkspace, getWorkspace } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const customSettings = {
+        mode: "connect" as const,
+        hostname: "custom.server.com",
+        port: 9000,
+        useHttps: true,
+        allowInsecure: false,
+      };
+
+      const workspace = createTestWorkspace({
+        name: "Custom Settings Workspace",
+        directory: "/tmp/custom-settings",
+      });
+      workspace.serverSettings = customSettings;
+      await createWorkspace(workspace);
+
+      const loaded = await getWorkspace(workspace.id);
+      expect(loaded).not.toBeNull();
+      expect(loaded!.serverSettings).toEqual(customSettings);
+    });
+
+    test("updateWorkspace updates server settings", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { createWorkspace, updateWorkspace, getWorkspace } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const workspace = createTestWorkspace({
+        name: "Update Settings Test",
+        directory: "/tmp/update-settings",
+      });
+      await createWorkspace(workspace);
+
+      const newSettings = {
+        mode: "connect" as const,
+        hostname: "updated.server.com",
+        port: 8080,
+        useHttps: true,
+        allowInsecure: true,
+      };
+
+      const updated = await updateWorkspace(workspace.id, { serverSettings: newSettings });
+      expect(updated).not.toBeNull();
+      expect(updated!.serverSettings).toEqual(newSettings);
+
+      // Verify persisted
+      const loaded = await getWorkspace(workspace.id);
+      expect(loaded!.serverSettings).toEqual(newSettings);
+    });
+
+    test("updateWorkspace preserves server settings when only updating name", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { createWorkspace, updateWorkspace, getWorkspace } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const customSettings = {
+        mode: "connect" as const,
+        hostname: "preserved.server.com",
+        port: 7000,
+        useHttps: false,
+        allowInsecure: true,
+      };
+
+      const workspace = createTestWorkspace({
+        name: "Original Name",
+        directory: "/tmp/preserve-settings",
+      });
+      workspace.serverSettings = customSettings;
+      await createWorkspace(workspace);
+
+      // Update only name
+      const updated = await updateWorkspace(workspace.id, { name: "New Name" });
+      expect(updated).not.toBeNull();
+      expect(updated!.name).toBe("New Name");
+      expect(updated!.serverSettings).toEqual(customSettings);
+
+      // Verify persisted
+      const loaded = await getWorkspace(workspace.id);
+      expect(loaded!.name).toBe("New Name");
+      expect(loaded!.serverSettings).toEqual(customSettings);
+    });
+
+    test("listWorkspaces includes server settings", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { createWorkspace, listWorkspaces } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const customSettings = {
+        mode: "connect" as const,
+        hostname: "list.server.com",
+        port: 6000,
+        useHttps: true,
+        allowInsecure: false,
+      };
+
+      const workspace = createTestWorkspace({
+        name: "List Settings Test",
+        directory: "/tmp/list-settings",
+      });
+      workspace.serverSettings = customSettings;
+      await createWorkspace(workspace);
+
+      const workspaces = await listWorkspaces();
+      expect(workspaces.length).toBe(1);
+      expect(workspaces[0]!.serverSettings).toEqual(customSettings);
+    });
+
+    test("getWorkspaceByDirectory includes server settings", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { createWorkspace, getWorkspaceByDirectory } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const customSettings = {
+        mode: "connect" as const,
+        hostname: "directory.server.com",
+        port: 5000,
+        useHttps: false,
+        allowInsecure: true,
+      };
+
+      const workspace = createTestWorkspace({
+        name: "Directory Settings Test",
+        directory: "/tmp/directory-settings",
+      });
+      workspace.serverSettings = customSettings;
+      await createWorkspace(workspace);
+
+      const found = await getWorkspaceByDirectory("/tmp/directory-settings");
+      expect(found).not.toBeNull();
+      expect(found!.serverSettings).toEqual(customSettings);
     });
   });
 });

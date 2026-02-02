@@ -13,6 +13,7 @@
 
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
+import { getWorkspaceByDirectory } from "../persistence/workspaces";
 import type { BranchInfo } from "../types";
 
 /**
@@ -39,9 +40,15 @@ export interface DefaultBranchResponse {
  * 
  * @param directory - The directory containing the git repository
  * @returns Configured GitService instance
+ * @throws Error if no workspace is found for the directory
  */
 async function getGitService(directory: string): Promise<GitService> {
-  const executor = await backendManager.getCommandExecutorAsync(directory);
+  // Look up the workspace by directory to get its workspaceId
+  const workspace = await getWorkspaceByDirectory(directory);
+  if (!workspace) {
+    throw new Error(`No workspace found for directory: ${directory}`);
+  }
+  const executor = await backendManager.getCommandExecutorAsync(workspace.id, directory);
   return GitService.withExecutor(executor);
 }
 

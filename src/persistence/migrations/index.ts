@@ -385,6 +385,56 @@ export const migrations: Migration[] = [
       log.info("Completed migration of existing loops to workspaces");
     },
   },
+  {
+    version: 12,
+    name: "add_server_settings_to_workspaces",
+    up: (db) => {
+      // This migration adds server_settings column to workspaces table
+      // and migrates existing global server settings to all workspaces
+      
+      if (!tableExists(db, "workspaces")) {
+        log.debug("workspaces table does not exist, skipping migration 12");
+        return;
+      }
+      
+      const columns = getTableColumns(db, "workspaces");
+      
+      // Add server_settings column if it doesn't exist
+      if (!columns.includes("server_settings")) {
+        db.run("ALTER TABLE workspaces ADD COLUMN server_settings TEXT NOT NULL DEFAULT '{}'");
+        log.info("Added server_settings column to workspaces table");
+      }
+      
+      // Default server settings (spawn mode)
+      const defaultSettings = JSON.stringify({
+        mode: "spawn",
+        useHttps: false,
+        allowInsecure: false,
+      });
+      
+      // Get the current global server settings from preferences (if table exists)
+      let serverSettingsJson = defaultSettings;
+      if (tableExists(db, "preferences")) {
+        const prefsRow = db.query("SELECT value FROM preferences WHERE key = ?").get("serverSettings") as { value: string } | null;
+        if (prefsRow?.value) {
+          serverSettingsJson = prefsRow.value;
+        }
+      }
+      
+      // Update all existing workspaces that have empty or default server_settings
+      const result = db.run(
+        "UPDATE workspaces SET server_settings = ? WHERE server_settings = '{}' OR server_settings IS NULL",
+        [serverSettingsJson]
+      );
+      log.info(`Updated ${result.changes} workspaces with server settings`);
+      
+      // Delete the global serverSettings from preferences (no longer needed)
+      if (tableExists(db, "preferences")) {
+        db.run("DELETE FROM preferences WHERE key = ?", ["serverSettings"]);
+        log.info("Removed global serverSettings from preferences table");
+      }
+    },
+  },
 ];
 
 /**

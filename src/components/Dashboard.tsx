@@ -4,12 +4,14 @@
 
 import { useState, useCallback, useEffect } from "react";
 import type { UncommittedChangesError, ModelInfo, HealthResponse, BranchInfo } from "../types";
-import { useLoops, useServerSettings, useWorkspaces } from "../hooks";
+import { useLoops, useWorkspaces } from "../hooks";
 import { Button, Modal } from "./common";
 import { LoopCard } from "./LoopCard";
 import { CreateLoopForm, type CreateLoopFormActionState } from "./CreateLoopForm";
-import { ConnectionStatusBar } from "./ConnectionStatusBar";
-import { ServerSettingsModal } from "./ServerSettingsModal";
+import { AppSettingsModal } from "./AppSettingsModal";
+import { WorkspaceSettingsModal } from "./WorkspaceSettingsModal";
+import { CreateWorkspaceModal } from "./CreateWorkspaceModal";
+import { useWorkspaceServerSettings } from "../hooks";
 import {
   AcceptLoopModal,
   AddressCommentsModal,
@@ -41,20 +43,21 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     updateLoop,
   } = useLoops();
 
-  // Server settings state
-  const {
-    settings: serverSettings,
-    status: serverStatus,
-    loading: serverLoading,
-    saving: serverSaving,
-    testing: serverTesting,
-    resettingConnections: serverResettingConnections,
-    resetting: serverResetting,
-    updateSettings: updateServerSettings,
-    testConnection: testServerConnection,
-    resetConnections: resetServerConnections,
-    resetAll: resetAllSettings,
-  } = useServerSettings();
+  // App settings state (reset functions)
+  const [appSettingsResetting, setAppSettingsResetting] = useState(false);
+
+  // Reset all settings function
+  const resetAllSettings = useCallback(async () => {
+    setAppSettingsResetting(true);
+    try {
+      const response = await fetch("/api/settings/reset-all", { method: "POST" });
+      return response.ok;
+    } catch {
+      return false;
+    } finally {
+      setAppSettingsResetting(false);
+    }
+  }, []);
 
   // Workspace state
   const {
@@ -64,10 +67,32 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     error: workspaceError,
     createWorkspace,
     deleteWorkspace,
+    refresh: refreshWorkspaces,
   } = useWorkspaces();
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
+  // Create workspace modal state
+  const [showCreateWorkspaceModal, setShowCreateWorkspaceModal] = useState(false);
+  // Workspace settings modal state
+  const [workspaceSettingsModal, setWorkspaceSettingsModal] = useState<{ open: boolean; workspaceId: string | null }>({
+    open: false,
+    workspaceId: null,
+  });
+  // remoteOnly is kept for WorkspaceSettingsModal
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
+
+  // Workspace server settings hook for the workspace being edited
+  // IMPORTANT: Use 'workspace' from this hook for fresh data from API, not from workspaces.find()
+  const {
+    workspace: workspaceFromHook,
+    status: workspaceStatus,
+    saving: workspaceSettingsSaving,
+    testing: workspaceSettingsTesting,
+    resettingConnection: workspaceSettingsResetting,
+    testConnection: testWorkspaceConnection,
+    resetConnection: resetWorkspaceConnection,
+    updateWorkspace: updateWorkspaceSettings,
+  } = useWorkspaceServerSettings(workspaceSettingsModal.workspaceId);
 
   // Fetch app config on mount to get remote-only status
   useEffect(() => {
@@ -160,15 +185,15 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   }, []);
 
   // Fetch models when directory changes
-  const fetchModels = useCallback(async (directory: string) => {
-    if (!directory) {
+  const fetchModels = useCallback(async (directory: string, workspaceId: string | null) => {
+    if (!directory || !workspaceId) {
       setModels([]);
       return;
     }
 
     setModelsLoading(true);
     try {
-      const response = await fetch(`/api/models?directory=${encodeURIComponent(directory)}`);
+      const response = await fetch(`/api/models?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`);
       if (response.ok) {
         const data = await response.json() as ModelInfo[];
         setModels(data);
@@ -259,7 +284,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       const workspace = workspaces.find(w => w.id === workspaceId);
       const directory = workspace?.directory ?? "";
       
-      fetchModels(directory);
+      fetchModels(directory, workspaceId);
       fetchBranches(directory);
       fetchDefaultBranch(directory);
       checkPlanningDir(directory);
@@ -386,13 +411,16 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   </span>
                 )}
               </h1>
-              {/* Server Settings */}
-              <ConnectionStatusBar
-                settings={serverSettings}
-                status={serverStatus}
-                loading={serverLoading}
+              {/* App Settings Button */}
+              <button
+                type="button"
                 onClick={() => setShowServerSettingsModal(true)}
-              />
+                className="flex items-center gap-2 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                title="App Settings"
+              >
+                <span className="text-gray-500 dark:text-gray-400 font-medium hidden sm:inline">Settings</span>
+                <GearIcon />
+              </button>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               {/* WebSocket Status indicator - Ralpher connection */}
@@ -415,6 +443,13 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                     : "Disconnected"}
                 </span>
               </div>
+              <Button 
+                variant="secondary" 
+                onClick={() => setShowCreateWorkspaceModal(true)} 
+                className="flex-1 sm:flex-none"
+              >
+                New Workspace
+              </Button>
               <Button onClick={() => setShowCreateModal(true)} className="flex-1 sm:flex-none">
                 New Loop
               </Button>
@@ -474,7 +509,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
             <div key={workspace.id} className="mb-10">
               {/* Workspace header - responsive layout */}
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
-                {/* Primary: Icon + Name */}
+                {/* Primary: Icon + Name + Settings */}
                 <div className="flex items-center gap-2 min-w-0">
                   <svg className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -482,6 +517,14 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
                     {workspace.name}
                   </h2>
+                  <button
+                    type="button"
+                    onClick={() => setWorkspaceSettingsModal({ open: true, workspaceId: workspace.id })}
+                    className="p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
+                    title="Workspace Settings"
+                  >
+                    <WorkspaceGearIcon />
+                  </button>
                 </div>
                 {/* Secondary: Path + Loop count */}
                 <div className="flex items-center gap-2 min-w-0 sm:flex-1">
@@ -784,6 +827,14 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                   <div key={workspace.id} className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-md">
                     <span className="text-sm text-gray-700 dark:text-gray-300">{workspace.name}</span>
                     <button
+                      type="button"
+                      onClick={() => setWorkspaceSettingsModal({ open: true, workspaceId: workspace.id })}
+                      className="p-1 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors"
+                      title="Workspace Settings"
+                    >
+                      <WorkspaceGearIcon />
+                    </button>
+                    <button
                       onClick={async () => {
                         if (confirm(`Delete workspace "${workspace.name}"?`)) {
                           const result = await deleteWorkspace(workspace.id);
@@ -995,14 +1046,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
               defaultBranch={defaultBranch}
               workspaces={workspaces}
               workspacesLoading={workspacesLoading}
-              onCreateWorkspace={async (request) => {
-                const result = await createWorkspace(request);
-                if (result) {
-                  return { id: result.id, directory: result.directory };
-                }
-                return null;
-              }}
-              workspaceCreating={workspaceCreating}
               workspaceError={workspaceError}
             />
           </Modal>
@@ -1050,21 +1093,12 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         error={uncommittedModal.error}
       />
 
-      {/* Server Settings modal */}
-      <ServerSettingsModal
+      {/* App Settings modal */}
+      <AppSettingsModal
         isOpen={showServerSettingsModal}
         onClose={() => setShowServerSettingsModal(false)}
-        settings={serverSettings}
-        status={serverStatus}
-        onSave={updateServerSettings}
-        onTest={testServerConnection}
-        onResetConnections={resetServerConnections}
         onResetAll={resetAllSettings}
-        saving={serverSaving}
-        testing={serverTesting}
-        resettingConnections={serverResettingConnections}
-        resetting={serverResetting}
-        remoteOnly={remoteOnly}
+        resetting={appSettingsResetting}
       />
 
       {/* Rename Loop modal */}
@@ -1078,8 +1112,101 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           }
         }}
       />
+
+      {/* Workspace Settings modal */}
+      <WorkspaceSettingsModal
+        isOpen={workspaceSettingsModal.open}
+        onClose={() => {
+          setWorkspaceSettingsModal({ open: false, workspaceId: null });
+          // Refresh the workspace list to reflect any name changes
+          // (handled by useWorkspaces hook re-fetching)
+        }}
+        workspace={workspaceFromHook}
+        status={workspaceStatus}
+        onSave={async (name, settings) => {
+          if (!workspaceSettingsModal.workspaceId) return false;
+          // Use the hook's updateWorkspace function for proper state management
+          const success = await updateWorkspaceSettings(name, settings);
+          if (success) {
+            // Refresh the workspaces list so the UI shows updated data
+            await refreshWorkspaces();
+          }
+          return success;
+        }}
+        onTest={testWorkspaceConnection}
+        onResetConnection={resetWorkspaceConnection}
+        saving={workspaceSettingsSaving}
+        testing={workspaceSettingsTesting}
+        resettingConnection={workspaceSettingsResetting}
+        remoteOnly={remoteOnly}
+      />
+
+      {/* Create Workspace modal */}
+      <CreateWorkspaceModal
+        isOpen={showCreateWorkspaceModal}
+        onClose={() => setShowCreateWorkspaceModal(false)}
+        onCreate={async (request) => {
+          const result = await createWorkspace(request);
+          return !!result;
+        }}
+        creating={workspaceCreating}
+        error={workspaceError}
+        remoteOnly={remoteOnly}
+      />
     </div>
   );
 }
 
 export default Dashboard;
+
+/**
+ * Simple gear icon component.
+ */
+function GearIcon() {
+  return (
+    <svg
+      className="w-4 h-4 text-gray-500 dark:text-gray-400"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Smaller gear icon for workspace settings.
+ */
+function WorkspaceGearIcon() {
+  return (
+    <svg
+      className="w-4 h-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+      />
+    </svg>
+  );
+}

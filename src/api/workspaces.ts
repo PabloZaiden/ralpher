@@ -9,6 +9,8 @@
  * @module api/workspaces
  */
 
+import { existsSync } from "fs";
+import { join } from "path";
 import { 
   createWorkspace, 
   getWorkspace, 
@@ -18,8 +20,8 @@ import {
   getWorkspaceByDirectory,
 } from "../persistence/workspaces";
 import { backendManager } from "../core/backend-manager";
-import { GitService } from "../core/git-service";
 import { log } from "../core/logger";
+import { getDefaultServerSettings, type ServerSettings } from "../types/settings";
 import type { 
   Workspace, 
   CreateWorkspaceRequest, 
@@ -39,12 +41,15 @@ async function parseBody<T>(req: Request): Promise<T | null> {
 }
 
 /**
- * Get a GitService configured for the current backend mode.
- * Uses PTY+WebSocket for command execution in both spawn and connect modes.
+ * Check if a directory is a git repository.
+ * Uses simple filesystem check for .git directory.
+ * 
+ * @param directory - The directory to check
+ * @returns true if the directory is a git repository
  */
-async function getGitService(directory: string): Promise<GitService> {
-  const executor = await backendManager.getCommandExecutorAsync(directory);
-  return GitService.withExecutor(executor);
+function isGitRepository(directory: string): boolean {
+  const gitDir = join(directory, ".git");
+  return existsSync(gitDir);
 }
 
 /**
@@ -95,15 +100,16 @@ export const workspacesRoutes = {
         );
       }
 
+      // Validate serverSettings - use default if not provided
+      const serverSettings = body.serverSettings ?? getDefaultServerSettings();
+
       // Trim name and directory to prevent whitespace issues
       const trimmedName = body.name.trim();
       const trimmedDirectory = body.directory.trim();
 
       try {
-        // Check if directory is a valid git repository
-        const gitService = await getGitService(trimmedDirectory);
-        const isGitRepo = await gitService.isGitRepo(trimmedDirectory);
-        if (!isGitRepo) {
+        // Check if directory is a valid git repository using simple filesystem check
+        if (!isGitRepository(trimmedDirectory)) {
           return Response.json(
             { message: "Directory must be a git repository" },
             { status: 400 }
@@ -124,6 +130,7 @@ export const workspacesRoutes = {
           id: crypto.randomUUID(),
           name: trimmedName,
           directory: trimmedDirectory,
+          serverSettings,
           createdAt: now,
           updatedAt: now,
         };
@@ -179,7 +186,10 @@ export const workspacesRoutes = {
       }
 
       try {
-        const workspace = await updateWorkspace(id, { name: body.name });
+        const workspace = await updateWorkspace(id, { 
+          name: body.name,
+          serverSettings: body.serverSettings,
+        });
         if (!workspace) {
           return Response.json(
             { message: "Workspace not found" },
@@ -251,6 +261,216 @@ export const workspacesRoutes = {
         log.error("Failed to get workspace by directory:", String(error));
         return Response.json(
           { message: "Failed to get workspace", error: String(error) },
+          { status: 500 }
+        );
+      }
+    },
+  },
+
+  /**
+   * GET /api/workspaces/:id/server-settings - Get workspace server settings
+   */
+  "/api/workspaces/:id/server-settings": async (req: Request & { params: { id: string } }) => {
+    const { id } = req.params;
+    const method = req.method;
+
+    if (method === "GET") {
+      try {
+        const workspace = await getWorkspace(id);
+        if (!workspace) {
+          return Response.json(
+            { message: "Workspace not found" },
+            { status: 404 }
+          );
+        }
+        return Response.json(workspace.serverSettings);
+      } catch (error) {
+        log.error("Failed to get workspace server settings:", String(error));
+        return Response.json(
+          { message: "Failed to get server settings", error: String(error) },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (method === "PUT") {
+      const body = await parseBody<ServerSettings>(req);
+      
+      if (!body) {
+        return Response.json(
+          { message: "Invalid JSON body" },
+          { status: 400 }
+        );
+      }
+
+      // Validate mode
+      if (body.mode !== "spawn" && body.mode !== "connect") {
+        return Response.json(
+          { message: "mode must be 'spawn' or 'connect'" },
+          { status: 400 }
+        );
+      }
+
+      try {
+        const workspace = await updateWorkspace(id, { serverSettings: body });
+        if (!workspace) {
+          return Response.json(
+            { message: "Workspace not found" },
+            { status: 404 }
+          );
+        }
+        
+        // Reset the connection for this workspace so it picks up new settings
+        await backendManager.resetWorkspaceConnection(id);
+        
+        log.info(`Updated server settings for workspace: ${workspace.name}`);
+        return Response.json(workspace.serverSettings);
+      } catch (error) {
+        log.error("Failed to update workspace server settings:", String(error));
+        return Response.json(
+          { message: "Failed to update server settings", error: String(error) },
+          { status: 500 }
+        );
+      }
+    }
+
+    return Response.json(
+      { message: "Method not allowed" },
+      { status: 405 }
+    );
+  },
+
+  /**
+   * GET /api/workspaces/:id/server-settings/status - Get connection status for workspace
+   */
+  "/api/workspaces/:id/server-settings/status": async (req: Request & { params: { id: string } }) => {
+    const { id } = req.params;
+
+    if (req.method !== "GET") {
+      return Response.json(
+        { message: "Method not allowed" },
+        { status: 405 }
+      );
+    }
+
+    try {
+      const workspace = await getWorkspace(id);
+      if (!workspace) {
+        return Response.json(
+          { message: "Workspace not found" },
+          { status: 404 }
+        );
+      }
+
+      const status = backendManager.getWorkspaceStatus(id);
+      return Response.json(status);
+    } catch (error) {
+      log.error("Failed to get workspace connection status:", String(error));
+      return Response.json(
+        { message: "Failed to get connection status", error: String(error) },
+        { status: 500 }
+      );
+    }
+  },
+
+  /**
+   * POST /api/workspaces/:id/server-settings/test - Test connection for workspace
+   */
+  "/api/workspaces/:id/server-settings/test": async (req: Request & { params: { id: string } }) => {
+    const { id } = req.params;
+
+    if (req.method !== "POST") {
+      return Response.json(
+        { message: "Method not allowed" },
+        { status: 405 }
+      );
+    }
+
+    try {
+      const workspace = await getWorkspace(id);
+      if (!workspace) {
+        return Response.json(
+          { message: "Workspace not found" },
+          { status: 404 }
+        );
+      }
+
+      // Optionally accept settings in the body to test proposed settings
+      // If no body, use the workspace's current settings
+      let settings = workspace.serverSettings;
+      const body = await parseBody<ServerSettings>(req);
+      if (body && body.mode) {
+        settings = body;
+      }
+
+      const result = await backendManager.testConnection(settings, workspace.directory);
+      return Response.json(result);
+    } catch (error) {
+      log.error("Failed to test workspace connection:", String(error));
+      return Response.json(
+        { message: "Failed to test connection", error: String(error) },
+        { status: 500 }
+      );
+    }
+  },
+
+  /**
+   * POST /api/workspaces/:id/server-settings/reset - Reset connection for workspace
+   */
+  "/api/workspaces/:id/server-settings/reset": async (req: Request & { params: { id: string } }) => {
+    const { id } = req.params;
+
+    if (req.method !== "POST") {
+      return Response.json(
+        { message: "Method not allowed" },
+        { status: 405 }
+      );
+    }
+
+    try {
+      const workspace = await getWorkspace(id);
+      if (!workspace) {
+        return Response.json(
+          { message: "Workspace not found" },
+          { status: 404 }
+        );
+      }
+
+      await backendManager.resetWorkspaceConnection(id);
+      log.info(`Reset connection for workspace: ${workspace.name}`);
+      return Response.json({ success: true });
+    } catch (error) {
+      log.error("Failed to reset workspace connection:", String(error));
+      return Response.json(
+        { message: "Failed to reset connection", error: String(error) },
+        { status: 500 }
+      );
+    }
+  },
+
+  /**
+   * POST /api/server-settings/test - Test connection without requiring a workspace
+   * Used by the create workspace modal to test connection before creating the workspace.
+   * Expects { settings: ServerSettings, directory: string } in the body.
+   */
+  "/api/server-settings/test": {
+    async POST(req: Request) {
+      try {
+        const body = await parseBody<{ settings: ServerSettings; directory: string }>(req);
+        if (!body || !body.settings || !body.directory) {
+          return Response.json(
+            { message: "Missing settings or directory in request body" },
+            { status: 400 }
+          );
+        }
+
+        const { settings, directory } = body;
+        const result = await backendManager.testConnection(settings, directory);
+        return Response.json(result);
+      } catch (error) {
+        log.error("Failed to test connection:", String(error));
+        return Response.json(
+          { success: false, error: String(error) },
           { status: 500 }
         );
       }

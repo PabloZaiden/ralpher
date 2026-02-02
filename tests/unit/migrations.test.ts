@@ -762,6 +762,233 @@ describe("migrations - todos with fresh database", () => {
   });
 });
 
+describe("migrations - add server settings to workspaces (migration #12)", () => {
+  let tempDir: string;
+  let db: Database;
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), "ralpher-migration-server-settings-test-"));
+    db = new Database(join(tempDir, "test.db"));
+    
+    // Create a database with workspaces table but WITHOUT server_settings column (pre-migration 12)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS loops (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        directory TEXT NOT NULL,
+        prompt TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        model_provider_id TEXT,
+        model_model_id TEXT,
+        max_iterations INTEGER,
+        max_consecutive_errors INTEGER,
+        activity_timeout_seconds INTEGER,
+        stop_pattern TEXT NOT NULL,
+        git_branch_prefix TEXT NOT NULL,
+        git_commit_prefix TEXT NOT NULL,
+        base_branch TEXT,
+        status TEXT NOT NULL DEFAULT 'idle',
+        current_iteration INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT,
+        completed_at TEXT,
+        last_activity_at TEXT,
+        session_id TEXT,
+        session_server_url TEXT,
+        error_message TEXT,
+        error_iteration INTEGER,
+        error_timestamp TEXT,
+        git_original_branch TEXT,
+        git_working_branch TEXT,
+        git_commits TEXT,
+        recent_iterations TEXT,
+        logs TEXT,
+        messages TEXT,
+        tool_calls TEXT,
+        consecutive_errors TEXT,
+        pending_prompt TEXT,
+        clear_planning_folder INTEGER DEFAULT 0,
+        todos TEXT,
+        workspace_id TEXT
+      )
+    `);
+    
+    // Create workspaces table WITHOUT server_settings column
+    db.run(`
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        directory TEXT UNIQUE NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+    
+    // Create preferences table for global settings
+    db.run(`
+      CREATE TABLE IF NOT EXISTS preferences (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `);
+  });
+
+  afterEach(async () => {
+    db.close();
+    await rm(tempDir, { recursive: true });
+  });
+
+  test("migration adds server_settings column to workspaces table", () => {
+    // Before migration
+    const columnsBefore = getTableColumns(db, "workspaces");
+    expect(columnsBefore).not.toContain("server_settings");
+
+    // Run migrations
+    runMigrations(db);
+
+    // After migration
+    const columnsAfter = getTableColumns(db, "workspaces");
+    expect(columnsAfter).toContain("server_settings");
+  });
+
+  test("migration copies global server settings to all existing workspaces", () => {
+    // Create a workspace
+    db.run(`
+      INSERT INTO workspaces (id, name, directory, created_at, updated_at)
+      VALUES ('ws-1', 'Test Workspace', '/home/user/project', '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z')
+    `);
+
+    // Set global server settings
+    const globalSettings = JSON.stringify({
+      mode: "connect",
+      hostname: "example.com",
+      port: 8080,
+      useHttps: true,
+      allowInsecure: false,
+    });
+    db.run("INSERT INTO preferences (key, value) VALUES (?, ?)", ["serverSettings", globalSettings]);
+
+    // Run migrations
+    runMigrations(db);
+
+    // Verify workspace has the global settings
+    const workspace = db.query("SELECT server_settings FROM workspaces WHERE id = 'ws-1'").get() as { server_settings: string };
+    expect(workspace.server_settings).toBe(globalSettings);
+
+    // Verify global settings were removed from preferences
+    const prefs = db.query("SELECT value FROM preferences WHERE key = 'serverSettings'").get();
+    expect(prefs).toBeNull();
+  });
+
+  test("migration uses default settings when no global settings exist", () => {
+    // Create a workspace without any global settings
+    db.run(`
+      INSERT INTO workspaces (id, name, directory, created_at, updated_at)
+      VALUES ('ws-1', 'Test Workspace', '/home/user/project', '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z')
+    `);
+
+    // No global settings in preferences
+
+    // Run migrations
+    runMigrations(db);
+
+    // Verify workspace has default settings
+    const workspace = db.query("SELECT server_settings FROM workspaces WHERE id = 'ws-1'").get() as { server_settings: string };
+    const settings = JSON.parse(workspace.server_settings);
+    expect(settings.mode).toBe("spawn");
+    expect(settings.useHttps).toBe(false);
+    expect(settings.allowInsecure).toBe(false);
+  });
+
+  test("migration is idempotent - can run multiple times", () => {
+    // Create a workspace
+    db.run(`
+      INSERT INTO workspaces (id, name, directory, created_at, updated_at)
+      VALUES ('ws-1', 'Test Workspace', '/home/user/project', '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z')
+    `);
+
+    // Run migrations twice
+    runMigrations(db);
+    expect(() => runMigrations(db)).not.toThrow();
+
+    // Column should still exist
+    const columns = getTableColumns(db, "workspaces");
+    expect(columns).toContain("server_settings");
+  });
+
+  test("migration handles multiple workspaces", () => {
+    // Create multiple workspaces
+    db.run(`
+      INSERT INTO workspaces (id, name, directory, created_at, updated_at)
+      VALUES ('ws-1', 'Workspace 1', '/home/user/project1', '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z')
+    `);
+    db.run(`
+      INSERT INTO workspaces (id, name, directory, created_at, updated_at)
+      VALUES ('ws-2', 'Workspace 2', '/home/user/project2', '2026-01-26T11:00:00Z', '2026-01-26T11:00:00Z')
+    `);
+    db.run(`
+      INSERT INTO workspaces (id, name, directory, created_at, updated_at)
+      VALUES ('ws-3', 'Workspace 3', '/home/user/project3', '2026-01-26T12:00:00Z', '2026-01-26T12:00:00Z')
+    `);
+
+    // Set global server settings
+    const globalSettings = JSON.stringify({
+      mode: "spawn",
+      useHttps: false,
+      allowInsecure: false,
+    });
+    db.run("INSERT INTO preferences (key, value) VALUES (?, ?)", ["serverSettings", globalSettings]);
+
+    // Run migrations
+    runMigrations(db);
+
+    // Verify all workspaces have the settings
+    const workspaces = db.query("SELECT id, server_settings FROM workspaces").all() as Array<{
+      id: string;
+      server_settings: string;
+    }>;
+    
+    expect(workspaces.length).toBe(3);
+    for (const ws of workspaces) {
+      expect(ws.server_settings).toBe(globalSettings);
+    }
+  });
+
+  test("migration skips workspaces that already have server_settings", () => {
+    // This test simulates running migration on a database that was created after migration 12
+    // Add the column manually first
+    db.run("ALTER TABLE workspaces ADD COLUMN server_settings TEXT NOT NULL DEFAULT '{}'");
+    
+    // Create a workspace with existing settings
+    const existingSettings = JSON.stringify({
+      mode: "connect",
+      hostname: "existing.server.com",
+      port: 9000,
+      useHttps: true,
+      allowInsecure: true,
+    });
+    db.run(`
+      INSERT INTO workspaces (id, name, directory, created_at, updated_at, server_settings)
+      VALUES ('ws-1', 'Workspace 1', '/home/user/project1', '2026-01-26T10:00:00Z', '2026-01-26T10:00:00Z', ?)
+    `, [existingSettings]);
+
+    // Set different global settings
+    const globalSettings = JSON.stringify({
+      mode: "spawn",
+      useHttps: false,
+      allowInsecure: false,
+    });
+    db.run("INSERT INTO preferences (key, value) VALUES (?, ?)", ["serverSettings", globalSettings]);
+
+    // Run migrations
+    runMigrations(db);
+
+    // Workspace should keep its existing settings, not be overwritten
+    const workspace = db.query("SELECT server_settings FROM workspaces WHERE id = 'ws-1'").get() as { server_settings: string };
+    expect(workspace.server_settings).toBe(existingSettings);
+  });
+});
+
 describe("migrations - migrate existing loops to workspaces (migration #11)", () => {
   let tempDir: string;
   let db: Database;

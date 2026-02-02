@@ -7,11 +7,14 @@
  * @module types/workspace
  */
 
+import type { ServerSettings } from "./settings";
+
 /**
  * A workspace represents a directory that contains Ralph Loops.
  * 
  * Workspaces provide a way to group loops by directory and allow
  * for simplified loop creation via workspace selection.
+ * Each workspace has its own server settings for independent operation.
  */
 export interface Workspace {
   /** Unique identifier (UUID v4) */
@@ -20,6 +23,8 @@ export interface Workspace {
   name: string;
   /** Absolute path to the directory (must be a git repository) */
   directory: string;
+  /** Server connection settings for this workspace */
+  serverSettings: ServerSettings;
   /** ISO 8601 timestamp of when the workspace was created */
   createdAt: string;
   /** ISO 8601 timestamp of the last update */
@@ -34,6 +39,8 @@ export interface CreateWorkspaceRequest {
   name: string;
   /** Absolute path to the directory (must be a git repository) */
   directory: string;
+  /** Server connection settings for this workspace */
+  serverSettings: ServerSettings;
 }
 
 /**
@@ -42,6 +49,8 @@ export interface CreateWorkspaceRequest {
 export interface UpdateWorkspaceRequest {
   /** New name for the workspace (optional) */
   name?: string;
+  /** Updated server settings (optional) */
+  serverSettings?: ServerSettings;
 }
 
 /**
