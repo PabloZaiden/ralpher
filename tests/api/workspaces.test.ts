@@ -800,5 +800,118 @@ describe("Workspace API Integration", () => {
         expect(updated.serverSettings.port).toBe(5000);
       });
     });
+
+    describe("Workspace settings isolation", () => {
+      test("updating one workspace settings does not affect another workspace", async () => {
+        // Create two separate git repositories
+        const testWorkDir2 = await mkdtemp(join(tmpdir(), "ralpher-api-workspace-test-work2-"));
+        await Bun.$`git init ${testWorkDir2}`.quiet();
+        await Bun.$`git -C ${testWorkDir2} config user.email "test@test.com"`.quiet();
+        await Bun.$`git -C ${testWorkDir2} config user.name "Test User"`.quiet();
+        await Bun.$`touch ${testWorkDir2}/README.md`.quiet();
+        await Bun.$`git -C ${testWorkDir2} add .`.quiet();
+        await Bun.$`git -C ${testWorkDir2} commit -m "Initial commit"`.quiet();
+
+        try {
+          // Create workspace A with specific settings
+          const settingsA = {
+            mode: "connect",
+            hostname: "server-a.com",
+            port: 5001,
+            useHttps: false,
+            allowInsecure: false,
+          };
+
+          const createResponseA = await fetch(`${baseUrl}/api/workspaces`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: "Workspace A",
+              directory: testWorkDir,
+              serverSettings: settingsA,
+            }),
+          });
+          expect(createResponseA.ok).toBe(true);
+          const workspaceA = await createResponseA.json();
+
+          // Create workspace B with different settings
+          const settingsB = {
+            mode: "connect",
+            hostname: "server-b.com",
+            port: 5002,
+            useHttps: true,
+            allowInsecure: true,
+          };
+
+          const createResponseB = await fetch(`${baseUrl}/api/workspaces`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: "Workspace B",
+              directory: testWorkDir2,
+              serverSettings: settingsB,
+            }),
+          });
+          expect(createResponseB.ok).toBe(true);
+          const workspaceB = await createResponseB.json();
+
+          // Verify initial settings are different
+          expect(workspaceA.serverSettings.hostname).toBe("server-a.com");
+          expect(workspaceA.serverSettings.port).toBe(5001);
+          expect(workspaceA.serverSettings.allowInsecure).toBe(false);
+
+          expect(workspaceB.serverSettings.hostname).toBe("server-b.com");
+          expect(workspaceB.serverSettings.port).toBe(5002);
+          expect(workspaceB.serverSettings.allowInsecure).toBe(true);
+
+          // Update workspace A's settings
+          const newSettingsA = {
+            mode: "connect",
+            hostname: "updated-server-a.com",
+            port: 6001,
+            useHttps: true,
+            allowInsecure: false,
+          };
+
+          const updateResponseA = await fetch(`${baseUrl}/api/workspaces/${workspaceA.id}/server-settings`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(newSettingsA),
+          });
+          expect(updateResponseA.ok).toBe(true);
+
+          // Verify workspace A was updated
+          const getResponseA = await fetch(`${baseUrl}/api/workspaces/${workspaceA.id}`);
+          expect(getResponseA.ok).toBe(true);
+          const updatedA = await getResponseA.json();
+          expect(updatedA.serverSettings.hostname).toBe("updated-server-a.com");
+          expect(updatedA.serverSettings.port).toBe(6001);
+          expect(updatedA.serverSettings.useHttps).toBe(true);
+
+          // CRITICAL: Verify workspace B was NOT affected
+          const getResponseB = await fetch(`${baseUrl}/api/workspaces/${workspaceB.id}`);
+          expect(getResponseB.ok).toBe(true);
+          const unchangedB = await getResponseB.json();
+          expect(unchangedB.serverSettings.hostname).toBe("server-b.com");
+          expect(unchangedB.serverSettings.port).toBe(5002);
+          expect(unchangedB.serverSettings.useHttps).toBe(true);
+          expect(unchangedB.serverSettings.allowInsecure).toBe(true);
+
+          // Also verify via the list endpoint
+          const listResponse = await fetch(`${baseUrl}/api/workspaces`);
+          expect(listResponse.ok).toBe(true);
+          const workspaces = await listResponse.json();
+          
+          const listedA = workspaces.find((w: { id: string }) => w.id === workspaceA.id);
+          const listedB = workspaces.find((w: { id: string }) => w.id === workspaceB.id);
+
+          expect(listedA.serverSettings.hostname).toBe("updated-server-a.com");
+          expect(listedB.serverSettings.hostname).toBe("server-b.com");
+        } finally {
+          // Cleanup the second test directory
+          await rm(testWorkDir2, { recursive: true, force: true });
+        }
+      });
+    });
   });
 });
