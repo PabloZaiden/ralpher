@@ -94,7 +94,7 @@ export async function getWorkspaceByDirectory(directory: string): Promise<Worksp
 }
 
 /**
- * List all workspaces with loop counts, sorted by most recent update.
+ * List all workspaces with loop counts, sorted by name alphabetically.
  */
 export async function listWorkspaces(): Promise<WorkspaceWithLoopCount[]> {
   const db = getDatabase();
@@ -103,7 +103,7 @@ export async function listWorkspaces(): Promise<WorkspaceWithLoopCount[]> {
     FROM workspaces w
     LEFT JOIN loops l ON l.workspace_id = w.id
     GROUP BY w.id
-    ORDER BY w.updated_at DESC
+    ORDER BY w.name COLLATE NOCASE ASC
   `);
   const rows = stmt.all() as Array<Record<string, unknown>>;
   return rows.map((row) => ({

@@ -83,31 +83,28 @@ describe("Workspace Persistence", () => {
       expect(workspace).toBeNull();
     });
 
-    test("listWorkspaces returns all workspaces sorted by updatedAt DESC", async () => {
+    test("listWorkspaces returns all workspaces sorted by name alphabetically", async () => {
       const { ensureDataDirectories } = await import("../../src/persistence/paths");
       const { createWorkspace, listWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
 
-      // Create workspaces with different updatedAt timestamps
-      const ws1 = createTestWorkspace({ name: "First Workspace", directory: "/tmp/first" });
-      ws1.updatedAt = "2024-01-01T00:00:00Z";
+      // Create workspaces with different names (out of alphabetical order)
+      const ws1 = createTestWorkspace({ name: "Zeta Workspace", directory: "/tmp/zeta" });
       await createWorkspace(ws1);
 
-      const ws2 = createTestWorkspace({ name: "Second Workspace", directory: "/tmp/second" });
-      ws2.updatedAt = "2024-01-03T00:00:00Z";
+      const ws2 = createTestWorkspace({ name: "Alpha Workspace", directory: "/tmp/alpha" });
       await createWorkspace(ws2);
 
-      const ws3 = createTestWorkspace({ name: "Third Workspace", directory: "/tmp/third" });
-      ws3.updatedAt = "2024-01-02T00:00:00Z";
+      const ws3 = createTestWorkspace({ name: "beta workspace", directory: "/tmp/beta" });
       await createWorkspace(ws3);
 
       const workspaces = await listWorkspaces();
       expect(workspaces.length).toBe(3);
-      // Should be sorted by updatedAt DESC
-      expect(workspaces[0]!.name).toBe("Second Workspace");
-      expect(workspaces[1]!.name).toBe("Third Workspace");
-      expect(workspaces[2]!.name).toBe("First Workspace");
+      // Should be sorted alphabetically by name (case-insensitive)
+      expect(workspaces[0]!.name).toBe("Alpha Workspace");
+      expect(workspaces[1]!.name).toBe("beta workspace");
+      expect(workspaces[2]!.name).toBe("Zeta Workspace");
     });
 
     test("updateWorkspace updates workspace name", async () => {
