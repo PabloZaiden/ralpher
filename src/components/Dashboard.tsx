@@ -82,14 +82,16 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   const [version, setVersion] = useState<string | null>(null);
 
   // Workspace server settings hook for the workspace being edited
+  // IMPORTANT: Use 'workspace' from this hook for fresh data from API, not from workspaces.find()
   const {
+    workspace: workspaceFromHook,
     status: workspaceStatus,
     saving: workspaceSettingsSaving,
     testing: workspaceSettingsTesting,
     resettingConnection: workspaceSettingsResetting,
     testConnection: testWorkspaceConnection,
     resetConnection: resetWorkspaceConnection,
-    refresh: refreshWorkspaceSettings,
+    updateWorkspace: updateWorkspaceSettings,
   } = useWorkspaceServerSettings(workspaceSettingsModal.workspaceId);
 
   // Fetch app config on mount to get remote-only status
@@ -1119,28 +1121,17 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           // Refresh the workspace list to reflect any name changes
           // (handled by useWorkspaces hook re-fetching)
         }}
-        workspace={workspaces.find(w => w.id === workspaceSettingsModal.workspaceId) ?? null}
+        workspace={workspaceFromHook}
         status={workspaceStatus}
         onSave={async (name, settings) => {
           if (!workspaceSettingsModal.workspaceId) return false;
-          // Update workspace name and server settings
-          try {
-            const response = await fetch(`/api/workspaces/${workspaceSettingsModal.workspaceId}`, {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ name, serverSettings: settings }),
-            });
-            if (!response.ok) return false;
-            // Refresh workspace settings hook and the workspaces list
-            // Both are needed: settings hook for connection status, workspaces for the list/modal props
-            await Promise.all([
-              refreshWorkspaceSettings(),
-              refreshWorkspaces(),
-            ]);
-            return true;
-          } catch {
-            return false;
+          // Use the hook's updateWorkspace function for proper state management
+          const success = await updateWorkspaceSettings(name, settings);
+          if (success) {
+            // Refresh the workspaces list so the UI shows updated data
+            await refreshWorkspaces();
           }
+          return success;
         }}
         onTest={testWorkspaceConnection}
         onResetConnection={resetWorkspaceConnection}

@@ -1,13 +1,19 @@
 /**
  * Workspace server settings state management hook.
  * Provides access to workspace-specific server settings and connection status.
+ * 
+ * IMPORTANT: This hook fetches fresh data from the API to avoid using stale in-memory data.
+ * Always use the data from this hook rather than from the workspaces list.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import type { ServerSettings, ConnectionStatus } from "../types/settings";
+import type { Workspace } from "../types/workspace";
 
 export interface UseWorkspaceServerSettingsResult {
-  /** Current server settings for the workspace */
+  /** Full workspace data (name, directory, serverSettings) - fetched fresh from API */
+  workspace: Workspace | null;
+  /** Current server settings for the workspace (alias for workspace.serverSettings) */
   settings: ServerSettings | null;
   /** Current connection status for the workspace */
   status: ConnectionStatus | null;
@@ -25,6 +31,10 @@ export interface UseWorkspaceServerSettingsResult {
   refresh: () => Promise<void>;
   /** Update server settings for the workspace */
   updateSettings: (settings: ServerSettings) => Promise<boolean>;
+  /** Update workspace name */
+  updateName: (name: string) => Promise<boolean>;
+  /** Update both name and server settings */
+  updateWorkspace: (name: string, settings: ServerSettings) => Promise<boolean>;
   /** Test connection with provided settings (uses workspace's current settings if not provided) */
   testConnection: (settings?: ServerSettings) => Promise<{ success: boolean; error?: string }>;
   /** Reset connection for the workspace */
@@ -34,10 +44,13 @@ export interface UseWorkspaceServerSettingsResult {
 /**
  * Hook for managing workspace-specific server settings.
  * 
+ * IMPORTANT: This hook fetches fresh workspace data from the API to avoid stale in-memory data.
+ * Always use workspace/settings from this hook rather than from the workspaces list.
+ * 
  * @param workspaceId - The ID of the workspace to manage settings for
  */
 export function useWorkspaceServerSettings(workspaceId: string | null): UseWorkspaceServerSettingsResult {
-  const [settings, setSettings] = useState<ServerSettings | null>(null);
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,20 +58,20 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
   const [testing, setTesting] = useState(false);
   const [resettingConnection, setResettingConnection] = useState(false);
 
-  // Fetch current settings for the workspace
-  const fetchSettings = useCallback(async () => {
+  // Fetch full workspace data (including server settings)
+  const fetchWorkspace = useCallback(async () => {
     if (!workspaceId) {
-      setSettings(null);
+      setWorkspace(null);
       return;
     }
 
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/server-settings`);
+      const response = await fetch(`/api/workspaces/${workspaceId}`);
       if (!response.ok) {
-        throw new Error(`Failed to fetch settings: ${response.statusText}`);
+        throw new Error(`Failed to fetch workspace: ${response.statusText}`);
       }
-      const data = (await response.json()) as ServerSettings;
-      setSettings(data);
+      const data = (await response.json()) as Workspace;
+      setWorkspace(data);
     } catch (err) {
       setError(String(err));
     }
@@ -84,13 +97,13 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
     }
   }, [workspaceId]);
 
-  // Refresh both settings and status
+  // Refresh both workspace and status
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    await Promise.all([fetchSettings(), fetchStatus()]);
+    await Promise.all([fetchWorkspace(), fetchStatus()]);
     setLoading(false);
-  }, [fetchSettings, fetchStatus]);
+  }, [fetchWorkspace, fetchStatus]);
 
   // Update server settings for the workspace
   const updateSettings = useCallback(async (newSettings: ServerSettings): Promise<boolean> => {
@@ -114,8 +127,8 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
         throw new Error(errorData.message || "Failed to save settings");
       }
 
-      // Update local state
-      setSettings(newSettings);
+      // Refresh workspace to get updated data from API (avoid stale data)
+      await fetchWorkspace();
       
       // Refresh status after settings change
       await fetchStatus();
@@ -127,7 +140,78 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
     } finally {
       setSaving(false);
     }
-  }, [workspaceId, fetchStatus]);
+  }, [workspaceId, fetchWorkspace, fetchStatus]);
+
+  // Update workspace name
+  const updateName = useCallback(async (name: string): Promise<boolean> => {
+    if (!workspaceId) {
+      setError("No workspace selected");
+      return false;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      
+      const response = await fetch(`/api/workspaces/${workspaceId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to update name");
+      }
+
+      // Refresh workspace to get updated data from API (avoid stale data)
+      await fetchWorkspace();
+      
+      return true;
+    } catch (err) {
+      setError(String(err));
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [workspaceId, fetchWorkspace]);
+
+  // Update both name and server settings
+  const updateWorkspace = useCallback(async (name: string, settings: ServerSettings): Promise<boolean> => {
+    if (!workspaceId) {
+      setError("No workspace selected");
+      return false;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      
+      const response = await fetch(`/api/workspaces/${workspaceId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, serverSettings: settings }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to update workspace");
+      }
+
+      // Refresh workspace to get updated data from API (avoid stale data)
+      await fetchWorkspace();
+      
+      // Refresh status after settings change
+      await fetchStatus();
+      
+      return true;
+    } catch (err) {
+      setError(String(err));
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [workspaceId, fetchWorkspace, fetchStatus]);
 
   // Test connection with provided settings (or current workspace settings)
   const testConnection = useCallback(
@@ -195,14 +279,15 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
     if (workspaceId) {
       refresh();
     } else {
-      setSettings(null);
+      setWorkspace(null);
       setStatus(null);
       setLoading(false);
     }
   }, [workspaceId, refresh]);
 
   return {
-    settings,
+    workspace,
+    settings: workspace?.serverSettings ?? null,
     status,
     loading,
     error,
@@ -211,6 +296,8 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
     resettingConnection,
     refresh,
     updateSettings,
+    updateName,
+    updateWorkspace,
     testConnection,
     resetConnection,
   };
