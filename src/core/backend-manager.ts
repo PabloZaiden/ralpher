@@ -340,6 +340,82 @@ class BackendManager {
   }
 
   /**
+   * Validate that a directory exists and is a git repository on the remote server.
+   * This is used during workspace creation to validate the directory before saving.
+   * 
+   * @param settings - Server settings to use for connection
+   * @param directory - The directory to validate
+   * @returns Object with success flag, isGitRepo boolean, and optional error message
+   */
+  async validateRemoteDirectory(
+    settings: ServerSettings,
+    directory: string
+  ): Promise<{ success: boolean; isGitRepo?: boolean; error?: string }> {
+    log.debug("Validating remote directory", { directory, mode: settings.mode });
+    
+    // In test mode, use the test executor factory if available
+    if (this.testExecutorFactory) {
+      log.debug("Using test executor factory for directory validation");
+      const executor = this.testExecutorFactory(directory);
+      const result = await executor.exec("git", ["-C", directory, "rev-parse", "--is-inside-work-tree"]);
+      const isGitRepo = result.success && result.stdout.trim() === "true";
+      return { success: true, isGitRepo };
+    }
+    
+    // Create a temporary backend for validation
+    const tempBackend = new OpenCodeBackend();
+    const config = buildConnectionConfig(settings, directory);
+
+    try {
+      // Connect to the server
+      await tempBackend.connect(config);
+      
+      // Get connection info and client
+      const connectionInfo = tempBackend.getConnectionInfo();
+      const client = tempBackend.getSdkClient() as OpencodeClient | null;
+      
+      if (!connectionInfo || !client) {
+        await tempBackend.disconnect();
+        return { success: false, error: "Failed to get connection info" };
+      }
+      
+      // Create a command executor
+      const executor = new CommandExecutorImpl({
+        client,
+        directory,
+        baseUrl: connectionInfo.baseUrl,
+        authHeaders: connectionInfo.authHeaders,
+        allowInsecure: connectionInfo.allowInsecure,
+      });
+      
+      // Check if it's a git repository using git command
+      const result = await executor.exec("git", ["-C", directory, "rev-parse", "--is-inside-work-tree"]);
+      const isGitRepo = result.success && result.stdout.trim() === "true";
+      
+      log.debug("Remote directory validation result", { 
+        directory, 
+        isGitRepo, 
+        exitCode: result.exitCode,
+        stdout: result.stdout.trim(),
+        stderr: result.stderr.trim()
+      });
+      
+      // Disconnect
+      await tempBackend.disconnect();
+      
+      return { success: true, isGitRepo };
+    } catch (error) {
+      log.error("Failed to validate remote directory", { directory, error: String(error) });
+      try {
+        await tempBackend.disconnect();
+      } catch {
+        // Ignore disconnect errors
+      }
+      return { success: false, error: String(error) };
+    }
+  }
+
+  /**
    * Get connection status for a specific workspace.
    */
   getWorkspaceStatus(workspaceId: string): ConnectionStatus {

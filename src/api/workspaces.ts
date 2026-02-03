@@ -9,8 +9,6 @@
  * @module api/workspaces
  */
 
-import { existsSync } from "fs";
-import { join } from "path";
 import { 
   createWorkspace, 
   getWorkspace, 
@@ -38,18 +36,6 @@ async function parseBody<T>(req: Request): Promise<T | null> {
   } catch {
     return null;
   }
-}
-
-/**
- * Check if a directory is a git repository.
- * Uses simple filesystem check for .git directory.
- * 
- * @param directory - The directory to check
- * @returns true if the directory is a git repository
- */
-function isGitRepository(directory: string): boolean {
-  const gitDir = join(directory, ".git");
-  return existsSync(gitDir);
 }
 
 /**
@@ -108,8 +94,28 @@ export const workspacesRoutes = {
       const trimmedDirectory = body.directory.trim();
 
       try {
-        // Check if directory is a valid git repository using simple filesystem check
-        if (!isGitRepository(trimmedDirectory)) {
+        // Validate directory is a git repository on the remote server
+        log.debug("Validating workspace directory on remote server", { 
+          directory: trimmedDirectory, 
+          name: trimmedName,
+          serverMode: serverSettings.mode 
+        });
+        
+        const validation = await backendManager.validateRemoteDirectory(serverSettings, trimmedDirectory);
+        
+        if (!validation.success) {
+          log.warn("Failed to validate remote directory", { 
+            directory: trimmedDirectory, 
+            error: validation.error 
+          });
+          return Response.json(
+            { message: `Failed to validate directory: ${validation.error}` },
+            { status: 400 }
+          );
+        }
+        
+        if (!validation.isGitRepo) {
+          log.warn("Directory is not a git repository", { directory: trimmedDirectory });
           return Response.json(
             { message: "Directory must be a git repository" },
             { status: 400 }
