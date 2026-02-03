@@ -114,6 +114,15 @@ export const workspacesRoutes = {
           );
         }
         
+        // Check if directory exists first to provide a clearer error message
+        if (validation.directoryExists === false) {
+          log.warn("Directory does not exist on remote server", { directory: trimmedDirectory });
+          return Response.json(
+            { message: "Directory does not exist on the remote server" },
+            { status: 400 }
+          );
+        }
+        
         if (!validation.isGitRepo) {
           log.warn("Directory is not a git repository", { directory: trimmedDirectory });
           return Response.json(

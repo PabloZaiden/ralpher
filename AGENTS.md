@@ -41,10 +41,10 @@ Always use the `CommandExecutor` interface to run commands on the remote server:
 // Get a command executor for a workspace
 const executor = await backendManager.getCommandExecutorAsync(workspaceId, directory);
 
-// Execute commands on the remote server
-const result = await executor.exec("git", ["status"]);
+// Execute git commands - always use -C flag to specify directory explicitly
+const result = await executor.exec("git", ["-C", directory, "status"]);
 
-// Use GitService for git operations
+// Use GitService for git operations (preferred - provides better encapsulation)
 const git = GitService.withExecutor(executor);
 const isRepo = await git.isGitRepo(directory);
 const branch = await git.getCurrentBranch(directory);
