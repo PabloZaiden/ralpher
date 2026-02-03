@@ -27,6 +27,62 @@ Ralpher is a full-stack Bun + React application for controlling and managing Ral
 
 For more project information, see the [README.md](README.md).
 
+## Remote Command Execution Architecture
+
+**CRITICAL: All operations on workspace repositories MUST be executed on the remote opencode server, NEVER locally on the Ralpher server.**
+
+Ralpher connects to opencode servers that may be running in different environments (e.g., devcontainers, remote machines). The workspace directory paths (like `/workspaces/myrepo`) exist on the **remote** server, not on the machine running Ralpher.
+
+### How to Execute Commands on Remote Servers
+
+Always use the `CommandExecutor` interface to run commands on the remote server:
+
+```typescript
+// Get a command executor for a workspace
+const executor = await backendManager.getCommandExecutorAsync(workspaceId, directory);
+
+// Execute git commands - always use -C flag to specify directory explicitly
+const result = await executor.exec("git", ["-C", directory, "status"]);
+
+// Use GitService for git operations (preferred - provides better encapsulation)
+const git = GitService.withExecutor(executor);
+const isRepo = await git.isGitRepo(directory);
+const branch = await git.getCurrentBranch(directory);
+```
+
+### What NOT to Do
+
+```typescript
+// WRONG - runs locally, will fail for remote workspaces
+import { existsSync } from "fs";
+if (existsSync(directory)) { ... }
+
+// WRONG - runs locally, directory may not exist on Ralpher server
+await Bun.$`git -C ${directory} status`;
+
+// WRONG - checks local filesystem
+const file = Bun.file(path);
+if (await file.exists()) { ... }
+```
+
+### What to Do Instead
+
+```typescript
+// CORRECT - runs on remote server via CommandExecutor
+const executor = await backendManager.getCommandExecutorAsync(workspaceId, directory);
+const exists = await executor.directoryExists(directory);
+const result = await executor.exec("git", ["-C", directory, "status"]);
+const content = await executor.readFile(path);
+```
+
+### Available CommandExecutor Methods
+
+- `exec(command, args, options?)` - Execute a shell command
+- `fileExists(path)` - Check if a file exists
+- `directoryExists(path)` - Check if a directory exists
+- `readFile(path)` - Read a file's contents
+- `listDirectory(path)` - List files in a directory
+
 ### TypeScript
 
 - **Strict mode is enabled** - respect all strict checks

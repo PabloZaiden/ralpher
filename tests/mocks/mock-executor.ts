@@ -1,6 +1,6 @@
 /**
  * Mock command executor for testing.
- * Runs commands locally using Bun.$ and Bun.file APIs.
+ * Runs commands locally using Bun.spawn and Bun.file APIs.
  * This is only used in tests - production code uses CommandExecutorImpl via PTY.
  */
 
@@ -9,7 +9,7 @@ import type { CommandExecutor, CommandResult, CommandOptions } from "../../src/c
 
 /**
  * TestCommandExecutor runs commands locally for testing purposes.
- * Uses Bun.$ for shell commands and Bun.file for file operations.
+ * Uses Bun.spawn for shell commands and Bun.file for file operations.
  */
 export class TestCommandExecutor implements CommandExecutor {
   /**
@@ -17,28 +17,31 @@ export class TestCommandExecutor implements CommandExecutor {
    */
   async exec(command: string, args: string[], options?: CommandOptions): Promise<CommandResult> {
     try {
-      const cwd = options?.cwd ?? ".";
-      // Use Bun.$ with the command and args
-      // The quiet() method prevents throwing on non-zero exit codes
-      const result = await Bun.$`${command} ${args}`.cwd(cwd).quiet();
+      const cwd = options?.cwd ?? process.cwd();
+      // Use Bun.spawn which handles cwd more reliably than Bun.$
+      const proc = Bun.spawn([command, ...args], {
+        cwd,
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      
+      // Wait for process to complete
+      const exitCode = await proc.exited;
+      const stdout = await new Response(proc.stdout).text();
+      const stderr = await new Response(proc.stderr).text();
+      
       return {
-        success: result.exitCode === 0,
-        stdout: result.stdout.toString(),
-        stderr: result.stderr.toString(),
-        exitCode: result.exitCode,
+        success: exitCode === 0,
+        stdout,
+        stderr,
+        exitCode,
       };
     } catch (error) {
-      // Bun.$ throws on non-zero exit codes by default
-      const bunError = error as {
-        stdout?: Buffer;
-        stderr?: Buffer;
-        exitCode?: number;
-      };
       return {
         success: false,
-        stdout: bunError.stdout?.toString() ?? "",
-        stderr: bunError.stderr?.toString() ?? String(error),
-        exitCode: bunError.exitCode ?? 1,
+        stdout: "",
+        stderr: String(error),
+        exitCode: 1,
       };
     }
   }

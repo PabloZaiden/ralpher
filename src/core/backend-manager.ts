@@ -19,6 +19,7 @@ import { loopEventEmitter } from "./event-emitter";
 import type { LoopEvent } from "../types/events";
 import type { CommandExecutor } from "./command-executor";
 import { CommandExecutorImpl } from "./remote-command-executor";
+import { GitService } from "./git-service";
 import { log } from "./logger";
 
 /**
@@ -335,6 +336,92 @@ class BackendManager {
       await testBackend.disconnect();
       return { success: true };
     } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  }
+
+  /**
+   * Validate that a directory exists and is a git repository on the remote server.
+   * This is used during workspace creation to validate the directory before saving.
+   * 
+   * @param settings - Server settings to use for connection
+   * @param directory - The directory to validate
+   * @returns Object with success flag, isGitRepo boolean, directoryExists boolean, and optional error message
+   */
+  async validateRemoteDirectory(
+    settings: ServerSettings,
+    directory: string
+  ): Promise<{ success: boolean; isGitRepo?: boolean; directoryExists?: boolean; error?: string }> {
+    log.debug("Validating remote directory", { directory, mode: settings.mode });
+    
+    // In test mode, use the test executor factory if available
+    if (this.testExecutorFactory) {
+      log.debug("Using test executor factory for directory validation");
+      const executor = this.testExecutorFactory(directory);
+      
+      // First check if directory exists
+      const directoryExists = await executor.directoryExists(directory);
+      if (!directoryExists) {
+        log.debug("Directory does not exist on remote server", { directory });
+        return { success: true, directoryExists: false, isGitRepo: false };
+      }
+      
+      const git = GitService.withExecutor(executor);
+      const isGitRepo = await git.isGitRepo(directory);
+      return { success: true, directoryExists: true, isGitRepo };
+    }
+    
+    // Create a temporary backend for validation
+    const tempBackend = new OpenCodeBackend();
+    const config = buildConnectionConfig(settings, directory);
+
+    try {
+      // Connect to the server
+      await tempBackend.connect(config);
+      
+      // Get connection info and client
+      const connectionInfo = tempBackend.getConnectionInfo();
+      const client = tempBackend.getSdkClient() as OpencodeClient | null;
+      
+      if (!connectionInfo || !client) {
+        await tempBackend.disconnect();
+        return { success: false, error: "Failed to get connection info" };
+      }
+      
+      // Create a command executor
+      const executor = new CommandExecutorImpl({
+        client,
+        directory,
+        baseUrl: connectionInfo.baseUrl,
+        authHeaders: connectionInfo.authHeaders,
+        allowInsecure: connectionInfo.allowInsecure,
+      });
+      
+      // First check if directory exists to provide clearer error messages
+      const directoryExists = await executor.directoryExists(directory);
+      if (!directoryExists) {
+        log.debug("Directory does not exist on remote server", { directory });
+        await tempBackend.disconnect();
+        return { success: true, directoryExists: false, isGitRepo: false };
+      }
+      
+      // Use GitService to check if it's a git repository (consistent with rest of codebase)
+      const git = GitService.withExecutor(executor);
+      const isGitRepo = await git.isGitRepo(directory);
+      
+      log.debug("Remote directory validation result", { directory, directoryExists: true, isGitRepo });
+      
+      // Disconnect
+      await tempBackend.disconnect();
+      
+      return { success: true, directoryExists: true, isGitRepo };
+    } catch (error) {
+      log.error("Failed to validate remote directory", { directory, error: String(error) });
+      try {
+        await tempBackend.disconnect();
+      } catch {
+        // Ignore disconnect errors
+      }
       return { success: false, error: String(error) };
     }
   }
