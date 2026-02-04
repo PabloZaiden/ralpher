@@ -16,19 +16,25 @@ import type {
 import { createEventStream, type EventStream } from "../../src/utils/event-stream";
 
 /**
+ * Mock model information for testing.
+ * This type is used across multiple mock backends and test files.
+ */
+export interface MockModelInfo {
+  providerID: string;
+  providerName: string;
+  modelID: string;
+  modelName: string;
+  connected: boolean;
+}
+
+/**
  * Options for creating a MockOpenCodeBackend.
  */
 export interface MockBackendOptions {
   /** Responses to return for prompts (cycled through in order) */
   responses?: string[];
   /** Models to return from getModels() */
-  models?: Array<{
-    providerID: string;
-    providerName: string;
-    modelID: string;
-    modelName: string;
-    connected: boolean;
-  }>;
+  models?: MockModelInfo[];
 }
 
 /**
@@ -48,13 +54,7 @@ export class MockOpenCodeBackend implements Backend {
   private responseIndex = 0;
   private pendingPrompt = false;
   private readonly responses: string[];
-  private readonly models: Array<{
-    providerID: string;
-    providerName: string;
-    modelID: string;
-    modelName: string;
-    connected: boolean;
-  }>;
+  private readonly models: MockModelInfo[];
   private readonly sessions = new Map<string, AgentSession>();
 
   constructor(options: MockBackendOptions = {}) {
@@ -212,13 +212,7 @@ export class MockOpenCodeBackend implements Backend {
    * Get available models.
    * Returns the models configured in the constructor options.
    */
-  async getModels(_directory: string): Promise<Array<{
-    providerID: string;
-    providerName: string;
-    modelID: string;
-    modelName: string;
-    connected: boolean;
-  }>> {
+  async getModels(_directory: string): Promise<MockModelInfo[]> {
     return this.models;
   }
 
@@ -250,13 +244,7 @@ export function createMockBackend(responses: string[] = ["<promise>COMPLETE</pro
  */
 export interface NeverCompletingMockBackendOptions {
   /** Models to return from getModels() */
-  models?: Array<{
-    providerID: string;
-    providerName: string;
-    modelID: string;
-    modelName: string;
-    connected: boolean;
-  }>;
+  models?: MockModelInfo[];
 }
 
 /**
@@ -269,13 +257,7 @@ export class NeverCompletingMockBackend implements Backend {
   private connected = false;
   private directory = "";
   private readonly sessions = new Map<string, AgentSession>();
-  private readonly models: Array<{
-    providerID: string;
-    providerName: string;
-    modelID: string;
-    modelName: string;
-    connected: boolean;
-  }>;
+  private readonly models: MockModelInfo[];
 
   constructor(options: NeverCompletingMockBackendOptions = {}) {
     this.models = options.models ?? [];
@@ -360,13 +342,7 @@ export class NeverCompletingMockBackend implements Backend {
     // No-op
   }
 
-  async getModels(_directory: string): Promise<Array<{
-    providerID: string;
-    providerName: string;
-    modelID: string;
-    modelName: string;
-    connected: boolean;
-  }>> {
+  async getModels(_directory: string): Promise<MockModelInfo[]> {
     return this.models;
   }
 

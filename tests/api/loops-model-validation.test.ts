@@ -21,12 +21,30 @@ import { backendManager } from "../../src/core/backend-manager";
 import { loopManager } from "../../src/core/loop-manager";
 import { closeDatabase } from "../../src/persistence/database";
 import { TestCommandExecutor } from "../mocks/mock-executor";
-import { MockOpenCodeBackend } from "../mocks/mock-backend";
+import { MockOpenCodeBackend, type MockModelInfo } from "../mocks/mock-backend";
 
 describe("Model Validation in API Endpoints", () => {
   let testDataDir: string;
   let server: Server<unknown>;
   let baseUrl: string;
+
+  // Default models for tests
+  const defaultTestModels: MockModelInfo[] = [
+    {
+      providerID: "anthropic",
+      providerName: "Anthropic",
+      modelID: "claude-sonnet-4-20250514",
+      modelName: "Claude Sonnet 4",
+      connected: true,
+    },
+    {
+      providerID: "openai",
+      providerName: "OpenAI",
+      modelID: "gpt-4o",
+      modelName: "GPT-4o",
+      connected: false, // Disconnected!
+    },
+  ];
 
   // Helper to get or create a workspace for a directory
   async function getOrCreateWorkspace(directory: string, name?: string): Promise<string> {
@@ -78,22 +96,7 @@ describe("Model Validation in API Endpoints", () => {
     // Set up backend manager with mock that returns models (including disconnected ones)
     const mockBackend = new MockOpenCodeBackend({
       responses: ["<promise>COMPLETE</promise>"],
-      models: [
-        {
-          providerID: "anthropic",
-          providerName: "Anthropic",
-          modelID: "claude-sonnet-4-20250514",
-          modelName: "Claude Sonnet 4",
-          connected: true,
-        },
-        {
-          providerID: "openai",
-          providerName: "OpenAI",
-          modelID: "gpt-4o",
-          modelName: "GPT-4o",
-          connected: false, // Disconnected!
-        },
-      ],
+      models: defaultTestModels,
     });
     backendManager.setBackendForTesting(mockBackend);
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
@@ -142,22 +145,7 @@ describe("Model Validation in API Endpoints", () => {
     // Re-setup backend after reset
     const mockBackend = new MockOpenCodeBackend({
       responses: ["<promise>COMPLETE</promise>"],
-      models: [
-        {
-          providerID: "anthropic",
-          providerName: "Anthropic",
-          modelID: "claude-sonnet-4-20250514",
-          modelName: "Claude Sonnet 4",
-          connected: true,
-        },
-        {
-          providerID: "openai",
-          providerName: "OpenAI",
-          modelID: "gpt-4o",
-          modelName: "GPT-4o",
-          connected: false,
-        },
-      ],
+      models: defaultTestModels,
     });
     backendManager.setBackendForTesting(mockBackend);
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
@@ -341,7 +329,7 @@ describe("Model Validation in API Endpoints", () => {
   });
 
   describe("Input validation", () => {
-    test("rejects invalid model object structure", async () => {
+    test("allows partial model object (missing providerID)", async () => {
       const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
       try {
         const response = await fetch(`${baseUrl}/api/loops`, {
@@ -358,9 +346,8 @@ describe("Model Validation in API Endpoints", () => {
           }),
         });
 
-        // This tests structural validation, not model validation
-        // The loop should still be created since partial model is valid
-        // (providerID and modelID are both optional from validation perspective)
+        // Partial model objects are allowed - the loop will use backend default
+        // for any missing fields. This tests structural validation, not model validation.
         expect(response.status).toBe(201);
       } finally {
         await rm(workDir, { recursive: true, force: true });

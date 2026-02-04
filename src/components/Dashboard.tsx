@@ -893,7 +893,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                     type="button"
                     variant="secondary"
                     onClick={formActionState.onSaveAsDraft}
-                    disabled={formActionState.isSubmitting || !formActionState.canSubmit}
+                    disabled={formActionState.isSubmitting || !formActionState.canSaveDraft}
                     loading={formActionState.isSubmitting}
                     className="sm:mr-auto"
                   >

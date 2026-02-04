@@ -12,8 +12,10 @@ import { WorkspaceSelector } from "./WorkspaceSelector";
 export interface CreateLoopFormActionState {
   /** Whether the form is currently submitting */
   isSubmitting: boolean;
-  /** Whether the form can be submitted (has required fields) */
+  /** Whether the form can be submitted to start a loop (has required fields AND model is enabled) */
   canSubmit: boolean;
+  /** Whether the form can be saved as a draft (has required fields, model can be disconnected) */
+  canSaveDraft: boolean;
   /** Whether we're editing an existing loop */
   isEditing: boolean;
   /** Whether we're editing a draft loop */
@@ -288,8 +290,11 @@ export function CreateLoopForm({
   // Form ref for programmatic submission
   const formRef = useRef<HTMLFormElement>(null);
   
-  // Check if form can be submitted
-  const canSubmit = !!selectedWorkspaceId && !!prompt.trim() && selectedModelEnabled;
+  // Check if form can be saved as a draft (basic fields only, model connectivity not required)
+  const canSaveDraft = !!selectedWorkspaceId && !!prompt.trim();
+  
+  // Check if form can be submitted to start a loop (also needs model to be enabled)
+  const canSubmit = canSaveDraft && selectedModelEnabled;
   
   // Handler for submit button click (when rendered externally)
   const handleSubmitClick = useCallback(() => {
@@ -300,12 +305,12 @@ export function CreateLoopForm({
   
   // Handler for save as draft click (when rendered externally)
   const handleSaveAsDraftClick = useCallback(() => {
-    if (formRef.current && canSubmit) {
+    if (formRef.current && canSaveDraft) {
       // Create a synthetic event and call handleSubmit with draft flag
       const syntheticEvent = { preventDefault: () => {} } as FormEvent;
       handleSubmit(syntheticEvent, true);
     }
-  }, [canSubmit, handleSubmit]);
+  }, [canSaveDraft, handleSubmit]);
   
   // Call renderActions whenever action state changes
   useEffect(() => {
@@ -313,6 +318,7 @@ export function CreateLoopForm({
       renderActions({
         isSubmitting,
         canSubmit,
+        canSaveDraft,
         isEditing,
         isEditingDraft,
         planMode,
@@ -321,7 +327,7 @@ export function CreateLoopForm({
         onSaveAsDraft: handleSaveAsDraftClick,
       });
     }
-  }, [renderActions, isSubmitting, canSubmit, isEditing, isEditingDraft, planMode, onCancel, handleSubmitClick, handleSaveAsDraftClick]);
+  }, [renderActions, isSubmitting, canSubmit, canSaveDraft, isEditing, isEditingDraft, planMode, onCancel, handleSubmitClick, handleSaveAsDraftClick]);
 
   // Group models by provider and sort by name
   const modelsByProvider = models.reduce<Record<string, ModelInfo[]>>(
@@ -681,7 +687,7 @@ export function CreateLoopForm({
               type="button"
               variant="secondary"
               onClick={(e) => handleSubmit(e, true)}
-              disabled={isSubmitting || !selectedWorkspaceId || !prompt.trim()}
+              disabled={isSubmitting || !canSaveDraft}
               loading={isSubmitting}
             >
               {isEditingDraft ? "Update Draft" : "Save as Draft"}
@@ -698,7 +704,7 @@ export function CreateLoopForm({
             >
               Cancel
             </Button>
-            <Button type="submit" loading={isSubmitting}>
+            <Button type="submit" loading={isSubmitting} disabled={isSubmitting || !canSubmit}>
               {isEditing 
                 ? (planMode ? "Start Plan" : "Start Loop")
                 : (planMode ? "Create Plan" : "Create Loop")

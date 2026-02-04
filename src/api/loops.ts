@@ -154,23 +154,6 @@ export const loopsCrudRoutes = {
       // Touch workspace to update last used timestamp
       await touchWorkspace(workspace.id);
 
-      // Validate model is enabled if provided (skip for drafts and if using backend default)
-      // Drafts can be created with any model - validation happens when starting
-      if (!body.draft && body.model?.providerID && body.model?.modelID) {
-        const modelValidation = await isModelEnabled(
-          workspaceId,
-          directory,
-          body.model.providerID,
-          body.model.modelID
-        );
-        if (!modelValidation.enabled) {
-          return errorResponse(
-            modelValidation.errorCode ?? "model_not_enabled",
-            modelValidation.error ?? "The selected model is not available"
-          );
-        }
-      }
-
       // Create a single executor/GitService for the request to avoid duplicate setup
       let git: GitService | null = null;
       const getGitService = async (): Promise<GitService> => {
@@ -229,6 +212,25 @@ export const loopsCrudRoutes = {
           }
         } catch (checkError) {
           return errorResponse("preflight_failed", `Failed to check for existing active loops: ${String(checkError)}`, 500);
+        }
+      }
+
+      // Validate model is enabled if provided (skip for drafts and if using backend default)
+      // Drafts can be created with any model - validation happens when starting
+      // NOTE: This is done AFTER preflight checks to avoid backend connection costs
+      // for requests that will be rejected anyway (uncommitted changes, active loop exists)
+      if (!body.draft && body.model?.providerID && body.model?.modelID) {
+        const modelValidation = await isModelEnabled(
+          workspaceId,
+          directory,
+          body.model.providerID,
+          body.model.modelID
+        );
+        if (!modelValidation.enabled) {
+          return errorResponse(
+            modelValidation.errorCode ?? "model_not_enabled",
+            modelValidation.error ?? "The selected model is not available"
+          );
         }
       }
 

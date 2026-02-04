@@ -14,6 +14,7 @@ import { backendManager, buildConnectionConfig } from "../core/backend-manager";
 import { OpenCodeBackend } from "../backends/opencode";
 import { getWorkspace } from "../persistence/workspaces";
 import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled } from "../persistence/preferences";
+import { getDefaultServerSettings } from "../types/settings";
 import type { ErrorResponse, ModelInfo } from "../types/api";
 
 /**
@@ -34,8 +35,11 @@ export interface ModelValidationResult {
  * This function fetches the available models for a workspace and checks
  * if the specified model exists and its provider is connected.
  * 
- * Uses the backendManager to get the backend instance, which supports
- * test backends set via setBackendForTesting().
+ * To avoid mutating global connection state during validation:
+ * - If a test backend is set via setBackendForTesting(), it uses that (for testing)
+ * - If the workspace backend is already connected, it uses that (no side effects)
+ * - Otherwise, it creates a temporary OpenCodeBackend that connects and disconnects
+ *   within this function, similar to GET /api/models
  * 
  * @param workspaceId - The workspace ID to check models for
  * @param directory - The working directory path
@@ -50,16 +54,48 @@ export async function isModelEnabled(
   modelID: string
 ): Promise<ModelValidationResult> {
   try {
-    // Get backend from backendManager (supports test backends)
-    const backend = backendManager.getBackend(workspaceId);
-
-    // Ensure the backend is connected
-    if (!backend.isConnected()) {
-      // Connect using workspace settings
-      await backendManager.connect(workspaceId, directory);
+    let models: ModelInfo[];
+    
+    // Check if a test backend is set (for testing purposes)
+    const testBackend = backendManager.getTestBackend();
+    if (testBackend) {
+      // Use test backend directly - no connection state mutation
+      if (!testBackend.isConnected()) {
+        await testBackend.connect(buildConnectionConfig(getDefaultServerSettings(), directory));
+      }
+      models = await testBackend.getModels(directory) as ModelInfo[];
+    } else {
+      // Check if workspace backend is already connected
+      const existingBackend = backendManager.getBackend(workspaceId);
+      if (existingBackend.isConnected()) {
+        // Use existing connected backend - no side effects
+        models = await existingBackend.getModels(directory) as ModelInfo[];
+      } else {
+        // Create a temporary backend (similar to GET /api/models)
+        // This avoids mutating global connection state
+        const workspace = await getWorkspace(workspaceId);
+        if (!workspace) {
+          return {
+            enabled: false,
+            error: `Workspace not found: ${workspaceId}`,
+            errorCode: "validation_failed",
+          };
+        }
+        
+        const tempBackend = new OpenCodeBackend();
+        try {
+          await tempBackend.connect(buildConnectionConfig(workspace.serverSettings, directory));
+          models = await tempBackend.getModels(directory) as ModelInfo[];
+        } finally {
+          // Always disconnect temporary backend
+          try {
+            await tempBackend.disconnect();
+          } catch {
+            // Ignore disconnect errors
+          }
+        }
+      }
     }
-
-    const models = await backend.getModels(directory) as ModelInfo[];
 
     // Check if the provider exists
     const providerModels = models.filter((m) => m.providerID === providerID);
