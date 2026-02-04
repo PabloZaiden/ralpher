@@ -1399,7 +1399,7 @@ Follow the standard loop execution flow:
       }
       
       // Check if loop can be jumpstarted from a stopped state
-      const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations"];
+      const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations", "planning"];
       if (jumpstartableStates.includes(loop.state.status)) {
         // Jumpstart the loop with the pending message
         return this.jumpstartLoop(loopId, options);
@@ -1442,7 +1442,7 @@ Follow the standard loop execution flow:
     }
 
     // Check if loop can be jumpstarted
-    const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations"];
+    const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations", "planning"];
     if (!jumpstartableStates.includes(loop.state.status)) {
       return { success: false, error: `Loop cannot be jumpstarted from status: ${loop.state.status}` };
     }
@@ -1464,9 +1464,22 @@ Follow the standard loop execution flow:
       loop.config.model = options.model;
     }
 
+    // Check if this was a planning loop
+    const wasInPlanningMode = loop.state.planMode?.active === true;
+    
     // Reset the loop to a restartable state
-    loop.state.status = "stopped"; // LoopEngine.start() accepts 'idle', 'stopped', or 'planning'
+    // If it was in planning mode, keep it in planning mode; otherwise reset to stopped
+    if (wasInPlanningMode) {
+      loop.state.status = "planning";
+      // Reset isPlanReady to false so it will generate a plan again
+      if (loop.state.planMode) {
+        loop.state.planMode.isPlanReady = false;
+      }
+    } else {
+      loop.state.status = "stopped"; // LoopEngine.start() accepts 'idle', 'stopped', or 'planning'
+    }
     loop.state.completedAt = undefined;
+    loop.state.error = undefined; // Clear any previous error
     
     // Save the updated state
     await updateLoopState(loopId, loop.state);
@@ -1484,6 +1497,24 @@ Follow the standard loop execution flow:
     // Determine if we should continue on existing branch or create new one
     // If the loop has an existing working branch, continue on it (don't create a new branch)
     const hasExistingBranch = !!loop.state.git?.workingBranch;
+    
+    // For planning mode loops, we need to use startPlanMode, not startLoop
+    if (wasInPlanningMode) {
+      if (hasExistingBranch) {
+        // Continue on existing branch for planning loop
+        return this.jumpstartOnExistingBranch(loopId, loop, true);
+      } else {
+        // Start fresh planning session
+        try {
+          await this.startPlanMode(loopId);
+          log.info(`Jumpstarted planning loop ${loopId} with pending message`);
+          return { success: true };
+        } catch (startError) {
+          log.error(`Failed to jumpstart planning loop ${loopId}: ${String(startError)}`);
+          return { success: false, error: `Failed to jumpstart planning loop: ${String(startError)}` };
+        }
+      }
+    }
     
     if (hasExistingBranch) {
       // Continue on the existing working branch (similar to addressReviewComments for pushed loops)
@@ -1504,8 +1535,9 @@ Follow the standard loop execution flow:
   /**
    * Jumpstart a loop on its existing working branch.
    * Used when the loop was NOT merged/accepted and should continue its previous work.
+   * @param isPlanning - Whether this is a planning loop (affects log messages only)
    */
-  private async jumpstartOnExistingBranch(loopId: string, loop: Loop): Promise<{ success: boolean; error?: string }> {
+  private async jumpstartOnExistingBranch(loopId: string, loop: Loop, isPlanning = false): Promise<{ success: boolean; error?: string }> {
     try {
       // Get the appropriate command executor for the current mode
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
@@ -1514,7 +1546,8 @@ Follow the standard loop execution flow:
 
       // Check out the existing working branch with retry logic for lock file issues
       const workingBranch = loop.state.git!.workingBranch;
-      log.info(`Jumpstarting loop ${loopId} on existing branch: ${workingBranch}`);
+      const loopType = isPlanning ? "planning loop" : "loop";
+      log.info(`Jumpstarting ${loopType} ${loopId} on existing branch: ${workingBranch}`);
       
       // Retry checkout up to 3 times to handle race conditions with in-flight git operations
       const maxRetries = 3;
@@ -1556,13 +1589,13 @@ Follow the standard loop execution flow:
 
       // Start execution (fire and forget - don't block the caller)
       engine.start().catch((error) => {
-        log.error(`Loop ${loopId} failed to start after jumpstart:`, String(error));
+        log.error(`${isPlanning ? "Planning loop" : "Loop"} ${loopId} failed to start after jumpstart:`, String(error));
       });
 
-      log.info(`Jumpstarted loop ${loopId} with pending message on existing branch: ${workingBranch}`);
+      log.info(`Jumpstarted ${loopType} ${loopId} with pending message on existing branch: ${workingBranch}`);
       return { success: true };
     } catch (error) {
-      log.error(`Failed to jumpstart loop ${loopId} on existing branch: ${String(error)}`);
+      log.error(`Failed to jumpstart ${isPlanning ? "planning loop" : "loop"} ${loopId} on existing branch: ${String(error)}`);
       return { success: false, error: `Failed to jumpstart loop: ${String(error)}` };
     }
   }

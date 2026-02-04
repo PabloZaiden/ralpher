@@ -346,6 +346,14 @@ export class OpenCodeBackend implements Backend {
    */
   async sendPromptAsync(sessionId: string, prompt: PromptInput): Promise<void> {
     log.trace("[OpenCodeBackend] sendPromptAsync: Entry", { sessionId });
+    log.debug("[OpenCodeBackend] sendPromptAsync: Prompt details", {
+      sessionId,
+      partsCount: prompt.parts.length,
+      model: prompt.model ? `${prompt.model.providerID}/${prompt.model.modelID}` : "default",
+      firstPartType: prompt.parts[0]?.type,
+      firstPartTextLength: prompt.parts[0]?.text?.length ?? 0,
+      textPreview: prompt.parts[0]?.text?.slice(0, 200) ?? "",
+    });
     const client = this.getClient();
 
     // v2 SDK uses flattened parameters
@@ -359,12 +367,20 @@ export class OpenCodeBackend implements Backend {
       })),
       model: prompt.model,
     });
-    log.trace("[OpenCodeBackend] sendPromptAsync: client.session.promptAsync returned", { hasError: !!result.error });
+    log.debug("[OpenCodeBackend] sendPromptAsync: client.session.promptAsync returned", { 
+      sessionId,
+      hasError: !!result.error,
+      errorDetails: result.error ? JSON.stringify(result.error) : undefined,
+    });
 
     if (result.error) {
+      log.error("[OpenCodeBackend] sendPromptAsync: Failed to send async prompt", {
+        sessionId,
+        error: JSON.stringify(result.error),
+      });
       throw new Error(`Failed to send async prompt: ${JSON.stringify(result.error)}`);
     }
-    log.trace("[OpenCodeBackend] sendPromptAsync: Exit");
+    log.trace("[OpenCodeBackend] sendPromptAsync: Exit", { sessionId });
   }
 
   /**
@@ -453,7 +469,9 @@ export class OpenCodeBackend implements Backend {
    * are being built. We track what we've already emitted to avoid duplicates.
    */
   async subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>> {
-    log.trace("[OpenCodeBackend] subscribeToEvents: Entry", { sessionId });
+    // Generate subscription ID for tracking
+    const subId = `sub-${Math.random().toString(36).slice(2, 9)}`;
+    log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Entry`, { sessionId });
     const client = this.getClient();
 
     // Create AbortController to allow cancellation when consumer calls close()
@@ -461,19 +479,19 @@ export class OpenCodeBackend implements Backend {
     
     // Track this subscription for reset functionality
     this.activeSubscriptions.add(abortController);
-    log.debug("[OpenCodeBackend] subscribeToEvents: Active subscription count", { 
+    log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Active subscription count`, { 
       count: this.activeSubscriptions.size,
       sessionId,
     });
 
     // v2 SDK uses flattened parameters
-    log.trace("[OpenCodeBackend] subscribeToEvents: About to call client.event.subscribe");
+    log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: About to call client.event.subscribe`);
     const subscription = await client.event.subscribe({
       directory: this.directory,
     }, {
       signal: abortController.signal,
     });
-    log.trace("[OpenCodeBackend] subscribeToEvents: Subscription created");
+    log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Subscription created`);
 
     // Track emitted events to avoid duplicates
     const emittedMessageStarts = new Set<string>();
@@ -490,49 +508,66 @@ export class OpenCodeBackend implements Backend {
     const self = this;
     (async () => {
       try {
-        log.trace("[OpenCodeBackend] subscribeToEvents: Starting background event loop");
+        log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Starting background event loop`);
         for await (const event of subscription.stream) {
           // Check if aborted
           if (abortController.signal.aborted) {
-            log.debug("[OpenCodeBackend] subscribeToEvents: Abort detected in loop, breaking");
+            log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Abort detected in loop, breaking`);
             break;
           }
-          log.trace("[OpenCodeBackend] subscribeToEvents: Received raw event", { type: (event as OpenCodeEvent).type });
+          const rawEventType = (event as OpenCodeEvent).type;
+          log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Received raw event`, { 
+            type: rawEventType,
+            sessionId,
+          });
           
           // Filter events for our session and translate them
           const translated = self.translateEvent(
             event as OpenCodeEvent,
             sessionId,
+            subId,
             emittedMessageStarts,
             toolPartStatus,
             reasoningTextLength
           );
           
           if (translated) {
+            log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Translated event`, {
+              rawType: rawEventType,
+              translatedType: translated.type,
+              sessionId,
+            });
             if (translated.type === "message.start") {
               hasMessageStart = true;
+              log.info(`[OpenCodeBackend:${subId}] subscribeToEvents: First message.start seen`, { sessionId });
             }
             // Skip stale message.complete before we've seen a message.start
             if (translated.type === "message.complete" && !hasMessageStart) {
+              log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Skipping stale message.complete (no message.start yet)`, { sessionId });
               continue;
             }
             push(translated);
+          } else {
+            log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Event filtered out (translated to null)`, {
+              rawType: rawEventType,
+              sessionId,
+            });
           }
         }
-        log.trace("[OpenCodeBackend] subscribeToEvents: SDK stream ended");
+        log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: SDK stream ended`);
         end();
       } catch (err) {
         // AbortError is expected when we close the subscription
         const isAbortError = err instanceof Error && err.name === "AbortError";
         if (!isAbortError) {
-          log.error("[OpenCodeBackend] subscribeToEvents: Error in event loop", { error: String(err) });
+          log.error(`[OpenCodeBackend:${subId}] subscribeToEvents: Error in event loop`, { error: String(err) });
         } else {
-          log.debug("[OpenCodeBackend] subscribeToEvents: Subscription aborted (expected)");
+          log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Subscription aborted (expected)`);
         }
         end();
       } finally {
         // Remove from tracking when done
-        log.debug("[OpenCodeBackend] subscribeToEvents: Background loop exiting", {
+        log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Background loop exiting`, {
           activeCount: self.activeSubscriptions.size,
         });
         self.activeSubscriptions.delete(abortController);
@@ -543,13 +578,13 @@ export class OpenCodeBackend implements Backend {
     const wrappedStream: EventStream<AgentEvent> = {
       next: () => stream.next(),
       close: () => {
-        log.debug("[OpenCodeBackend] subscribeToEvents: Closing subscription", {
+        log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Closing subscription`, {
           activeBeforeClose: self.activeSubscriptions.size,
         });
         stream.close();
         abortController.abort();
         self.activeSubscriptions.delete(abortController);
-        log.debug("[OpenCodeBackend] subscribeToEvents: Subscription closed", {
+        log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Subscription closed`, {
           activeAfterClose: self.activeSubscriptions.size,
         });
       },
@@ -618,6 +653,7 @@ export class OpenCodeBackend implements Backend {
    * 
    * @param event - The raw SDK event
    * @param sessionId - The session ID to filter for
+   * @param subId - Subscription ID for logging
    * @param emittedMessageStarts - Set of message IDs we've already emitted start events for
    * @param toolPartStatus - Map of tool part IDs to their last emitted status
    * @param reasoningTextLength - Map of reasoning part IDs to their last known text length
@@ -625,6 +661,7 @@ export class OpenCodeBackend implements Backend {
   private translateEvent(
     event: OpenCodeEvent,
     sessionId: string,
+    subId: string,
     emittedMessageStarts: Set<string>,
     toolPartStatus: Map<string, string>,
     reasoningTextLength: Map<string, number>
@@ -632,33 +669,61 @@ export class OpenCodeBackend implements Backend {
     switch (event.type) {
       case "message.updated": {
         const msg = event.properties.info;
-        if (msg.sessionID !== sessionId) return null;
+        log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.updated`, {
+          msgSessionId: msg.sessionID,
+          targetSessionId: sessionId,
+          role: msg.role,
+          messageId: msg.id,
+          alreadyEmitted: emittedMessageStarts.has(msg.id),
+        });
+        if (msg.sessionID !== sessionId) {
+          log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.updated - session ID mismatch`);
+          return null;
+        }
 
         if (msg.role === "assistant") {
           // Only emit message.start once per message ID
           if (emittedMessageStarts.has(msg.id)) {
+            log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.updated - already emitted start for this message`);
             return null;
           }
           emittedMessageStarts.add(msg.id);
+          log.info(`[OpenCodeBackend:${subId}] translateEvent: message.updated - emitting message.start`, { messageId: msg.id });
           return {
             type: "message.start",
             messageId: msg.id,
           };
         }
+        log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.updated - role is not assistant, returning null`, { role: msg.role });
         return null;
       }
 
       case "message.part.updated": {
         const part = event.properties.part;
-        if (part.sessionID !== sessionId) return null;
+        log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated`, {
+          partSessionId: part.sessionID,
+          targetSessionId: sessionId,
+          partType: part.type,
+          hasDelta: !!event.properties.delta,
+          deltaLength: event.properties.delta?.length ?? 0,
+        });
+        if (part.sessionID !== sessionId) {
+          log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - session ID mismatch`);
+          return null;
+        }
 
         if (part.type === "text") {
           // Text deltas are always unique (each delta is new content)
           if (event.properties.delta) {
+            log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - emitting message.delta`, {
+              deltaLength: event.properties.delta.length,
+            });
             return {
               type: "message.delta",
               content: event.properties.delta,
             };
+          } else {
+            log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - text part has no delta, returning null`);
           }
         } else if (part.type === "reasoning") {
           // Reasoning content (AI thinking/chain of thought)
@@ -736,9 +801,12 @@ export class OpenCodeBackend implements Backend {
       }
 
       case "session.idle": {
-        if (event.properties.sessionID !== sessionId) return null;
+        if (event.properties.sessionID !== sessionId) {
+          log.trace(`[OpenCodeBackend:${subId}] translateEvent: session.idle - session ID mismatch`);
+          return null;
+        }
         // Session is idle = message complete
-        // We need to track the last message content somehow
+        log.info(`[OpenCodeBackend:${subId}] translateEvent: session.idle - emitting message.complete`, { sessionId });
         return {
           type: "message.complete",
           content: "", // Content is accumulated by the caller
@@ -751,6 +819,7 @@ export class OpenCodeBackend implements Backend {
         const errorMessage = typeof error?.data?.message === "string" 
           ? error.data.message 
           : "Unknown error";
+        log.error(`[OpenCodeBackend:${subId}] translateEvent: session.error`, { sessionId, errorMessage });
         return {
           type: "error",
           message: errorMessage,
@@ -825,7 +894,7 @@ export class OpenCodeBackend implements Backend {
 
       default:
         // Log unhandled event types for debugging
-        log.debug("[OpenCodeBackend] translateEvent: Unhandled event type", { type: event.type });
+        log.debug(`[OpenCodeBackend:${subId}] translateEvent: Unhandled event type`, { type: event.type });
         return null;
     }
   }

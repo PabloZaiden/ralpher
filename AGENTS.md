@@ -350,6 +350,7 @@ expect(loop.state.status).toBe("completed");
 - Before doing something, check the patterns used in the rest of the codebase.
 - Keep the `.planning/status.md` file updated with progress.
 - **Never use time estimates** in plans, documentation, or task descriptions. Time estimates are inherently inaccurate and create false expectations. Use complexity levels (Low, Medium, High) instead.
+- **Avoid code duplication**: When you find yourself writing similar code in multiple places, refactor to extract the common logic into a shared function or method. Use parameters to handle variations rather than duplicating code. This improves maintainability and reduces the risk of inconsistent behavior.
 
 ## Common Patterns
 
