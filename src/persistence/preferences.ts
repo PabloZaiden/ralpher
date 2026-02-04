@@ -9,6 +9,16 @@
 import { getDatabase } from "./database";
 
 /**
+ * Valid log level names.
+ */
+export type LogLevelName = "silly" | "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
+/**
+ * Default log level when no preference is set.
+ */
+export const DEFAULT_LOG_LEVEL: LogLevelName = "info";
+
+/**
  * User preferences structure.
  */
 export interface UserPreferences {
@@ -21,6 +31,8 @@ export interface UserPreferences {
   lastDirectory?: string;
   /** Whether markdown rendering is enabled (defaults to true) */
   markdownRenderingEnabled?: boolean;
+  /** Log level for both frontend and backend (defaults to "info") */
+  logLevel?: LogLevelName;
 }
 
 /**
@@ -99,4 +111,36 @@ export async function getMarkdownRenderingEnabled(): Promise<boolean> {
  */
 export async function setMarkdownRenderingEnabled(enabled: boolean): Promise<void> {
   setPreference("markdownRenderingEnabled", String(enabled));
+}
+
+/**
+ * Valid log levels for validation.
+ */
+const VALID_LOG_LEVELS: LogLevelName[] = ["silly", "trace", "debug", "info", "warn", "error", "fatal"];
+
+/**
+ * Get the log level preference.
+ * Defaults to "info" if not set.
+ */
+export async function getLogLevelPreference(): Promise<LogLevelName> {
+  const value = getPreference("logLevel");
+  if (value === null) {
+    return DEFAULT_LOG_LEVEL;
+  }
+  // Validate the stored value is a valid log level
+  if (VALID_LOG_LEVELS.includes(value as LogLevelName)) {
+    return value as LogLevelName;
+  }
+  return DEFAULT_LOG_LEVEL;
+}
+
+/**
+ * Set the log level preference.
+ */
+export async function setLogLevelPreference(level: LogLevelName): Promise<void> {
+  // Validate the level before storing
+  if (!VALID_LOG_LEVELS.includes(level)) {
+    throw new Error(`Invalid log level: ${level}. Valid levels are: ${VALID_LOG_LEVELS.join(", ")}`);
+  }
+  setPreference("logLevel", level);
 }

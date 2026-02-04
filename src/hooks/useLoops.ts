@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest, UncommittedChangesError } from "../types";
 import { useGlobalEvents } from "./useWebSocket";
+import { log } from "../lib/logger";
 import {
   acceptLoopApi,
   pushLoopApi,
@@ -137,7 +138,7 @@ export function useLoops(): UseLoopsResult {
         return [...prev, loop];
       });
     } catch (err) {
-      console.error("Failed to refresh loop:", err);
+      log.error("Failed to refresh loop:", err);
     }
   }, []);
 

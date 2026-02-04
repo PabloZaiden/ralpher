@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { log } from "../lib/logger";
 
 export type ConnectionStatus = "connecting" | "open" | "closed" | "error";
 
@@ -140,7 +141,7 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
         });
         onEventRef.current?.(data);
       } catch {
-        console.warn("Failed to parse WebSocket message:", event.data);
+        log.warn("Failed to parse WebSocket message:", event.data);
       }
     };
 

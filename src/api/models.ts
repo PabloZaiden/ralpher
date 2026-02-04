@@ -13,9 +13,10 @@
 import { backendManager, buildConnectionConfig } from "../core/backend-manager";
 import { OpenCodeBackend } from "../backends/opencode";
 import { getWorkspace } from "../persistence/workspaces";
-import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled } from "../persistence/preferences";
+import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled, getLogLevelPreference, setLogLevelPreference, DEFAULT_LOG_LEVEL } from "../persistence/preferences";
 import { getDefaultServerSettings } from "../types/settings";
 import type { ErrorResponse, ModelInfo } from "../types/api";
+import { setLogLevel as setBackendLogLevel, type LogLevelName } from "../core/logger";
 
 /**
  * Result of checking if a model is enabled/connected.
@@ -346,6 +347,61 @@ export const preferencesRoutes = {
         await setMarkdownRenderingEnabled(body.enabled);
 
         return Response.json({ success: true });
+      } catch (error) {
+        return errorResponse("save_failed", String(error), 500);
+      }
+    },
+  },
+
+  "/api/preferences/log-level": {
+    /**
+     * GET /api/preferences/log-level - Get log level preference.
+     * 
+     * Returns the current log level setting and available levels.
+     * Defaults to "info" if not set.
+     * 
+     * @returns Object with level (current level) and availableLevels array
+     */
+    async GET(): Promise<Response> {
+      const level = await getLogLevelPreference();
+      return Response.json({
+        level,
+        defaultLevel: DEFAULT_LOG_LEVEL,
+        availableLevels: ["silly", "trace", "debug", "info", "warn", "error", "fatal"],
+      });
+    },
+
+    /**
+     * PUT /api/preferences/log-level - Set log level preference.
+     * 
+     * Sets the log level for both frontend and backend.
+     * Valid levels: silly, trace, debug, info, warn, error, fatal
+     * 
+     * Request Body:
+     * - level (required): Log level name string
+     * 
+     * @returns Success response
+     */
+    async PUT(req: Request): Promise<Response> {
+      try {
+        const body = await req.json() as { level: string };
+        
+        if (!body.level || typeof body.level !== "string") {
+          return errorResponse("invalid_body", "level is required and must be a string");
+        }
+
+        const validLevels = ["silly", "trace", "debug", "info", "warn", "error", "fatal"];
+        if (!validLevels.includes(body.level)) {
+          return errorResponse("invalid_level", `Invalid log level: ${body.level}. Valid levels are: ${validLevels.join(", ")}`);
+        }
+
+        // Save to preferences
+        await setLogLevelPreference(body.level as LogLevelName);
+        
+        // Also update the backend logger in real-time
+        setBackendLogLevel(body.level as LogLevelName);
+
+        return Response.json({ success: true, level: body.level });
       } catch (error) {
         return errorResponse("save_failed", String(error), 500);
       }

@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { Modal, Button } from "./common";
+import { log } from "../lib/logger";
 
 export interface AddressCommentsModalProps {
   /** Whether the modal is open */
@@ -45,7 +46,7 @@ export function AddressCommentsModal({
       onClose();
     } catch (error) {
       // Keep modal open on error so user can retry
-      console.error("Failed to submit comments:", error);
+      log.error("Failed to submit comments:", error);
     } finally {
       setSubmitting(false);
     }
