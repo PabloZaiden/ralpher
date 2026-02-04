@@ -22,6 +22,8 @@ export interface UseLogLevelPreferenceResult {
   saving: boolean;
   /** Set the log level preference */
   setLevel: (level: LogLevelName) => Promise<void>;
+  /** Whether the log level is controlled by RALPHER_LOG_LEVEL environment variable */
+  isFromEnv: boolean;
 }
 
 /**
@@ -34,6 +36,7 @@ export function useLogLevelPreference(): UseLogLevelPreferenceResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [isFromEnv, setIsFromEnv] = useState(false);
 
   // Fetch the current preference
   const fetchPreference = useCallback(async () => {
@@ -44,8 +47,9 @@ export function useLogLevelPreference(): UseLogLevelPreferenceResult {
       if (!response.ok) {
         throw new Error(`Failed to fetch log level preference: ${response.statusText}`);
       }
-      const data = (await response.json()) as { level: LogLevelName };
+      const data = (await response.json()) as { level: LogLevelName; isFromEnv?: boolean };
       setLevelState(data.level);
+      setIsFromEnv(data.isFromEnv ?? false);
       // Also update the frontend logger
       setFrontendLogLevel(data.level);
     } catch (err) {
@@ -94,5 +98,6 @@ export function useLogLevelPreference(): UseLogLevelPreferenceResult {
     error,
     saving,
     setLevel,
+    isFromEnv,
   };
 }

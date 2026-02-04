@@ -39,6 +39,12 @@ export const LOG_LEVELS: Record<LogLevelName, number> = {
 };
 
 /**
+ * Array of valid log level names.
+ * Single source of truth for log level validation.
+ */
+export const VALID_LOG_LEVELS: LogLevelName[] = Object.keys(LOG_LEVELS) as LogLevelName[];
+
+/**
  * Map of numeric values to log level names.
  */
 export const LOG_LEVEL_NAMES: Record<number, LogLevelName> = {

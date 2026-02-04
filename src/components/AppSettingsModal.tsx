@@ -35,7 +35,7 @@ export function AppSettingsModal({
   const { enabled: markdownEnabled, toggle: toggleMarkdown, saving: savingMarkdown } = useMarkdownPreference();
 
   // Log level preference
-  const { level: logLevel, availableLevels, setLevel: setLogLevel, saving: savingLogLevel } = useLogLevelPreference();
+  const { level: logLevel, availableLevels, setLevel: setLogLevel, saving: savingLogLevel, isFromEnv: logLevelFromEnv } = useLogLevelPreference();
 
   // Reset state when modal closes
   function handleClose() {
@@ -102,19 +102,26 @@ export function AppSettingsModal({
                   Controls the verbosity of logging for both frontend and backend.
                   Lower levels show more detailed information for debugging.
                 </p>
-                <select
-                  id="log-level"
-                  value={logLevel}
-                  onChange={(e) => setLogLevel(e.target.value as LogLevelName)}
-                  disabled={savingLogLevel}
-                  className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50"
-                >
-                  {availableLevels.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label} - {option.description}
-                    </option>
-                  ))}
-                </select>
+                {logLevelFromEnv ? (
+                  <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-md px-3 py-2">
+                    Log level is controlled by the <code className="font-mono text-xs bg-amber-100 dark:bg-amber-800 px-1 py-0.5 rounded">RALPHER_LOG_LEVEL</code> environment variable.
+                    Current level: <strong>{logLevel}</strong>
+                  </div>
+                ) : (
+                  <select
+                    id="log-level"
+                    value={logLevel}
+                    onChange={(e) => setLogLevel(e.target.value as LogLevelName)}
+                    disabled={savingLogLevel}
+                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50"
+                  >
+                    {availableLevels.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label} - {option.description}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
           </div>

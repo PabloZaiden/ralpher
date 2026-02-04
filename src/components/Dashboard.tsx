@@ -12,7 +12,10 @@ import { AppSettingsModal } from "./AppSettingsModal";
 import { WorkspaceSettingsModal } from "./WorkspaceSettingsModal";
 import { CreateWorkspaceModal } from "./CreateWorkspaceModal";
 import { useWorkspaceServerSettings } from "../hooks";
-import { log } from "../lib/logger";
+import { createLogger } from "../lib/logger";
+
+// Create a named logger for this component
+const log = createLogger("Dashboard");
 import {
   AcceptLoopModal,
   AddressCommentsModal,
@@ -278,24 +281,24 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   // Handle workspace change from form
   // Fetch branches, models, and check planning dir based on workspace's directory
   const handleWorkspaceChange = useCallback((workspaceId: string | null, directory: string) => {
-    log.debug('[Dashboard] handleWorkspaceChange called', { 
+    log.debug('handleWorkspaceChange called', { 
       workspaceId, 
       directory,
       modelsWorkspaceId
     });
     if (workspaceId !== modelsWorkspaceId) {
-      log.debug('[Dashboard] Workspace changed, fetching data...');
+      log.debug('Workspace changed, fetching data...');
       setModelsWorkspaceId(workspaceId);
       
       // Use the directory passed from the form (already looked up from WorkspaceSelector)
-      log.debug('[Dashboard] Using directory from parameter:', directory);
+      log.debug('Using directory from parameter:', directory);
       
       fetchModels(directory, workspaceId);
       fetchBranches(directory);
       fetchDefaultBranch(directory);
       checkPlanningDir(directory);
     } else {
-      log.debug('[Dashboard] Workspace unchanged, skipping fetch');
+      log.debug('Workspace unchanged, skipping fetch');
     }
   }, [modelsWorkspaceId, fetchModels, checkPlanningDir, fetchBranches, fetchDefaultBranch]);
 

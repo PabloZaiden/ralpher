@@ -9,7 +9,7 @@ import { apiRoutes } from "./api";
 import { ensureDataDirectories } from "./persistence/paths";
 import { backendManager } from "./core/backend-manager";
 import { websocketHandlers, type WebSocketData } from "./api/websocket";
-import { log, setLogLevel, isLogLevelFromEnv, type LogLevelName } from "./core/logger";
+import { log, setLogLevel, isLogLevelFromEnv } from "./core/logger";
 import { getLogLevelPreference } from "./persistence/preferences";
 
 // Ensure data directories exist on startup
@@ -18,7 +18,7 @@ await ensureDataDirectories();
 // Initialize log level from saved preference (unless environment variable is set)
 if (!isLogLevelFromEnv()) {
   const savedLogLevel = await getLogLevelPreference();
-  setLogLevel(savedLogLevel as LogLevelName);
+  setLogLevel(savedLogLevel);
   log.debug(`Log level set from saved preference: ${savedLogLevel}`);
 } else {
   log.debug(`Log level set from RALPHER_LOG_LEVEL environment variable`);

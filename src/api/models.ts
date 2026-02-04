@@ -16,7 +16,7 @@ import { getWorkspace } from "../persistence/workspaces";
 import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled, getLogLevelPreference, setLogLevelPreference, DEFAULT_LOG_LEVEL } from "../persistence/preferences";
 import { getDefaultServerSettings } from "../types/settings";
 import type { ErrorResponse, ModelInfo } from "../types/api";
-import { setLogLevel as setBackendLogLevel, type LogLevelName } from "../core/logger";
+import { setLogLevel as setBackendLogLevel, type LogLevelName, VALID_LOG_LEVELS, isLogLevelFromEnv } from "../core/logger";
 
 /**
  * Result of checking if a model is enabled/connected.
@@ -360,14 +360,15 @@ export const preferencesRoutes = {
      * Returns the current log level setting and available levels.
      * Defaults to "info" if not set.
      * 
-     * @returns Object with level (current level) and availableLevels array
+     * @returns Object with level (current level), availableLevels array, and isFromEnv flag
      */
     async GET(): Promise<Response> {
       const level = await getLogLevelPreference();
       return Response.json({
         level,
         defaultLevel: DEFAULT_LOG_LEVEL,
-        availableLevels: ["silly", "trace", "debug", "info", "warn", "error", "fatal"],
+        availableLevels: VALID_LOG_LEVELS,
+        isFromEnv: isLogLevelFromEnv(),
       });
     },
 
@@ -390,9 +391,8 @@ export const preferencesRoutes = {
           return errorResponse("invalid_body", "level is required and must be a string");
         }
 
-        const validLevels = ["silly", "trace", "debug", "info", "warn", "error", "fatal"];
-        if (!validLevels.includes(body.level)) {
-          return errorResponse("invalid_level", `Invalid log level: ${body.level}. Valid levels are: ${validLevels.join(", ")}`);
+        if (!VALID_LOG_LEVELS.includes(body.level as LogLevelName)) {
+          return errorResponse("invalid_level", `Invalid log level: ${body.level}. Valid levels are: ${VALID_LOG_LEVELS.join(", ")}`);
         }
 
         // Save to preferences
