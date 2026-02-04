@@ -85,7 +85,25 @@ describe("POST /api/loops/:id/pending", () => {
     await ensureDataDirectories();
 
     // Set up backend manager before starting server
-    backendManager.setBackendForTesting(new NeverCompletingMockBackend());
+    // Configure models that tests will use
+    backendManager.setBackendForTesting(new NeverCompletingMockBackend({
+      models: [
+        {
+          providerID: "anthropic",
+          providerName: "Anthropic",
+          modelID: "claude-sonnet-4-20250514",
+          modelName: "Claude Sonnet 4",
+          connected: true,
+        },
+        {
+          providerID: "openai",
+          providerName: "OpenAI",
+          modelID: "gpt-4o",
+          modelName: "GPT-4o",
+          connected: true, // Mark as connected for these tests
+        },
+      ],
+    }));
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
 
     // Start test server on random port
@@ -129,8 +147,25 @@ describe("POST /api/loops/:id/pending", () => {
       }
     }
     
-    // Re-setup backend after reset
-    backendManager.setBackendForTesting(new NeverCompletingMockBackend());
+    // Re-setup backend after reset with models configured
+    backendManager.setBackendForTesting(new NeverCompletingMockBackend({
+      models: [
+        {
+          providerID: "anthropic",
+          providerName: "Anthropic",
+          modelID: "claude-sonnet-4-20250514",
+          modelName: "Claude Sonnet 4",
+          connected: true,
+        },
+        {
+          providerID: "openai",
+          providerName: "OpenAI",
+          modelID: "gpt-4o",
+          modelName: "GPT-4o",
+          connected: true,
+        },
+      ],
+    }));
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
   };
 

@@ -63,6 +63,17 @@ export function LoopActionBar({
   // Check if user has local changes (not yet submitted)
   const hasLocalChanges = message.trim().length > 0 || selectedModel !== "";
 
+  // Check if the selected model is enabled (connected)
+  const isSelectedModelEnabled = (): boolean => {
+    if (!selectedModel) return true; // No model selected = keep current model
+    const [providerID, modelID] = selectedModel.split(":");
+    if (!providerID || !modelID) return true;
+    const model = models.find((m) => m.providerID === providerID && m.modelID === modelID);
+    return model?.connected ?? false;
+  };
+  
+  const selectedModelEnabled = isSelectedModelEnabled();
+
   // Group models by provider
   const modelsByProvider = models.reduce<Record<string, ModelInfo[]>>(
     (acc, model) => {
@@ -110,6 +121,9 @@ export function LoopActionBar({
     e.preventDefault();
     
     if (!hasLocalChanges || disabled || isSubmitting) return;
+    
+    // Validate model is enabled if selected
+    if (selectedModel && !selectedModelEnabled) return;
 
     setIsSubmitting(true);
 
@@ -137,7 +151,7 @@ export function LoopActionBar({
     } finally {
       setIsSubmitting(false);
     }
-  }, [hasLocalChanges, disabled, isSubmitting, message, selectedModel, onQueuePending]);
+  }, [hasLocalChanges, disabled, isSubmitting, message, selectedModel, selectedModelEnabled, onQueuePending]);
 
   // Handle clear pending
   const handleClear = useCallback(async () => {
@@ -254,13 +268,20 @@ export function LoopActionBar({
           <Button
             type="submit"
             size="sm"
-            disabled={disabled || isSubmitting || !hasLocalChanges}
+            disabled={disabled || isSubmitting || !hasLocalChanges || (selectedModel !== "" && !selectedModelEnabled)}
             loading={isSubmitting}
             className="flex-shrink-0 h-9"
           >
             Queue
           </Button>
         </div>
+
+        {/* Error message for disconnected model */}
+        {selectedModel && !selectedModelEnabled && (
+          <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+            The selected model's provider is not connected. Please select a different model.
+          </p>
+        )}
 
         <p className="hidden sm:block mt-2 text-xs text-gray-500 dark:text-gray-400">
           Message will be sent after current step completes. Model change takes effect on next prompt.
