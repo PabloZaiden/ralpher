@@ -95,6 +95,26 @@ describe("Frontend Logger", () => {
         expect(getLogLevel()).toBe(level);
       }
     });
+
+    test("synchronizes sub-loggers when level changes", () => {
+      // Create a sub-logger before changing the level
+      const subLogger = createLogger("TestSubLogger");
+      
+      // Initially should have the current (default) level
+      expect(subLogger.settings.minLevel).toBe(LOG_LEVELS[DEFAULT_LOG_LEVEL]);
+      
+      // Change the level to debug
+      setLogLevel("debug");
+      expect(subLogger.settings.minLevel).toBe(LOG_LEVELS["debug"]);
+      
+      // Change the level to silly
+      setLogLevel("silly");
+      expect(subLogger.settings.minLevel).toBe(LOG_LEVELS["silly"]);
+      
+      // Change the level to error
+      setLogLevel("error");
+      expect(subLogger.settings.minLevel).toBe(LOG_LEVELS["error"]);
+    });
   });
 
   describe("getLogLevel", () => {

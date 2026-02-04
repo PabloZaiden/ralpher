@@ -80,19 +80,34 @@ export const log: Logger<ILogObj> = new Logger({
 });
 
 /**
+ * Registry of all sub-loggers for level synchronization.
+ * When setLogLevel() is called, all registered sub-loggers are updated
+ * because tslog sub-loggers copy the parent's minLevel at creation time
+ * and don't automatically sync when the parent's level changes.
+ */
+const subLoggers: Logger<ILogObj>[] = [];
+
+/**
  * Create a child logger with a specific name.
  * Useful for component-specific logging.
+ * 
+ * The sub-logger is registered so that its log level can be synchronized
+ * when setLogLevel() is called (tslog sub-loggers don't automatically
+ * inherit level changes from the parent).
  * 
  * @param name - The name for the sub-logger (e.g., "Dashboard", "CreateLoopForm")
  * @returns A new Logger instance that inherits settings from the parent
  */
 export function createLogger(name: string): Logger<ILogObj> {
-  return log.getSubLogger({ name });
+  const subLogger = log.getSubLogger({ name });
+  subLoggers.push(subLogger);
+  return subLogger;
 }
 
 /**
  * Set the log level at runtime.
  * Updates the logger's minLevel setting dynamically.
+ * Also updates all registered sub-loggers to keep them in sync.
  * 
  * @param level - The log level name (silly, trace, debug, info, warn, error, fatal)
  */
@@ -100,7 +115,17 @@ export function setLogLevel(level: LogLevelName): void {
   if (!(level in LOG_LEVELS)) {
     throw new Error(`Invalid log level: ${level}. Valid levels are: ${Object.keys(LOG_LEVELS).join(", ")}`);
   }
-  log.settings.minLevel = LOG_LEVELS[level];
+  const numericLevel = LOG_LEVELS[level];
+  
+  // Update parent logger
+  log.settings.minLevel = numericLevel;
+  
+  // Update all registered sub-loggers
+  // (tslog sub-loggers copy the parent's minLevel at creation time
+  // and don't automatically sync when the parent's level changes)
+  for (const subLogger of subLoggers) {
+    subLogger.settings.minLevel = numericLevel;
+  }
 }
 
 /**
