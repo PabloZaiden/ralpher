@@ -16,6 +16,9 @@ import { backendManager } from "../core/backend-manager";
 import { getAppConfig } from "../core/config";
 import { deleteAndReinitializeDatabase } from "../persistence/database";
 import type { ErrorResponse } from "../types/api";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("api:settings");
 
 /**
  * Create a standardized error response.
@@ -52,7 +55,10 @@ export const settingsRoutes = {
      * @returns AppConfig object
      */
     async GET(): Promise<Response> {
-      return Response.json(getAppConfig());
+      log.debug("GET /api/config");
+      const config = getAppConfig();
+      log.trace("Returning app config", { remoteOnly: config.remoteOnly });
+      return Response.json(config);
     },
   },
 
@@ -70,18 +76,23 @@ export const settingsRoutes = {
      * @returns Success response with message
      */
     async POST(): Promise<Response> {
+      log.warn("POST /api/settings/reset-all - Resetting all settings");
       try {
         // Reset all backend connections first
+        log.debug("Resetting all backend connections");
         await backendManager.resetAllConnections();
         
         // Delete and reinitialize the database
+        log.debug("Deleting and reinitializing database");
         await deleteAndReinitializeDatabase();
         
+        log.info("All settings have been reset successfully");
         return Response.json({ 
           success: true, 
           message: "All settings have been reset. Database recreated." 
         });
       } catch (error) {
+        log.error("Failed to reset all settings", { error: String(error) });
         return errorResponse("reset_failed", String(error), 500);
       }
     },

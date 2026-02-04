@@ -27,6 +27,7 @@ import {
   isLoopActive,
   canJumpstart,
 } from "../utils";
+import { log } from "../lib/logger";
 
 export interface LoopDetailsProps {
   /** Loop ID to display */
@@ -167,7 +168,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         }
       }
     } catch (error) {
-      console.error("Failed to fetch review comments:", String(error));
+      log.error("Failed to fetch review comments:", String(error));
     } finally {
       setLoadingComments(false);
     }
@@ -186,7 +187,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
           setModels(data);
         }
       } catch (error) {
-        console.error("Failed to fetch models:", String(error));
+        log.error("Failed to fetch models:", String(error));
       } finally {
         setModelsLoading(false);
       }
@@ -381,7 +382,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       // Fetch updated comments after successfully submitting
       await fetchReviewComments();
     } catch (error) {
-      console.error("Failed to address comments:", error);
+      log.error("Failed to address comments:", error);
       throw error; // Re-throw so modal knows it failed
     }
   }

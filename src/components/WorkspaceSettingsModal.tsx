@@ -8,6 +8,9 @@ import { Modal, Button, Badge } from "./common";
 import { ServerSettingsForm } from "./ServerSettingsForm";
 import type { ServerSettings, ConnectionStatus } from "../types/settings";
 import type { Workspace } from "../types/workspace";
+import { createLogger } from "../lib/logger";
+
+const log = createLogger("WorkspaceSettingsModal");
 
 export interface WorkspaceSettingsModalProps {
   /** Whether the modal is open */
@@ -72,14 +75,19 @@ export function WorkspaceSettingsModal({
 
     if (!serverSettings) return;
 
+    log.debug("Saving workspace settings", { workspaceName: name.trim() });
     const success = await onSave(name.trim(), serverSettings);
     if (success) {
+      log.trace("Workspace settings saved successfully");
       onClose();
+    } else {
+      log.warn("Failed to save workspace settings");
     }
   }
 
   // Handle server settings change
   function handleServerSettingsChange(settings: ServerSettings, isValid: boolean) {
+    log.trace("Server settings changed", { mode: settings.mode, isValid });
     setServerSettings(settings);
     setIsServerSettingsValid(isValid);
   }

@@ -7,6 +7,9 @@ import type { Workspace, WorkspaceWithLoopCount } from "../types/workspace";
 import type { ServerSettings } from "../types/settings";
 import { getDefaultServerSettings } from "../types/settings";
 import { getDatabase } from "./database";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("persistence:workspaces");
 
 /**
  * Convert a Workspace to a flat object for database insertion.
@@ -61,6 +64,7 @@ function rowToWorkspace(row: Record<string, unknown>): Workspace {
  * Create a new workspace.
  */
 export async function createWorkspace(workspace: Workspace): Promise<void> {
+  log.debug("Creating workspace", { id: workspace.id, name: workspace.name, directory: workspace.directory });
   const db = getDatabase();
   const row = workspaceToRow(workspace);
 
@@ -71,32 +75,48 @@ export async function createWorkspace(workspace: Workspace): Promise<void> {
   const sql = `INSERT INTO workspaces (${columns.join(", ")}) VALUES (${placeholders})`;
   const stmt = db.prepare(sql);
   stmt.run(...values);
+  log.info("Workspace created", { id: workspace.id, name: workspace.name });
 }
 
 /**
  * Get a workspace by ID.
  */
 export async function getWorkspace(id: string): Promise<Workspace | null> {
+  log.debug("Getting workspace", { id });
   const db = getDatabase();
   const stmt = db.prepare("SELECT * FROM workspaces WHERE id = ?");
   const row = stmt.get(id) as Record<string, unknown> | null;
-  return row ? rowToWorkspace(row) : null;
+  if (!row) {
+    log.trace("Workspace not found", { id });
+    return null;
+  }
+  const workspace = rowToWorkspace(row);
+  log.trace("Workspace retrieved", { id, name: workspace.name });
+  return workspace;
 }
 
 /**
  * Get a workspace by directory path.
  */
 export async function getWorkspaceByDirectory(directory: string): Promise<Workspace | null> {
+  log.debug("Getting workspace by directory", { directory });
   const db = getDatabase();
   const stmt = db.prepare("SELECT * FROM workspaces WHERE directory = ?");
   const row = stmt.get(directory) as Record<string, unknown> | null;
-  return row ? rowToWorkspace(row) : null;
+  if (!row) {
+    log.trace("Workspace not found for directory", { directory });
+    return null;
+  }
+  const workspace = rowToWorkspace(row);
+  log.trace("Workspace found for directory", { directory, id: workspace.id, name: workspace.name });
+  return workspace;
 }
 
 /**
  * List all workspaces with loop counts, sorted by name alphabetically.
  */
 export async function listWorkspaces(): Promise<WorkspaceWithLoopCount[]> {
+  log.debug("Listing all workspaces");
   const db = getDatabase();
   const stmt = db.prepare(`
     SELECT w.*, COUNT(l.id) as loop_count
@@ -106,10 +126,12 @@ export async function listWorkspaces(): Promise<WorkspaceWithLoopCount[]> {
     ORDER BY w.name COLLATE NOCASE ASC
   `);
   const rows = stmt.all() as Array<Record<string, unknown>>;
-  return rows.map((row) => ({
+  const workspaces = rows.map((row) => ({
     ...rowToWorkspace(row),
     loopCount: (row["loop_count"] as number) ?? 0,
   }));
+  log.trace("Workspaces listed", { count: workspaces.length });
+  return workspaces;
 }
 
 /**
@@ -119,6 +141,7 @@ export async function updateWorkspace(
   id: string, 
   updates: Partial<Pick<Workspace, "name" | "serverSettings">>
 ): Promise<Workspace | null> {
+  log.debug("Updating workspace", { id, hasNameUpdate: updates.name !== undefined, hasSettingsUpdate: updates.serverSettings !== undefined });
   const db = getDatabase();
   
   // Build the update query dynamically based on provided fields
@@ -137,6 +160,7 @@ export async function updateWorkspace(
   
   if (setClauses.length === 0) {
     // No updates provided, just return the existing workspace
+    log.trace("No updates provided, returning existing workspace", { id });
     return getWorkspace(id);
   }
   
@@ -150,6 +174,7 @@ export async function updateWorkspace(
   const stmt = db.prepare(sql);
   stmt.run(...values);
   
+  log.trace("Workspace updated", { id });
   return getWorkspace(id);
 }
 
@@ -160,11 +185,13 @@ export async function updateWorkspace(
  * @returns true if deleted, false if not found or has loops
  */
 export async function deleteWorkspace(id: string): Promise<{ success: boolean; reason?: string }> {
+  log.debug("Deleting workspace", { id });
   const db = getDatabase();
   
   // Check if workspace exists
   const workspace = await getWorkspace(id);
   if (!workspace) {
+    log.trace("Workspace not found for deletion", { id });
     return { success: false, reason: "Workspace not found" };
   }
   
@@ -173,6 +200,7 @@ export async function deleteWorkspace(id: string): Promise<{ success: boolean; r
   const loopCountRow = loopCountStmt.get(id) as { count: number };
   
   if (loopCountRow.count > 0) {
+    log.warn("Cannot delete workspace with loops", { id, loopCount: loopCountRow.count });
     return { 
       success: false, 
       reason: `Workspace has ${loopCountRow.count} loop(s). Delete all loops first.` 
@@ -181,6 +209,7 @@ export async function deleteWorkspace(id: string): Promise<{ success: boolean; r
   
   // Delete the workspace
   db.run("DELETE FROM workspaces WHERE id = ?", [id]);
+  log.info("Workspace deleted", { id, name: workspace.name });
   return { success: true };
 }
 
@@ -188,9 +217,11 @@ export async function deleteWorkspace(id: string): Promise<{ success: boolean; r
  * Get the count of loops for a workspace.
  */
 export async function getWorkspaceLoopCount(workspaceId: string): Promise<number> {
+  log.trace("Getting workspace loop count", { workspaceId });
   const db = getDatabase();
   const stmt = db.prepare("SELECT COUNT(*) as count FROM loops WHERE workspace_id = ?");
   const row = stmt.get(workspaceId) as { count: number };
+  log.trace("Workspace loop count retrieved", { workspaceId, count: row.count });
   return row.count;
 }
 
@@ -199,6 +230,7 @@ export async function getWorkspaceLoopCount(workspaceId: string): Promise<number
  * Called when a loop is created in this workspace.
  */
 export async function touchWorkspace(id: string): Promise<void> {
+  log.trace("Touching workspace", { id });
   const db = getDatabase();
   db.run("UPDATE workspaces SET updated_at = ? WHERE id = ?", [
     new Date().toISOString(),

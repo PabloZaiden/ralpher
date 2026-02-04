@@ -11,6 +11,9 @@
  */
 
 import type { HealthResponse } from "../types/api";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("api:health");
 
 /**
  * Application version string read from package.json.
@@ -35,6 +38,7 @@ export const healthRoutes = {
      * @returns HealthResponse with healthy flag and version
      */
     async GET(): Promise<Response> {
+      log.trace("GET /api/health");
       const response: HealthResponse = {
         healthy: true,
         version: VERSION,

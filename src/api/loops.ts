@@ -98,7 +98,9 @@ export const loopsCrudRoutes = {
      * @returns Array of Loop objects with config and state
      */
     async GET(): Promise<Response> {
+      log.debug("GET /api/loops - Listing all loops");
       const loops = await loopManager.getAllLoops();
+      log.trace("GET /api/loops - Retrieved loops", { count: loops.length });
       return Response.json(loops);
     },
 
@@ -132,15 +134,25 @@ export const loopsCrudRoutes = {
      * @returns Created Loop object with 201 status
      */
     async POST(req: Request): Promise<Response> {
+      log.debug("POST /api/loops - Creating new loop");
       const body = await parseBody<CreateLoopRequest>(req);
       if (!body) {
+        log.warn("POST /api/loops - Invalid JSON body");
         return errorResponse("invalid_body", "Request body must be valid JSON");
       }
 
       const validationError = validateCreateLoopRequest(body);
       if (validationError) {
+        log.warn("POST /api/loops - Validation error", { error: validationError });
         return errorResponse("validation_error", validationError);
       }
+      
+      log.trace("POST /api/loops - Request validated", { 
+        workspaceId: body.workspaceId, 
+        planMode: body.planMode, 
+        draft: body.draft,
+        hasModel: !!body.model 
+      });
 
       // Resolve workspaceId to directory - workspaceId is required
       const { getWorkspace, touchWorkspace } = await import("../persistence/workspaces");
@@ -333,8 +345,10 @@ export const loopsCrudRoutes = {
      * @returns Loop object or 404 if not found
      */
     async GET(req: Request & { params: { id: string } }): Promise<Response> {
+      log.trace("GET /api/loops/:id", { loopId: req.params.id });
       const loop = await loopManager.getLoop(req.params.id);
       if (!loop) {
+        log.debug("GET /api/loops/:id - Loop not found", { loopId: req.params.id });
         return errorResponse("not_found", "Loop not found", 404);
       }
       return Response.json(loop);
@@ -353,8 +367,10 @@ export const loopsCrudRoutes = {
      * @returns Updated Loop object or 404 if not found
      */
     async PATCH(req: Request & { params: { id: string } }): Promise<Response> {
+      log.debug("PATCH /api/loops/:id", { loopId: req.params.id });
       const loop = await loopManager.getLoop(req.params.id);
       if (!loop) {
+        log.debug("PATCH /api/loops/:id - Loop not found", { loopId: req.params.id });
         return errorResponse("not_found", "Loop not found", 404);
       }
 
@@ -502,15 +518,19 @@ export const loopsCrudRoutes = {
      * @returns Success response or 404 if not found
      */
     async DELETE(req: Request & { params: { id: string } }): Promise<Response> {
+      log.debug("DELETE /api/loops/:id", { loopId: req.params.id });
       const loop = await loopManager.getLoop(req.params.id);
       if (!loop) {
+        log.debug("DELETE /api/loops/:id - Loop not found", { loopId: req.params.id });
         return errorResponse("not_found", "Loop not found", 404);
       }
 
       try {
         await loopManager.deleteLoop(req.params.id);
+        log.info("DELETE /api/loops/:id - Loop deleted", { loopId: req.params.id });
         return successResponse();
       } catch (error) {
+        log.error("DELETE /api/loops/:id - Delete failed", { loopId: req.params.id, error: String(error) });
         return errorResponse("delete_failed", String(error), 500);
       }
     },
@@ -711,15 +731,18 @@ export const loopsControlRoutes = {
      * @returns AcceptResponse with success and mergeCommit SHA
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      log.debug("POST /api/loops/:id/accept", { loopId: req.params.id });
       const result = await loopManager.acceptLoop(req.params.id);
 
       if (!result.success) {
+        log.warn("POST /api/loops/:id/accept - Failed", { loopId: req.params.id, error: result.error });
         if (result.error?.includes("not found")) {
           return errorResponse("not_found", "Loop not found", 404);
         }
         return errorResponse("accept_failed", result.error ?? "Unknown error", 400);
       }
 
+      log.info("POST /api/loops/:id/accept - Loop accepted", { loopId: req.params.id, mergeCommit: result.mergeCommit });
       const response: AcceptResponse = {
         success: true,
         mergeCommit: result.mergeCommit!,
@@ -739,15 +762,18 @@ export const loopsControlRoutes = {
      * @returns PushResponse with success and remoteBranch name
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      log.debug("POST /api/loops/:id/push", { loopId: req.params.id });
       const result = await loopManager.pushLoop(req.params.id);
 
       if (!result.success) {
+        log.warn("POST /api/loops/:id/push - Failed", { loopId: req.params.id, error: result.error });
         if (result.error?.includes("not found")) {
           return errorResponse("not_found", "Loop not found", 404);
         }
         return errorResponse("push_failed", result.error ?? "Unknown error", 400);
       }
 
+      log.info("POST /api/loops/:id/push - Loop pushed", { loopId: req.params.id, remoteBranch: result.remoteBranch });
       const response: PushResponse = {
         success: true,
         remoteBranch: result.remoteBranch!,
@@ -766,15 +792,18 @@ export const loopsControlRoutes = {
      * @returns Success response
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      log.debug("POST /api/loops/:id/discard", { loopId: req.params.id });
       const result = await loopManager.discardLoop(req.params.id);
 
       if (!result.success) {
+        log.warn("POST /api/loops/:id/discard - Failed", { loopId: req.params.id, error: result.error });
         if (result.error?.includes("not found")) {
           return errorResponse("not_found", "Loop not found", 404);
         }
         return errorResponse("discard_failed", result.error ?? "Unknown error", 400);
       }
 
+      log.info("POST /api/loops/:id/discard - Loop discarded", { loopId: req.params.id });
       return successResponse();
     },
   },
@@ -789,14 +818,18 @@ export const loopsControlRoutes = {
      * @returns Success response
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      log.debug("POST /api/loops/:id/purge", { loopId: req.params.id });
       const result = await loopManager.purgeLoop(req.params.id);
 
       if (!result.success) {
+        log.warn("POST /api/loops/:id/purge - Failed", { loopId: req.params.id, error: result.error });
         if (result.error?.includes("not found")) {
           return errorResponse("not_found", "Loop not found", 404);
         }
         return errorResponse("purge_failed", result.error ?? "Unknown error", 400);
       }
+
+      log.info("POST /api/loops/:id/purge - Loop purged", { loopId: req.params.id });
 
       return successResponse();
     },

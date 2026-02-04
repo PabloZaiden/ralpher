@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Workspace, WorkspaceWithLoopCount, CreateWorkspaceRequest } from "../types/workspace";
+import { log } from "../lib/logger";
 
 export interface UseWorkspacesResult {
   /** List of workspaces with loop counts */
@@ -152,7 +153,7 @@ export function useWorkspaces(): UseWorkspacesResult {
       }
       return (await response.json()) as Workspace;
     } catch (err) {
-      console.error("Failed to get workspace by directory:", err);
+      log.error("Failed to get workspace by directory:", err);
       return null;
     }
   }, []);

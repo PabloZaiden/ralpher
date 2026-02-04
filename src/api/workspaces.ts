@@ -47,8 +47,10 @@ export const workspacesRoutes = {
    */
   "/api/workspaces": {
     async GET() {
+      log.debug("GET /api/workspaces - Listing all workspaces");
       try {
         const workspaces = await listWorkspaces();
+        log.trace("GET /api/workspaces - Retrieved workspaces", { count: workspaces.length });
         return Response.json(workspaces);
       } catch (error) {
         log.error("Failed to list workspaces:", String(error));
@@ -63,9 +65,11 @@ export const workspacesRoutes = {
      * POST /api/workspaces - Create a new workspace
      */
     async POST(req: Request) {
+      log.debug("POST /api/workspaces - Creating new workspace");
       const body = await parseBody<CreateWorkspaceRequest>(req);
       
       if (!body) {
+        log.warn("POST /api/workspaces - Invalid JSON body");
         return Response.json(
           { message: "Invalid JSON body" },
           { status: 400 }
@@ -73,6 +77,7 @@ export const workspacesRoutes = {
       }
 
       if (!body.name || typeof body.name !== "string" || !body.name.trim()) {
+        log.warn("POST /api/workspaces - Missing or empty name");
         return Response.json(
           { message: "name is required and must be a non-empty string" },
           { status: 400 }
@@ -80,6 +85,7 @@ export const workspacesRoutes = {
       }
 
       if (!body.directory || typeof body.directory !== "string" || !body.directory.trim()) {
+        log.warn("POST /api/workspaces - Missing or empty directory");
         return Response.json(
           { message: "directory is required and must be a non-empty string" },
           { status: 400 }
@@ -172,9 +178,11 @@ export const workspacesRoutes = {
     const method = req.method;
 
     if (method === "GET") {
+      log.trace("GET /api/workspaces/:id", { workspaceId: id });
       try {
         const workspace = await getWorkspace(id);
         if (!workspace) {
+          log.debug("GET /api/workspaces/:id - Workspace not found", { workspaceId: id });
           return Response.json(
             { message: "Workspace not found" },
             { status: 404 }
@@ -191,9 +199,11 @@ export const workspacesRoutes = {
     }
 
     if (method === "PUT") {
+      log.debug("PUT /api/workspaces/:id", { workspaceId: id });
       const body = await parseBody<UpdateWorkspaceRequest>(req);
       
       if (!body) {
+        log.warn("PUT /api/workspaces/:id - Invalid JSON body", { workspaceId: id });
         return Response.json(
           { message: "Invalid JSON body" },
           { status: 400 }
@@ -206,6 +216,7 @@ export const workspacesRoutes = {
           serverSettings: body.serverSettings,
         });
         if (!workspace) {
+          log.debug("PUT /api/workspaces/:id - Workspace not found", { workspaceId: id });
           return Response.json(
             { message: "Workspace not found" },
             { status: 404 }
@@ -223,9 +234,11 @@ export const workspacesRoutes = {
     }
 
     if (method === "DELETE") {
+      log.debug("DELETE /api/workspaces/:id", { workspaceId: id });
       try {
         const result = await deleteWorkspace(id);
         if (!result.success) {
+          log.warn("DELETE /api/workspaces/:id - Failed", { workspaceId: id, reason: result.reason });
           return Response.json(
             { message: result.reason },
             { status: result.reason === "Workspace not found" ? 404 : 400 }

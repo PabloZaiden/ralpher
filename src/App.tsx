@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Dashboard } from "./components/Dashboard";
 import { LoopDetails } from "./components/LoopDetails";
+import { LogLevelInitializer } from "./components/LogLevelInitializer";
 import "./index.css";
 
 type Route =
@@ -64,17 +65,21 @@ export function App() {
   // Render the current view
   if (route.view === "loop") {
     return (
-      <LoopDetails
-        loopId={route.loopId}
-        onBack={handleBack}
-      />
+      <LogLevelInitializer>
+        <LoopDetails
+          loopId={route.loopId}
+          onBack={handleBack}
+        />
+      </LogLevelInitializer>
     );
   }
 
   return (
-    <Dashboard
-      onSelectLoop={handleSelectLoop}
-    />
+    <LogLevelInitializer>
+      <Dashboard
+        onSelectLoop={handleSelectLoop}
+      />
+    </LogLevelInitializer>
   );
 }
 

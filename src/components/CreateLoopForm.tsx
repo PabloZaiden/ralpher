@@ -7,6 +7,10 @@ import type { CreateLoopRequest, ModelInfo, BranchInfo } from "../types";
 import type { WorkspaceWithLoopCount } from "../types/workspace";
 import { Button } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
+import { createLogger } from "../lib/logger";
+
+// Create a named logger for this component
+const log = createLogger("CreateLoopForm");
 
 /** State for action buttons, exposed via renderActions prop */
 export interface CreateLoopFormActionState {
@@ -146,20 +150,20 @@ export function CreateLoopForm({
 
   // Reset selected branch when default branch changes (directory changed)
   useEffect(() => {
-    console.log('[CreateLoopForm] useEffect 1 - branch reset', { defaultBranch, userChangedBranch, isEditing });
+    log.debug('useEffect 1 - branch reset', { defaultBranch, userChangedBranch, isEditing });
     // Only set default branch if:
     // 1. We have a default branch from the server
     // 2. User hasn't manually changed the branch
     // 3. Not editing an existing loop (for edits, use the stored baseBranch)
     if (defaultBranch && !userChangedBranch && !isEditing) {
-      console.log('[CreateLoopForm] Setting selected branch to:', defaultBranch);
+      log.debug('Setting selected branch to:', defaultBranch);
       setSelectedBranch(defaultBranch);
     }
   }, [defaultBranch, userChangedBranch, isEditing]);
 
   // Set initial model when lastModel, models, or initialLoopData change
   useEffect(() => {
-    console.log('[CreateLoopForm] useEffect 2 - model selection', { 
+    log.debug('useEffect 2 - model selection', { 
       selectedModel, 
       lastModel, 
       modelsCount: models.length,
@@ -174,7 +178,7 @@ export function CreateLoopForm({
         (m) => `${m.providerID}:${m.modelID}` === modelKey
       );
       if (exists) {
-        console.log('[CreateLoopForm] Setting model from initialLoopData:', modelKey);
+        log.debug('Setting model from initialLoopData:', modelKey);
         setSelectedModel(modelKey);
         return;
       }
@@ -187,7 +191,7 @@ export function CreateLoopForm({
         (m) => `${m.providerID}:${m.modelID}` === modelKey
       );
       if (exists) {
-        console.log('[CreateLoopForm] Setting model from lastModel:', modelKey);
+        log.debug('Setting model from lastModel:', modelKey);
         setSelectedModel(modelKey);
         return;
       }
@@ -196,7 +200,7 @@ export function CreateLoopForm({
     // Default to first connected model
     const firstConnected = models.find((m) => m.connected);
     if (firstConnected) {
-      console.log('[CreateLoopForm] Setting model to first connected:', `${firstConnected.providerID}:${firstConnected.modelID}`);
+      log.debug('Setting model to first connected:', `${firstConnected.providerID}:${firstConnected.modelID}`);
       setSelectedModel(`${firstConnected.providerID}:${firstConnected.modelID}`);
     }
   }, [lastModel, models, selectedModel, initialLoopData]);
@@ -204,7 +208,7 @@ export function CreateLoopForm({
   // Notify parent when workspace changes
   // This triggers fetching models, branches, and checking planning dir
   useEffect(() => {
-    console.log('[CreateLoopForm] useEffect 3 - workspace change', { 
+    log.debug('useEffect 3 - workspace change', { 
       selectedWorkspaceId,
       selectedWorkspaceDirectory,
       isInitialMount: isInitialMount.current,
@@ -215,7 +219,7 @@ export function CreateLoopForm({
       isInitialMount.current = false;
       // But DO call on initial mount if we have initial data (editing mode)
       if (initialLoopData?.workspaceId && initialLoopData?.directory && onWorkspaceChange) {
-        console.log('[CreateLoopForm] Initial call to onWorkspaceChange:', initialLoopData.workspaceId, initialLoopData.directory);
+        log.debug('Initial call to onWorkspaceChange:', initialLoopData.workspaceId, initialLoopData.directory);
         onWorkspaceChange(initialLoopData.workspaceId, initialLoopData.directory);
       }
       return;
@@ -223,7 +227,7 @@ export function CreateLoopForm({
     
     if (!onWorkspaceChange) return;
     
-    console.log('[CreateLoopForm] Calling onWorkspaceChange:', selectedWorkspaceId, selectedWorkspaceDirectory);
+    log.debug('Calling onWorkspaceChange:', selectedWorkspaceId, selectedWorkspaceDirectory);
     // Notify parent of workspace change (including null for no selection)
     onWorkspaceChange(selectedWorkspaceId ?? null, selectedWorkspaceDirectory);
     // Note: onWorkspaceChange is intentionally NOT in deps array to prevent infinite loop
@@ -235,13 +239,13 @@ export function CreateLoopForm({
   
   // Reset branch selection flag when workspace changes (separate effect to avoid loop)
   useEffect(() => {
-    console.log('[CreateLoopForm] useEffect 4 - reset userChangedBranch', { 
+    log.debug('useEffect 4 - reset userChangedBranch', { 
       isEditing, 
       isInitialMount: isInitialMount.current,
       selectedWorkspaceId 
     });
     if (!isEditing && !isInitialMount.current) {
-      console.log('[CreateLoopForm] Resetting userChangedBranch to false');
+      log.debug('Resetting userChangedBranch to false');
       setUserChangedBranch(false);
     }
   }, [selectedWorkspaceId, isEditing]);
@@ -326,7 +330,7 @@ export function CreateLoopForm({
       }
     } catch (error) {
       // Keep form open on error so user can retry
-      console.error("Failed to create loop:", error);
+      log.error("Failed to create loop:", error);
     } finally {
       setSubmitting(false);
     }
@@ -386,7 +390,7 @@ export function CreateLoopForm({
   
   useEffect(() => {
     const prev = renderActionsRef.current;
-    console.log('[CreateLoopForm] useEffect 5 - renderActions deps changed:', {
+    log.debug('useEffect 5 - renderActions deps changed:', {
       isSubmitting: isSubmitting !== prev.isSubmitting,
       canSubmit: canSubmit !== prev.canSubmit,
       canSaveDraft: canSaveDraft !== prev.canSaveDraft,

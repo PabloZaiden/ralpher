@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ServerSettings, ConnectionStatus } from "../types/settings";
 import type { Workspace } from "../types/workspace";
+import { log } from "../lib/logger";
 
 export interface UseWorkspaceServerSettingsResult {
   /** Full workspace data (name, directory, serverSettings) - fetched fresh from API */
@@ -93,7 +94,7 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
       setStatus(data);
     } catch (err) {
       // Don't set error for status fetch failures - non-critical
-      console.error("Failed to fetch connection status:", err);
+      log.error("Failed to fetch connection status:", err);
     }
   }, [workspaceId]);
 

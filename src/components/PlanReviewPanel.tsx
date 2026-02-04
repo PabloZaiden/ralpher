@@ -8,6 +8,9 @@ import { MarkdownRenderer } from "./MarkdownRenderer";
 import { LogViewer, type LogEntry } from "./LogViewer";
 import type { Loop, MessageData, ToolCallData } from "../types";
 import { useMarkdownPreference } from "../hooks";
+import { createLogger } from "../lib/logger";
+
+const log = createLogger("PlanReviewPanel");
 
 export interface PlanReviewPanelProps {
   /** The loop in planning mode */
@@ -57,9 +60,11 @@ export function PlanReviewPanel({
   const handleSendFeedback = async () => {
     if (!feedback.trim()) return;
 
+    log.debug("Sending plan feedback", { loopId: loop.config.id, feedbackLength: feedback.length });
     setIsSubmitting(true);
     try {
       await onSendFeedback(feedback);
+      log.trace("Plan feedback sent successfully");
       setFeedback("");
     } finally {
       setIsSubmitting(false);
@@ -67,18 +72,22 @@ export function PlanReviewPanel({
   };
 
   const handleAcceptPlan = async () => {
+    log.debug("Accepting plan", { loopId: loop.config.id });
     setIsSubmitting(true);
     try {
       await onAcceptPlan();
+      log.info("Plan accepted, starting loop execution");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDiscardPlan = async () => {
+    log.debug("Discarding plan", { loopId: loop.config.id });
     setIsSubmitting(true);
     try {
       await onDiscardPlan();
+      log.info("Plan discarded");
     } finally {
       setIsSubmitting(false);
       setShowDiscardConfirm(false);

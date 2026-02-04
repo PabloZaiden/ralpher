@@ -7,6 +7,19 @@
  */
 
 import { getDatabase } from "./database";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("persistence:preferences");
+
+/**
+ * Valid log level names.
+ */
+export type LogLevelName = "silly" | "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
+/**
+ * Default log level when no preference is set.
+ */
+export const DEFAULT_LOG_LEVEL: LogLevelName = "info";
 
 /**
  * User preferences structure.
@@ -21,39 +34,51 @@ export interface UserPreferences {
   lastDirectory?: string;
   /** Whether markdown rendering is enabled (defaults to true) */
   markdownRenderingEnabled?: boolean;
+  /** Log level for both frontend and backend (defaults to "info") */
+  logLevel?: LogLevelName;
 }
 
 /**
  * Get a preference value by key.
  */
 function getPreference(key: string): string | null {
+  log.trace("Getting preference", { key });
   const db = getDatabase();
   const stmt = db.prepare("SELECT value FROM preferences WHERE key = ?");
   const row = stmt.get(key) as { value: string } | null;
-  return row?.value ?? null;
+  const value = row?.value ?? null;
+  log.trace("Preference retrieved", { key, found: value !== null });
+  return value;
 }
 
 /**
  * Set a preference value by key.
  */
 function setPreference(key: string, value: string): void {
+  log.debug("Setting preference", { key });
   const db = getDatabase();
   const stmt = db.prepare("INSERT OR REPLACE INTO preferences (key, value) VALUES (?, ?)");
   stmt.run(key, value);
+  log.trace("Preference set", { key });
 }
 
 /**
  * Get the last used model.
  */
 export async function getLastModel(): Promise<UserPreferences["lastModel"]> {
+  log.debug("Getting last model preference");
   const lastModelJson = getPreference("lastModel");
   if (!lastModelJson) {
+    log.trace("No last model preference found");
     return undefined;
   }
   
   try {
-    return JSON.parse(lastModelJson);
+    const model = JSON.parse(lastModelJson);
+    log.trace("Last model preference retrieved", { providerID: model.providerID, modelID: model.modelID });
+    return model;
   } catch {
+    log.warn("Failed to parse last model preference");
     return undefined;
   }
 }
@@ -65,6 +90,7 @@ export async function setLastModel(model: {
   providerID: string;
   modelID: string;
 }): Promise<void> {
+  log.debug("Setting last model preference", { providerID: model.providerID, modelID: model.modelID });
   setPreference("lastModel", JSON.stringify(model));
 }
 
@@ -72,13 +98,17 @@ export async function setLastModel(model: {
  * Get the last used working directory.
  */
 export async function getLastDirectory(): Promise<string | undefined> {
-  return getPreference("lastDirectory") ?? undefined;
+  log.debug("Getting last directory preference");
+  const dir = getPreference("lastDirectory") ?? undefined;
+  log.trace("Last directory preference", { found: dir !== undefined });
+  return dir;
 }
 
 /**
  * Set the last used working directory.
  */
 export async function setLastDirectory(directory: string): Promise<void> {
+  log.debug("Setting last directory preference", { directory });
   setPreference("lastDirectory", directory);
 }
 
@@ -87,16 +117,59 @@ export async function setLastDirectory(directory: string): Promise<void> {
  * Defaults to true if not set.
  */
 export async function getMarkdownRenderingEnabled(): Promise<boolean> {
+  log.debug("Getting markdown rendering preference");
   const value = getPreference("markdownRenderingEnabled");
   if (value === null) {
+    log.trace("Markdown rendering preference not set, using default", { default: true });
     return true; // Default to enabled
   }
-  return value === "true";
+  const enabled = value === "true";
+  log.trace("Markdown rendering preference", { enabled });
+  return enabled;
 }
 
 /**
  * Set whether markdown rendering is enabled.
  */
 export async function setMarkdownRenderingEnabled(enabled: boolean): Promise<void> {
+  log.debug("Setting markdown rendering preference", { enabled });
   setPreference("markdownRenderingEnabled", String(enabled));
+}
+
+/**
+ * Valid log levels for validation.
+ */
+const VALID_LOG_LEVELS: LogLevelName[] = ["silly", "trace", "debug", "info", "warn", "error", "fatal"];
+
+/**
+ * Get the log level preference.
+ * Defaults to "info" if not set.
+ */
+export async function getLogLevelPreference(): Promise<LogLevelName> {
+  log.debug("Getting log level preference");
+  const value = getPreference("logLevel");
+  if (value === null) {
+    log.trace("Log level preference not set, using default", { default: DEFAULT_LOG_LEVEL });
+    return DEFAULT_LOG_LEVEL;
+  }
+  // Validate the stored value is a valid log level
+  if (VALID_LOG_LEVELS.includes(value as LogLevelName)) {
+    log.trace("Log level preference", { level: value });
+    return value as LogLevelName;
+  }
+  log.warn("Invalid log level preference, using default", { storedValue: value, default: DEFAULT_LOG_LEVEL });
+  return DEFAULT_LOG_LEVEL;
+}
+
+/**
+ * Set the log level preference.
+ */
+export async function setLogLevelPreference(level: LogLevelName): Promise<void> {
+  log.debug("Setting log level preference", { level });
+  // Validate the level before storing
+  if (!VALID_LOG_LEVELS.includes(level)) {
+    log.error("Invalid log level provided", { level, validLevels: VALID_LOG_LEVELS });
+    throw new Error(`Invalid log level: ${level}. Valid levels are: ${VALID_LOG_LEVELS.join(", ")}`);
+  }
+  setPreference("logLevel", level);
 }

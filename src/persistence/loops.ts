@@ -5,6 +5,9 @@
 
 import type { Loop, LoopConfig, LoopState } from "../types";
 import { getDatabase } from "./database";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("persistence:loops");
 
 /**
  * Allowed column names for the loops table.
@@ -252,6 +255,7 @@ function rowToLoop(row: Record<string, unknown>): Loop {
  * Uses INSERT OR REPLACE for upsert behavior.
  */
 export async function saveLoop(loop: Loop): Promise<void> {
+  log.debug("Saving loop", { id: loop.config.id, name: loop.config.name, status: loop.state.status });
   const db = getDatabase();
   const row = loopToRow(loop);
   
@@ -268,6 +272,7 @@ export async function saveLoop(loop: Loop): Promise<void> {
   `);
   
   stmt.run(...values);
+  log.trace("Loop saved to database", { id: loop.config.id });
 }
 
 /**
@@ -275,16 +280,20 @@ export async function saveLoop(loop: Loop): Promise<void> {
  * Returns null if the loop doesn't exist.
  */
 export async function loadLoop(loopId: string): Promise<Loop | null> {
+  log.debug("Loading loop", { loopId });
   const db = getDatabase();
   
   const stmt = db.prepare("SELECT * FROM loops WHERE id = ?");
   const row = stmt.get(loopId) as Record<string, unknown> | null;
   
   if (!row) {
+    log.trace("Loop not found", { loopId });
     return null;
   }
   
-  return rowToLoop(row);
+  const loop = rowToLoop(row);
+  log.trace("Loop loaded", { loopId, status: loop.state.status });
+  return loop;
 }
 
 /**
@@ -292,12 +301,19 @@ export async function loadLoop(loopId: string): Promise<Loop | null> {
  * Returns true if deleted, false if it didn't exist.
  */
 export async function deleteLoop(loopId: string): Promise<boolean> {
+  log.debug("Deleting loop", { loopId });
   const db = getDatabase();
   
   const stmt = db.prepare("DELETE FROM loops WHERE id = ?");
   const result = stmt.run(loopId);
   
-  return result.changes > 0;
+  const deleted = result.changes > 0;
+  if (deleted) {
+    log.info("Loop deleted", { loopId });
+  } else {
+    log.trace("Loop not found for deletion", { loopId });
+  }
+  return deleted;
 }
 
 /**
@@ -305,24 +321,30 @@ export async function deleteLoop(loopId: string): Promise<boolean> {
  * Sorted by creation date, newest first.
  */
 export async function listLoops(): Promise<Loop[]> {
+  log.debug("Listing all loops");
   const db = getDatabase();
   
   const stmt = db.prepare("SELECT * FROM loops ORDER BY created_at DESC");
   const rows = stmt.all() as Record<string, unknown>[];
   
-  return rows.map(rowToLoop);
+  const loops = rows.map(rowToLoop);
+  log.trace("Loops listed", { count: loops.length });
+  return loops;
 }
 
 /**
  * Check if a loop exists.
  */
 export async function loopExists(loopId: string): Promise<boolean> {
+  log.trace("Checking if loop exists", { loopId });
   const db = getDatabase();
   
   const stmt = db.prepare("SELECT 1 FROM loops WHERE id = ? LIMIT 1");
   const row = stmt.get(loopId);
   
-  return row !== null;
+  const exists = row !== null;
+  log.trace("Loop exists check result", { loopId, exists });
+  return exists;
 }
 
 /**
@@ -349,6 +371,7 @@ const ACTIVE_LOOP_STATUSES = [
  * @returns The active loop if one exists, null otherwise
  */
 export async function getActiveLoopByDirectory(directory: string): Promise<Loop | null> {
+  log.debug("Getting active loop by directory", { directory });
   const db = getDatabase();
   
   // Build placeholders for the IN clause
@@ -363,10 +386,13 @@ export async function getActiveLoopByDirectory(directory: string): Promise<Loop 
   const row = stmt.get(directory, ...ACTIVE_LOOP_STATUSES) as Record<string, unknown> | null;
   
   if (!row) {
+    log.trace("No active loop found for directory", { directory });
     return null;
   }
   
-  return rowToLoop(row);
+  const loop = rowToLoop(row);
+  log.trace("Active loop found", { directory, loopId: loop.config.id, status: loop.state.status });
+  return loop;
 }
 
 /**
@@ -374,6 +400,7 @@ export async function getActiveLoopByDirectory(directory: string): Promise<Loop 
  * Uses a transaction to ensure atomicity of SELECT + UPDATE.
  */
 export async function updateLoopState(loopId: string, state: LoopState): Promise<boolean> {
+  log.debug("Updating loop state", { loopId, status: state.status });
   const db = getDatabase();
   
   // Prepare statements outside transaction
@@ -383,6 +410,7 @@ export async function updateLoopState(loopId: string, state: LoopState): Promise
   const updateInTransaction = db.transaction(() => {
     const row = selectStmt.get(loopId) as Record<string, unknown> | null;
     if (!row) {
+      log.trace("Loop not found for state update", { loopId });
       return false;
     }
     
@@ -405,6 +433,7 @@ export async function updateLoopState(loopId: string, state: LoopState): Promise
     `);
     updateStmt.run(...values);
     
+    log.trace("Loop state updated", { loopId, status: state.status });
     return true;
   });
   
@@ -416,6 +445,7 @@ export async function updateLoopState(loopId: string, state: LoopState): Promise
  * Uses a transaction to ensure atomicity of SELECT + UPDATE.
  */
 export async function updateLoopConfig(loopId: string, config: LoopConfig): Promise<boolean> {
+  log.debug("Updating loop config", { loopId, name: config.name });
   const db = getDatabase();
   
   // Prepare statements outside transaction
@@ -425,6 +455,7 @@ export async function updateLoopConfig(loopId: string, config: LoopConfig): Prom
   const updateInTransaction = db.transaction(() => {
     const row = selectStmt.get(loopId) as Record<string, unknown> | null;
     if (!row) {
+      log.trace("Loop not found for config update", { loopId });
       return false;
     }
     
@@ -447,6 +478,7 @@ export async function updateLoopConfig(loopId: string, config: LoopConfig): Prom
     `);
     updateStmt.run(...values);
     
+    log.trace("Loop config updated", { loopId, name: config.name });
     return true;
   });
   
@@ -481,6 +513,7 @@ const STALE_LOOP_STATUSES = [
  * @returns The number of loops that were reset
  */
 export async function resetStaleLoops(): Promise<number> {
+  log.debug("Resetting stale loops");
   const db = getDatabase();
   const now = new Date().toISOString();
   
@@ -498,5 +531,10 @@ export async function resetStaleLoops(): Promise<number> {
   
   const result = stmt.run(now, now, ...STALE_LOOP_STATUSES);
   
+  if (result.changes > 0) {
+    log.info("Reset stale loops", { count: result.changes });
+  } else {
+    log.trace("No stale loops to reset");
+  }
   return result.changes;
 }

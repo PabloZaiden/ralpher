@@ -12,6 +12,10 @@ import { AppSettingsModal } from "./AppSettingsModal";
 import { WorkspaceSettingsModal } from "./WorkspaceSettingsModal";
 import { CreateWorkspaceModal } from "./CreateWorkspaceModal";
 import { useWorkspaceServerSettings } from "../hooks";
+import { createLogger } from "../lib/logger";
+
+// Create a named logger for this component
+const log = createLogger("Dashboard");
 import {
   AcceptLoopModal,
   AddressCommentsModal,
@@ -277,24 +281,24 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   // Handle workspace change from form
   // Fetch branches, models, and check planning dir based on workspace's directory
   const handleWorkspaceChange = useCallback((workspaceId: string | null, directory: string) => {
-    console.log('[Dashboard] handleWorkspaceChange called', { 
+    log.debug('handleWorkspaceChange called', { 
       workspaceId, 
       directory,
       modelsWorkspaceId
     });
     if (workspaceId !== modelsWorkspaceId) {
-      console.log('[Dashboard] Workspace changed, fetching data...');
+      log.debug('Workspace changed, fetching data...');
       setModelsWorkspaceId(workspaceId);
       
       // Use the directory passed from the form (already looked up from WorkspaceSelector)
-      console.log('[Dashboard] Using directory from parameter:', directory);
+      log.debug('Using directory from parameter:', directory);
       
       fetchModels(directory, workspaceId);
       fetchBranches(directory);
       fetchDefaultBranch(directory);
       checkPlanningDir(directory);
     } else {
-      console.log('[Dashboard] Workspace unchanged, skipping fetch');
+      log.debug('Workspace unchanged, skipping fetch');
     }
   }, [modelsWorkspaceId, fetchModels, checkPlanningDir, fetchBranches, fetchDefaultBranch]);
 
@@ -355,7 +359,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       }
       setAddressCommentsModal({ open: false, loopId: null });
     } catch (error) {
-      console.error("Failed to address comments:", error);
+      log.error("Failed to address comments:", error);
       // TODO: Show error toast
     }
   }
@@ -950,7 +954,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                       
                       if (!response.ok) {
                         const error = await response.json();
-                        console.error("Failed to update draft:", error);
+                        log.error("Failed to update draft:", error);
                         return false;
                       }
                       
@@ -960,7 +964,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                       // Success - close modal
                       return true;
                     } catch (error) {
-                      console.error("Failed to update draft:", error);
+                      log.error("Failed to update draft:", error);
                       return false;
                     }
                   }
@@ -986,7 +990,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                         return true; // Close the modal, uncommitted modal will show
                       }
                       
-                      console.error("Failed to start draft:", error);
+                      log.error("Failed to start draft:", error);
                       return false;
                     }
                     
@@ -996,7 +1000,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                     // Success - close modal
                     return true;
                   } catch (error) {
-                    console.error("Failed to start draft:", error);
+                    log.error("Failed to start draft:", error);
                     return false;
                   }
                 }

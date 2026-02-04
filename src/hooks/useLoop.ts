@@ -36,6 +36,9 @@ import {
   type AddressCommentsResult,
   type SetPendingResult,
 } from "./loopActions";
+import { createLogger } from "../lib/logger";
+
+const log = createLogger("useLoop");
 
 export interface UseLoopResult {
   /** The loop data */
@@ -104,6 +107,7 @@ export interface UseLoopResult {
  * Hook for managing a single loop with real-time updates.
  */
 export function useLoop(loopId: string): UseLoopResult {
+  log.debug("useLoop initialized", { loopId });
   const [loop, setLoop] = useState<Loop | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +125,7 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Handle events
   function handleEvent(event: LoopEvent) {
+    log.trace("Received event", { loopId, type: event.type });
     switch (event.type) {
       case "loop.log":
         // Update existing log entry or add new one
@@ -218,12 +223,14 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Fetch loop data
   const refresh = useCallback(async () => {
+    log.debug("Refreshing loop data", { loopId });
     try {
       setLoading(true);
       setError(null);
       const response = await fetch(`/api/loops/${loopId}`);
       if (!response.ok) {
         if (response.status === 404) {
+          log.debug("Loop not found", { loopId });
           setLoop(null);
           setError("Loop not found");
           return;
@@ -232,6 +239,7 @@ export function useLoop(loopId: string): UseLoopResult {
       }
       const data = (await response.json()) as Loop;
       setLoop(data);
+      log.trace("Loop data refreshed", { loopId, status: data.state.status });
       
       // Load persisted logs from loop state on initial load
       // Only load if we have no logs yet (fresh page load)
@@ -281,6 +289,7 @@ export function useLoop(loopId: string): UseLoopResult {
         setTodos(data.state.todos);
       }
     } catch (err) {
+      log.error("Failed to refresh loop", { loopId, error: String(err) });
       setError(String(err));
     } finally {
       setLoading(false);
@@ -290,6 +299,7 @@ export function useLoop(loopId: string): UseLoopResult {
   // Update the loop
   const update = useCallback(
     async (request: UpdateLoopRequest): Promise<boolean> => {
+      log.debug("Updating loop", { loopId, hasNameUpdate: request.name !== undefined });
       try {
         const response = await fetch(`/api/loops/${loopId}`, {
           method: "PATCH",
@@ -302,8 +312,10 @@ export function useLoop(loopId: string): UseLoopResult {
         }
         const data = (await response.json()) as Loop;
         setLoop(data);
+        log.trace("Loop updated successfully", { loopId });
         return true;
       } catch (err) {
+        log.error("Failed to update loop", { loopId, error: String(err) });
         setError(String(err));
         return false;
       }
@@ -313,11 +325,14 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Delete the loop
   const remove = useCallback(async (): Promise<boolean> => {
+    log.debug("Deleting loop", { loopId });
     try {
       await deleteLoopApi(loopId);
       setLoop(null);
+      log.info("Loop deleted", { loopId });
       return true;
     } catch (err) {
+      log.error("Failed to delete loop", { loopId, error: String(err) });
       setError(String(err));
       return false;
     }
@@ -325,11 +340,14 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Accept the loop's changes
   const accept = useCallback(async (): Promise<AcceptLoopResult> => {
+    log.debug("Accepting loop", { loopId });
     try {
       const result = await acceptLoopApi(loopId);
       await refresh();
+      log.info("Loop accepted", { loopId, mergeCommit: result.mergeCommit });
       return result;
     } catch (err) {
+      log.error("Failed to accept loop", { loopId, error: String(err) });
       setError(String(err));
       return { success: false };
     }
@@ -337,11 +355,14 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Push the loop's branch to remote
   const push = useCallback(async (): Promise<PushLoopResult> => {
+    log.debug("Pushing loop", { loopId });
     try {
       const result = await pushLoopApi(loopId);
       await refresh();
+      log.info("Loop pushed", { loopId, remoteBranch: result.remoteBranch });
       return result;
     } catch (err) {
+      log.error("Failed to push loop", { loopId, error: String(err) });
       setError(String(err));
       return { success: false };
     }
@@ -349,11 +370,14 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Discard the loop's changes
   const discard = useCallback(async (): Promise<boolean> => {
+    log.debug("Discarding loop", { loopId });
     try {
       await discardLoopApi(loopId);
       await refresh();
+      log.info("Loop discarded", { loopId });
       return true;
     } catch (err) {
+      log.error("Failed to discard loop", { loopId, error: String(err) });
       setError(String(err));
       return false;
     }
@@ -361,11 +385,14 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Purge the loop (permanently delete)
   const purge = useCallback(async (): Promise<boolean> => {
+    log.debug("Purging loop", { loopId });
     try {
       await purgeLoopApi(loopId);
       setLoop(null);
+      log.info("Loop purged", { loopId });
       return true;
     } catch (err) {
+      log.error("Failed to purge loop", { loopId, error: String(err) });
       setError(String(err));
       return false;
     }
@@ -373,11 +400,14 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Mark a loop as merged and sync with remote
   const markMerged = useCallback(async (): Promise<boolean> => {
+    log.debug("Marking loop as merged", { loopId });
     try {
       await markMergedApi(loopId);
       setLoop(null);
+      log.info("Loop marked as merged", { loopId });
       return true;
     } catch (err) {
+      log.error("Failed to mark loop as merged", { loopId, error: String(err) });
       setError(String(err));
       return false;
     }
@@ -386,11 +416,14 @@ export function useLoop(loopId: string): UseLoopResult {
   // Set a pending prompt for the next iteration
   const setPendingPrompt = useCallback(
     async (prompt: string): Promise<boolean> => {
+      log.debug("Setting pending prompt", { loopId, promptLength: prompt.length });
       try {
         await setPendingPromptApi(loopId, prompt);
         await refresh();
+        log.trace("Pending prompt set", { loopId });
         return true;
       } catch (err) {
+        log.error("Failed to set pending prompt", { loopId, error: String(err) });
         setError(String(err));
         return false;
       }
@@ -400,11 +433,14 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Clear the pending prompt
   const clearPendingPrompt = useCallback(async (): Promise<boolean> => {
+    log.debug("Clearing pending prompt", { loopId });
     try {
       await clearPendingPromptApi(loopId);
       await refresh();
+      log.trace("Pending prompt cleared", { loopId });
       return true;
     } catch (err) {
+      log.error("Failed to clear pending prompt", { loopId, error: String(err) });
       setError(String(err));
       return false;
     }
@@ -412,6 +448,7 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Get the git diff
   const getDiff = useCallback(async (): Promise<FileDiff[]> => {
+    log.trace("Getting diff", { loopId });
     try {
       const response = await fetch(`/api/loops/${loopId}/diff`);
       if (!response.ok) {
@@ -421,8 +458,11 @@ export function useLoop(loopId: string): UseLoopResult {
         }
         throw new Error(`Failed to get diff: ${response.statusText}`);
       }
-      return (await response.json()) as FileDiff[];
+      const diff = (await response.json()) as FileDiff[];
+      log.trace("Diff retrieved", { loopId, fileCount: diff.length });
+      return diff;
     } catch (err) {
+      log.error("Failed to get diff", { loopId, error: String(err) });
       setError(String(err));
       return [];
     }
@@ -430,6 +470,7 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Get the plan.md content
   const getPlan = useCallback(async (): Promise<FileContentResponse> => {
+    log.trace("Getting plan", { loopId });
     try {
       const response = await fetch(`/api/loops/${loopId}/plan`);
       if (!response.ok) {
@@ -437,6 +478,7 @@ export function useLoop(loopId: string): UseLoopResult {
       }
       return (await response.json()) as FileContentResponse;
     } catch (err) {
+      log.error("Failed to get plan", { loopId, error: String(err) });
       setError(String(err));
       return { content: "", exists: false };
     }
@@ -444,6 +486,7 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Get the status.md content
   const getStatusFile = useCallback(async (): Promise<FileContentResponse> => {
+    log.trace("Getting status file", { loopId });
     try {
       const response = await fetch(`/api/loops/${loopId}/status-file`);
       if (!response.ok) {
@@ -451,6 +494,7 @@ export function useLoop(loopId: string): UseLoopResult {
       }
       return (await response.json()) as FileContentResponse;
     } catch (err) {
+      log.error("Failed to get status file", { loopId, error: String(err) });
       setError(String(err));
       return { content: "", exists: false };
     }
@@ -459,11 +503,14 @@ export function useLoop(loopId: string): UseLoopResult {
   // Send feedback to refine the plan
   const sendPlanFeedback = useCallback(
     async (feedback: string): Promise<boolean> => {
+      log.debug("Sending plan feedback", { loopId, feedbackLength: feedback.length });
       try {
         await sendPlanFeedbackApi(loopId, feedback);
         await refresh();
+        log.trace("Plan feedback sent", { loopId });
         return true;
       } catch (err) {
+        log.error("Failed to send plan feedback", { loopId, error: String(err) });
         setError(String(err));
         return false;
       }
@@ -473,11 +520,14 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Accept the plan and start the loop execution
   const acceptPlan = useCallback(async (): Promise<boolean> => {
+    log.debug("Accepting plan", { loopId });
     try {
       await acceptPlanApi(loopId);
       await refresh();
+      log.info("Plan accepted", { loopId });
       return true;
     } catch (err) {
+      log.error("Failed to accept plan", { loopId, error: String(err) });
       setError(String(err));
       return false;
     }
@@ -485,11 +535,14 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Discard the plan and delete the loop
   const discardPlan = useCallback(async (): Promise<boolean> => {
+    log.debug("Discarding plan", { loopId });
     try {
       await discardPlanApi(loopId);
       setLoop(null);
+      log.info("Plan discarded", { loopId });
       return true;
     } catch (err) {
+      log.error("Failed to discard plan", { loopId, error: String(err) });
       setError(String(err));
       return false;
     }
@@ -498,11 +551,14 @@ export function useLoop(loopId: string): UseLoopResult {
   // Address reviewer comments
   const addressReviewComments = useCallback(
     async (comments: string): Promise<AddressCommentsResult> => {
+      log.debug("Addressing review comments", { loopId, commentsLength: comments.length });
       try {
         const result = await addressReviewCommentsApi(loopId, comments);
         await refresh();
+        log.info("Review comments addressed", { loopId, reviewCycle: result.reviewCycle });
         return result;
       } catch (err) {
+        log.error("Failed to address review comments", { loopId, error: String(err) });
         setError(String(err));
         return { success: false };
       }
@@ -513,11 +569,14 @@ export function useLoop(loopId: string): UseLoopResult {
   // Set pending message and/or model
   const setPending = useCallback(
     async (options: { message?: string; model?: { providerID: string; modelID: string } }): Promise<SetPendingResult> => {
+      log.debug("Setting pending", { loopId, hasMessage: options.message !== undefined, hasModel: options.model !== undefined });
       try {
         const result = await setPendingApi(loopId, options);
         await refresh();
+        log.trace("Pending values set", { loopId });
         return result;
       } catch (err) {
+        log.error("Failed to set pending", { loopId, error: String(err) });
         setError(String(err));
         return { success: false };
       }
@@ -527,11 +586,14 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Clear all pending values
   const clearPending = useCallback(async (): Promise<boolean> => {
+    log.debug("Clearing pending values", { loopId });
     try {
       await clearPendingApi(loopId);
       await refresh();
+      log.trace("Pending values cleared", { loopId });
       return true;
     } catch (err) {
+      log.error("Failed to clear pending", { loopId, error: String(err) });
       setError(String(err));
       return false;
     }
