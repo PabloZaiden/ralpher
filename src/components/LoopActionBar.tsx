@@ -11,6 +11,9 @@
 import { useState, useCallback, type FormEvent } from "react";
 import type { ModelInfo, ModelConfig } from "../types";
 import { Button } from "./common";
+import { createLogger } from "../lib/logger";
+
+const log = createLogger("LoopActionBar");
 
 export interface LoopActionBarProps {
   /** Current model configuration (from loop config) */
@@ -125,6 +128,10 @@ export function LoopActionBar({
     // Validate model is enabled if selected
     if (selectedModel && !selectedModelEnabled) return;
 
+    log.debug("Queueing pending changes", { 
+      hasMessage: !!message.trim(), 
+      hasModelChange: !!selectedModel 
+    });
     setIsSubmitting(true);
 
     try {
@@ -144,9 +151,12 @@ export function LoopActionBar({
 
       const success = await onQueuePending(options);
       if (success) {
+        log.trace("Pending changes queued successfully");
         // Clear local state on success
         setMessage("");
         setSelectedModel("");
+      } else {
+        log.warn("Failed to queue pending changes");
       }
     } finally {
       setIsSubmitting(false);
@@ -157,9 +167,11 @@ export function LoopActionBar({
   const handleClear = useCallback(async () => {
     if (disabled || isSubmitting || !hasPending) return;
 
+    log.debug("Clearing pending changes");
     setIsSubmitting(true);
     try {
       await onClearPending();
+      log.trace("Pending changes cleared");
     } finally {
       setIsSubmitting(false);
     }

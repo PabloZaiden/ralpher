@@ -5,6 +5,9 @@
  */
 
 import type { LoopStatus } from "../types";
+import { createLogger } from "../lib/logger";
+
+const log = createLogger("LoopStatus");
 
 /**
  * Get a human-readable label for a loop status.
@@ -47,7 +50,9 @@ export function getStatusLabel(status: LoopStatus): string {
  * reviewed manually or discarded.
  */
 export function canAccept(status: LoopStatus): boolean {
-  return status === "completed" || status === "max_iterations";
+  const result = status === "completed" || status === "max_iterations";
+  log.trace("canAccept check", { status, result });
+  return result;
 }
 
 /**
@@ -55,7 +60,9 @@ export function canAccept(status: LoopStatus): boolean {
  * Only purge is allowed in final states.
  */
 export function isFinalState(status: LoopStatus): boolean {
-  return status === "merged" || status === "pushed" || status === "deleted";
+  const result = status === "merged" || status === "pushed" || status === "deleted";
+  log.trace("isFinalState check", { status, result });
+  return result;
 }
 
 /**
@@ -63,14 +70,18 @@ export function isFinalState(status: LoopStatus): boolean {
  * Used to determine if pending prompts can be set.
  */
 export function isLoopActive(status: LoopStatus): boolean {
-  return status === "running" || status === "waiting" || status === "starting";
+  const result = status === "running" || status === "waiting" || status === "starting";
+  log.trace("isLoopActive check", { status, result });
+  return result;
 }
 
 /**
  * Check if a loop is in a running state where iteration prompts can be set.
  */
 export function isLoopRunning(status: LoopStatus): boolean {
-  return status === "running" || status === "starting";
+  const result = status === "running" || status === "starting";
+  log.trace("isLoopRunning check", { status, result });
+  return result;
 }
 
 /**
@@ -78,7 +89,9 @@ export function isLoopRunning(status: LoopStatus): boolean {
  * This allows users to send a message to restart the loop.
  */
 export function canJumpstart(status: LoopStatus): boolean {
-  return status === "completed" || status === "stopped" || status === "failed" || status === "max_iterations";
+  const result = status === "completed" || status === "stopped" || status === "failed" || status === "max_iterations";
+  log.trace("canJumpstart check", { status, result });
+  return result;
 }
 
 /**
@@ -86,5 +99,7 @@ export function canJumpstart(status: LoopStatus): boolean {
  * These loops are in a final state but can still receive reviewer comments.
  */
 export function isAwaitingFeedback(status: LoopStatus, reviewModeAddressable: boolean | undefined): boolean {
-  return (status === "merged" || status === "pushed") && reviewModeAddressable === true;
+  const result = (status === "merged" || status === "pushed") && reviewModeAddressable === true;
+  log.trace("isAwaitingFeedback check", { status, reviewModeAddressable, result });
+  return result;
 }

@@ -7,6 +7,9 @@
 import { Database } from "bun:sqlite";
 import { join } from "path";
 import { runMigrations } from "./migrations";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("database");
 
 let db: Database | null = null;
 
@@ -44,15 +47,18 @@ export function getDatabase(): Database {
  */
 export async function initializeDatabase(): Promise<void> {
   const dbPath = getDatabasePath();
+  log.debug("Initializing database", { path: dbPath });
   
   // If already initialized with the same path, return early
   if (db) {
     // Check if it's the same database path - if so, nothing to do
     // Note: db.filename returns the path of the open database
     if (db.filename === dbPath) {
+      log.trace("Database already initialized with same path");
       return;
     }
     // Different path - close the old connection to prevent resource leak
+    log.debug("Closing existing database connection for different path");
     db.close();
     db = null;
   }
@@ -62,23 +68,31 @@ export async function initializeDatabase(): Promise<void> {
   await mkdir(getDataDir(), { recursive: true });
 
   db = new Database(dbPath);
+  log.trace("Database connection opened");
   
   // Enable foreign key constraints
   // This must be set for every connection to enforce FK constraints and cascades
   db.run("PRAGMA foreign_keys = ON");
+  log.trace("PRAGMA foreign_keys = ON");
   
   // Enable WAL mode for better concurrency
   db.run("PRAGMA journal_mode = WAL");
+  log.trace("PRAGMA journal_mode = WAL");
   
   // Set busy timeout to wait up to 5 seconds for locks
   // This prevents spurious failures under concurrent load
   db.run("PRAGMA busy_timeout = 5000");
+  log.trace("PRAGMA busy_timeout = 5000");
   
   // Create tables
   createTables(db);
+  log.trace("Tables created");
   
   // Run any pending migrations
   runMigrations(db);
+  log.trace("Migrations completed");
+  
+  log.info("Database initialized", { path: dbPath });
 }
 
 /**
@@ -208,8 +222,10 @@ function createTables(database: Database): void {
  */
 export function closeDatabase(): void {
   if (db) {
+    log.debug("Closing database connection");
     db.close();
     db = null;
+    log.info("Database connection closed");
   }
 }
 
@@ -230,6 +246,8 @@ export function resetDatabase(): void {
     throw new Error("Database not initialized");
   }
   
+  log.warn("Resetting database - dropping all tables");
+  
   // Wrap DROP operations in a transaction
   const dropAllTables = db.transaction(() => {
     db!.run("DROP TABLE IF EXISTS review_comments");
@@ -240,8 +258,13 @@ export function resetDatabase(): void {
   });
   
   dropAllTables();
+  log.trace("All tables dropped");
+  
   createTables(db);
+  log.trace("Tables recreated");
+  
   runMigrations(db);
+  log.info("Database reset complete");
 }
 
 /**
@@ -252,6 +275,8 @@ export function resetDatabase(): void {
 export async function deleteAndReinitializeDatabase(): Promise<void> {
   const dbPath = getDatabasePath();
   
+  log.warn("Deleting database file and reinitializing", { path: dbPath });
+  
   // Close existing connection
   closeDatabase();
   
@@ -259,22 +284,27 @@ export async function deleteAndReinitializeDatabase(): Promise<void> {
   const { unlink } = await import("fs/promises");
   try {
     await unlink(dbPath);
+    log.trace("Deleted database file");
   } catch {
     // File might not exist, that's ok
+    log.trace("Database file did not exist");
   }
   try {
     await unlink(`${dbPath}-wal`);
+    log.trace("Deleted WAL file");
   } catch {
     // WAL file might not exist
   }
   try {
     await unlink(`${dbPath}-shm`);
+    log.trace("Deleted SHM file");
   } catch {
     // SHM file might not exist
   }
   
   // Reinitialize
   await initializeDatabase();
+  log.info("Database deleted and reinitialized");
 }
 
 /**
@@ -288,6 +318,7 @@ export function insertReviewComment(comment: {
   createdAt: string;
   status?: string;
 }): void {
+  log.debug("Inserting review comment", { id: comment.id, loopId: comment.loopId, reviewCycle: comment.reviewCycle });
   const db = getDatabase();
   db.run(
     `INSERT INTO review_comments (id, loop_id, review_cycle, comment_text, created_at, status)
@@ -301,6 +332,7 @@ export function insertReviewComment(comment: {
       comment.status ?? "pending",
     ]
   );
+  log.trace("Review comment inserted", { id: comment.id });
 }
 
 /**
@@ -316,6 +348,7 @@ export function getReviewComments(loopId: string): Array<{
   status: string;
   addressed_at: string | null;
 }> {
+  log.debug("Getting review comments", { loopId });
   const db = getDatabase();
   const comments = db.query(
     `SELECT * FROM review_comments 
@@ -331,6 +364,7 @@ export function getReviewComments(loopId: string): Array<{
     addressed_at: string | null;
   }>;
   
+  log.trace("Review comments retrieved", { loopId, count: comments.length });
   return comments;
 }
 
@@ -339,6 +373,7 @@ export function getReviewComments(loopId: string): Array<{
  * Used to mark comments as "addressed" when a loop completes.
  */
 export function markCommentsAsAddressed(loopId: string, reviewCycle: number, addressedAt: string): void {
+  log.debug("Marking comments as addressed", { loopId, reviewCycle });
   const db = getDatabase();
   db.run(
     `UPDATE review_comments 
@@ -346,5 +381,6 @@ export function markCommentsAsAddressed(loopId: string, reviewCycle: number, add
      WHERE loop_id = ? AND review_cycle = ? AND status = 'pending'`,
     [addressedAt, loopId, reviewCycle]
   );
+  log.trace("Comments marked as addressed", { loopId, reviewCycle, addressedAt });
 }
 

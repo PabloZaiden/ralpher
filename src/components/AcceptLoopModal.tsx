@@ -5,6 +5,9 @@
 
 import { useState } from "react";
 import { Modal, Button } from "./common";
+import { createLogger } from "../lib/logger";
+
+const log = createLogger("AcceptLoopModal");
 
 export interface AcceptLoopModalProps {
   /** Whether the modal is open */
@@ -47,18 +50,22 @@ export function AcceptLoopModal({
     : "Choose how to finalize this loop's changes.";
 
   async function handleAccept() {
+    log.debug("User chose to accept and merge loop");
     setAccepting(true);
     try {
       await onAccept();
+      log.info("Loop merged successfully");
     } finally {
       setAccepting(false);
     }
   }
 
   async function handlePush() {
+    log.debug("User chose to push loop to remote");
     setPushing(true);
     try {
       await onPush();
+      log.info("Loop pushed to remote successfully");
     } finally {
       setPushing(false);
     }
