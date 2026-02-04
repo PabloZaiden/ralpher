@@ -10,11 +10,131 @@
  * @module api/models
  */
 
-import { buildConnectionConfig } from "../core/backend-manager";
+import { backendManager, buildConnectionConfig } from "../core/backend-manager";
 import { OpenCodeBackend } from "../backends/opencode";
 import { getWorkspace } from "../persistence/workspaces";
 import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled } from "../persistence/preferences";
-import type { ErrorResponse } from "../types/api";
+import { getDefaultServerSettings } from "../types/settings";
+import type { ErrorResponse, ModelInfo } from "../types/api";
+
+/**
+ * Result of checking if a model is enabled/connected.
+ */
+export interface ModelValidationResult {
+  /** Whether the model is enabled and can be used */
+  enabled: boolean;
+  /** Error message if the model is not enabled */
+  error?: string;
+  /** Error code for programmatic handling */
+  errorCode?: "model_not_enabled" | "model_not_found" | "provider_not_found" | "validation_failed";
+}
+
+/**
+ * Check if a model is enabled (its provider is connected).
+ * 
+ * This function fetches the available models for a workspace and checks
+ * if the specified model exists and its provider is connected.
+ * 
+ * To avoid mutating global connection state during validation:
+ * - If a test backend is set via setBackendForTesting(), it uses that (for testing)
+ * - If the workspace backend is already connected, it uses that (no side effects)
+ * - Otherwise, it creates a temporary OpenCodeBackend that connects and disconnects
+ *   within this function, similar to GET /api/models
+ * 
+ * @param workspaceId - The workspace ID to check models for
+ * @param directory - The working directory path
+ * @param providerID - The provider ID (e.g., "anthropic")
+ * @param modelID - The model ID (e.g., "claude-sonnet-4-20250514")
+ * @returns Promise with validation result
+ */
+export async function isModelEnabled(
+  workspaceId: string,
+  directory: string,
+  providerID: string,
+  modelID: string
+): Promise<ModelValidationResult> {
+  try {
+    let models: ModelInfo[];
+    
+    // Check if a test backend is set (for testing purposes)
+    const testBackend = backendManager.getTestBackend();
+    if (testBackend) {
+      // Use test backend directly - no connection state mutation
+      if (!testBackend.isConnected()) {
+        await testBackend.connect(buildConnectionConfig(getDefaultServerSettings(), directory));
+      }
+      models = await testBackend.getModels(directory) as ModelInfo[];
+    } else {
+      // Check if workspace backend is already connected
+      const existingBackend = backendManager.getBackend(workspaceId);
+      if (existingBackend.isConnected()) {
+        // Use existing connected backend - no side effects
+        models = await existingBackend.getModels(directory) as ModelInfo[];
+      } else {
+        // Create a temporary backend (similar to GET /api/models)
+        // This avoids mutating global connection state
+        const workspace = await getWorkspace(workspaceId);
+        if (!workspace) {
+          return {
+            enabled: false,
+            error: `Workspace not found: ${workspaceId}`,
+            errorCode: "validation_failed",
+          };
+        }
+        
+        const tempBackend = new OpenCodeBackend();
+        try {
+          await tempBackend.connect(buildConnectionConfig(workspace.serverSettings, directory));
+          models = await tempBackend.getModels(directory) as ModelInfo[];
+        } finally {
+          // Always disconnect temporary backend
+          try {
+            await tempBackend.disconnect();
+          } catch {
+            // Ignore disconnect errors
+          }
+        }
+      }
+    }
+
+    // Check if the provider exists
+    const providerModels = models.filter((m) => m.providerID === providerID);
+    if (providerModels.length === 0) {
+      return {
+        enabled: false,
+        error: `Provider not found: ${providerID}`,
+        errorCode: "provider_not_found",
+      };
+    }
+
+    // Check if the specific model exists
+    const model = providerModels.find((m) => m.modelID === modelID);
+    if (!model) {
+      return {
+        enabled: false,
+        error: `Model not found: ${modelID}`,
+        errorCode: "model_not_found",
+      };
+    }
+
+    // Check if the model's provider is connected
+    if (!model.connected) {
+      return {
+        enabled: false,
+        error: "The selected model's provider is not connected. Please check your API credentials.",
+        errorCode: "model_not_enabled",
+      };
+    }
+
+    return { enabled: true };
+  } catch (error) {
+    return {
+      enabled: false,
+      error: `Failed to validate model: ${String(error)}`,
+      errorCode: "validation_failed",
+    };
+  }
+}
 
 /**
  * Create a standardized error response.

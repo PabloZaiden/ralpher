@@ -598,6 +598,17 @@ class BackendManager {
   }
 
   /**
+   * Get the test backend if set (for model validation and similar use cases).
+   * Returns null if no test backend is set.
+   */
+  getTestBackend(): Backend | null {
+    if (this.isTestBackend && this.testBackend) {
+      return this.testBackend;
+    }
+    return null;
+  }
+
+  /**
    * Set test settings (for testing).
    * Also enables test mode if not already enabled.
    */

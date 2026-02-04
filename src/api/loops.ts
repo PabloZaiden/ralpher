@@ -23,6 +23,7 @@ import { updateLoopState, getActiveLoopByDirectory } from "../persistence/loops"
 import { getReviewComments } from "../persistence/database";
 import { getWorkspaceByDirectory } from "../persistence/workspaces";
 import { log } from "../core/logger";
+import { isModelEnabled } from "./models";
 import type {
   CreateLoopRequest,
   AcceptResponse,
@@ -211,6 +212,25 @@ export const loopsCrudRoutes = {
           }
         } catch (checkError) {
           return errorResponse("preflight_failed", `Failed to check for existing active loops: ${String(checkError)}`, 500);
+        }
+      }
+
+      // Validate model is enabled if provided (skip for drafts and if using backend default)
+      // Drafts can be created with any model - validation happens when starting
+      // NOTE: This is done AFTER preflight checks to avoid backend connection costs
+      // for requests that will be rejected anyway (uncommitted changes, active loop exists)
+      if (!body.draft && body.model?.providerID && body.model?.modelID) {
+        const modelValidation = await isModelEnabled(
+          workspaceId,
+          directory,
+          body.model.providerID,
+          body.model.modelID
+        );
+        if (!modelValidation.enabled) {
+          return errorResponse(
+            modelValidation.errorCode ?? "model_not_enabled",
+            modelValidation.error ?? "The selected model is not available"
+          );
         }
       }
 
@@ -926,6 +946,25 @@ export const loopsControlRoutes = {
         }
         if (!body.model.modelID || typeof body.model.modelID !== "string") {
           return errorResponse("validation_error", "'model.modelID' is required and must be a string");
+        }
+
+        // Validate model is enabled before allowing the change
+        const loop = await loopManager.getLoop(req.params.id);
+        if (!loop) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+
+        const modelValidation = await isModelEnabled(
+          loop.config.workspaceId,
+          loop.config.directory,
+          body.model.providerID,
+          body.model.modelID
+        );
+        if (!modelValidation.enabled) {
+          return errorResponse(
+            modelValidation.errorCode ?? "model_not_enabled",
+            modelValidation.error ?? "The selected model is not available"
+          );
         }
       }
 

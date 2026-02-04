@@ -12,8 +12,10 @@ import { WorkspaceSelector } from "./WorkspaceSelector";
 export interface CreateLoopFormActionState {
   /** Whether the form is currently submitting */
   isSubmitting: boolean;
-  /** Whether the form can be submitted (has required fields) */
+  /** Whether the form can be submitted to start a loop (has required fields AND model is enabled) */
   canSubmit: boolean;
+  /** Whether the form can be saved as a draft (has required fields, model can be disconnected) */
+  canSaveDraft: boolean;
   /** Whether we're editing an existing loop */
   isEditing: boolean;
   /** Whether we're editing a draft loop */
@@ -125,6 +127,17 @@ export function CreateLoopForm({
   const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
   const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? true);
 
+  // Check if the selected model is enabled (connected)
+  const isSelectedModelEnabled = (): boolean => {
+    if (!selectedModel) return true; // No model selected = use backend default, which is fine
+    const [providerID, modelID] = selectedModel.split(":");
+    if (!providerID || !modelID) return true;
+    const model = models.find((m) => m.providerID === providerID && m.modelID === modelID);
+    return model?.connected ?? false;
+  };
+  
+  const selectedModelEnabled = isSelectedModelEnabled();
+
   // Reset selected branch when default branch changes (directory changed)
   useEffect(() => {
     // Only set default branch if:
@@ -194,6 +207,11 @@ export function CreateLoopForm({
       return;
     }
     if (!prompt.trim()) {
+      return;
+    }
+    
+    // Validate model is enabled if selected (not for drafts - drafts can have any model)
+    if (!asDraft && selectedModel && !selectedModelEnabled) {
       return;
     }
 
@@ -272,8 +290,11 @@ export function CreateLoopForm({
   // Form ref for programmatic submission
   const formRef = useRef<HTMLFormElement>(null);
   
-  // Check if form can be submitted
-  const canSubmit = !!selectedWorkspaceId && !!prompt.trim();
+  // Check if form can be saved as a draft (basic fields only, model connectivity not required)
+  const canSaveDraft = !!selectedWorkspaceId && !!prompt.trim();
+  
+  // Check if form can be submitted to start a loop (also needs model to be enabled)
+  const canSubmit = canSaveDraft && selectedModelEnabled;
   
   // Handler for submit button click (when rendered externally)
   const handleSubmitClick = useCallback(() => {
@@ -284,12 +305,12 @@ export function CreateLoopForm({
   
   // Handler for save as draft click (when rendered externally)
   const handleSaveAsDraftClick = useCallback(() => {
-    if (formRef.current && canSubmit) {
+    if (formRef.current && canSaveDraft) {
       // Create a synthetic event and call handleSubmit with draft flag
       const syntheticEvent = { preventDefault: () => {} } as FormEvent;
       handleSubmit(syntheticEvent, true);
     }
-  }, [canSubmit, handleSubmit]);
+  }, [canSaveDraft, handleSubmit]);
   
   // Call renderActions whenever action state changes
   useEffect(() => {
@@ -297,6 +318,7 @@ export function CreateLoopForm({
       renderActions({
         isSubmitting,
         canSubmit,
+        canSaveDraft,
         isEditing,
         isEditingDraft,
         planMode,
@@ -305,7 +327,7 @@ export function CreateLoopForm({
         onSaveAsDraft: handleSaveAsDraftClick,
       });
     }
-  }, [renderActions, isSubmitting, canSubmit, isEditing, isEditingDraft, planMode, onCancel, handleSubmitClick, handleSaveAsDraftClick]);
+  }, [renderActions, isSubmitting, canSubmit, canSaveDraft, isEditing, isEditingDraft, planMode, onCancel, handleSubmitClick, handleSaveAsDraftClick]);
 
   // Group models by provider and sort by name
   const modelsByProvider = models.reduce<Record<string, ModelInfo[]>>(
@@ -498,6 +520,11 @@ export function CreateLoopForm({
             </>
           )}
         </select>
+        {!modelsLoading && models.length > 0 && selectedModel && !selectedModelEnabled && (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+            The selected model's provider is not connected. Please check your API credentials or select a different model.
+          </p>
+        )}
         {!modelsLoading && models.length > 0 && !selectedModel && (
           <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
             No model selected - will use default from opencode config
@@ -660,7 +687,7 @@ export function CreateLoopForm({
               type="button"
               variant="secondary"
               onClick={(e) => handleSubmit(e, true)}
-              disabled={isSubmitting || !selectedWorkspaceId || !prompt.trim()}
+              disabled={isSubmitting || !canSaveDraft}
               loading={isSubmitting}
             >
               {isEditingDraft ? "Update Draft" : "Save as Draft"}
@@ -677,7 +704,7 @@ export function CreateLoopForm({
             >
               Cancel
             </Button>
-            <Button type="submit" loading={isSubmitting}>
+            <Button type="submit" loading={isSubmitting} disabled={isSubmitting || !canSubmit}>
               {isEditing 
                 ? (planMode ? "Start Plan" : "Start Loop")
                 : (planMode ? "Create Plan" : "Create Loop")
