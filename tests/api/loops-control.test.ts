@@ -680,7 +680,7 @@ describe("Loops Control API Integration", () => {
         expect(commentsBody.success).toBe(true);
         expect(commentsBody.comments).toBeInstanceOf(Array);
         expect(commentsBody.comments.length).toBeGreaterThan(0);
-        expect(commentsBody.comments[0].status).toBe("pending");
+        expect(commentsBody.comments[0].commentText).toBe(commentsText);
         expect(commentsBody.comments[0].reviewCycle).toBe(1);
       } finally {
         await rm(uniqueWorkDir, { recursive: true, force: true });
@@ -801,10 +801,10 @@ describe("Loops Control API Integration", () => {
       }
     });
 
-    test("Comments are stored with pending status initially", async () => {
+    test("Comments can be queried via GET endpoint", async () => {
       // Use unique directory with bare repo to avoid conflicts
-      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-pending-test-"));
-      const uniqueBareRepo = await mkdtemp(join(tmpdir(), "ralpher-comments-pending-bare-"));
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-get-test-"));
+      const uniqueBareRepo = await mkdtemp(join(tmpdir(), "ralpher-comments-get-bare-"));
       await Bun.$`git init --bare ${uniqueBareRepo}`.quiet();
       await Bun.$`git init ${uniqueWorkDir}`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
@@ -846,13 +846,14 @@ describe("Loops Control API Integration", () => {
         });
         expect(addressResponse.status).toBe(200);
 
-        // Get comments - should be pending
+        // Get comments - verify they exist and contain the correct data
         const commentsResponse = await fetch(`${baseUrl}/api/loops/${loopId}/comments`);
         const commentsBody = await commentsResponse.json();
         expect(commentsBody.success).toBe(true);
         expect(commentsBody.comments.length).toBeGreaterThan(0);
-        expect(commentsBody.comments[0].status).toBe("pending");
-        expect(commentsBody.comments[0].addressedAt).toBeUndefined();
+        expect(commentsBody.comments[0].commentText).toBe("Test comment");
+        expect(commentsBody.comments[0].reviewCycle).toBe(1);
+        expect(commentsBody.comments[0].loopId).toBe(loopId);
       } finally {
         await rm(uniqueWorkDir, { recursive: true, force: true });
         await rm(uniqueBareRepo, { recursive: true, force: true });

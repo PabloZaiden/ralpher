@@ -528,7 +528,9 @@ export class OpenCodeBackend implements Backend {
             subId,
             emittedMessageStarts,
             toolPartStatus,
-            reasoningTextLength
+            reasoningTextLength,
+            client,
+            self.directory
           );
           
           if (translated) {
@@ -657,6 +659,8 @@ export class OpenCodeBackend implements Backend {
    * @param emittedMessageStarts - Set of message IDs we've already emitted start events for
    * @param toolPartStatus - Map of tool part IDs to their last emitted status
    * @param reasoningTextLength - Map of reasoning part IDs to their last known text length
+   * @param client - OpenCode client for API calls
+   * @param directory - Directory for session queries
    */
   private translateEvent(
     event: OpenCodeEvent,
@@ -664,7 +668,9 @@ export class OpenCodeBackend implements Backend {
     subId: string,
     emittedMessageStarts: Set<string>,
     toolPartStatus: Map<string, string>,
-    reasoningTextLength: Map<string, number>
+    reasoningTextLength: Map<string, number>,
+    client: any,
+    directory: string
   ): AgentEvent | null {
     switch (event.type) {
       case "message.updated": {
@@ -806,6 +812,32 @@ export class OpenCodeBackend implements Backend {
           return null;
         }
         // Session is idle = message complete
+        // If we never saw a message.start, this might indicate an empty or error response
+        if (!emittedMessageStarts.size) {
+          log.warn(`[OpenCodeBackend:${subId}] translateEvent: session.idle received but no assistant messages were seen`, {
+            sessionId,
+            emittedMessageStartsCount: emittedMessageStarts.size,
+          });
+          // Fetch the session to see what messages exist
+          (async () => {
+            try {
+              const sessionResult = await client.session.get({
+                sessionID: sessionId,
+                directory,
+              });
+              if (sessionResult.data) {
+                const session = sessionResult.data as any;
+                log.warn(`[OpenCodeBackend:${subId}] translateEvent: session.idle - session details`, {
+                  sessionId,
+                  messageCount: session.messages?.length ?? 0,
+                  messages: JSON.stringify(session.messages ?? [], null, 2),
+                });
+              }
+            } catch (err) {
+              log.error(`[OpenCodeBackend:${subId}] translateEvent: Failed to fetch session details`, { error: String(err) });
+            }
+          })();
+        }
         log.info(`[OpenCodeBackend:${subId}] translateEvent: session.idle - emitting message.complete`, { sessionId });
         return {
           type: "message.complete",
