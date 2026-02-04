@@ -2,7 +2,7 @@
  * TodoViewer component for displaying TODOs from agent sessions.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, memo } from "react";
 import type { TodoItem } from "../backends/types";
 import { Badge } from "./common";
 
@@ -99,7 +99,13 @@ function getTextStyle(status: TodoItem["status"]): string {
   return "text-gray-100";
 }
 
-export function TodoViewer({
+/**
+ * TodoViewer displays TODO items from the agent session.
+ * Memoized to prevent re-renders when parent component state changes
+ * (e.g., typing in input fields). This is critical for performance
+ * when displaying many TODOs in long-running loops.
+ */
+export const TodoViewer = memo(function TodoViewer({
   todos,
   autoScroll = true,
   maxHeight,
@@ -163,6 +169,6 @@ export function TodoViewer({
       )}
     </div>
   );
-}
+});
 
 export default TodoViewer;

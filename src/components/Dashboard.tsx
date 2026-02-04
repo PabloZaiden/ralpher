@@ -276,20 +276,27 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
 
   // Handle workspace change from form
   // Fetch branches, models, and check planning dir based on workspace's directory
-  const handleWorkspaceChange = useCallback((workspaceId: string | null) => {
+  const handleWorkspaceChange = useCallback((workspaceId: string | null, directory: string) => {
+    console.log('[Dashboard] handleWorkspaceChange called', { 
+      workspaceId, 
+      directory,
+      modelsWorkspaceId
+    });
     if (workspaceId !== modelsWorkspaceId) {
+      console.log('[Dashboard] Workspace changed, fetching data...');
       setModelsWorkspaceId(workspaceId);
       
-      // Get directory from workspace
-      const workspace = workspaces.find(w => w.id === workspaceId);
-      const directory = workspace?.directory ?? "";
+      // Use the directory passed from the form (already looked up from WorkspaceSelector)
+      console.log('[Dashboard] Using directory from parameter:', directory);
       
       fetchModels(directory, workspaceId);
       fetchBranches(directory);
       fetchDefaultBranch(directory);
       checkPlanningDir(directory);
+    } else {
+      console.log('[Dashboard] Workspace unchanged, skipping fetch');
     }
-  }, [modelsWorkspaceId, workspaces, fetchModels, checkPlanningDir, fetchBranches, fetchDefaultBranch]);
+  }, [modelsWorkspaceId, fetchModels, checkPlanningDir, fetchBranches, fetchDefaultBranch]);
 
   // Reset model state when modal closes
   const handleCloseCreateModal = useCallback(() => {
@@ -1009,6 +1016,9 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                 
                 // Handle success case
                 if (result.loop) {
+                  // Refresh loops list to show the new loop
+                  await refresh();
+                  
                   // Refresh last model in case it changed
                   if (request.model) {
                     setLastModel(request.model);

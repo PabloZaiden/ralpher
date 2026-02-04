@@ -1,8 +1,12 @@
 /**
  * LogViewer component for displaying real-time loop logs and messages.
+ * 
+ * Performance: This component is memoized to prevent expensive re-renders
+ * when typing in input fields. Without memoization, every keystroke would
+ * re-render thousands of log entries, causing severe input lag.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, memo } from "react";
 import type { MessageData, ToolCallData, LogLevel } from "../types";
 import { Badge } from "./common";
 
@@ -109,7 +113,11 @@ function getLogLevelBadge(level: LogLevel): "default" | "info" | "success" | "wa
   }
 }
 
-export function LogViewer({
+/**
+ * LogViewer displays messages, tool calls, and logs in chronological order.
+ * Memoized to prevent re-renders when parent state changes (e.g., typing in inputs).
+ */
+export const LogViewer = memo(function LogViewer({
   messages,
   toolCalls,
   logs = [],
@@ -296,6 +304,6 @@ export function LogViewer({
       )}
     </div>
   );
-}
+});
 
 export default LogViewer;
