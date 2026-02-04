@@ -542,8 +542,23 @@ export function useLoop(loopId: string): UseLoopResult {
     refresh();
   }, [refresh]);
 
+  // Reset state when loopId changes (switching between loops)
+  // This prevents stale data from appearing briefly when switching loops
+  useEffect(() => {
+    setLoop(null);
+    setMessages([]);
+    setToolCalls([]);
+    setProgressContent("");
+    setLogs([]);
+    setTodos([]);
+    setGitChangeCounter(0);
+  }, [loopId]);
+
   // Cleanup: Release memory when component unmounts
   // Critical for preventing memory leaks when closing LoopDetails
+  // This handles the case where the component unmounts entirely (not just switching loops)
+  // React state updates in cleanup are safe - warnings about unmounted components are
+  // development-only and don't affect production behavior
   // Empty dependency array means this only runs on unmount, not on every render
   useEffect(() => {
     return () => {

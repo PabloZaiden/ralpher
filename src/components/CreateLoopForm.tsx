@@ -228,8 +228,10 @@ export function CreateLoopForm({
     onWorkspaceChange(selectedWorkspaceId ?? null, selectedWorkspaceDirectory);
     // Note: onWorkspaceChange is intentionally NOT in deps array to prevent infinite loop
     // The callback itself changing should not retrigger this effect
+    // Note: We use primitive values (workspaceId, directory) instead of initialLoopData object
+    // to avoid re-running when initialLoopData gets a new object reference
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedWorkspaceId, selectedWorkspaceDirectory, initialLoopData]);
+  }, [selectedWorkspaceId, selectedWorkspaceDirectory, initialLoopData?.workspaceId, initialLoopData?.directory]);
   
   // Reset branch selection flag when workspace changes (separate effect to avoid loop)
   useEffect(() => {

@@ -280,9 +280,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     console.log('[Dashboard] handleWorkspaceChange called', { 
       workspaceId, 
       directory,
-      modelsWorkspaceId,
-      workspacesCount: workspaces.length,
-      workspaceIds: workspaces.map(w => w.id)
+      modelsWorkspaceId
     });
     if (workspaceId !== modelsWorkspaceId) {
       console.log('[Dashboard] Workspace changed, fetching data...');
