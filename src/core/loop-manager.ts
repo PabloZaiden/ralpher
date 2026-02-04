@@ -1502,7 +1502,7 @@ Follow the standard loop execution flow:
     if (wasInPlanningMode) {
       if (hasExistingBranch) {
         // Continue on existing branch for planning loop
-        return this.jumpstartPlanningOnExistingBranch(loopId, loop);
+        return this.jumpstartOnExistingBranch(loopId, loop, true);
       } else {
         // Start fresh planning session
         try {
@@ -1535,8 +1535,9 @@ Follow the standard loop execution flow:
   /**
    * Jumpstart a loop on its existing working branch.
    * Used when the loop was NOT merged/accepted and should continue its previous work.
+   * @param isPlanning - Whether this is a planning loop (affects log messages only)
    */
-  private async jumpstartOnExistingBranch(loopId: string, loop: Loop): Promise<{ success: boolean; error?: string }> {
+  private async jumpstartOnExistingBranch(loopId: string, loop: Loop, isPlanning = false): Promise<{ success: boolean; error?: string }> {
     try {
       // Get the appropriate command executor for the current mode
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
@@ -1545,7 +1546,8 @@ Follow the standard loop execution flow:
 
       // Check out the existing working branch with retry logic for lock file issues
       const workingBranch = loop.state.git!.workingBranch;
-      log.info(`Jumpstarting loop ${loopId} on existing branch: ${workingBranch}`);
+      const loopType = isPlanning ? "planning loop" : "loop";
+      log.info(`Jumpstarting ${loopType} ${loopId} on existing branch: ${workingBranch}`);
       
       // Retry checkout up to 3 times to handle race conditions with in-flight git operations
       const maxRetries = 3;
@@ -1587,78 +1589,14 @@ Follow the standard loop execution flow:
 
       // Start execution (fire and forget - don't block the caller)
       engine.start().catch((error) => {
-        log.error(`Loop ${loopId} failed to start after jumpstart:`, String(error));
+        log.error(`${isPlanning ? "Planning loop" : "Loop"} ${loopId} failed to start after jumpstart:`, String(error));
       });
 
-      log.info(`Jumpstarted loop ${loopId} with pending message on existing branch: ${workingBranch}`);
+      log.info(`Jumpstarted ${loopType} ${loopId} with pending message on existing branch: ${workingBranch}`);
       return { success: true };
     } catch (error) {
-      log.error(`Failed to jumpstart loop ${loopId} on existing branch: ${String(error)}`);
+      log.error(`Failed to jumpstart ${isPlanning ? "planning loop" : "loop"} ${loopId} on existing branch: ${String(error)}`);
       return { success: false, error: `Failed to jumpstart loop: ${String(error)}` };
-    }
-  }
-
-  /**
-   * Jumpstart a planning loop on its existing working branch.
-   * Similar to jumpstartOnExistingBranch but preserves planning mode state.
-   */
-  private async jumpstartPlanningOnExistingBranch(loopId: string, loop: Loop): Promise<{ success: boolean; error?: string }> {
-    try {
-      // Get the appropriate command executor for the current mode
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
-      const git = GitService.withExecutor(executor);
-      const backend = backendManager.getBackend(loop.config.workspaceId);
-
-      // Check out the existing working branch with retry logic for lock file issues
-      const workingBranch = loop.state.git!.workingBranch;
-      log.info(`Jumpstarting planning loop ${loopId} on existing branch: ${workingBranch}`);
-      
-      // Retry checkout up to 3 times to handle race conditions with in-flight git operations
-      const maxRetries = 3;
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        // Clean up any stale git lock files from previously killed processes
-        await GitService.cleanupStaleLockFiles(loop.config.directory, 1, 0);
-        
-        try {
-          await git.checkoutBranch(loop.config.directory, workingBranch);
-          break; // Success - exit retry loop
-        } catch (checkoutError) {
-          const errorStr = String(checkoutError);
-          if (errorStr.includes("index.lock") && attempt < maxRetries) {
-            log.warn(`[LoopManager] Checkout failed due to lock file, retrying (${attempt}/${maxRetries})...`);
-            await new Promise(resolve => setTimeout(resolve, 100 * attempt)); // Exponential backoff
-            continue;
-          }
-          throw checkoutError; // Not a lock issue or max retries exceeded
-        }
-      }
-
-      // Create and start a new loop engine with skipGitSetup
-      const engine = new LoopEngine({
-        loop: { config: loop.config, state: loop.state },
-        backend,
-        gitService: git,
-        eventEmitter: this.emitter,
-        onPersistState: async (state) => {
-          await updateLoopState(loopId, state);
-        },
-        skipGitSetup: true, // Don't create a new branch - continue on existing
-      });
-      this.engines.set(loopId, engine);
-
-      // Start state persistence
-      this.startStatePersistence(loopId);
-
-      // Start execution (fire and forget - don't block the caller)
-      engine.start().catch((error) => {
-        log.error(`Planning loop ${loopId} failed to start after jumpstart:`, String(error));
-      });
-
-      log.info(`Jumpstarted planning loop ${loopId} with pending message on existing branch: ${workingBranch}`);
-      return { success: true };
-    } catch (error) {
-      log.error(`Failed to jumpstart planning loop ${loopId} on existing branch: ${String(error)}`);
-      return { success: false, error: `Failed to jumpstart planning loop: ${String(error)}` };
     }
   }
 
