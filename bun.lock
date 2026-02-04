@@ -5,7 +5,7 @@
     "": {
       "name": "@pablozaiden/ralpher",
       "dependencies": {
-        "@opencode-ai/sdk": "1.1.47",
+        "@opencode-ai/sdk": "1.1.50",
         "@tailwindcss/typography": "0.5.19",
         "bun-plugin-tailwind": "0.1.2",
         "react": "19.2.4",
@@ -24,7 +24,7 @@
     },
   },
   "packages": {
-    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.1.47", "", {}, "sha512-s3PBHwk1sP6Zt/lJxIWSBWZ1TnrI1nFxSP97LCODUytouAQgbygZ1oDH7O2sGMBEuGdA8B1nNSPla0aRSN3IpA=="],
+    "@opencode-ai/sdk": ["@opencode-ai/sdk@1.1.50", "", {}, "sha512-qw0jv1TYJ6fA1Ga1Qkvicq+wrUS2Z6MyPG0LykI3mxMb9yRk9sr1ARX+T26Ij7DiRW4x7ffp36F9EE63Lyl1YQ=="],
 
     "@oven/bun-darwin-aarch64": ["@oven/bun-darwin-aarch64@1.3.8", "", { "os": "darwin", "cpu": "arm64" }, "sha512-hPERz4IgXCM6Y6GdEEsJAFceyJMt29f3HlFzsvE/k+TQjChRhar6S+JggL35b9VmFfsdxyCOOTPqgnSrdV0etA=="],
 
