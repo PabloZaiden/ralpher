@@ -1412,7 +1412,7 @@ Follow the standard loop execution flow:
     const status = engine.state.status;
     if (!["running", "waiting", "planning", "starting"].includes(status)) {
       // Check if we can jumpstart from a stopped state
-      const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations", "planning"];
+      const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations"];
       if (jumpstartableStates.includes(status)) {
         return this.jumpstartLoop(loopId, options);
       }
