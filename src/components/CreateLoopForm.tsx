@@ -44,7 +44,7 @@ export interface CreateLoopFormProps {
   /** Last used model */
   lastModel?: { providerID: string; modelID: string } | null;
   /** Callback when workspace changes (to reload models and branches) */
-  onWorkspaceChange?: (workspaceId: string | null) => void;
+  onWorkspaceChange?: (workspaceId: string | null, directory: string) => void;
   /** Warning about .planning directory */
   planningWarning?: string | null;
   /** Available branches for the workspace's directory */
@@ -109,9 +109,15 @@ export function CreateLoopForm({
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
   
+  // Track if this is the first render to prevent infinite loops
+  const isInitialMount = useRef(true);
+  
   // Workspace state - the only source of truth for directory
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | undefined>(
     initialLoopData?.workspaceId
+  );
+  const [selectedWorkspaceDirectory, setSelectedWorkspaceDirectory] = useState<string>(
+    initialLoopData?.directory ?? ""
   );
   
   const [prompt, setPrompt] = useState(initialLoopData?.prompt ?? "");
@@ -140,17 +146,25 @@ export function CreateLoopForm({
 
   // Reset selected branch when default branch changes (directory changed)
   useEffect(() => {
+    console.log('[CreateLoopForm] useEffect 1 - branch reset', { defaultBranch, userChangedBranch, isEditing });
     // Only set default branch if:
     // 1. We have a default branch from the server
     // 2. User hasn't manually changed the branch
     // 3. Not editing an existing loop (for edits, use the stored baseBranch)
     if (defaultBranch && !userChangedBranch && !isEditing) {
+      console.log('[CreateLoopForm] Setting selected branch to:', defaultBranch);
       setSelectedBranch(defaultBranch);
     }
   }, [defaultBranch, userChangedBranch, isEditing]);
 
   // Set initial model when lastModel, models, or initialLoopData change
   useEffect(() => {
+    console.log('[CreateLoopForm] useEffect 2 - model selection', { 
+      selectedModel, 
+      lastModel, 
+      modelsCount: models.length,
+      initialLoopDataModel: initialLoopData?.model 
+    });
     if (selectedModel) return; // Don't override if user already selected
 
     // If editing and initial loop data has a model, use that
@@ -160,6 +174,7 @@ export function CreateLoopForm({
         (m) => `${m.providerID}:${m.modelID}` === modelKey
       );
       if (exists) {
+        console.log('[CreateLoopForm] Setting model from initialLoopData:', modelKey);
         setSelectedModel(modelKey);
         return;
       }
@@ -172,6 +187,7 @@ export function CreateLoopForm({
         (m) => `${m.providerID}:${m.modelID}` === modelKey
       );
       if (exists) {
+        console.log('[CreateLoopForm] Setting model from lastModel:', modelKey);
         setSelectedModel(modelKey);
         return;
       }
@@ -180,6 +196,7 @@ export function CreateLoopForm({
     // Default to first connected model
     const firstConnected = models.find((m) => m.connected);
     if (firstConnected) {
+      console.log('[CreateLoopForm] Setting model to first connected:', `${firstConnected.providerID}:${firstConnected.modelID}`);
       setSelectedModel(`${firstConnected.providerID}:${firstConnected.modelID}`);
     }
   }, [lastModel, models, selectedModel, initialLoopData]);
@@ -187,19 +204,47 @@ export function CreateLoopForm({
   // Notify parent when workspace changes
   // This triggers fetching models, branches, and checking planning dir
   useEffect(() => {
+    console.log('[CreateLoopForm] useEffect 3 - workspace change', { 
+      selectedWorkspaceId,
+      selectedWorkspaceDirectory,
+      isInitialMount: isInitialMount.current,
+      hasOnWorkspaceChange: !!onWorkspaceChange 
+    });
+    // Skip on initial mount to prevent calling with initial value
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      // But DO call on initial mount if we have initial data (editing mode)
+      if (initialLoopData?.workspaceId && initialLoopData?.directory && onWorkspaceChange) {
+        console.log('[CreateLoopForm] Initial call to onWorkspaceChange:', initialLoopData.workspaceId, initialLoopData.directory);
+        onWorkspaceChange(initialLoopData.workspaceId, initialLoopData.directory);
+      }
+      return;
+    }
+    
     if (!onWorkspaceChange) return;
     
+    console.log('[CreateLoopForm] Calling onWorkspaceChange:', selectedWorkspaceId, selectedWorkspaceDirectory);
     // Notify parent of workspace change (including null for no selection)
-    onWorkspaceChange(selectedWorkspaceId ?? null);
-    
-    // Reset the manual branch selection flag when workspace changes,
-    // so the new default branch will be used
-    if (!isEditing) {
+    onWorkspaceChange(selectedWorkspaceId ?? null, selectedWorkspaceDirectory);
+    // Note: onWorkspaceChange is intentionally NOT in deps array to prevent infinite loop
+    // The callback itself changing should not retrigger this effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedWorkspaceId, selectedWorkspaceDirectory, initialLoopData]);
+  
+  // Reset branch selection flag when workspace changes (separate effect to avoid loop)
+  useEffect(() => {
+    console.log('[CreateLoopForm] useEffect 4 - reset userChangedBranch', { 
+      isEditing, 
+      isInitialMount: isInitialMount.current,
+      selectedWorkspaceId 
+    });
+    if (!isEditing && !isInitialMount.current) {
+      console.log('[CreateLoopForm] Resetting userChangedBranch to false');
       setUserChangedBranch(false);
     }
-  }, [selectedWorkspaceId, onWorkspaceChange, isEditing]);
+  }, [selectedWorkspaceId, isEditing]);
 
-  async function handleSubmit(e: FormEvent, asDraft = false) {
+  const handleSubmit = useCallback(async (e: FormEvent, asDraft = false) => {
     e.preventDefault();
 
     // Workspace selection is required
@@ -283,7 +328,22 @@ export function CreateLoopForm({
     } finally {
       setSubmitting(false);
     }
-  }
+    // Note: onSubmit and onCancel are intentionally NOT in deps
+    // They are callbacks from parent and shouldn't trigger recreation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    selectedWorkspaceId,
+    prompt,
+    selectedModel,
+    selectedModelEnabled,
+    planMode,
+    maxIterations,
+    maxConsecutiveErrors,
+    activityTimeoutSeconds,
+    selectedBranch,
+    currentBranch,
+    clearPlanningFolder,
+  ]);
 
   const isSubmitting = loading || submitting;
 
@@ -313,7 +373,35 @@ export function CreateLoopForm({
   }, [canSaveDraft, handleSubmit]);
   
   // Call renderActions whenever action state changes
+  const renderActionsRef = useRef<{
+    isSubmitting?: boolean;
+    canSubmit?: boolean;
+    canSaveDraft?: boolean;
+    isEditing?: boolean;
+    isEditingDraft?: boolean;
+    planMode?: boolean;
+  }>({});
+  
   useEffect(() => {
+    const prev = renderActionsRef.current;
+    console.log('[CreateLoopForm] useEffect 5 - renderActions deps changed:', {
+      isSubmitting: isSubmitting !== prev.isSubmitting,
+      canSubmit: canSubmit !== prev.canSubmit,
+      canSaveDraft: canSaveDraft !== prev.canSaveDraft,
+      isEditing: isEditing !== prev.isEditing,
+      isEditingDraft: isEditingDraft !== prev.isEditingDraft,
+      planMode: planMode !== prev.planMode,
+    });
+    
+    renderActionsRef.current = {
+      isSubmitting,
+      canSubmit,
+      canSaveDraft,
+      isEditing,
+      isEditingDraft,
+      planMode,
+    };
+    
     if (renderActions) {
       renderActions({
         isSubmitting,
@@ -327,7 +415,11 @@ export function CreateLoopForm({
         onSaveAsDraft: handleSaveAsDraftClick,
       });
     }
-  }, [renderActions, isSubmitting, canSubmit, canSaveDraft, isEditing, isEditingDraft, planMode, onCancel, handleSubmitClick, handleSaveAsDraftClick]);
+    // Note: renderActions, onCancel, handleSubmitClick, handleSaveAsDraftClick are intentionally NOT in deps
+    // They are callbacks that change frequently but don't need to retrigger this effect
+    // We only want to notify parent when the actual state values change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSubmitting, canSubmit, canSaveDraft, isEditing, isEditingDraft, planMode]);
 
   // Group models by provider and sort by name
   const modelsByProvider = models.reduce<Record<string, ModelInfo[]>>(
@@ -364,10 +456,10 @@ export function CreateLoopForm({
     })
     .sort((a, b) => a.localeCompare(b));
 
-  // Handle workspace selection - only takes workspaceId, directory is derived
-  function handleWorkspaceSelect(workspaceId: string | null, _workspaceDirectory: string) {
+  // Handle workspace selection - stores both workspaceId and directory
+  function handleWorkspaceSelect(workspaceId: string | null, workspaceDirectory: string) {
     setSelectedWorkspaceId(workspaceId || undefined);
-    // Directory is now derived from workspace via selectedWorkspace
+    setSelectedWorkspaceDirectory(workspaceDirectory);
     // The useEffect watching selectedWorkspaceId will notify parent
   }
 

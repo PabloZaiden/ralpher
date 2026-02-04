@@ -203,7 +203,7 @@ export function LoopActionBar({
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
             disabled={disabled || isSubmitting || modelsLoading}
-            className="w-auto min-w-32 flex-shrink sm:w-48 h-9 text-sm rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+            className="w-28 sm:w-32 md:w-48 max-w-[120px] sm:max-w-none flex-shrink-0 h-9 text-sm rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
           >
             {modelsLoading ? (
               <option value="">Loading...</option>

@@ -542,6 +542,23 @@ export function useLoop(loopId: string): UseLoopResult {
     refresh();
   }, [refresh]);
 
+  // Cleanup: Release memory when component unmounts
+  // Critical for preventing memory leaks when closing LoopDetails
+  // Empty dependency array means this only runs on unmount, not on every render
+  useEffect(() => {
+    return () => {
+      setLoop(null);
+      setMessages([]);
+      setToolCalls([]);
+      setProgressContent("");
+      setLogs([]);
+      setTodos([]);
+      setGitChangeCounter(0);
+      // WebSocket cleanup is automatically handled by useLoopEvents hook
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return {
     loop,
     loading,
