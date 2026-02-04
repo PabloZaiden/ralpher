@@ -81,26 +81,36 @@ export const log: Logger<ILogObj> = new Logger({
 
 /**
  * Registry of all sub-loggers for level synchronization.
- * When setLogLevel() is called, all registered sub-loggers are updated
- * because tslog sub-loggers copy the parent's minLevel at creation time
- * and don't automatically sync when the parent's level changes.
+ * Using a Map keyed by name ensures:
+ * 1. No duplicate loggers for the same name (prevents memory leaks from repeated calls)
+ * 2. Efficient lookup when the same logger is requested multiple times
+ * 3. All registered sub-loggers can be updated when setLogLevel() is called
  */
-const subLoggers: Logger<ILogObj>[] = [];
+const subLoggers: Map<string, Logger<ILogObj>> = new Map();
 
 /**
  * Create a child logger with a specific name.
  * Useful for component-specific logging.
+ * 
+ * Sub-loggers are cached by name - calling createLogger with the same name
+ * returns the same instance. This prevents memory leaks from repeated calls
+ * (e.g., during HMR or if called in render paths).
  * 
  * The sub-logger is registered so that its log level can be synchronized
  * when setLogLevel() is called (tslog sub-loggers don't automatically
  * inherit level changes from the parent).
  * 
  * @param name - The name for the sub-logger (e.g., "Dashboard", "CreateLoopForm")
- * @returns A new Logger instance that inherits settings from the parent
+ * @returns A Logger instance for the given name (cached)
  */
 export function createLogger(name: string): Logger<ILogObj> {
+  const existing = subLoggers.get(name);
+  if (existing) {
+    return existing;
+  }
+  
   const subLogger = log.getSubLogger({ name });
-  subLoggers.push(subLogger);
+  subLoggers.set(name, subLogger);
   return subLogger;
 }
 
@@ -123,7 +133,7 @@ export function setLogLevel(level: LogLevelName): void {
   // Update all registered sub-loggers
   // (tslog sub-loggers copy the parent's minLevel at creation time
   // and don't automatically sync when the parent's level changes)
-  for (const subLogger of subLoggers) {
+  for (const subLogger of subLoggers.values()) {
     subLogger.settings.minLevel = numericLevel;
   }
 }

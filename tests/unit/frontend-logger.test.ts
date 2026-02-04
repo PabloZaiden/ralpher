@@ -37,6 +37,18 @@ describe("Frontend Logger", () => {
     expect(typeof componentLog.debug).toBe("function");
   });
 
+  test("createLogger returns the same instance for the same name", () => {
+    const logger1 = createLogger("CachedLogger");
+    const logger2 = createLogger("CachedLogger");
+    expect(logger1).toBe(logger2);
+  });
+
+  test("createLogger returns different instances for different names", () => {
+    const logger1 = createLogger("Logger1");
+    const logger2 = createLogger("Logger2");
+    expect(logger1).not.toBe(logger2);
+  });
+
   describe("LOG_LEVELS", () => {
     test("contains all valid level mappings", () => {
       expect(LOG_LEVELS["silly"]).toBe(0);
