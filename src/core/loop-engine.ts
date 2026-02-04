@@ -1133,6 +1133,14 @@ export class LoopEngine {
       this.emitLog("debug", "Building prompt for AI agent");
       const prompt = this.buildPrompt(iteration);
 
+      // Log the prompt for debugging
+      log.debug("[LoopEngine] runIteration: Prompt details", {
+        partsCount: prompt.parts.length,
+        model: prompt.model ? `${prompt.model.providerID}/${prompt.model.modelID}` : "default",
+        textLength: prompt.parts[0]?.text?.length ?? 0,
+        textPreview: prompt.parts[0]?.text?.slice(0, 200) ?? "",
+      });
+
       // Send prompt and collect response
       if (!this.sessionId) {
         throw new Error("No session ID");
@@ -1826,6 +1834,29 @@ Output ONLY the commit message, nothing else.`
   ): string {
     const logId = id ?? `log-${this.config.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const timestamp = createTimestamp();
+    
+    // Also log to app logger for holistic view
+    const loopPrefix = `[Loop:${this.config.name}]`;
+    const detailsStr = details ? ` ${JSON.stringify(details)}` : "";
+    switch (level) {
+      case "error":
+        log.error(`${loopPrefix} ${message}${detailsStr}`);
+        break;
+      case "warn":
+        log.warn(`${loopPrefix} ${message}${detailsStr}`);
+        break;
+      case "info":
+        log.info(`${loopPrefix} ${message}${detailsStr}`);
+        break;
+      case "debug":
+        log.debug(`${loopPrefix} ${message}${detailsStr}`);
+        break;
+      case "agent":
+      case "user":
+        // Log agent and user messages at info level
+        log.info(`${loopPrefix} [${level}] ${message}${detailsStr}`);
+        break;
+    }
     
     // Persist log in loop state (for page refresh recovery)
     const logEntry: LoopLogEntry = {
