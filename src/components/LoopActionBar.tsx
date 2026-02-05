@@ -198,11 +198,7 @@ export function LoopActionBar({
         // Variant is everything after the second colon (may be empty string)
         const variant = parts.length >= 3 ? parts.slice(2).join(":") : "";
         if (providerID && modelID) {
-          options.model = { providerID, modelID };
-          // Only include variant if non-empty
-          if (variant) {
-            options.model.variant = variant;
-          }
+          options.model = { providerID, modelID, variant };
         }
       }
 
