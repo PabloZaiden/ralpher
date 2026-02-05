@@ -45,8 +45,8 @@ export interface CreateLoopFormProps {
   models?: ModelInfo[];
   /** Loading models */
   modelsLoading?: boolean;
-  /** Last used model */
-  lastModel?: { providerID: string; modelID: string } | null;
+  /** Last used model (includes variant) */
+  lastModel?: { providerID: string; modelID: string; variant?: string } | null;
   /** Callback when workspace changes (to reload models and branches) */
   onWorkspaceChange?: (workspaceId: string | null, directory: string) => void;
   /** Warning about .planning directory */
@@ -65,7 +65,7 @@ export interface CreateLoopFormProps {
   initialLoopData?: {
     directory: string;
     prompt: string;
-    model?: { providerID: string; modelID: string };
+    model?: { providerID: string; modelID: string; variant?: string };
     maxIterations?: number;
     maxConsecutiveErrors?: number;
     activityTimeoutSeconds?: number;
@@ -138,9 +138,14 @@ export function CreateLoopForm({
   const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? true);
 
   // Check if the selected model is enabled (connected)
+  // Format: providerID:modelID:variant (variant can be empty string)
   const isSelectedModelEnabled = (): boolean => {
     if (!selectedModel) return true; // No model selected = use backend default, which is fine
-    const [providerID, modelID] = selectedModel.split(":");
+    const parts = selectedModel.split(":");
+    // Format is providerID:modelID:variant (variant may be empty)
+    if (parts.length < 2) return true;
+    const providerID = parts[0];
+    const modelID = parts[1];
     if (!providerID || !modelID) return true;
     const model = models.find((m) => m.providerID === providerID && m.modelID === modelID);
     return model?.connected ?? false;
@@ -171,13 +176,30 @@ export function CreateLoopForm({
     });
     if (selectedModel) return; // Don't override if user already selected
 
+    // Helper to create model key with variant
+    // Format: providerID:modelID:variant (variant can be empty string)
+    const makeModelKey = (m: { providerID: string; modelID: string; variant?: string }) => {
+      const variant = m.variant ?? "";
+      return `${m.providerID}:${m.modelID}:${variant}`;
+    };
+
+    // Helper to check if a model+variant combination exists in the models list
+    const modelVariantExists = (providerID: string, modelID: string, variant: string): boolean => {
+      const model = models.find((m) => m.providerID === providerID && m.modelID === modelID);
+      if (!model) return false;
+      // If model has no variants, only empty string variant is valid
+      if (!model.variants || model.variants.length === 0) {
+        return variant === "";
+      }
+      // Check if variant exists in model's variants
+      return model.variants.includes(variant);
+    };
+
     // If editing and initial loop data has a model, use that
     if (initialLoopData?.model && models.length > 0) {
-      const modelKey = `${initialLoopData.model.providerID}:${initialLoopData.model.modelID}`;
-      const exists = models.some(
-        (m) => `${m.providerID}:${m.modelID}` === modelKey
-      );
-      if (exists) {
+      const variant = initialLoopData.model.variant ?? "";
+      if (modelVariantExists(initialLoopData.model.providerID, initialLoopData.model.modelID, variant)) {
+        const modelKey = makeModelKey(initialLoopData.model);
         log.debug('Setting model from initialLoopData:', modelKey);
         setSelectedModel(modelKey);
         return;
@@ -186,22 +208,25 @@ export function CreateLoopForm({
 
     // Otherwise, try lastModel
     if (lastModel && models.length > 0) {
-      const modelKey = `${lastModel.providerID}:${lastModel.modelID}`;
-      const exists = models.some(
-        (m) => `${m.providerID}:${m.modelID}` === modelKey
-      );
-      if (exists) {
+      const variant = lastModel.variant ?? "";
+      if (modelVariantExists(lastModel.providerID, lastModel.modelID, variant)) {
+        const modelKey = makeModelKey(lastModel);
         log.debug('Setting model from lastModel:', modelKey);
         setSelectedModel(modelKey);
         return;
       }
     }
 
-    // Default to first connected model
+    // Default to first connected model (with first variant or empty variant)
     const firstConnected = models.find((m) => m.connected);
     if (firstConnected) {
-      log.debug('Setting model to first connected:', `${firstConnected.providerID}:${firstConnected.modelID}`);
-      setSelectedModel(`${firstConnected.providerID}:${firstConnected.modelID}`);
+      // Use first variant if available, otherwise empty string
+      const variant = firstConnected.variants && firstConnected.variants.length > 0 
+        ? firstConnected.variants[0] 
+        : "";
+      const modelKey = `${firstConnected.providerID}:${firstConnected.modelID}:${variant}`;
+      log.debug('Setting model to first connected:', modelKey);
+      setSelectedModel(modelKey);
     }
   }, [lastModel, models, selectedModel, initialLoopData]);
 
@@ -277,10 +302,17 @@ export function CreateLoopForm({
     };
 
     // Add model if selected
+    // Format: providerID:modelID:variant (variant can be empty string)
     if (selectedModel) {
-      const [providerID, modelID] = selectedModel.split(":");
+      const parts = selectedModel.split(":");
+      const providerID = parts[0];
+      const modelID = parts[1];
+      // Variant is everything after the second colon (may be empty string)
+      const variant = parts.length >= 3 ? parts.slice(2).join(":") : "";
       if (providerID && modelID) {
         request.model = { providerID, modelID };
+        // Always include variant, even if it's an empty string
+        request.model.variant = variant;
       }
     }
 
@@ -462,6 +494,41 @@ export function CreateLoopForm({
     })
     .sort((a, b) => a.localeCompare(b));
 
+  /**
+   * Generate options for a model, expanding variants into separate options.
+   * For models without variants, renders a single option.
+   * For models with variants, renders one option per variant.
+   */
+  function renderModelOptions(model: ModelInfo, disabled: boolean = false) {
+    const variants = model.variants && model.variants.length > 0 
+      ? model.variants 
+      : [""]; // No variants = single option with empty variant
+    
+    // Sort variants: empty string first, then alphabetically
+    const sortedVariants = [...variants].sort((a, b) => {
+      if (a === "") return -1;
+      if (b === "") return 1;
+      return a.localeCompare(b);
+    });
+
+    return sortedVariants.map((variant) => {
+      // Format: providerID:modelID:variant
+      const optionValue = `${model.providerID}:${model.modelID}:${variant}`;
+      // Display: "Model Name (variant)" or just "Model Name" for empty variant
+      const displayName = variant ? `${model.modelName} (${variant})` : model.modelName;
+      
+      return (
+        <option
+          key={optionValue}
+          value={optionValue}
+          disabled={disabled}
+        >
+          {displayName}
+        </option>
+      );
+    });
+  }
+
   // Handle workspace selection - stores both workspaceId and directory
   function handleWorkspaceSelect(workspaceId: string | null, workspaceDirectory: string) {
     setSelectedWorkspaceId(workspaceId || undefined);
@@ -587,14 +654,7 @@ export function CreateLoopForm({
                 const providerModels = modelsByProvider[provider] ?? [];
                 return (
                   <optgroup key={provider} label={`${provider} (connected)`}>
-                    {providerModels.map((model) => (
-                      <option
-                        key={`${model.providerID}:${model.modelID}`}
-                        value={`${model.providerID}:${model.modelID}`}
-                      >
-                        {model.modelName}
-                      </option>
-                    ))}
+                    {providerModels.map((model) => renderModelOptions(model, false))}
                   </optgroup>
                 );
               })}
@@ -603,15 +663,7 @@ export function CreateLoopForm({
                 const providerModels = modelsByProvider[provider] ?? [];
                 return (
                   <optgroup key={provider} label={`${provider} (not connected)`}>
-                    {providerModels.map((model) => (
-                      <option
-                        key={`${model.providerID}:${model.modelID}`}
-                        value={`${model.providerID}:${model.modelID}`}
-                        disabled
-                      >
-                        {model.modelName}
-                      </option>
-                    ))}
+                    {providerModels.map((model) => renderModelOptions(model, true))}
                   </optgroup>
                 );
               })}

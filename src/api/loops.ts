@@ -266,6 +266,7 @@ export const loopsCrudRoutes = {
           workspaceId,
           modelProviderID: body.model?.providerID,
           modelID: body.model?.modelID,
+          modelVariant: body.model?.variant,
           maxIterations: body.maxIterations,
           maxConsecutiveErrors: body.maxConsecutiveErrors,
           activityTimeoutSeconds: body.activityTimeoutSeconds,

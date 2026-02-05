@@ -29,6 +29,8 @@ export interface UserPreferences {
   lastModel?: {
     providerID: string;
     modelID: string;
+    /** Model variant (e.g., "thinking"). Empty string or undefined for default. */
+    variant?: string;
   };
   /** Last used working directory for loop creation */
   lastDirectory?: string;
@@ -75,7 +77,7 @@ export async function getLastModel(): Promise<UserPreferences["lastModel"]> {
   
   try {
     const model = JSON.parse(lastModelJson);
-    log.trace("Last model preference retrieved", { providerID: model.providerID, modelID: model.modelID });
+    log.trace("Last model preference retrieved", { providerID: model.providerID, modelID: model.modelID, variant: model.variant });
     return model;
   } catch {
     log.warn("Failed to parse last model preference");
@@ -89,8 +91,9 @@ export async function getLastModel(): Promise<UserPreferences["lastModel"]> {
 export async function setLastModel(model: {
   providerID: string;
   modelID: string;
+  variant?: string;
 }): Promise<void> {
-  log.debug("Setting last model preference", { providerID: model.providerID, modelID: model.modelID });
+  log.debug("Setting last model preference", { providerID: model.providerID, modelID: model.modelID, variant: model.variant });
   setPreference("lastModel", JSON.stringify(model));
 }
 

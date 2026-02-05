@@ -79,6 +79,8 @@ export interface PromptInput {
   model?: {
     providerID: string;
     modelID: string;
+    /** Model variant (e.g., "thinking"). Empty string or undefined for default. */
+    variant?: string;
   };
 }
 

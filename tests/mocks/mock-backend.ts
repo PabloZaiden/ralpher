@@ -25,6 +25,8 @@ export interface MockModelInfo {
   modelID: string;
   modelName: string;
   connected: boolean;
+  /** Optional variant names. Empty string represents the default variant. */
+  variants?: string[];
 }
 
 /**
