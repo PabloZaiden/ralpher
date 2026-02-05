@@ -799,6 +799,108 @@ describe("Workspace API Integration", () => {
         expect(updated.serverSettings.hostname).toBe("original.server.com");
         expect(updated.serverSettings.port).toBe(5000);
       });
+
+      test("resets connection when serverSettings are updated via PUT /api/workspaces/:id", async () => {
+        // Import the event emitter to capture events
+        const { loopEventEmitter } = await import("../../src/core/event-emitter");
+        
+        // Create a workspace
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Reset Connection Test",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        // Set up event listener to capture the server.reset event
+        // Cast event to any since server.reset is not in the LoopEvent type union
+        const events: Array<{ type: string; workspaceId?: string }> = [];
+        const unsubscribe = loopEventEmitter.subscribe((event) => {
+          const eventType = (event as { type: string }).type;
+          if (eventType === "server.reset") {
+            events.push(event as { type: string; workspaceId?: string });
+          }
+        });
+
+        try {
+          // Update workspace with new serverSettings
+          const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: "Updated Name",
+              serverSettings: {
+                mode: "connect",
+                hostname: "new-server.com",
+                port: 8080,
+                useHttps: false,
+                allowInsecure: false,
+              },
+            }),
+          });
+
+          expect(response.ok).toBe(true);
+          const updated = await response.json();
+          expect(updated.name).toBe("Updated Name");
+          expect(updated.serverSettings.hostname).toBe("new-server.com");
+
+          // Verify a server.reset event was emitted for this workspace
+          expect(events.length).toBe(1);
+          expect(events[0]!.type).toBe("server.reset");
+          expect(events[0]!.workspaceId).toBe(workspace.id);
+        } finally {
+          unsubscribe();
+        }
+      });
+
+      test("does NOT reset connection when only name is updated", async () => {
+        // Import the event emitter to capture events
+        const { loopEventEmitter } = await import("../../src/core/event-emitter");
+        
+        // Create a workspace
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "No Reset Test",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        // Set up event listener to capture the server.reset event
+        // Cast event to any since server.reset is not in the LoopEvent type union
+        const events: Array<{ type: string; workspaceId?: string }> = [];
+        const unsubscribe = loopEventEmitter.subscribe((event) => {
+          const eventType = (event as { type: string }).type;
+          if (eventType === "server.reset") {
+            events.push(event as { type: string; workspaceId?: string });
+          }
+        });
+
+        try {
+          // Update workspace with only name (no serverSettings)
+          const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: "Updated Name Only Again",
+            }),
+          });
+
+          expect(response.ok).toBe(true);
+          const updated = await response.json();
+          expect(updated.name).toBe("Updated Name Only Again");
+
+          // Verify NO server.reset event was emitted
+          expect(events.length).toBe(0);
+        } finally {
+          unsubscribe();
+        }
+      });
     });
 
     describe("Workspace settings isolation", () => {
