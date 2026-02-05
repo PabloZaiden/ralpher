@@ -311,10 +311,8 @@ export function CreateLoopForm({
       const variant = parts.length >= 3 ? parts.slice(2).join(":") : "";
       if (providerID && modelID) {
         request.model = { providerID, modelID };
-        // Only include variant if non-empty
-        if (variant) {
-          request.model.variant = variant;
-        }
+        // Always include variant, even if it's an empty string
+        request.model.variant = variant;
       }
     }
 
