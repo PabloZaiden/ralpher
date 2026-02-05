@@ -72,6 +72,8 @@ export interface ModelConfig {
   providerID: string;
   /** Model ID (e.g., "claude-sonnet-4-20250514", "gpt-4o") */
   modelID: string;
+  /** Model variant (e.g., "thinking", ""). Empty string or undefined for default. */
+  variant?: string;
 }
 
 /**

@@ -34,6 +34,13 @@ export interface ModelInfo {
   modelName: string;
   /** Whether the provider is connected (has valid API key configured) */
   connected: boolean;
+  /**
+   * Available variants for this model.
+   * Each variant name is a key from the SDK's model.variants object.
+   * An empty string ("") represents the default/no-variant option.
+   * If undefined or empty, the model has no variants.
+   */
+  variants?: string[];
 }
 
 /**

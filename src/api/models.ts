@@ -229,7 +229,7 @@ export const preferencesRoutes = {
     /**
      * GET /api/preferences/last-model - Get the last used model.
      * 
-     * Retrieves the last AI model (provider + model ID) used to create a loop.
+     * Retrieves the last AI model (provider + model ID + variant) used to create a loop.
      * Used to pre-populate the model selector in the UI.
      * 
      * @returns ModelConfig object or null if none set
@@ -248,12 +248,13 @@ export const preferencesRoutes = {
      * Request Body:
      * - providerID (required): Provider ID (e.g., "anthropic")
      * - modelID (required): Model ID (e.g., "claude-sonnet-4-20250514")
+     * - variant (optional): Model variant (e.g., "thinking")
      * 
      * @returns Success response
      */
     async PUT(req: Request): Promise<Response> {
       try {
-        const body = await req.json() as { providerID: string; modelID: string };
+        const body = await req.json() as { providerID: string; modelID: string; variant?: string };
         
         if (!body.providerID || !body.modelID) {
           return errorResponse("invalid_body", "providerID and modelID are required");
@@ -262,6 +263,7 @@ export const preferencesRoutes = {
         await setLastModel({
           providerID: body.providerID,
           modelID: body.modelID,
+          variant: body.variant,
         });
 
         return Response.json({ success: true });

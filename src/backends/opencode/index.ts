@@ -32,6 +32,13 @@ export interface ModelInfo {
   modelName: string;
   /** Whether the provider is connected (has valid API key) */
   connected: boolean;
+  /**
+   * Available variants for this model.
+   * Each variant name is a key from the SDK's model.variants object.
+   * An empty string ("") represents the default/no-variant option.
+   * If undefined, the model has no variants.
+   */
+  variants?: string[];
 }
 
 import type {
@@ -321,6 +328,7 @@ export class OpenCodeBackend implements Backend {
     const client = this.getClient();
 
     // v2 SDK uses flattened parameters
+    // Note: variant is a separate field at the same level as model
     const result = await client.session.prompt({
       sessionID: sessionId,
       directory: this.directory,
@@ -328,7 +336,8 @@ export class OpenCodeBackend implements Backend {
         type: p.type as "text",
         text: p.text,
       })),
-      model: prompt.model,
+      model: prompt.model ? { providerID: prompt.model.providerID, modelID: prompt.model.modelID } : undefined,
+      variant: prompt.model?.variant,
     });
 
     if (result.error) {
@@ -350,6 +359,7 @@ export class OpenCodeBackend implements Backend {
       sessionId,
       partsCount: prompt.parts.length,
       model: prompt.model ? `${prompt.model.providerID}/${prompt.model.modelID}` : "default",
+      variant: prompt.model?.variant,
       firstPartType: prompt.parts[0]?.type,
       firstPartTextLength: prompt.parts[0]?.text?.length ?? 0,
       textPreview: prompt.parts[0]?.text?.slice(0, 200) ?? "",
@@ -357,6 +367,7 @@ export class OpenCodeBackend implements Backend {
     const client = this.getClient();
 
     // v2 SDK uses flattened parameters
+    // Note: variant is a separate field at the same level as model
     log.trace("[OpenCodeBackend] sendPromptAsync: About to call client.session.promptAsync");
     const result = await client.session.promptAsync({
       sessionID: sessionId,
@@ -365,7 +376,8 @@ export class OpenCodeBackend implements Backend {
         type: p.type as "text",
         text: p.text,
       })),
-      model: prompt.model,
+      model: prompt.model ? { providerID: prompt.model.providerID, modelID: prompt.model.modelID } : undefined,
+      variant: prompt.model?.variant,
     });
     log.debug("[OpenCodeBackend] sendPromptAsync: client.session.promptAsync returned", { 
       sessionId,
@@ -953,7 +965,13 @@ export class OpenCodeBackend implements Backend {
       all: Array<{
         id: string;
         name: string;
-        models: { [key: string]: { id: string; name: string } };
+        models: {
+          [key: string]: {
+            id: string;
+            name: string;
+            variants?: { [key: string]: unknown };
+          };
+        };
       }>;
       connected: string[];
     };
@@ -967,12 +985,17 @@ export class OpenCodeBackend implements Backend {
       for (const modelId of Object.keys(provider.models)) {
         const model = provider.models[modelId];
         if (model) {
+          // Extract variant names from the variants object
+          // Keys are variant names, empty string ("") represents default
+          const variants = model.variants ? Object.keys(model.variants) : undefined;
+
           models.push({
             providerID: provider.id,
             providerName: provider.name,
             modelID: model.id,
             modelName: model.name,
             connected: isConnected,
+            variants,
           });
         }
       }
