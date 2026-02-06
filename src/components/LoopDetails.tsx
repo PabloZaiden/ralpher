@@ -542,9 +542,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Loop Error</h3>
                 <p className="mt-1 text-sm text-red-700 dark:text-red-400 break-words">{state.error.message}</p>
                 <div className="mt-2 text-xs text-red-600 dark:text-red-500">
-                  {state.error.iteration !== undefined && (
-                    <span className="mr-3">Iteration: {state.error.iteration}</span>
-                  )}
+                  <span className="mr-3">Iteration: {state.error.iteration}</span>
                   {state.error.timestamp && (
                     <span>Time: {formatDateTime(state.error.timestamp)}</span>
                   )}
