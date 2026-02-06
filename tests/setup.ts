@@ -13,7 +13,7 @@ import { ensureDataDirectories } from "../src/persistence/paths";
 import { closeDatabase } from "../src/persistence/database";
 import { createWorkspace } from "../src/persistence/workspaces";
 import { TestCommandExecutor } from "./mocks/mock-executor";
-import { MockOpenCodeBackend } from "./mocks/mock-backend";
+import { MockOpenCodeBackend, defaultTestModel } from "./mocks/mock-backend";
 import type { LoopEvent } from "../src/types/events";
 import { getDefaultServerSettings } from "../src/types/settings";
 
@@ -22,6 +22,26 @@ import { getDefaultServerSettings } from "../src/types/settings";
  * This workspace is automatically created by setupTestContext().
  */
 export const testWorkspaceId = "test-workspace-id";
+
+/**
+ * Default test model configuration for loop creation.
+ * Use this in tests to satisfy the required model field.
+ */
+export const testModel = {
+  providerID: "test-provider",
+  modelID: "test-model",
+  variant: "",
+};
+
+/**
+ * Default test model fields for CreateLoopOptions.
+ * Use spread operator: { ...testModelFields, ... }
+ */
+export const testModelFields = {
+  modelProviderID: testModel.providerID,
+  modelID: testModel.modelID,
+  modelVariant: testModel.variant,
+};
 
 /**
  * Test context containing all test dependencies.
@@ -117,7 +137,10 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
   // Register mock backend if requested
   let mockBackend: MockOpenCodeBackend | undefined;
   if (useMockBackend) {
-    mockBackend = new MockOpenCodeBackend({ responses: mockResponses });
+    mockBackend = new MockOpenCodeBackend({ 
+      responses: mockResponses,
+      models: [defaultTestModel],
+    });
     backendManager.setBackendForTesting(mockBackend);
     // Set the executor factory for testing (uses local Bun.$ execution)
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());

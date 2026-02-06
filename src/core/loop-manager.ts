@@ -41,10 +41,10 @@ export interface CreateLoopOptions {
   prompt: string;
   /** Workspace ID this loop belongs to */
   workspaceId: string;
-  /** Model provider ID */
-  modelProviderID?: string;
-  /** Model ID */
-  modelID?: string;
+  /** Model provider ID (required) */
+  modelProviderID: string;
+  /** Model ID (required) */
+  modelID: string;
   /** Model variant (e.g., "thinking"). Empty string for default variant. */
   modelVariant?: string;
   /** Maximum iterations (default: Infinity for unlimited) */
@@ -218,10 +218,11 @@ export class LoopManager {
       createdAt: now,
       updatedAt: now,
       workspaceId: options.workspaceId,
-      model:
-        options.modelProviderID && options.modelID
-          ? { providerID: options.modelProviderID, modelID: options.modelID, variant: options.modelVariant }
-          : undefined,
+      model: {
+        providerID: options.modelProviderID,
+        modelID: options.modelID,
+        variant: options.modelVariant,
+      },
       maxIterations: options.maxIterations ?? DEFAULT_LOOP_CONFIG.maxIterations,
       maxConsecutiveErrors: options.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors,
       activityTimeoutSeconds: options.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,

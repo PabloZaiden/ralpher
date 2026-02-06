@@ -6,7 +6,7 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
-import { setupTestContext, teardownTestContext, waitForPlanReady, waitForLoopStatus } from "../setup";
+import { setupTestContext, teardownTestContext, waitForPlanReady, waitForLoopStatus, testModelFields } from "../setup";
 import type { TestContext } from "../setup";
 
 // Helper to check if a file exists
@@ -43,7 +43,8 @@ describe("Plan Mode - Clear Planning Folder", () => {
 
     // Create loop with plan mode + clear folder
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a simple plan",
+        ...testModelFields,
+        prompt: "Create a simple plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -81,7 +82,8 @@ describe("Plan Mode - Clear Planning Folder", () => {
 
     // Create loop without clear option
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a plan",
+        ...testModelFields,
+        prompt: "Create a plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -109,7 +111,8 @@ describe("Plan Mode - Clear Planning Folder", () => {
     await writeFile(join(planningDir, "old-file.md"), "Old content");
 
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a plan",
+        ...testModelFields,
+        prompt: "Create a plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -145,7 +148,8 @@ describe("Plan Mode - Clear Planning Folder", () => {
   test("planningFolderCleared persists across restart", async () => {
     // Create loop, clear folder, mark as cleared
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a plan",
+        ...testModelFields,
+        prompt: "Create a plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -214,7 +218,8 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
 
     // Create loop with plan mode but WITHOUT clearPlanningFolder
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a simple plan",
+        ...testModelFields,
+        prompt: "Create a simple plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -247,7 +252,8 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
 
     // Create loop with plan mode AND clearPlanningFolder
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a simple plan",
+        ...testModelFields,
+        prompt: "Create a simple plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -278,7 +284,8 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
 
     // Create loop with plan mode but WITHOUT clearPlanningFolder
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a simple plan",
+        ...testModelFields,
+        prompt: "Create a simple plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -321,7 +328,8 @@ describe("Plan Mode - State Transitions", () => {
 
   test("creates loop in planning status when planMode is true", async () => {
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a plan",
+        ...testModelFields,
+        prompt: "Create a plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -337,7 +345,8 @@ describe("Plan Mode - State Transitions", () => {
 
   test("transitions from planning to running on accept", async () => {
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a plan",
+        ...testModelFields,
+        prompt: "Create a plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -366,7 +375,8 @@ describe("Plan Mode - State Transitions", () => {
 
   test("increments feedback rounds on each feedback", async () => {
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a plan",
+        ...testModelFields,
+        prompt: "Create a plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -397,7 +407,8 @@ describe("Plan Mode - State Transitions", () => {
 
   test("deletes loop on discard", async () => {
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a plan",
+        ...testModelFields,
+        prompt: "Create a plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -422,7 +433,8 @@ describe("Plan Mode - State Transitions", () => {
 
   test("reuses session from plan creation when starting execution", async () => {
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a plan",
+        ...testModelFields,
+        prompt: "Create a plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -474,7 +486,8 @@ describe("Plan Mode - isPlanReady Flag", () => {
 
   test("isPlanReady is false when plan mode starts", async () => {
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a simple plan",
+        ...testModelFields,
+        prompt: "Create a simple plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -489,7 +502,8 @@ describe("Plan Mode - isPlanReady Flag", () => {
 
   test("isPlanReady becomes true after PLAN_READY marker detected", async () => {
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a simple plan",
+        ...testModelFields,
+        prompt: "Create a simple plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -507,7 +521,8 @@ describe("Plan Mode - isPlanReady Flag", () => {
 
   test("isPlanReady resets to false when feedback is sent", async () => {
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a simple plan",
+        ...testModelFields,
+        prompt: "Create a simple plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 5, // Increase max iterations to allow feedback iteration
@@ -535,7 +550,8 @@ describe("Plan Mode - isPlanReady Flag", () => {
 
   test("isPlanReady persists in database across restarts", async () => {
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a simple plan",
+        ...testModelFields,
+        prompt: "Create a simple plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -583,7 +599,8 @@ describe("Plan Mode - Rejection Paths", () => {
 
   test("rejects plan acceptance when isPlanReady is false", async () => {
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a simple plan",
+        ...testModelFields,
+        prompt: "Create a simple plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 5,  // Allow multiple iterations

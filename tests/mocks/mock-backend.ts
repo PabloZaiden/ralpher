@@ -234,11 +234,27 @@ export class MockOpenCodeBackend implements Backend {
 }
 
 /**
+ * Default test model that should be used across all tests.
+ * Tests should use this model when creating loops.
+ */
+export const defaultTestModel: MockModelInfo = {
+  providerID: "test-provider",
+  providerName: "Test Provider",
+  modelID: "test-model",
+  modelName: "Test Model",
+  connected: true,
+};
+
+/**
  * Create a mock backend with the given responses.
  * Convenience function for tests.
+ * Includes the default test model by default.
  */
 export function createMockBackend(responses: string[] = ["<promise>COMPLETE</promise>"]): MockOpenCodeBackend {
-  return new MockOpenCodeBackend({ responses });
+  return new MockOpenCodeBackend({ 
+    responses,
+    models: [defaultTestModel],
+  });
 }
 
 /**
@@ -480,8 +496,18 @@ export class PlanModeMockBackend implements Backend {
     // No-op
   }
 
-  async getModels(_directory: string): Promise<[]> {
-    return [];
+  async getModels(_directory: string): Promise<{ providerID: string; providerName: string; modelID: string; modelName: string; connected: boolean; variants?: string[] }[]> {
+    // Return a test model so it can be validated
+    return [
+      {
+        providerID: "test-provider",
+        providerName: "Test Provider",
+        modelID: "test-model",
+        modelName: "Test Model",
+        connected: true,
+        variants: [],
+      },
+    ];
   }
 
   async getSession(id: string): Promise<AgentSession | null> {

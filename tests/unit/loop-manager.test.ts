@@ -19,6 +19,13 @@ describe("LoopManager", () => {
   let emitter: SimpleEventEmitter<LoopEvent>;
   let emittedEvents: LoopEvent[];
   const testWorkspaceId = "test-workspace-id";
+  
+  // Default test model for loop creation (model is now required)
+  const testModelFields = {
+    modelProviderID: "test-provider",
+    modelID: "test-model",
+    modelVariant: "",
+  };
 
   beforeEach(async () => {
     // Create temp directories
@@ -71,6 +78,7 @@ describe("LoopManager", () => {
   describe("createLoop", () => {
     test("creates a new loop with defaults", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Do something",
         workspaceId: testWorkspaceId,
@@ -91,6 +99,7 @@ describe("LoopManager", () => {
 
     test("creates a loop with custom options", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Custom task",
         workspaceId: testWorkspaceId,
@@ -107,6 +116,7 @@ describe("LoopManager", () => {
   describe("getLoop", () => {
     test("returns a loop by ID", async () => {
       const created = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
         workspaceId: testWorkspaceId,
@@ -127,6 +137,7 @@ describe("LoopManager", () => {
   describe("getAllLoops", () => {
     test("returns all loops", async () => {
       await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test 1",
         workspaceId: testWorkspaceId,
@@ -134,6 +145,7 @@ describe("LoopManager", () => {
       });
 
       await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test 2",
         workspaceId: testWorkspaceId,
@@ -149,6 +161,7 @@ describe("LoopManager", () => {
   describe("updateLoop", () => {
     test("updates loop configuration", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Original prompt",
         workspaceId: testWorkspaceId,
@@ -165,6 +178,7 @@ describe("LoopManager", () => {
 
     test("rejects baseBranch update when git state exists", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
         workspaceId: testWorkspaceId,
@@ -192,6 +206,7 @@ describe("LoopManager", () => {
 
     test("allows baseBranch update when git state is undefined", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
         workspaceId: testWorkspaceId,
@@ -215,6 +230,7 @@ describe("LoopManager", () => {
   describe("deleteLoop", () => {
     test("soft-deletes a loop (marks as deleted)", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
         workspaceId: testWorkspaceId,
@@ -236,6 +252,7 @@ describe("LoopManager", () => {
 
     test("purges a deleted loop", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
         workspaceId: testWorkspaceId,
@@ -256,6 +273,7 @@ describe("LoopManager", () => {
 
     test("cannot purge a non-deleted/non-merged loop", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
         workspaceId: testWorkspaceId,
@@ -277,6 +295,7 @@ describe("LoopManager", () => {
     test("requires loop to be in final state", async () => {
       // Create a loop in idle state (not a final state)
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
         workspaceId: testWorkspaceId,
@@ -293,6 +312,7 @@ describe("LoopManager", () => {
     test("requires loop to have git state", async () => {
       // Create a loop and set it to a final state without git
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
         workspaceId: testWorkspaceId,
@@ -330,6 +350,7 @@ describe("LoopManager", () => {
   describe("isRunning", () => {
     test("returns false for non-running loop", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
         workspaceId: testWorkspaceId,
@@ -343,6 +364,7 @@ describe("LoopManager", () => {
   describe("clearPlanningFolder option", () => {
     test("creates a loop with clearPlanningFolder = true", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Task with clearing",
         workspaceId: testWorkspaceId,
@@ -355,6 +377,7 @@ describe("LoopManager", () => {
 
     test("creates a loop with clearPlanningFolder = false", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Task without clearing",
         workspaceId: testWorkspaceId,
@@ -367,6 +390,7 @@ describe("LoopManager", () => {
 
     test("creates a loop with clearPlanningFolder defaulting to false", async () => {
       const loop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Task with default",
         workspaceId: testWorkspaceId,
@@ -379,6 +403,7 @@ describe("LoopManager", () => {
 
     test("clearPlanningFolder is persisted correctly", async () => {
       const created = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Test persistence",
         workspaceId: testWorkspaceId,
@@ -398,6 +423,7 @@ describe("LoopManager", () => {
     test("creates draft loops without active loop check", async () => {
       // First create a running loop (simulate by setting status manually)
       const runningLoop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Running task",
         workspaceId: testWorkspaceId,
@@ -412,6 +438,7 @@ describe("LoopManager", () => {
 
       // Draft loops should not be blocked by existing active loops
       const draftLoop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Draft task",
         workspaceId: testWorkspaceId,
@@ -426,6 +453,7 @@ describe("LoopManager", () => {
     test("draft loops do not block other loops from being created", async () => {
       // Create a draft loop first
       const draftLoop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Draft task",
         workspaceId: testWorkspaceId,
@@ -437,6 +465,7 @@ describe("LoopManager", () => {
 
       // Create another loop - should work since draft doesn't block
       const normalLoop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Normal task",
         workspaceId: testWorkspaceId,
@@ -454,7 +483,8 @@ describe("LoopManager", () => {
       for (const status of terminalStatuses) {
         // Create a loop and set it to terminal state
         const terminalLoop = await manager.createLoop({
-          directory: testWorkDir,
+        ...testModelFields,
+        directory: testWorkDir,
           prompt: `Terminal ${status} task`,
           workspaceId: testWorkspaceId,
           planMode: false,
@@ -472,6 +502,7 @@ describe("LoopManager", () => {
 
       // Creating a new loop should still work since all are terminal
       const newLoop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "New task after terminals",
         workspaceId: testWorkspaceId,
@@ -487,6 +518,7 @@ describe("LoopManager", () => {
     test("preserves planning loops during reset", async () => {
       // Create a loop and set it to planning status
       const planningLoop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Planning task",
         workspaceId: testWorkspaceId,
@@ -524,6 +556,7 @@ describe("LoopManager", () => {
     test("stops non-planning loops during reset", async () => {
       // Create a loop and set it to running status
       const runningLoop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Running task",
         workspaceId: testWorkspaceId,
@@ -551,6 +584,7 @@ describe("LoopManager", () => {
     test("preserves planning loops while stopping running loops", async () => {
       // Create a planning loop
       const planningLoop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Planning task",
         workspaceId: testWorkspaceId,
@@ -570,6 +604,7 @@ describe("LoopManager", () => {
 
       // Create a running loop
       const runningLoop = await manager.createLoop({
+        ...testModelFields,
         directory: testWorkDir,
         prompt: "Running task",
         workspaceId: testWorkspaceId,

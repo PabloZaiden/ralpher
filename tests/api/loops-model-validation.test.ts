@@ -187,7 +187,7 @@ describe("Model Validation in API Endpoints", () => {
       }
     });
 
-    test("succeeds without model (uses backend default)", async () => {
+    test("rejects request without model (model is now required)", async () => {
       const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
       try {
         const response = await fetch(`${baseUrl}/api/loops`, {
@@ -197,12 +197,15 @@ describe("Model Validation in API Endpoints", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
-            // No model specified - should use backend default
+            // No model specified - should be rejected
           }),
         });
 
-        // Should succeed
-        expect(response.status).toBe(201);
+        // Should fail with 400 since model is required
+        expect(response.status).toBe(400);
+        const data = await response.json();
+        expect(data.error).toBe("validation_error");
+        expect(data.message).toContain("model");
       } finally {
         await rm(workDir, { recursive: true, force: true });
       }
@@ -250,6 +253,10 @@ describe("Model Validation in API Endpoints", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            model: {
+              providerID: "anthropic",
+              modelID: "claude-sonnet-4-20250514",
+            },
           }),
         });
         expect(createRes.status).toBe(201);
@@ -291,6 +298,10 @@ describe("Model Validation in API Endpoints", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            model: {
+              providerID: "anthropic",
+              modelID: "claude-sonnet-4-20250514",
+            },
           }),
         });
         expect(createRes.status).toBe(201);
@@ -329,7 +340,7 @@ describe("Model Validation in API Endpoints", () => {
   });
 
   describe("Input validation", () => {
-    test("allows partial model object (missing providerID)", async () => {
+    test("rejects partial model object (missing providerID)", async () => {
       const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
       try {
         const response = await fetch(`${baseUrl}/api/loops`, {
@@ -340,15 +351,17 @@ describe("Model Validation in API Endpoints", () => {
             prompt: "Test prompt",
             planMode: false,
             model: {
-              // Missing providerID
+              // Missing providerID - should be rejected
               modelID: "gpt-4o",
             },
           }),
         });
 
-        // Partial model objects are allowed - the loop will use backend default
-        // for any missing fields. This tests structural validation, not model validation.
-        expect(response.status).toBe(201);
+        // Model with missing providerID should be rejected
+        expect(response.status).toBe(400);
+        const data = await response.json();
+        expect(data.error).toBe("validation_error");
+        expect(data.message).toContain("model");
       } finally {
         await rm(workDir, { recursive: true, force: true });
       }

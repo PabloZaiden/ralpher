@@ -152,13 +152,13 @@ export function CreateLoopForm({
   // Check if the selected model is enabled (connected)
   // Format: providerID:modelID:variant (variant can be empty string)
   const isSelectedModelEnabled = (): boolean => {
-    if (!selectedModel) return true; // No model selected = use backend default, which is fine
+    if (!selectedModel) return false; // No model selected = not valid (model is required)
     const parts = selectedModel.split(":");
     // Format is providerID:modelID:variant (variant may be empty)
-    if (parts.length < 2) return true;
+    if (parts.length < 2) return false;
     const providerID = parts[0];
     const modelID = parts[1];
-    if (!providerID || !modelID) return true;
+    if (!providerID || !modelID) return false;
     const model = models.find((m) => m.providerID === providerID && m.modelID === modelID);
     return model?.connected ?? false;
   };
@@ -306,35 +306,34 @@ export function CreateLoopForm({
       return;
     }
     
-    // Validate model is enabled if selected (not for drafts - drafts can have any model)
-    if (!asDraft && selectedModel && !selectedModelEnabled) {
+    // Validate model is enabled if selected (required for all submissions including drafts)
+    if (!selectedModel || !selectedModelEnabled) {
       return;
     }
 
     setSubmitting(true);
 
+    // Parse model from selectedModel string
+    // Format: providerID:modelID:variant (variant can be empty string)
+    const parts = selectedModel.split(":");
+    const providerID = parts[0];
+    const modelID = parts[1];
+    // Variant is everything after the second colon (may be empty string)
+    const variant = parts.length >= 3 ? parts.slice(2).join(":") : "";
+    
+    if (!providerID || !modelID) {
+      setSubmitting(false);
+      return;
+    }
+
     const request: CreateLoopRequest = {
       workspaceId: selectedWorkspaceId,
       prompt: prompt.trim(),
       planMode: planMode, // planMode is required
+      model: { providerID, modelID, variant },
       // Backend settings are now global (not per-loop)
       // Git is always enabled - no toggle exposed to users
     };
-
-    // Add model if selected
-    // Format: providerID:modelID:variant (variant can be empty string)
-    if (selectedModel) {
-      const parts = selectedModel.split(":");
-      const providerID = parts[0];
-      const modelID = parts[1];
-      // Variant is everything after the second colon (may be empty string)
-      const variant = parts.length >= 3 ? parts.slice(2).join(":") : "";
-      if (providerID && modelID) {
-        request.model = { providerID, modelID };
-        // Always include variant, even if it's an empty string
-        request.model.variant = variant;
-      }
-    }
 
     if (maxIterations.trim()) {
       const num = parseInt(maxIterations, 10);
@@ -696,8 +695,8 @@ export function CreateLoopForm({
           </p>
         )}
         {!modelsLoading && models.length > 0 && !selectedModel && (
-          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-            No model selected - will use default from opencode config
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+            Model is required. Please select a model.
           </p>
         )}
       </div>

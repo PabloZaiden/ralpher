@@ -15,6 +15,9 @@ import { backendManager } from "../../src/core/backend-manager";
 import { createMockBackend } from "../mocks/mock-backend";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 
+// Default test model for loop creation (model is now required)
+const testModel = { providerID: "test-provider", modelID: "test-model" };
+
 describe("Multi-Workspace E2E", () => {
   let testDataDir: string;
   let testWorkDir1: string;
@@ -270,6 +273,7 @@ describe("Multi-Workspace E2E", () => {
           prompt: "Test loop for workspace 1",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       expect(loop1Response.ok).toBe(true);
@@ -284,6 +288,7 @@ describe("Multi-Workspace E2E", () => {
           prompt: "Test loop for workspace 2",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       expect(loop2Response.ok).toBe(true);

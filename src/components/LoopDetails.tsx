@@ -4,7 +4,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { FileDiff, FileContentResponse, ModelInfo } from "../types";
-import type { ReviewComment } from "../types/loop";
+import type { ReviewComment, ModelConfig } from "../types/loop";
 import { useLoop, useMarkdownPreference } from "../hooks";
 import { Badge, Button, getStatusBadgeVariant, EditIcon } from "./common";
 import { LogViewer } from "./LogViewer";
@@ -55,6 +55,19 @@ const tabs: { id: TabId; label: string }[] = [
 function formatDateTime(isoString: string | undefined): string {
   if (!isoString) return "N/A";
   return new Date(isoString).toLocaleString();
+}
+
+/**
+ * Format model configuration for display.
+ * Shows providerID/modelID, with variant in parentheses if present.
+ */
+function formatModelDisplay(model: ModelConfig | undefined): string {
+  if (!model) return "Not configured";
+  const base = `${model.providerID}/${model.modelID}`;
+  if (model.variant && model.variant.trim() !== "") {
+    return `${base} (${model.variant})`;
+  }
+  return base;
 }
 
 /**
@@ -507,14 +520,11 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
           {/* Model info */}
           <span className="text-gray-500 dark:text-gray-400">
             Model: <span className="font-medium text-gray-900 dark:text-gray-100">
-              {config.model 
-                ? `${config.model.modelID}`
-                : "Default"
-              }
+              {formatModelDisplay(config.model)}
             </span>
             {state.pendingModel && (
               <span className="ml-1 text-yellow-600 dark:text-yellow-400">
-                → {state.pendingModel.modelID}
+                → {formatModelDisplay(state.pendingModel)}
               </span>
             )}
           </span>
@@ -721,11 +731,11 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                           <div className="text-sm">
                             <span className="text-gray-500 dark:text-gray-400">Model: </span>
                             <span className="font-medium text-gray-900 dark:text-gray-100">
-                              {config.model ? config.model.modelID : "Default"}
+                              {formatModelDisplay(config.model)}
                             </span>
                             {state.pendingModel && (
                               <span className="ml-1 text-yellow-600 dark:text-yellow-400">
-                                → {state.pendingModel.modelID}
+                                → {formatModelDisplay(state.pendingModel)}
                               </span>
                             )}
                           </div>

@@ -14,6 +14,9 @@ import { backendManager } from "../../src/core/backend-manager";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 import { createMockBackend } from "../mocks/mock-backend";
 
+// Default test model for loop creation (model is now required)
+const testModel = { providerID: "test-provider", modelID: "test-model" };
+
 describe("Draft Loop E2E Workflow", () => {
   let testDataDir: string;
   let testWorkDir: string;
@@ -154,6 +157,7 @@ describe("Draft Loop E2E Workflow", () => {
         prompt: "Initial task",
         draft: true,
         planMode: false,
+          model: testModel,
       }),
     });
 
@@ -243,6 +247,7 @@ describe("Draft Loop E2E Workflow", () => {
         workspaceId: testWorkspaceId,
         prompt: "Create a plan for feature X",
         planMode: true,
+          model: testModel,
         draft: true,
       }),
     });
@@ -340,6 +345,7 @@ describe("Draft Loop E2E Workflow", () => {
           prompt: "Quick task",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -380,6 +386,7 @@ describe("Draft Loop E2E Workflow", () => {
         workspaceId: testWorkspaceId,
         prompt: "Task",
         planMode: false,
+          model: testModel,
       }),
     });
 
@@ -415,6 +422,7 @@ describe("Draft Loop E2E Workflow", () => {
         prompt: "Test task for workspace selection",
         draft: true,
         planMode: false,
+          model: testModel,
       }),
     });
 
@@ -461,6 +469,7 @@ describe("Draft Loop E2E Workflow", () => {
         workspaceId: testWorkspaceId,
         prompt: "Test task",
         planMode: true,
+          model: testModel,
         draft: true,
       }),
     });
@@ -505,6 +514,7 @@ describe("Draft Loop E2E Workflow", () => {
         workspaceId: testWorkspaceId,
         prompt: "Test task",
         planMode: true,
+          model: testModel,
         draft: true,
       }),
     });
@@ -523,6 +533,7 @@ describe("Draft Loop E2E Workflow", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         planMode: false,
+          model: testModel,
       }),
     });
 
@@ -568,6 +579,7 @@ describe("Draft Loop E2E Workflow", () => {
         clearPlanningFolder: true,
         draft: true,
         planMode: false,
+          model: testModel,
       }),
     });
 
@@ -637,6 +649,7 @@ describe("Draft Loop E2E Workflow", () => {
         prompt: "First draft prompt - this should be unique",
         draft: true,
         planMode: false,
+          model: testModel,
       }),
     });
 
@@ -654,6 +667,7 @@ describe("Draft Loop E2E Workflow", () => {
         prompt: "Second draft prompt - completely different",
         draft: true,
         planMode: false,
+          model: testModel,
       }),
     });
 
@@ -705,6 +719,7 @@ describe("Draft Loop E2E Workflow", () => {
         prompt: longPrompt,
         draft: true,
         planMode: false,
+          model: testModel,
       }),
     });
 

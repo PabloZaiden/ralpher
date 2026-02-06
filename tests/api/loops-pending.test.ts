@@ -16,6 +16,9 @@ import { closeDatabase } from "../../src/persistence/database";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 import { NeverCompletingMockBackend } from "../mocks/mock-backend";
 
+// Default test model for loop creation (model is now required)
+const testModel = { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" };
+
 describe("POST /api/loops/:id/pending", () => {
   let testDataDir: string;
   let server: Server<unknown>;
@@ -189,6 +192,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -233,6 +237,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -276,6 +281,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -321,6 +327,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -370,6 +377,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           draft: true,  // Create as draft - stays in idle status
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -405,6 +413,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -450,6 +459,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -487,6 +497,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -525,6 +536,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -564,6 +576,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -604,6 +617,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -645,6 +659,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -691,6 +706,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -732,6 +748,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -780,6 +797,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -832,6 +850,7 @@ describe("POST /api/loops/:id/pending", () => {
           workspaceId,
           prompt: "Test prompt",
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createRes.status).toBe(201);

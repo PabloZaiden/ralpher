@@ -140,6 +140,24 @@ function loopToRow(loop: Loop): Record<string, unknown> {
  * Convert a database row to a Loop object.
  */
 function rowToLoop(row: Record<string, unknown>): Loop {
+  // Handle model - required field, but may be missing in legacy data
+  let model: { providerID: string; modelID: string; variant?: string };
+  if (row["model_provider_id"] && row["model_model_id"]) {
+    model = {
+      providerID: row["model_provider_id"] as string,
+      modelID: row["model_model_id"] as string,
+    };
+    if (row["model_variant"]) {
+      model.variant = row["model_variant"] as string;
+    }
+  } else {
+    // Legacy loops without model - provide a placeholder that indicates missing config
+    model = {
+      providerID: "unknown",
+      modelID: "not-configured",
+    };
+  }
+
   const config: LoopConfig = {
     id: row["id"] as string,
     name: row["name"] as string,
@@ -153,6 +171,7 @@ function rowToLoop(row: Record<string, unknown>): Loop {
       branchPrefix: row["git_branch_prefix"] as string,
       commitPrefix: row["git_commit_prefix"] as string,
     },
+    model,
     // Mandatory fields with defaults for backward compatibility with old data
     maxIterations: (row["max_iterations"] as number | null) ?? Infinity,
     maxConsecutiveErrors: (row["max_consecutive_errors"] as number | null) ?? 10,
@@ -162,12 +181,6 @@ function rowToLoop(row: Record<string, unknown>): Loop {
   };
 
   // Optional config fields
-  if (row["model_provider_id"] && row["model_model_id"]) {
-    config.model = {
-      providerID: row["model_provider_id"] as string,
-      modelID: row["model_model_id"] as string,
-    };
-  }
   if (row["base_branch"] !== null) {
     config.baseBranch = row["base_branch"] as string;
   }

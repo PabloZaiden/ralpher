@@ -12,6 +12,7 @@ import {
   waitForEvent,
   countEvents,
   getEvents,
+  testModelFields,
   type TestContext,
 } from "../setup";
 
@@ -41,6 +42,7 @@ describe("Git Workflow", () => {
   describe("Branch Creation", () => {
     test("creates a branch when starting a loop with git enabled", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
@@ -70,6 +72,7 @@ describe("Git Workflow", () => {
 
     test("uses custom branch prefix", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
@@ -86,6 +89,7 @@ describe("Git Workflow", () => {
 
     test("branch name includes loop name and timestamp", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
@@ -123,6 +127,7 @@ describe("Git Workflow", () => {
       });
 
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
@@ -150,6 +155,7 @@ describe("Git Workflow", () => {
 
     test("uses custom commit prefix", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
@@ -169,6 +175,7 @@ describe("Git Workflow", () => {
       await Bun.$`git add .`.cwd(ctx.workDir).quiet();
 
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
@@ -190,6 +197,7 @@ describe("Git Workflow", () => {
   describe("Accept Loop (Merge Branch)", () => {
     test("merges branch on accept", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
@@ -232,6 +240,7 @@ describe("Git Workflow", () => {
 
     test("returns error when accepting non-completed loop", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
@@ -248,6 +257,7 @@ describe("Git Workflow", () => {
   describe("Discard Loop (Delete Branch)", () => {
     test("deletes branch on discard", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
@@ -284,6 +294,7 @@ describe("Git Workflow", () => {
   describe("Mark as Merged", () => {
     test("switches to original branch, deletes working branch, and marks as deleted", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
@@ -322,6 +333,7 @@ describe("Git Workflow", () => {
 
     test("works for pushed loops", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
@@ -365,6 +377,7 @@ describe("Git Workflow", () => {
 
     test("returns error when loop is not in final state", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,

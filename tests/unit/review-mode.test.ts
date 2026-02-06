@@ -4,7 +4,7 @@
  */
 
 import { test, expect, describe } from "bun:test";
-import { setupTestContext, teardownTestContext, waitForEvent, waitForLoopStatus } from "../setup";
+import { setupTestContext, teardownTestContext, waitForEvent, waitForLoopStatus, testModelFields } from "../setup";
 import { join } from "path";
 
 const testWorkspaceId = "test-workspace-id";
@@ -22,7 +22,8 @@ describe("Review Mode", () => {
       try {
         // Create and complete a loop
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,
@@ -68,7 +69,8 @@ describe("Review Mode", () => {
       try {
         // Create and complete a loop
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,
@@ -113,7 +115,8 @@ describe("Review Mode", () => {
 
         // Create and complete a loop
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,
@@ -154,7 +157,8 @@ describe("Review Mode", () => {
       try {
         // Create, complete, and accept a loop
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,
@@ -192,7 +196,8 @@ describe("Review Mode", () => {
       try {
         // Create a loop but don't accept/push it
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,
@@ -222,7 +227,8 @@ describe("Review Mode", () => {
       try {
         // Create, complete, and accept a loop
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,
@@ -256,7 +262,8 @@ describe("Review Mode", () => {
       try {
         // Create, complete, and accept a loop
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,
@@ -292,7 +299,8 @@ describe("Review Mode", () => {
       try {
         // Create a loop but don't accept/push it
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,
@@ -346,7 +354,8 @@ describe("Review Mode", () => {
 
         // Create, complete, and push a loop
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,
@@ -400,7 +409,8 @@ describe("Review Mode", () => {
 
         // Create, complete, and merge a loop
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,
@@ -447,7 +457,8 @@ describe("Review Mode", () => {
       try {
         // Create and complete a loop
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,
@@ -490,7 +501,8 @@ describe("Review Mode", () => {
 
         // Create and complete a loop
         const loop = await ctx.manager.createLoop({
-          directory: ctx.workDir,
+        ...testModelFields,
+        directory: ctx.workDir,
           prompt: "Make changes",
           planMode: false,
           workspaceId: testWorkspaceId,

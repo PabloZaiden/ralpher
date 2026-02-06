@@ -6,7 +6,7 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdir, writeFile } from "fs/promises";
 import { join } from "path";
-import { setupTestContext, teardownTestContext, waitForPlanReady, waitForLoopStatus } from "../setup";
+import { setupTestContext, teardownTestContext, waitForPlanReady, waitForLoopStatus, testModelFields } from "../setup";
 import type { TestContext } from "../setup";
 import type { Loop } from "../../src/types";
 
@@ -45,7 +45,8 @@ describe("Plan Mode E2E Workflow", () => {
 
     // 1. Create loop with plan mode
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a simple implementation plan",
+        ...testModelFields,
+        prompt: "Create a simple implementation plan",
       directory: ctx.workDir,
       maxIterations: 2,
       planMode: true,
@@ -110,7 +111,8 @@ describe("Plan Mode E2E Workflow", () => {
   test("discard plan workflow", async () => {
     // 1. Create loop with plan mode
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a plan",
+        ...testModelFields,
+        prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,
@@ -143,7 +145,8 @@ describe("Plan Mode E2E Workflow", () => {
   test("multiple feedback rounds", async () => {
     // 1. Create loop
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a detailed plan",
+        ...testModelFields,
+        prompt: "Create a detailed plan",
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,
@@ -191,7 +194,8 @@ describe("Plan Mode E2E Workflow", () => {
 
     // Create loop with clearPlanningFolder enabled
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a plan",
+        ...testModelFields,
+        prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
       clearPlanningFolder: true,
@@ -235,7 +239,8 @@ describe("Plan Mode E2E Workflow", () => {
   test("session continuity from planning to execution", async () => {
     // Create loop with plan mode
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a plan",
+        ...testModelFields,
+        prompt: "Create a plan",
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,
@@ -279,7 +284,8 @@ describe("Plan Mode E2E Workflow", () => {
   test("isPlanReady flag workflow: starts false, becomes true, button controls", async () => {
     // 1. Create loop with plan mode
     const loop = await ctx.manager.createLoop({
-      prompt: "Create a simple plan",
+        ...testModelFields,
+        prompt: "Create a simple plan",
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,

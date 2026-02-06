@@ -254,8 +254,18 @@ export class ConfigurableMockBackend implements LoopBackend {
     // Mock - no-op
   }
 
-  async getModels(_directory: string): Promise<[]> {
-    return [];
+  async getModels(_directory: string): Promise<{ providerID: string; providerName: string; modelID: string; modelName: string; connected: boolean; variants?: string[] }[]> {
+    // Return the test model so it can be validated
+    return [
+      {
+        providerID: "test-provider",
+        providerName: "Test Provider",
+        modelID: "test-model",
+        modelName: "Test Model",
+        connected: true,
+        variants: [],
+      },
+    ];
   }
 
   async getSession(id: string): Promise<AgentSession | null> {
@@ -434,6 +444,15 @@ export async function getOrCreateWorkspace(
 }
 
 /**
+ * Default test model for API-based loop creation.
+ */
+export const testModelForAPI = {
+  providerID: "test-provider",
+  modelID: "test-model",
+  variant: "",
+};
+
+/**
  * Create a loop via the API.
  */
 export async function createLoopViaAPI(
@@ -442,6 +461,7 @@ export async function createLoopViaAPI(
     directory: string;
     prompt: string;
     planMode: boolean;
+    model?: { providerID: string; modelID: string; variant?: string };
     maxIterations?: number;
     clearPlanningFolder?: boolean;
     baseBranch?: string;
@@ -452,10 +472,14 @@ export async function createLoopViaAPI(
 
   // Now create the loop with workspaceId instead of directory
   const { directory: _directory, ...restOptions } = options;
+  
+  // Use provided model or default test model
+  const model = restOptions.model || testModelForAPI;
+  
   const response = await fetch(`${baseUrl}/api/loops`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...restOptions, workspaceId }),
+    body: JSON.stringify({ ...restOptions, workspaceId, model }),
   });
 
   const body = await response.json();
