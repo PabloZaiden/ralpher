@@ -618,4 +618,104 @@ describe("Draft Loop E2E Workflow", () => {
     expect(secondUpdateBody.config.clearPlanningFolder).toBe(false);
     expect(secondUpdateBody.config.prompt).toBe("Updated prompt only");
   });
+
+  test("sequential draft edits preserve prompt correctly", async () => {
+    // This test simulates the user workflow of:
+    // 1. Creating a draft with a specific prompt
+    // 2. Closing the dialog
+    // 3. Reopening to edit
+    // 4. Modifying the prompt
+    // 5. Saving
+    // Each step should preserve the prompt correctly
+
+    // Step 1: Create first draft
+    const create1Response = await fetch(`${baseUrl}/api/loops`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: testWorkspaceId,
+        prompt: "First draft prompt - this should be unique",
+        draft: true,
+        planMode: false,
+      }),
+    });
+
+    expect(create1Response.status).toBe(201);
+    const create1Body = await create1Response.json();
+    const loop1Id = create1Body.config.id;
+    expect(create1Body.config.prompt).toBe("First draft prompt - this should be unique");
+
+    // Step 2: Create second draft (simulating switching to create new)
+    const create2Response = await fetch(`${baseUrl}/api/loops`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: testWorkspaceId,
+        prompt: "Second draft prompt - completely different",
+        draft: true,
+        planMode: false,
+      }),
+    });
+
+    expect(create2Response.status).toBe(201);
+    const create2Body = await create2Response.json();
+    const loop2Id = create2Body.config.id;
+    expect(create2Body.config.prompt).toBe("Second draft prompt - completely different");
+
+    // Step 3: Go back to edit first draft - verify prompt is correct
+    const get1Response = await fetch(`${baseUrl}/api/loops/${loop1Id}`);
+    expect(get1Response.status).toBe(200);
+    const get1Body = await get1Response.json();
+    expect(get1Body.config.prompt).toBe("First draft prompt - this should be unique");
+
+    // Step 4: Update first draft
+    const update1Response = await fetch(`${baseUrl}/api/loops/${loop1Id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt: "First draft prompt - UPDATED",
+      }),
+    });
+
+    expect(update1Response.status).toBe(200);
+    const update1Body = await update1Response.json();
+    expect(update1Body.config.prompt).toBe("First draft prompt - UPDATED");
+
+    // Step 5: Switch to edit second draft - verify its prompt is unchanged
+    const get2Response = await fetch(`${baseUrl}/api/loops/${loop2Id}`);
+    expect(get2Response.status).toBe(200);
+    const get2Body = await get2Response.json();
+    expect(get2Body.config.prompt).toBe("Second draft prompt - completely different");
+
+    // Step 6: Verify first draft still has updated prompt
+    const verify1Response = await fetch(`${baseUrl}/api/loops/${loop1Id}`);
+    expect(verify1Response.status).toBe(200);
+    const verify1Body = await verify1Response.json();
+    expect(verify1Body.config.prompt).toBe("First draft prompt - UPDATED");
+  });
+
+  test("draft name is derived from prompt (first 50 chars)", async () => {
+    const longPrompt = "This is a very long prompt that should be truncated to create the draft name automatically";
+    
+    const createResponse = await fetch(`${baseUrl}/api/loops`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: testWorkspaceId,
+        prompt: longPrompt,
+        draft: true,
+        planMode: false,
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const createBody = await createResponse.json();
+    
+    // Draft name should be derived from the prompt (first 50 chars)
+    // Not a timestamp-based fallback
+    expect(createBody.config.name).toBeDefined();
+    expect(createBody.config.name.length).toBeLessThanOrEqual(50);
+    expect(createBody.config.name).not.toMatch(/^loop-\d{4}-\d{2}-\d{2}/);
+    expect(createBody.config.name).toContain("This is a very long prompt");
+  });
 });

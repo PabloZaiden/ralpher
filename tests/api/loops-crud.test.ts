@@ -788,6 +788,137 @@ describe("Loops CRUD API Integration", () => {
       const getBody = await getResponse.json();
       expect(getBody.state.status).toBe("deleted");
     });
+
+    test("draft prompt is preserved exactly as entered", async () => {
+      const testPrompt = "This is a test prompt with special characters: @#$%^&*()";
+      
+      // Create draft
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: testPrompt,
+          draft: true,
+          planMode: false,
+        }),
+      });
+
+      expect(createResponse.status).toBe(201);
+      const createBody = await createResponse.json();
+      expect(createBody.config.prompt).toBe(testPrompt);
+
+      // Fetch the draft and verify prompt is preserved
+      const getResponse = await fetch(`${baseUrl}/api/loops/${createBody.config.id}`);
+      expect(getResponse.status).toBe(200);
+      const getBody = await getResponse.json();
+      expect(getBody.config.prompt).toBe(testPrompt);
+    });
+
+    test("multi-line draft prompt is preserved", async () => {
+      const multiLinePrompt = `Line 1: Introduction
+Line 2: Main content with details
+Line 3: Conclusion
+
+This is a paragraph with
+multiple lines.
+
+- Bullet point 1
+- Bullet point 2
+- Bullet point 3`;
+      
+      // Create draft
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: multiLinePrompt,
+          draft: true,
+          planMode: false,
+        }),
+      });
+
+      expect(createResponse.status).toBe(201);
+      const createBody = await createResponse.json();
+      expect(createBody.config.prompt).toBe(multiLinePrompt);
+      
+      const loopId = createBody.config.id;
+
+      // Fetch the draft and verify multi-line prompt is preserved
+      const getResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      expect(getResponse.status).toBe(200);
+      const getBody = await getResponse.json();
+      expect(getBody.config.prompt).toBe(multiLinePrompt);
+
+      // Update with a different multi-line prompt
+      const updatedPrompt = `Updated line 1
+Updated line 2
+Updated line 3`;
+
+      const updateResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: updatedPrompt,
+        }),
+      });
+
+      expect(updateResponse.status).toBe(200);
+      const updateBody = await updateResponse.json();
+      expect(updateBody.config.prompt).toBe(updatedPrompt);
+    });
+
+    test("updating draft prompt multiple times preserves each change", async () => {
+      // Create draft
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Initial prompt v1",
+          draft: true,
+          planMode: false,
+        }),
+      });
+
+      expect(createResponse.status).toBe(201);
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+      expect(createBody.config.prompt).toBe("Initial prompt v1");
+
+      // First update
+      const update1Response = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: "Updated prompt v2",
+        }),
+      });
+
+      expect(update1Response.status).toBe(200);
+      const update1Body = await update1Response.json();
+      expect(update1Body.config.prompt).toBe("Updated prompt v2");
+
+      // Second update
+      const update2Response = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: "Final prompt v3",
+        }),
+      });
+
+      expect(update2Response.status).toBe(200);
+      const update2Body = await update2Response.json();
+      expect(update2Body.config.prompt).toBe("Final prompt v3");
+
+      // Fetch and verify final state
+      const getResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      expect(getResponse.status).toBe(200);
+      const getBody = await getResponse.json();
+      expect(getBody.config.prompt).toBe("Final prompt v3");
+    });
   });
 
   describe("POST /api/loops/:id/mark-merged", () => {

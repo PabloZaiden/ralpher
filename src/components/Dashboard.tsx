@@ -954,6 +954,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
             )}
           >
             <CreateLoopForm
+              key={isEditing ? editLoop.config.id : 'create-new'}
               editLoopId={isEditing ? editLoop.config.id : undefined}
               initialLoopData={initialLoopData}
               isEditingDraft={isEditingDraft}
