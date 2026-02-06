@@ -138,14 +138,15 @@ export function CreateLoopForm({
   const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? true);
 
   // Sync prompt state when initialLoopData changes (safety measure for component reuse)
+  // This handles both editing a draft (set to draft's prompt) and switching to create mode (reset to empty)
   useEffect(() => {
-    if (initialLoopData?.prompt !== undefined) {
-      log.debug('Syncing prompt from initialLoopData', { 
-        promptLength: initialLoopData.prompt.length,
-        promptPreview: initialLoopData.prompt.slice(0, 50)
-      });
-      setPrompt(initialLoopData.prompt);
-    }
+    const newPrompt = initialLoopData?.prompt ?? "";
+    log.debug('Syncing prompt from initialLoopData', { 
+      promptLength: newPrompt.length,
+      promptPreview: newPrompt.slice(0, 50),
+      hasInitialLoopData: !!initialLoopData
+    });
+    setPrompt(newPrompt);
   }, [initialLoopData?.prompt]);
 
   // Check if the selected model is enabled (connected)
