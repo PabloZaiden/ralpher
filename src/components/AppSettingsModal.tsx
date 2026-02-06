@@ -38,6 +38,7 @@ export function AppSettingsModal({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showKillConfirm, setShowKillConfirm] = useState(false);
   const [serverKilled, setServerKilled] = useState(false);
+  const [killError, setKillError] = useState(false);
 
   // Markdown rendering preference
   const { enabled: markdownEnabled, toggle: toggleMarkdown, saving: savingMarkdown } = useMarkdownPreference();
@@ -49,6 +50,8 @@ export function AppSettingsModal({
   function handleClose() {
     setShowResetConfirm(false);
     setShowKillConfirm(false);
+    setServerKilled(false);
+    setKillError(false);
     onClose();
   }
 
@@ -211,40 +214,56 @@ export function AppSettingsModal({
                       type="button"
                       variant="danger"
                       size="sm"
-                      onClick={() => setShowKillConfirm(true)}
+                      onClick={() => {
+                        setKillError(false);
+                        setShowKillConfirm(true);
+                      }}
                       disabled={resetting || killingServer}
                     >
                       Kill server
                     </Button>
                   ) : (
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-red-600 dark:text-red-400">Are you sure?</span>
-                      <Button
-                        type="button"
-                        variant="danger"
-                        size="sm"
-                        onClick={async () => {
-                          if (onKillServer) {
-                            const success = await onKillServer();
-                            if (success) {
-                              setServerKilled(true);
-                              // Don't close the modal - let the user see the shutdown message
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm text-red-600 dark:text-red-400">Are you sure?</span>
+                        <Button
+                          type="button"
+                          variant="danger"
+                          size="sm"
+                          onClick={async () => {
+                            if (onKillServer) {
+                              setKillError(false);
+                              const success = await onKillServer();
+                              if (success) {
+                                setServerKilled(true);
+                                // Don't close the modal - let the user see the shutdown message
+                              } else {
+                                setKillError(true);
+                              }
                             }
-                          }
-                        }}
-                        loading={killingServer}
-                      >
-                        Yes, kill server
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowKillConfirm(false)}
-                        disabled={killingServer}
-                      >
-                        Cancel
-                      </Button>
+                          }}
+                          loading={killingServer}
+                        >
+                          Yes, kill server
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setShowKillConfirm(false);
+                            setKillError(false);
+                          }}
+                          disabled={killingServer}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                      {killError && (
+                        <div className="text-sm text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 rounded px-2 py-1">
+                          Failed to kill server. Please try again.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

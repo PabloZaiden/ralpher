@@ -69,8 +69,12 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     setAppSettingsKilling(true);
     try {
       const response = await fetch("/api/server/kill", { method: "POST" });
+      if (!response.ok) {
+        log.error("Failed to kill server: HTTP", response.status);
+      }
       return response.ok;
-    } catch {
+    } catch (error) {
+      log.error("Failed to kill server:", error);
       return false;
     } finally {
       setAppSettingsKilling(false);
