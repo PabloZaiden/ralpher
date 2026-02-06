@@ -24,6 +24,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "workspace_id",
   "model_provider_id",
   "model_model_id",
+  "model_variant",
   "max_iterations",
   "max_consecutive_errors",
   "activity_timeout_seconds",
@@ -54,6 +55,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "pending_prompt",
   "pending_model_provider_id",
   "pending_model_model_id",
+  "pending_model_variant",
   "plan_mode_active",
   "plan_session_id",
   "plan_server_url",
@@ -93,6 +95,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     workspace_id: config.workspaceId,
     model_provider_id: config.model?.providerID ?? null,
     model_model_id: config.model?.modelID ?? null,
+    model_variant: config.model?.variant ?? null,
     max_iterations: config.maxIterations ?? null,
     max_consecutive_errors: config.maxConsecutiveErrors ?? null,
     activity_timeout_seconds: config.activityTimeoutSeconds ?? null,
@@ -124,6 +127,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     pending_prompt: state.pendingPrompt ?? null,
     pending_model_provider_id: state.pendingModel?.providerID ?? null,
     pending_model_model_id: state.pendingModel?.modelID ?? null,
+    pending_model_variant: state.pendingModel?.variant ?? null,
     plan_mode_active: state.planMode?.active ? 1 : 0,
     plan_session_id: state.planMode?.planSessionId ?? null,
     plan_server_url: state.planMode?.planServerUrl ?? null,
@@ -241,6 +245,9 @@ function rowToLoop(row: Record<string, unknown>): Loop {
       providerID: row["pending_model_provider_id"] as string,
       modelID: row["pending_model_model_id"] as string,
     };
+    if (row["pending_model_variant"]) {
+      state.pendingModel.variant = row["pending_model_variant"] as string;
+    }
   }
   // Reconstruct planMode if any plan mode field is set (not just when active)
   if (row["plan_mode_active"] !== null || row["planning_folder_cleared"] === 1 || 

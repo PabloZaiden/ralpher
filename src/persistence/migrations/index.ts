@@ -435,6 +435,27 @@ export const migrations: Migration[] = [
       }
     },
   },
+
+  // Migration 13: Add model_variant columns for model variant support
+  {
+    version: 13,
+    name: "add_model_variant_columns",
+    up: (db) => {
+      const columns = getTableColumns(db, "loops");
+      
+      // Add model_variant column for config model variant
+      if (!columns.includes("model_variant")) {
+        db.run("ALTER TABLE loops ADD COLUMN model_variant TEXT");
+        log.info("Added model_variant column to loops table");
+      }
+      
+      // Add pending_model_variant column for pending model variant
+      if (!columns.includes("pending_model_variant")) {
+        db.run("ALTER TABLE loops ADD COLUMN pending_model_variant TEXT");
+        log.info("Added pending_model_variant column to loops table");
+      }
+    },
+  },
 ];
 
 /**
