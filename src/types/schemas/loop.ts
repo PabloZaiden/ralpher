@@ -22,7 +22,6 @@ export const GitConfigSchema = z.object({
 /**
  * Schema for CreateLoopRequest - POST /api/loops
  *
- * Matches the CreateLoopRequest interface in types/api.ts.
  */
 export const CreateLoopRequestSchema = z.object({
   workspaceId: z.string().min(1, "workspaceId is required"),
