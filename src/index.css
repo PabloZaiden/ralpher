@@ -19,7 +19,12 @@
 
   html {
     @apply h-full overflow-hidden;
-    height: 100dvh; /* Dynamic viewport height for iOS */
+    /* Use svh (smallest viewport height) to ensure content fits even with 
+       iOS Safari's floating bottom controls visible. dvh can be too tall 
+       when the floating bottom bar overlaps the content area.
+       Order: fallback first, then the preferred svh value overrides. */
+    height: 100dvh; /* Fallback for browsers that don't support svh */
+    height: 100svh; /* Preferred: smallest viewport height for iOS Safari */
     touch-action: pan-x pan-y; /* Control touch actions - prevent pinch zoom */
     overscroll-behavior: none; /* Prevent overscroll/bounce effects */
   }
