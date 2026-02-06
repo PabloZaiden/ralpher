@@ -116,6 +116,11 @@ export function CreateLoopForm({
   // Track if this is the first render to prevent infinite loops
   const isInitialMount = useRef(true);
   
+  // Ref to track current prompt value - used to avoid stale closures in callbacks
+  // passed to parent via renderActions. The ref is always up-to-date even when
+  // the callbacks aren't recreated (to avoid re-renders in parent).
+  const promptRef = useRef(initialLoopData?.prompt ?? "");
+  
   // Workspace state - the only source of truth for directory
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | undefined>(
     initialLoopData?.workspaceId
@@ -147,6 +152,7 @@ export function CreateLoopForm({
       hasInitialLoopData: !!initialLoopData
     });
     setPrompt(newPrompt);
+    promptRef.current = newPrompt;
   }, [initialLoopData?.prompt]);
 
   // Check if the selected model is enabled (connected)
@@ -290,11 +296,16 @@ export function CreateLoopForm({
   const handleSubmit = useCallback(async (e: FormEvent, asDraft = false) => {
     e.preventDefault();
 
+    // Read the current prompt from ref to avoid stale closures
+    // This ensures we get the actual current value even if the callback
+    // reference wasn't updated (e.g., when passed via renderActions to parent)
+    const currentPrompt = promptRef.current;
+
     // Debug logging for form submission
     log.debug('handleSubmit - Form state', { 
       asDraft,
-      promptLength: prompt.length,
-      promptPreview: prompt.slice(0, 50),
+      promptLength: currentPrompt.length,
+      promptPreview: currentPrompt.slice(0, 50),
       selectedWorkspaceId,
     });
 
@@ -302,7 +313,7 @@ export function CreateLoopForm({
     if (!selectedWorkspaceId) {
       return;
     }
-    if (!prompt.trim()) {
+    if (!currentPrompt.trim()) {
       return;
     }
     
@@ -328,7 +339,7 @@ export function CreateLoopForm({
 
     const request: CreateLoopRequest = {
       workspaceId: selectedWorkspaceId,
-      prompt: prompt.trim(),
+      prompt: currentPrompt.trim(),
       planMode: planMode, // planMode is required
       model: { providerID, modelID, variant },
       // Backend settings are now global (not per-loop)
@@ -387,10 +398,11 @@ export function CreateLoopForm({
     }
     // Note: onSubmit and onCancel are intentionally NOT in deps
     // They are callbacks from parent and shouldn't trigger recreation
+    // Note: prompt is NOT in deps because we read from promptRef.current
+    // This avoids stale closures when callbacks are passed to parent via renderActions
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedWorkspaceId,
-    prompt,
     selectedModel,
     selectedModelEnabled,
     planMode,
@@ -712,7 +724,10 @@ export function CreateLoopForm({
         <textarea
           id="prompt"
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={(e) => {
+            setPrompt(e.target.value);
+            promptRef.current = e.target.value;
+          }}
           placeholder={planMode ? "Describe what you want to achieve. The AI will create a detailed plan based on this." : "Do everything that's pending in the plan"}
           required
           rows={3}
