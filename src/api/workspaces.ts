@@ -222,6 +222,12 @@ export const workspacesRoutes = {
             { status: 404 }
           );
         }
+        
+        // Reset connection if server settings were updated so new config takes effect
+        if (body.serverSettings) {
+          await backendManager.resetWorkspaceConnection(id);
+        }
+        
         log.info(`Updated workspace: ${workspace.name}`);
         return Response.json(workspace);
       } catch (error) {
