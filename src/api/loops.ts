@@ -285,6 +285,7 @@ export const loopsCrudRoutes = {
             await setLastModel({
               providerID: body.model.providerID,
               modelID: body.model.modelID,
+              variant: body.model.variant,
             });
           } catch (error) {
             log.warn(`Failed to save last model: ${String(error)}`);

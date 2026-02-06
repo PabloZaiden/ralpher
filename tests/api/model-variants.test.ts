@@ -351,4 +351,110 @@ describe("Model Variants API", () => {
       }
     });
   });
+
+  describe("POST /api/loops - Saves Last Model with Variant", () => {
+    test("saves model with variant as last model when creating a loop", async () => {
+      const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
+      try {
+        // Create a loop with a specific model and variant
+        const response = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspaceId,
+            prompt: "Test prompt",
+            planMode: false,
+            draft: true,
+            model: {
+              providerID: "anthropic",
+              modelID: "claude-sonnet-4-20250514",
+              variant: "thinking",
+            },
+          }),
+        });
+
+        expect(response.status).toBe(201);
+
+        // Verify that the last model preference was saved with the variant
+        const getResponse = await fetch(`${baseUrl}/api/preferences/last-model`);
+        expect(getResponse.status).toBe(200);
+
+        const lastModel = await getResponse.json();
+        expect(lastModel.providerID).toBe("anthropic");
+        expect(lastModel.modelID).toBe("claude-sonnet-4-20250514");
+        expect(lastModel.variant).toBe("thinking");
+      } finally {
+        await rm(workDir, { recursive: true, force: true });
+      }
+    });
+
+    test("saves model with empty variant as last model when creating a loop", async () => {
+      const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
+      try {
+        // Create a loop with an empty variant (default)
+        const response = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspaceId,
+            prompt: "Test prompt",
+            planMode: false,
+            draft: true,
+            model: {
+              providerID: "anthropic",
+              modelID: "claude-sonnet-4-20250514",
+              variant: "",
+            },
+          }),
+        });
+
+        expect(response.status).toBe(201);
+
+        // Verify that the last model preference was saved with the empty variant
+        const getResponse = await fetch(`${baseUrl}/api/preferences/last-model`);
+        expect(getResponse.status).toBe(200);
+
+        const lastModel = await getResponse.json();
+        expect(lastModel.providerID).toBe("anthropic");
+        expect(lastModel.modelID).toBe("claude-sonnet-4-20250514");
+        expect(lastModel.variant).toBe("");
+      } finally {
+        await rm(workDir, { recursive: true, force: true });
+      }
+    });
+
+    test("saves model without variant field as last model when creating a loop", async () => {
+      const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
+      try {
+        // Create a loop without a variant (for models that don't support variants)
+        const response = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspaceId,
+            prompt: "Test prompt",
+            planMode: false,
+            draft: true,
+            model: {
+              providerID: "openai",
+              modelID: "gpt-4o",
+            },
+          }),
+        });
+
+        expect(response.status).toBe(201);
+
+        // Verify that the last model preference was saved without variant
+        const getResponse = await fetch(`${baseUrl}/api/preferences/last-model`);
+        expect(getResponse.status).toBe(200);
+
+        const lastModel = await getResponse.json();
+        expect(lastModel.providerID).toBe("openai");
+        expect(lastModel.modelID).toBe("gpt-4o");
+        expect(lastModel.variant).toBeUndefined();
+      } finally {
+        await rm(workDir, { recursive: true, force: true });
+      }
+    });
+  });
 });
