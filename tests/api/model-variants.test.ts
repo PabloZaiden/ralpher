@@ -445,6 +445,8 @@ describe("Model Variants API", () => {
         });
 
         expect(response.status).toBe(201);
+        // Consume response body to avoid leaving the stream open
+        await response.arrayBuffer();
 
         // Verify that the last model preference was saved without variant
         const getResponse = await fetch(`${baseUrl}/api/preferences/last-model`);
