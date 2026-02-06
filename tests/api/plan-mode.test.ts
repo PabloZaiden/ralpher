@@ -15,6 +15,9 @@ import { TestCommandExecutor } from "../mocks/mock-executor";
 import { closeDatabase } from "../../src/persistence/database";
 import { PlanModeMockBackend } from "../mocks/mock-backend";
 
+// Default test model for loop creation (model is now required)
+const testModel = { providerID: "test-provider", modelID: "test-model" };
+
 describe("Plan Mode API Integration", () => {
   let testDataDir: string;
   let server: Server<unknown>;
@@ -238,6 +241,7 @@ describe("Plan Mode API Integration", () => {
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,
+          model: testModel,
         }),
       });
 
@@ -268,6 +272,7 @@ describe("Plan Mode API Integration", () => {
           maxIterations: 1,
           clearPlanningFolder: true,
           planMode: true,
+          model: testModel,
         }),
       });
 
@@ -311,6 +316,7 @@ describe("Plan Mode API Integration", () => {
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,
+          model: testModel,
         }),
       });
 
@@ -353,6 +359,7 @@ describe("Plan Mode API Integration", () => {
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -397,6 +404,7 @@ describe("Plan Mode API Integration", () => {
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,
+          model: testModel,
         }),
       });
 
@@ -447,6 +455,7 @@ describe("Plan Mode API Integration", () => {
           maxIterations: 1,
           clearPlanningFolder: true,
           planMode: true,
+          model: testModel,
         }),
       });
 
@@ -495,6 +504,7 @@ describe("Plan Mode API Integration", () => {
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -531,6 +541,7 @@ describe("Plan Mode API Integration", () => {
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,
+          model: testModel,
         }),
       });
 

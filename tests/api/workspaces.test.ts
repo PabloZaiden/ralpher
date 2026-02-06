@@ -14,6 +14,9 @@ import { backendManager } from "../../src/core/backend-manager";
 import { createMockBackend } from "../mocks/mock-backend";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 
+// Default test model for loop creation (model is now required)
+const testModel = { providerID: "test-provider", modelID: "test-model" };
+
 describe("Workspace API Integration", () => {
   let testDataDir: string;
   let testWorkDir: string;
@@ -372,6 +375,7 @@ describe("Workspace API Integration", () => {
           prompt: "Test prompt for loop creation",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       expect(loopResponse.ok).toBe(true);
@@ -407,6 +411,7 @@ describe("Workspace API Integration", () => {
           prompt: "Test prompt",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 

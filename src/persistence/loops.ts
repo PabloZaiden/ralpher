@@ -24,6 +24,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "workspace_id",
   "model_provider_id",
   "model_model_id",
+  "model_variant",
   "max_iterations",
   "max_consecutive_errors",
   "activity_timeout_seconds",
@@ -54,6 +55,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "pending_prompt",
   "pending_model_provider_id",
   "pending_model_model_id",
+  "pending_model_variant",
   "plan_mode_active",
   "plan_session_id",
   "plan_server_url",
@@ -93,6 +95,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     workspace_id: config.workspaceId,
     model_provider_id: config.model?.providerID ?? null,
     model_model_id: config.model?.modelID ?? null,
+    model_variant: config.model?.variant ?? null,
     max_iterations: config.maxIterations ?? null,
     max_consecutive_errors: config.maxConsecutiveErrors ?? null,
     activity_timeout_seconds: config.activityTimeoutSeconds ?? null,
@@ -124,6 +127,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     pending_prompt: state.pendingPrompt ?? null,
     pending_model_provider_id: state.pendingModel?.providerID ?? null,
     pending_model_model_id: state.pendingModel?.modelID ?? null,
+    pending_model_variant: state.pendingModel?.variant ?? null,
     plan_mode_active: state.planMode?.active ? 1 : 0,
     plan_session_id: state.planMode?.planSessionId ?? null,
     plan_server_url: state.planMode?.planServerUrl ?? null,
@@ -140,6 +144,24 @@ function loopToRow(loop: Loop): Record<string, unknown> {
  * Convert a database row to a Loop object.
  */
 function rowToLoop(row: Record<string, unknown>): Loop {
+  // Handle model - required field, but may be missing in legacy data
+  let model: { providerID: string; modelID: string; variant?: string };
+  if (row["model_provider_id"] && row["model_model_id"]) {
+    model = {
+      providerID: row["model_provider_id"] as string,
+      modelID: row["model_model_id"] as string,
+    };
+    if (row["model_variant"]) {
+      model.variant = row["model_variant"] as string;
+    }
+  } else {
+    // Legacy loops without model - provide a placeholder that indicates missing config
+    model = {
+      providerID: "unknown",
+      modelID: "not-configured",
+    };
+  }
+
   const config: LoopConfig = {
     id: row["id"] as string,
     name: row["name"] as string,
@@ -153,6 +175,7 @@ function rowToLoop(row: Record<string, unknown>): Loop {
       branchPrefix: row["git_branch_prefix"] as string,
       commitPrefix: row["git_commit_prefix"] as string,
     },
+    model,
     // Mandatory fields with defaults for backward compatibility with old data
     maxIterations: (row["max_iterations"] as number | null) ?? Infinity,
     maxConsecutiveErrors: (row["max_consecutive_errors"] as number | null) ?? 10,
@@ -162,12 +185,6 @@ function rowToLoop(row: Record<string, unknown>): Loop {
   };
 
   // Optional config fields
-  if (row["model_provider_id"] && row["model_model_id"]) {
-    config.model = {
-      providerID: row["model_provider_id"] as string,
-      modelID: row["model_model_id"] as string,
-    };
-  }
   if (row["base_branch"] !== null) {
     config.baseBranch = row["base_branch"] as string;
   }
@@ -228,6 +245,9 @@ function rowToLoop(row: Record<string, unknown>): Loop {
       providerID: row["pending_model_provider_id"] as string,
       modelID: row["pending_model_model_id"] as string,
     };
+    if (row["pending_model_variant"]) {
+      state.pendingModel.variant = row["pending_model_variant"] as string;
+    }
   }
   // Reconstruct planMode if any plan mode field is set (not just when active)
   if (row["plan_mode_active"] !== null || row["planning_folder_cleared"] === 1 || 

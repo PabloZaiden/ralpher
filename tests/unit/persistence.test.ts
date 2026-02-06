@@ -55,6 +55,7 @@ function createTestLoop(overrides: {
       createdAt: overrides.createdAt ?? now,
       updatedAt: now,
       workspaceId: "test-workspace-id",
+      model: { providerID: "test-provider", modelID: "test-model" },
       stopPattern: "<promise>COMPLETE</promise>$",
       git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
       maxIterations: Infinity,

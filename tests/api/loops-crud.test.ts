@@ -15,6 +15,9 @@ import { TestCommandExecutor } from "../mocks/mock-executor";
 import packageJson from "../../package.json";
 import { createMockBackend } from "../mocks/mock-backend";
 
+// Default test model for loop creation (model is now required)
+const testModel = { providerID: "test-provider", modelID: "test-model" };
+
 describe("Loops CRUD API Integration", () => {
   let testDataDir: string;
   let testWorkDir: string;
@@ -164,6 +167,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Build something",
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -187,6 +191,7 @@ describe("Loops CRUD API Integration", () => {
           stopPattern: "<done>FINISHED</done>$",
           git: { branchPrefix: "custom/" },
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -229,6 +234,7 @@ describe("Loops CRUD API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "",
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -262,6 +268,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Test prompt",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -295,6 +302,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Original prompt",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -333,6 +341,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Test",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -362,6 +371,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Test prompt",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -393,6 +403,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Purge me",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -434,6 +445,7 @@ describe("Loops CRUD API Integration", () => {
           clearPlanningFolder: true,
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -452,6 +464,7 @@ describe("Loops CRUD API Integration", () => {
           clearPlanningFolder: false,
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -469,6 +482,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Task with default",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -489,6 +503,7 @@ describe("Loops CRUD API Integration", () => {
           clearPlanningFolder: true,
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -513,6 +528,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Draft task",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -545,6 +561,7 @@ describe("Loops CRUD API Integration", () => {
             prompt: "Normal task",
             draft: false,
             planMode: false,
+            model: testModel,
           }),
         });
 
@@ -570,6 +587,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Original prompt",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -612,6 +630,7 @@ describe("Loops CRUD API Integration", () => {
             workspaceId,
             prompt: "Task",
             planMode: false,
+          model: testModel,
           }),
         });
         expect(createResponse.status).toBe(201);
@@ -647,6 +666,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Task",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -658,6 +678,7 @@ describe("Loops CRUD API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -685,6 +706,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Task",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -696,6 +718,7 @@ describe("Loops CRUD API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           planMode: true,
+          model: testModel,
         }),
       });
 
@@ -727,6 +750,7 @@ describe("Loops CRUD API Integration", () => {
             prompt: "Task",
             draft: true,
             planMode: false,
+          model: testModel,
           }),
         });
         const draftBody = await draftResponse.json();
@@ -749,6 +773,7 @@ describe("Loops CRUD API Integration", () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             planMode: false,
+          model: testModel,
           }),
         });
 
@@ -770,6 +795,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Task",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -801,6 +827,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: testPrompt,
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -836,6 +863,7 @@ multiple lines.
           prompt: multiLinePrompt,
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -879,6 +907,7 @@ Updated line 3`;
           prompt: "Initial prompt v1",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -942,6 +971,7 @@ Updated line 3`;
           prompt: "Test mark merged",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -967,6 +997,7 @@ Updated line 3`;
           workspaceId: testWorkspaceId,
           prompt: "Test no git",
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -1006,6 +1037,7 @@ Updated line 3`;
           workspaceId: testWorkspaceId,
           prompt: "Test mark merged",
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -1042,6 +1074,7 @@ Updated line 3`;
           prompt: "Test rename task",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -1089,6 +1122,7 @@ Updated line 3`;
             prompt: "Complete me",
             name: "Before Completion",
             planMode: false,
+          model: testModel,
           }),
         });
         expect(createResponse.status).toBe(201);
@@ -1122,6 +1156,7 @@ Updated line 3`;
           prompt: "Test trim",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -1157,6 +1192,7 @@ Updated line 3`;
           prompt: "Test empty name",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -1184,6 +1220,7 @@ Updated line 3`;
           prompt: "Test whitespace name",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();

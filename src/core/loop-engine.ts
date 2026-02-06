@@ -1203,12 +1203,12 @@ export class LoopEngine {
                   // Update existing log entry
                   this.emitLog("agent", "AI generating response...", {
                     responseContent: currentResponseLogContent,
-                  }, currentResponseLogId);
+                  }, currentResponseLogId, "trace");
                 } else {
                   // Create new log entry
                   currentResponseLogId = this.emitLog("agent", "AI generating response...", {
                     responseContent: currentResponseLogContent,
-                  });
+                  }, undefined, "trace");
                 }
               }
               // Emit progress event for streaming text

@@ -116,6 +116,11 @@ export function CreateLoopForm({
   // Track if this is the first render to prevent infinite loops
   const isInitialMount = useRef(true);
   
+  // Ref to track current prompt value - used to avoid stale closures in callbacks
+  // passed to parent via renderActions. The ref is always up-to-date even when
+  // the callbacks aren't recreated (to avoid re-renders in parent).
+  const promptRef = useRef(initialLoopData?.prompt ?? "");
+  
   // Workspace state - the only source of truth for directory
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | undefined>(
     initialLoopData?.workspaceId
@@ -147,18 +152,19 @@ export function CreateLoopForm({
       hasInitialLoopData: !!initialLoopData
     });
     setPrompt(newPrompt);
+    promptRef.current = newPrompt;
   }, [initialLoopData?.prompt]);
 
   // Check if the selected model is enabled (connected)
   // Format: providerID:modelID:variant (variant can be empty string)
   const isSelectedModelEnabled = (): boolean => {
-    if (!selectedModel) return true; // No model selected = use backend default, which is fine
+    if (!selectedModel) return false; // No model selected = not valid (model is required)
     const parts = selectedModel.split(":");
     // Format is providerID:modelID:variant (variant may be empty)
-    if (parts.length < 2) return true;
+    if (parts.length < 2) return false;
     const providerID = parts[0];
     const modelID = parts[1];
-    if (!providerID || !modelID) return true;
+    if (!providerID || !modelID) return false;
     const model = models.find((m) => m.providerID === providerID && m.modelID === modelID);
     return model?.connected ?? false;
   };
@@ -290,11 +296,16 @@ export function CreateLoopForm({
   const handleSubmit = useCallback(async (e: FormEvent, asDraft = false) => {
     e.preventDefault();
 
+    // Read the current prompt from ref to avoid stale closures
+    // This ensures we get the actual current value even if the callback
+    // reference wasn't updated (e.g., when passed via renderActions to parent)
+    const currentPrompt = promptRef.current;
+
     // Debug logging for form submission
     log.debug('handleSubmit - Form state', { 
       asDraft,
-      promptLength: prompt.length,
-      promptPreview: prompt.slice(0, 50),
+      promptLength: currentPrompt.length,
+      promptPreview: currentPrompt.slice(0, 50),
       selectedWorkspaceId,
     });
 
@@ -302,39 +313,38 @@ export function CreateLoopForm({
     if (!selectedWorkspaceId) {
       return;
     }
-    if (!prompt.trim()) {
+    if (!currentPrompt.trim()) {
       return;
     }
     
-    // Validate model is enabled if selected (not for drafts - drafts can have any model)
-    if (!asDraft && selectedModel && !selectedModelEnabled) {
+    // Validate model is enabled if selected (required for all submissions including drafts)
+    if (!selectedModel || !selectedModelEnabled) {
       return;
     }
 
     setSubmitting(true);
 
+    // Parse model from selectedModel string
+    // Format: providerID:modelID:variant (variant can be empty string)
+    const parts = selectedModel.split(":");
+    const providerID = parts[0];
+    const modelID = parts[1];
+    // Variant is everything after the second colon (may be empty string)
+    const variant = parts.length >= 3 ? parts.slice(2).join(":") : "";
+    
+    if (!providerID || !modelID) {
+      setSubmitting(false);
+      return;
+    }
+
     const request: CreateLoopRequest = {
       workspaceId: selectedWorkspaceId,
-      prompt: prompt.trim(),
+      prompt: currentPrompt.trim(),
       planMode: planMode, // planMode is required
+      model: { providerID, modelID, variant },
       // Backend settings are now global (not per-loop)
       // Git is always enabled - no toggle exposed to users
     };
-
-    // Add model if selected
-    // Format: providerID:modelID:variant (variant can be empty string)
-    if (selectedModel) {
-      const parts = selectedModel.split(":");
-      const providerID = parts[0];
-      const modelID = parts[1];
-      // Variant is everything after the second colon (may be empty string)
-      const variant = parts.length >= 3 ? parts.slice(2).join(":") : "";
-      if (providerID && modelID) {
-        request.model = { providerID, modelID };
-        // Always include variant, even if it's an empty string
-        request.model.variant = variant;
-      }
-    }
 
     if (maxIterations.trim()) {
       const num = parseInt(maxIterations, 10);
@@ -388,10 +398,11 @@ export function CreateLoopForm({
     }
     // Note: onSubmit and onCancel are intentionally NOT in deps
     // They are callbacks from parent and shouldn't trigger recreation
+    // Note: prompt is NOT in deps because we read from promptRef.current
+    // This avoids stale closures when callbacks are passed to parent via renderActions
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedWorkspaceId,
-    prompt,
     selectedModel,
     selectedModelEnabled,
     planMode,
@@ -501,16 +512,11 @@ export function CreateLoopForm({
   }
 
   // Get connected providers (for display order), sorted by name
+  // Only connected providers are shown - disconnected models are not displayed
   const connectedProviders = Object.keys(modelsByProvider)
     .filter((provider) => {
       const providerModels = modelsByProvider[provider];
       return providerModels && providerModels.some((m) => m.connected);
-    })
-    .sort((a, b) => a.localeCompare(b));
-  const disconnectedProviders = Object.keys(modelsByProvider)
-    .filter((provider) => {
-      const providerModels = modelsByProvider[provider];
-      return providerModels && !providerModels.some((m) => m.connected);
     })
     .sort((a, b) => a.localeCompare(b));
 
@@ -669,35 +675,30 @@ export function CreateLoopForm({
           {!modelsLoading && models.length > 0 && (
             <>
               <option value="">Select a model...</option>
-              {/* Connected providers first */}
+              {/* Only show connected providers */}
               {connectedProviders.map((provider) => {
                 const providerModels = modelsByProvider[provider] ?? [];
                 return (
-                  <optgroup key={provider} label={`${provider} (connected)`}>
+                  <optgroup key={provider} label={provider}>
                     {providerModels.map((model) => renderModelOptions(model, false))}
                   </optgroup>
                 );
               })}
-              {/* Disconnected providers */}
-              {disconnectedProviders.map((provider) => {
-                const providerModels = modelsByProvider[provider] ?? [];
-                return (
-                  <optgroup key={provider} label={`${provider} (not connected)`}>
-                    {providerModels.map((model) => renderModelOptions(model, true))}
-                  </optgroup>
-                );
-              })}
+              {/* Show message if no providers are connected */}
+              {connectedProviders.length === 0 && (
+                <option value="" disabled>No connected providers available</option>
+              )}
             </>
           )}
         </select>
-        {!modelsLoading && models.length > 0 && selectedModel && !selectedModelEnabled && (
+        {!modelsLoading && models.length > 0 && connectedProviders.length === 0 && (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-            The selected model's provider is not connected. Please check your API credentials or select a different model.
+            No providers are connected. Please configure API credentials in the opencode server.
           </p>
         )}
-        {!modelsLoading && models.length > 0 && !selectedModel && (
-          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-            No model selected - will use default from opencode config
+        {!modelsLoading && models.length > 0 && connectedProviders.length > 0 && !selectedModel && (
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+            Model is required. Please select a model.
           </p>
         )}
       </div>
@@ -713,7 +714,10 @@ export function CreateLoopForm({
         <textarea
           id="prompt"
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={(e) => {
+            setPrompt(e.target.value);
+            promptRef.current = e.target.value;
+          }}
           placeholder={planMode ? "Describe what you want to achieve. The AI will create a detailed plan based on this." : "Do everything that's pending in the plan"}
           required
           rows={3}

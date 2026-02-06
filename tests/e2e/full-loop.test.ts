@@ -10,6 +10,7 @@ import {
   waitForEvent,
   countEvents,
   getEvents,
+  testModelFields,
   type TestContext,
 } from "../setup";
 
@@ -38,6 +39,7 @@ describe("Full Loop Workflow", () => {
   describe("Loop Creation", () => {
     test("creates a loop via manager with correct defaults", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Implement a feature",
         workspaceId: testWorkspaceId,
@@ -58,6 +60,7 @@ describe("Full Loop Workflow", () => {
 
     test("creates a loop with custom options", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Custom task",
         workspaceId: testWorkspaceId,
@@ -72,6 +75,7 @@ describe("Full Loop Workflow", () => {
 
     test("persists loop to disk", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Test persistence",
         workspaceId: testWorkspaceId,
@@ -87,6 +91,7 @@ describe("Full Loop Workflow", () => {
   describe("Loop Execution", () => {
     test("starts loop and runs through iterations until completion", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Do the work",
         workspaceId: testWorkspaceId,
@@ -135,6 +140,7 @@ describe("Full Loop Workflow", () => {
       });
 
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Work forever",
         workspaceId: testWorkspaceId,
@@ -169,6 +175,7 @@ describe("Full Loop Workflow", () => {
       });
 
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Do work",
         workspaceId: testWorkspaceId,
@@ -203,6 +210,7 @@ describe("Full Loop Workflow", () => {
       });
 
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Cause error",
         workspaceId: testWorkspaceId,
@@ -225,6 +233,7 @@ describe("Full Loop Workflow", () => {
   describe("Loop CRUD Operations", () => {
     test("lists all loops", async () => {
       await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Task 1",
         workspaceId: testWorkspaceId,
@@ -232,6 +241,7 @@ describe("Full Loop Workflow", () => {
       });
 
       await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Task 2",
         workspaceId: testWorkspaceId,
@@ -239,6 +249,7 @@ describe("Full Loop Workflow", () => {
       });
 
       await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Task 3",
         workspaceId: testWorkspaceId,
@@ -251,6 +262,7 @@ describe("Full Loop Workflow", () => {
 
     test("updates loop configuration", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Original prompt",
         workspaceId: testWorkspaceId,
@@ -271,6 +283,7 @@ describe("Full Loop Workflow", () => {
 
     test("soft-deletes a loop (marks as deleted)", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Delete me",
         workspaceId: testWorkspaceId,
@@ -291,6 +304,7 @@ describe("Full Loop Workflow", () => {
 
     test("purges a deleted loop", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Purge me",
         workspaceId: testWorkspaceId,
@@ -324,6 +338,7 @@ describe("Full Loop Workflow", () => {
   describe("Loop State Tracking", () => {
     test("tracks running state correctly", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Track me",
         workspaceId: testWorkspaceId,
@@ -347,6 +362,7 @@ describe("Full Loop Workflow", () => {
 
     test("records iteration summaries", async () => {
       const loop = await ctx.manager.createLoop({
+        ...testModelFields,
         directory: ctx.workDir,
         prompt: "Track iterations",
         workspaceId: testWorkspaceId,

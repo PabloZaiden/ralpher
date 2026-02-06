@@ -15,6 +15,9 @@ import { TestCommandExecutor } from "../mocks/mock-executor";
 import { updateLoopState } from "../../src/persistence/loops";
 import { NeverCompletingMockBackend } from "../mocks/mock-backend";
 
+// Default test model for loop creation (model is now required)
+const testModel = { providerID: "test-provider", modelID: "test-model" };
+
 describe("Active Loop Directory Check API", () => {
   let testDataDir: string;
   let testWorkDir: string;
@@ -136,6 +139,7 @@ describe("Active Loop Directory Check API", () => {
           prompt: "First task",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -156,6 +160,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "Second task",
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -177,6 +182,7 @@ describe("Active Loop Directory Check API", () => {
           prompt: "Active task",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -195,6 +201,7 @@ describe("Active Loop Directory Check API", () => {
           prompt: "Draft task",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -213,6 +220,7 @@ describe("Active Loop Directory Check API", () => {
           prompt: "Will be stopped",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -237,6 +245,7 @@ describe("Active Loop Directory Check API", () => {
           prompt: "After stopped",
           draft: true, // Use draft to avoid triggering the loop
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -253,6 +262,7 @@ describe("Active Loop Directory Check API", () => {
           prompt: "Planning task with a specific name",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -270,6 +280,7 @@ describe("Active Loop Directory Check API", () => {
           workspaceId: testWorkspaceId,
           prompt: "Another task",
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -291,6 +302,7 @@ describe("Active Loop Directory Check API", () => {
           prompt: "Running loop",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -309,6 +321,7 @@ describe("Active Loop Directory Check API", () => {
           prompt: "Draft to start",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -338,6 +351,7 @@ describe("Active Loop Directory Check API", () => {
           prompt: "Completed loop",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -356,6 +370,7 @@ describe("Active Loop Directory Check API", () => {
           prompt: "Draft to start after completion",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
 
@@ -387,6 +402,7 @@ describe("Active Loop Directory Check API", () => {
             prompt: `Terminal ${status} loop`,
             draft: true,
             planMode: false,
+            model: testModel,
           }),
         });
 
@@ -405,6 +421,7 @@ describe("Active Loop Directory Check API", () => {
             prompt: `New loop after ${status}`,
             draft: true,
             planMode: false,
+            model: testModel,
           }),
         });
 
@@ -427,6 +444,7 @@ describe("Active Loop Directory Check API", () => {
             prompt: `Active ${status} loop`,
             draft: true,
             planMode: false,
+            model: testModel,
           }),
         });
 
@@ -444,6 +462,7 @@ describe("Active Loop Directory Check API", () => {
             workspaceId: testWorkspaceId,
             prompt: `Blocked by ${status}`,
             planMode: false,
+            model: testModel,
             // Not a draft
           }),
         });

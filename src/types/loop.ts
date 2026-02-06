@@ -35,8 +35,8 @@ export interface LoopConfig {
   /** Workspace ID this loop belongs to */
   workspaceId: string;
 
-  /** Model configuration for AI provider and model selection (optional - uses backend default if not set) */
-  model?: ModelConfig;
+  /** Model configuration for AI provider and model selection (required) */
+  model: ModelConfig;
 
   /** Maximum iterations before stopping (Infinity for unlimited) */
   maxIterations: number;

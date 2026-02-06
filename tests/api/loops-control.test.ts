@@ -16,6 +16,9 @@ import { closeDatabase } from "../../src/persistence/database";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 import { createMockBackend } from "../mocks/mock-backend";
 
+// Default test model for loop creation (model is now required)
+const testModel = { providerID: "test-provider", modelID: "test-model" };
+
 describe("Loops Control API Integration", () => {
   let testDataDir: string;
   let testWorkDir: string;
@@ -192,6 +195,7 @@ describe("Loops Control API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Test prompt",
           planMode: true,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -232,6 +236,7 @@ describe("Loops Control API Integration", () => {
           prompt: "Test prompt",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       const createBody = await createResponse.json();
@@ -272,6 +277,7 @@ describe("Loops Control API Integration", () => {
           prompt: "Test",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -316,6 +322,7 @@ describe("Loops Control API Integration", () => {
           prompt: "Test",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -359,6 +366,7 @@ describe("Loops Control API Integration", () => {
           prompt: "Test",
           draft: true,
           planMode: false,
+          model: testModel,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -405,6 +413,7 @@ describe("Loops Control API Integration", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            model: testModel,
           }),
         });
         const createBody = await createResponse.json();
@@ -449,6 +458,7 @@ describe("Loops Control API Integration", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            model: testModel,
           }),
         });
         const createBody = await createResponse.json();
@@ -490,6 +500,7 @@ describe("Loops Control API Integration", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            model: testModel,
           }),
         });
         const createBody = await createResponse.json();
@@ -532,6 +543,7 @@ describe("Loops Control API Integration", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            model: testModel,
           }),
         });
         const createBody = await createResponse.json();
@@ -591,6 +603,7 @@ describe("Loops Control API Integration", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            model: testModel,
           }),
         });
         const createBody = await createResponse.json();
@@ -637,6 +650,7 @@ describe("Loops Control API Integration", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            model: testModel,
           }),
         });
         const createBody = await createResponse.json();
@@ -710,6 +724,7 @@ describe("Loops Control API Integration", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            model: testModel,
           }),
         });
         const createBody = await createResponse.json();
@@ -767,6 +782,7 @@ describe("Loops Control API Integration", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            model: testModel,
           }),
         });
         const createBody = await createResponse.json();
@@ -826,6 +842,7 @@ describe("Loops Control API Integration", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            model: testModel,
           }),
         });
         const createBody = await createResponse.json();

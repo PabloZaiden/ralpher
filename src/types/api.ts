@@ -61,8 +61,8 @@ export interface CreateLoopRequest {
   workspaceId: string;
   /** The task prompt/PRD describing what the loop should accomplish */
   prompt: string;
-  /** Model configuration for AI provider and model selection */
-  model?: ModelConfig;
+  /** Model configuration for AI provider and model selection (required) */
+  model: ModelConfig;
   /** Maximum number of iterations before stopping (default: Infinity for unlimited) */
   maxIterations?: number;
   /** Maximum consecutive identical errors before failsafe exit (default: 10) */
@@ -316,6 +316,18 @@ export function validateCreateLoopRequest(req: unknown): string | undefined {
 
   if (typeof body["prompt"] !== "string" || (body["prompt"] as string).trim() === "") {
     return "prompt is required and must be a non-empty string";
+  }
+
+  // model is required and must have providerID and modelID
+  if (typeof body["model"] !== "object" || body["model"] === null) {
+    return "model is required";
+  }
+  const model = body["model"] as Record<string, unknown>;
+  if (typeof model["providerID"] !== "string" || (model["providerID"] as string).trim() === "") {
+    return "model.providerID is required and must be a non-empty string";
+  }
+  if (typeof model["modelID"] !== "string" || (model["modelID"] as string).trim() === "") {
+    return "model.modelID is required and must be a non-empty string";
   }
 
   if (body["maxIterations"] !== undefined && typeof body["maxIterations"] !== "number") {
