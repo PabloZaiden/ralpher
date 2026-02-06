@@ -546,7 +546,7 @@ export class OpenCodeBackend implements Backend {
           );
           
           if (translated) {
-            log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Translated event`, {
+            log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Translated event`, {
               rawType: rawEventType,
               translatedType: translated.type,
               sessionId,
@@ -687,7 +687,7 @@ export class OpenCodeBackend implements Backend {
     switch (event.type) {
       case "message.updated": {
         const msg = event.properties.info;
-        log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.updated`, {
+        log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.updated`, {
           msgSessionId: msg.sessionID,
           targetSessionId: sessionId,
           role: msg.role,
@@ -695,14 +695,14 @@ export class OpenCodeBackend implements Backend {
           alreadyEmitted: emittedMessageStarts.has(msg.id),
         });
         if (msg.sessionID !== sessionId) {
-          log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.updated - session ID mismatch`);
+          log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.updated - session ID mismatch`);
           return null;
         }
 
         if (msg.role === "assistant") {
           // Only emit message.start once per message ID
           if (emittedMessageStarts.has(msg.id)) {
-            log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.updated - already emitted start for this message`);
+            log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.updated - already emitted start for this message`);
             return null;
           }
           emittedMessageStarts.add(msg.id);
@@ -712,13 +712,13 @@ export class OpenCodeBackend implements Backend {
             messageId: msg.id,
           };
         }
-        log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.updated - role is not assistant, returning null`, { role: msg.role });
+        log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.updated - role is not assistant, returning null`, { role: msg.role });
         return null;
       }
 
       case "message.part.updated": {
         const part = event.properties.part;
-        log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated`, {
+        log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated`, {
           partSessionId: part.sessionID,
           targetSessionId: sessionId,
           partType: part.type,
@@ -726,7 +726,7 @@ export class OpenCodeBackend implements Backend {
           deltaLength: event.properties.delta?.length ?? 0,
         });
         if (part.sessionID !== sessionId) {
-          log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - session ID mismatch`);
+          log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - session ID mismatch`);
           return null;
         }
 
@@ -741,7 +741,7 @@ export class OpenCodeBackend implements Backend {
               content: event.properties.delta,
             };
           } else {
-            log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - text part has no delta, returning null`);
+            log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - text part has no delta, returning null`);
           }
         } else if (part.type === "reasoning") {
           // Reasoning content (AI thinking/chain of thought)

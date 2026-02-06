@@ -1190,13 +1190,13 @@ export class LoopEngine {
               // Reset response log tracking
               currentResponseLogId = null;
               currentResponseLogContent = "";
-              // Log that AI started generating
+              // Log that AI started generating (agent level - visible to user)
               this.emitLog("agent", "AI started generating response");
               break;
 
             case "message.delta":
               responseContent += event.content;
-              // Combine consecutive deltas into the same log entry
+              // Combine consecutive deltas into the same log entry (agent level - visible to user)
               if (event.content.trim()) {
                 currentResponseLogContent += event.content;
                 if (currentResponseLogId) {
@@ -1224,7 +1224,7 @@ export class LoopEngine {
             case "reasoning.delta":
               // AI reasoning/thinking content (chain of thought)
               reasoningContent += event.content;
-              // Combine consecutive reasoning deltas into the same log entry
+              // Combine consecutive reasoning deltas into the same log entry (agent level - visible to user)
               if (event.content.trim()) {
                 currentReasoningLogContent += event.content;
                 if (currentReasoningLogId) {
@@ -1850,6 +1850,9 @@ Output ONLY the commit message, nothing else.`
         break;
       case "debug":
         log.debug(`${loopPrefix} ${message}${detailsStr}`);
+        break;
+      case "trace":
+        log.trace(`${loopPrefix} ${message}${detailsStr}`);
         break;
       case "agent":
       case "user":
