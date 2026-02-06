@@ -39,6 +39,7 @@ function errorResponse(error: string, message: string, status = 400): Response {
  * Provides endpoints for application configuration and management:
  * - GET /api/config - Get application configuration
  * - POST /api/settings/reset-all - Delete and reinitialize database
+ * - POST /api/server/kill - Terminate the server process (for container restart)
  * 
  * Note: Global server settings and connection reset endpoints have been removed.
  * Server settings and connection management are now per-workspace via the workspace API.
@@ -95,6 +96,37 @@ export const settingsRoutes = {
         log.error("Failed to reset all settings", { error: String(error) });
         return errorResponse("reset_failed", String(error), 500);
       }
+    },
+  },
+
+  "/api/server/kill": {
+    /**
+     * POST /api/server/kill - Terminate the server process.
+     * 
+     * This is a DESTRUCTIVE operation that terminates the Ralpher server process.
+     * In containerized environments (e.g., Kubernetes), this will cause the container
+     * to restart, potentially pulling an updated image.
+     * 
+     * The server sends a success response before scheduling the exit to ensure
+     * the client receives confirmation that the kill was initiated.
+     * 
+     * @returns Success response with message, then server terminates
+     */
+    async POST(): Promise<Response> {
+      log.warn("POST /api/server/kill - Server kill requested");
+      
+      // Schedule the server termination after a short delay to allow the response to be sent
+      setTimeout(() => {
+        log.info("Server is shutting down...");
+        // Exit with code 0 to indicate intentional termination
+        // In k8s, the container will restart based on the restart policy
+        process.exit(0);
+      }, 100);
+      
+      return Response.json({ 
+        success: true, 
+        message: "Server is shutting down. The connection will be lost." 
+      });
     },
   },
 };
