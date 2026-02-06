@@ -4,18 +4,56 @@
 @layer base {
   :root {
     @apply text-[rgba(255,255,255,0.87)] bg-[#242424] font-sans;
+
+    /* Safe area insets as CSS variables */
+    --safe-area-inset-top: env(safe-area-inset-top, 0px);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-inset-left: env(safe-area-inset-left, 0px);
+    --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  }
+
+  /* Remove tap highlight on iOS */
+  * {
+    -webkit-tap-highlight-color: transparent;
   }
 
   html {
-    @apply h-full;
+    @apply h-full overflow-hidden;
+    height: 100dvh; /* Dynamic viewport height for iOS */
+    touch-action: pan-x pan-y; /* Control touch actions - prevent pinch zoom */
+    overscroll-behavior: none; /* Prevent overscroll/bounce effects */
   }
 
   body {
-    @apply min-w-[320px] h-full m-0;
+    @apply h-full m-0 overflow-hidden fixed w-full top-0 left-0;
+    overscroll-behavior: none; /* Prevent overscroll/bounce effects */
   }
 
   #root {
-    @apply w-full h-full;
+    @apply w-full h-full overflow-hidden;
+  }
+
+  /* Prevent text selection on interactive elements */
+  button,
+  a,
+  [role="button"] {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Prevent callout menu on long-press */
+  img,
+  a {
+    -webkit-touch-callout: none;
+  }
+
+  /* Prevent iOS zoom on input focus - iOS zooms when font-size < 16px */
+  @media (hover: none) and (pointer: coarse) {
+    input,
+    textarea,
+    select {
+      font-size: 16px !important;
+    }
   }
 
   /* Custom scrollbar for dark backgrounds */
@@ -85,5 +123,28 @@
   ::before,
   ::after {
     animation: none !important;
+  }
+}
+
+/* Safe area utility classes for notched devices */
+@layer utilities {
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .safe-area-x {
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  .safe-area-all {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
   }
 }

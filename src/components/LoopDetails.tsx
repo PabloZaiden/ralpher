@@ -434,7 +434,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
       {/* Header - compact single line */}
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 safe-area-top">
         <div className="px-4 sm:px-6 lg:px-8 py-2">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={onBack}>
