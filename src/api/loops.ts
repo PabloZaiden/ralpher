@@ -466,7 +466,14 @@ export const loopsCrudRoutes = {
         // Zod already validated types - use directly
         const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};
         
-        if (body.name !== undefined) updates.name = body.name;
+        // Apply the same validation as PATCH: trim and non-empty check for name
+        if (body.name !== undefined) {
+          const trimmedName = body.name.trim();
+          if (trimmedName === "") {
+            return errorResponse("validation_error", "Name cannot be empty");
+          }
+          updates.name = trimmedName;
+        }
         if (body.directory !== undefined) updates.directory = body.directory;
         if (body.prompt !== undefined) updates.prompt = body.prompt;
         if (body.maxIterations !== undefined) updates.maxIterations = body.maxIterations;

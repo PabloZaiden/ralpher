@@ -31,8 +31,8 @@ export const ServerSettingsSchema = z.object({
 /**
  * Schema for CreateWorkspaceRequest - POST /api/workspaces
  *
- * Matches the CreateWorkspaceRequest interface in types/workspace.ts.
  * serverSettings is optional - defaults to getDefaultServerSettings() if not provided.
+ * The CreateWorkspaceRequest type in types/workspace.ts is derived from this schema.
  */
 export const CreateWorkspaceRequestSchema = z.object({
   name: z.string().min(1, "name is required"),
@@ -43,7 +43,8 @@ export const CreateWorkspaceRequestSchema = z.object({
 /**
  * Schema for UpdateWorkspaceRequest - PUT /api/workspaces/:id
  *
- * All fields are optional. Matches UpdateWorkspaceRequest interface.
+ * All fields are optional.
+ * The UpdateWorkspaceRequest type in types/workspace.ts is derived from this schema.
  */
 export const UpdateWorkspaceRequestSchema = z.object({
   name: z.string().optional(),
