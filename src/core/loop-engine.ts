@@ -1852,7 +1852,8 @@ Output ONLY the commit message, nothing else.`
     // If consoleLevel is provided, use it for server console output
     // Otherwise, derive from level (existing behavior)
     if (consoleLevel) {
-      const logMessage = `${loopPrefix} [${level}] ${message}${detailsStr}`;
+      const levelTag = level === "agent" || level === "user" ? ` [${level}]` : "";
+      const logMessage = `${loopPrefix}${levelTag} ${message}${detailsStr}`;
       switch (consoleLevel) {
         case "trace":
           log.trace(logMessage);
