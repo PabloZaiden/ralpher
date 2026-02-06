@@ -148,6 +148,15 @@ export function LoopCard({
         </div>
       )}
 
+      {/* Error display - show when loop has an error */}
+      {state.error && (
+        <div className="mb-3 sm:mb-4 p-2 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
+          <p className="text-xs sm:text-sm text-red-800 dark:text-red-300 break-words">
+            {state.error.message}
+          </p>
+        </div>
+      )}
+
       {/* Git info - hide for drafts (no branch yet) */}
       {!isDraft && state.git && (
         <div className="mb-3 sm:mb-4 text-xs sm:text-sm">
