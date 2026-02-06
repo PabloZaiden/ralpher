@@ -4,10 +4,20 @@
  * These types define the request and response shapes for the REST API.
  * They are used for type safety in both the API route handlers and clients.
  * 
+ * Request types for validated endpoints are derived from Zod schemas,
+ * making the schemas the single source of truth for both runtime validation
+ * and TypeScript types.
+ * 
  * @module types/api
  */
 
-import type { GitConfig, ModelConfig, ReviewComment } from "./loop";
+import type { ReviewComment } from "./loop";
+import {
+  CreateLoopRequestSchema,
+  UpdateLoopRequestSchema,
+  AddressCommentsRequestSchema,
+} from "./schemas";
+import type { z } from "zod";
 
 /**
  * Branch information returned by the git API.
@@ -55,65 +65,29 @@ export interface ModelInfo {
  * 
  * The `workspaceId` is required - loops must be created within a workspace.
  * The directory is automatically derived from the workspace.
+ * 
+ * Type is derived from CreateLoopRequestSchema - the Zod schema is the
+ * single source of truth for both validation and TypeScript types.
  */
-export interface CreateLoopRequest {
-  /** Workspace ID to create the loop in (required) */
-  workspaceId: string;
-  /** The task prompt/PRD describing what the loop should accomplish */
-  prompt: string;
-  /** Model configuration for AI provider and model selection (required) */
-  model: ModelConfig;
-  /** Maximum number of iterations before stopping (default: Infinity for unlimited) */
-  maxIterations?: number;
-  /** Maximum consecutive identical errors before failsafe exit (default: 10) */
-  maxConsecutiveErrors?: number;
-  /** Seconds without events before treating as error and retrying (default: 180, min: 60) */
-  activityTimeoutSeconds?: number;
-  /** Regex pattern for completion detection (default: "<promise>COMPLETE</promise>$") */
-  stopPattern?: string;
-  /** Git configuration for branch and commit naming */
-  git?: Partial<GitConfig>;
-  /** Base branch to create the loop from (default: current branch) */
-  baseBranch?: string;
-  /** Clear the .planning folder contents before starting (default: false) */
-  clearPlanningFolder?: boolean;
-  /** Start in plan creation mode instead of immediate execution (required, must be true or false) */
-  planMode: boolean;
-  /** Save as draft without starting (no git branch or session created) */
-  draft?: boolean;
-}
+export type CreateLoopRequest = z.infer<typeof CreateLoopRequestSchema>;
 
 /**
  * Request body for PATCH /api/loops/:id endpoint.
  * All fields are optional - only provided fields are updated.
+ * 
+ * Type is derived from UpdateLoopRequestSchema - the Zod schema is the
+ * single source of truth for both validation and TypeScript types.
  */
-export interface UpdateLoopRequest {
-  /** Update the loop name */
-  name?: string;
-  /** Update the prompt/PRD */
-  prompt?: string;
-  /** Update the model configuration */
-  model?: ModelConfig;
-  /** Update the maximum iterations limit */
-  maxIterations?: number;
-  /** Update the max consecutive errors threshold */
-  maxConsecutiveErrors?: number;
-  /** Update the activity timeout in seconds */
-  activityTimeoutSeconds?: number;
-  /** Update the completion detection regex */
-  stopPattern?: string;
-  /** Update git configuration (branch/commit prefixes) */
-  git?: Partial<GitConfig>;
-}
+export type UpdateLoopRequest = z.infer<typeof UpdateLoopRequestSchema>;
 
 /**
  * Request body for POST /api/loops/:id/address-comments endpoint.
  * Used to submit reviewer comments for the loop to address.
+ * 
+ * Type is derived from AddressCommentsRequestSchema - the Zod schema is the
+ * single source of truth for both validation and TypeScript types.
  */
-export interface AddressCommentsRequest {
-  /** Reviewer's comments to address (can be multi-line) */
-  comments: string;
-}
+export type AddressCommentsRequest = z.infer<typeof AddressCommentsRequestSchema>;
 
 /**
  * Response from POST /api/loops/:id/address-comments endpoint.
@@ -291,70 +265,4 @@ export interface FileContentResponse {
   content: string;
   /** Whether the file exists on disk */
   exists: boolean;
-}
-
-/**
- * Validate a CreateLoopRequest object.
- * 
- * Checks that all required fields are present and have valid types.
- * Used by the POST /api/loops endpoint to validate incoming requests.
- * 
- * @param req - The request object to validate
- * @returns Error message string if invalid, undefined if valid
- */
-export function validateCreateLoopRequest(req: unknown): string | undefined {
-  if (typeof req !== "object" || req === null) {
-    return "Request body must be an object";
-  }
-
-  const body = req as Record<string, unknown>;
-
-  // workspaceId is required
-  if (typeof body["workspaceId"] !== "string" || (body["workspaceId"] as string).trim() === "") {
-    return "workspaceId is required";
-  }
-
-  if (typeof body["prompt"] !== "string" || (body["prompt"] as string).trim() === "") {
-    return "prompt is required and must be a non-empty string";
-  }
-
-  // model is required and must have providerID and modelID
-  if (typeof body["model"] !== "object" || body["model"] === null) {
-    return "model is required";
-  }
-  const model = body["model"] as Record<string, unknown>;
-  if (typeof model["providerID"] !== "string" || (model["providerID"] as string).trim() === "") {
-    return "model.providerID is required and must be a non-empty string";
-  }
-  if (typeof model["modelID"] !== "string" || (model["modelID"] as string).trim() === "") {
-    return "model.modelID is required and must be a non-empty string";
-  }
-
-  if (body["maxIterations"] !== undefined && typeof body["maxIterations"] !== "number") {
-    return "maxIterations must be a number";
-  }
-
-  if (body["maxConsecutiveErrors"] !== undefined && typeof body["maxConsecutiveErrors"] !== "number") {
-    return "maxConsecutiveErrors must be a number";
-  }
-
-  if (body["activityTimeoutSeconds"] !== undefined) {
-    if (typeof body["activityTimeoutSeconds"] !== "number") {
-      return "activityTimeoutSeconds must be a number";
-    }
-    if (body["activityTimeoutSeconds"] < 60) {
-      return "activityTimeoutSeconds must be at least 60 seconds";
-    }
-  }
-
-  if (body["stopPattern"] !== undefined && typeof body["stopPattern"] !== "string") {
-    return "stopPattern must be a string";
-  }
-
-  // planMode is required and must be a boolean
-  if (typeof body["planMode"] !== "boolean") {
-    return "planMode is required and must be a boolean (true or false)";
-  }
-
-  return undefined;
 }

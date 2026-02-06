@@ -11,6 +11,10 @@
 
 import type { TodoItem } from "../backends/types";
 
+// Import and re-export ModelConfig from schema (single source of truth)
+import type { ModelConfig } from "./schemas/model";
+export type { ModelConfig };
+
 /**
  * Configuration for a Ralph Loop.
  * 
@@ -61,19 +65,6 @@ export interface LoopConfig {
 
   /** Whether to start in plan mode (for drafts, this indicates the intended mode) */
   planMode: boolean;
-}
-
-/**
- * Model configuration for AI provider selection.
- * Used to specify which AI model should execute the loop.
- */
-export interface ModelConfig {
-  /** Provider ID (e.g., "anthropic", "openai", "bedrock") */
-  providerID: string;
-  /** Model ID (e.g., "claude-sonnet-4-20250514", "gpt-4o") */
-  modelID: string;
-  /** Model variant (e.g., "thinking", ""). Empty string or undefined for default. */
-  variant?: string;
 }
 
 /**

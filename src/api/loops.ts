@@ -25,32 +25,24 @@ import { getWorkspaceByDirectory } from "../persistence/workspaces";
 import { log } from "../core/logger";
 import { isModelEnabled } from "./models";
 import type {
-  CreateLoopRequest,
   AcceptResponse,
   PushResponse,
   ErrorResponse,
   FileContentResponse,
-  AddressCommentsRequest,
   AddressCommentsResponse,
   ReviewHistoryResponse,
   GetCommentsResponse,
 } from "../types/api";
-import { validateCreateLoopRequest } from "../types/api";
-
-/**
- * Safely parse JSON body from a request.
- * Returns null if the body is not valid JSON.
- * 
- * @param req - The incoming HTTP request
- * @returns Parsed body or null if parsing fails
- */
-async function parseBody<T>(req: Request): Promise<T | null> {
-  try {
-    return await req.json() as T;
-  } catch {
-    return null;
-  }
-}
+import { parseAndValidate } from "./validation";
+import {
+  CreateLoopRequestSchema,
+  UpdateLoopRequestSchema,
+  StartDraftRequestSchema,
+  PendingPromptRequestSchema,
+  SetPendingRequestSchema,
+  PlanFeedbackRequestSchema,
+  AddressCommentsRequestSchema,
+} from "../types/schemas";
 
 /**
  * Create a standardized error response.
@@ -135,17 +127,14 @@ export const loopsCrudRoutes = {
      */
     async POST(req: Request): Promise<Response> {
       log.debug("POST /api/loops - Creating new loop");
-      const body = await parseBody<CreateLoopRequest>(req);
-      if (!body) {
-        log.warn("POST /api/loops - Invalid JSON body");
-        return errorResponse("invalid_body", "Request body must be valid JSON");
+      
+      // Parse and validate request body using Zod schema
+      const validation = await parseAndValidate(CreateLoopRequestSchema, req);
+      if (!validation.success) {
+        log.warn("POST /api/loops - Validation error");
+        return validation.response;
       }
-
-      const validationError = validateCreateLoopRequest(body);
-      if (validationError) {
-        log.warn("POST /api/loops - Validation error", { error: validationError });
-        return errorResponse("validation_error", validationError);
-      }
+      const body = validation.data;
       
       log.trace("POST /api/loops - Request validated", { 
         workspaceId: body.workspaceId, 
@@ -376,50 +365,49 @@ export const loopsCrudRoutes = {
         return errorResponse("not_found", "Loop not found", 404);
       }
 
-      const body = await parseBody<Record<string, unknown>>(req);
-      if (!body) {
-        return errorResponse("invalid_body", "Request body must be valid JSON");
+      // Parse and validate request body using Zod schema
+      const validation = await parseAndValidate(UpdateLoopRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
       }
+      const body = validation.data;
 
       try {
         // Transform request body to match LoopConfig format
         const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};
         
-        if (body["name"] !== undefined) {
-          if (typeof body["name"] !== "string") {
-            return errorResponse("validation_error", "Name must be a string");
-          }
-          const trimmedName = body["name"].trim();
+        // Zod already validated these - use directly
+        if (body.name !== undefined) {
+          const trimmedName = body.name.trim();
           if (trimmedName === "") {
             return errorResponse("validation_error", "Name cannot be empty");
           }
           updates.name = trimmedName;
         }
-        if (body["directory"] !== undefined) updates.directory = body["directory"] as string;
-        if (body["prompt"] !== undefined) updates.prompt = body["prompt"] as string;
-        if (body["maxIterations"] !== undefined) updates.maxIterations = body["maxIterations"] as number;
-        if (body["maxConsecutiveErrors"] !== undefined) updates.maxConsecutiveErrors = body["maxConsecutiveErrors"] as number;
-        if (body["activityTimeoutSeconds"] !== undefined) updates.activityTimeoutSeconds = body["activityTimeoutSeconds"] as number;
-        if (body["stopPattern"] !== undefined) updates.stopPattern = body["stopPattern"] as string;
-        if (body["baseBranch"] !== undefined) updates.baseBranch = body["baseBranch"] as string;
-        if (body["clearPlanningFolder"] !== undefined) updates.clearPlanningFolder = body["clearPlanningFolder"] as boolean;
-        if (body["planMode"] !== undefined) updates.planMode = body["planMode"] as boolean;
+        if (body.directory !== undefined) updates.directory = body.directory;
+        if (body.prompt !== undefined) updates.prompt = body.prompt;
+        if (body.maxIterations !== undefined) updates.maxIterations = body.maxIterations;
+        if (body.maxConsecutiveErrors !== undefined) updates.maxConsecutiveErrors = body.maxConsecutiveErrors;
+        if (body.activityTimeoutSeconds !== undefined) updates.activityTimeoutSeconds = body.activityTimeoutSeconds;
+        if (body.stopPattern !== undefined) updates.stopPattern = body.stopPattern;
+        if (body.baseBranch !== undefined) updates.baseBranch = body.baseBranch;
+        if (body.clearPlanningFolder !== undefined) updates.clearPlanningFolder = body.clearPlanningFolder;
+        if (body.planMode !== undefined) updates.planMode = body.planMode;
         
-        // Handle model config
-        if (body["model"] !== undefined) {
-          const modelBody = body["model"] as Record<string, unknown>;
+        // Handle model config - already validated by Zod
+        if (body.model !== undefined) {
           updates.model = {
-            providerID: modelBody["providerID"] as string,
-            modelID: modelBody["modelID"] as string,
+            providerID: body.model.providerID,
+            modelID: body.model.modelID,
+            variant: body.model.variant,
           };
         }
         
-        // Handle git config
-        if (body["git"] !== undefined) {
-          const gitBody = body["git"] as Record<string, unknown>;
+        // Handle git config - already validated by Zod
+        if (body.git !== undefined) {
           updates.git = {
-            branchPrefix: gitBody["branchPrefix"] as string,
-            commitPrefix: gitBody["commitPrefix"] as string,
+            branchPrefix: body.git.branchPrefix ?? loop.config.git.branchPrefix,
+            commitPrefix: body.git.commitPrefix ?? loop.config.git.commitPrefix,
           };
         }
 
@@ -458,49 +446,58 @@ export const loopsCrudRoutes = {
         return errorResponse("not_draft", "Only draft loops can be updated via PUT", 400);
       }
 
-      const body = await parseBody<Record<string, unknown>>(req);
-      if (!body) {
-        return errorResponse("invalid_body", "Request body must be valid JSON");
+      // Parse and validate request body using Zod schema
+      const validation = await parseAndValidate(UpdateLoopRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
       }
+      const body = validation.data;
 
       // Debug logging for draft update operations
       log.debug("PUT /api/loops/:id - Request body", { 
         loopId: req.params.id,
-        hasPrompt: body["prompt"] !== undefined,
-        promptLength: typeof body["prompt"] === "string" ? body["prompt"].length : 0,
-        promptPreview: typeof body["prompt"] === "string" ? (body["prompt"] as string).slice(0, 50) : null,
+        hasPrompt: body.prompt !== undefined,
+        promptLength: typeof body.prompt === "string" ? body.prompt.length : 0,
+        promptPreview: typeof body.prompt === "string" ? body.prompt.slice(0, 50) : null,
       });
 
       try {
         // Transform request body to match LoopConfig format (partial updates)
+        // Zod already validated types - use directly
         const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};
         
-        if (body["name"] !== undefined) updates.name = body["name"] as string;
-        if (body["directory"] !== undefined) updates.directory = body["directory"] as string;
-        if (body["prompt"] !== undefined) updates.prompt = body["prompt"] as string;
-        if (body["maxIterations"] !== undefined) updates.maxIterations = body["maxIterations"] as number;
-        if (body["maxConsecutiveErrors"] !== undefined) updates.maxConsecutiveErrors = body["maxConsecutiveErrors"] as number;
-        if (body["activityTimeoutSeconds"] !== undefined) updates.activityTimeoutSeconds = body["activityTimeoutSeconds"] as number;
-        if (body["stopPattern"] !== undefined) updates.stopPattern = body["stopPattern"] as string;
-        if (body["baseBranch"] !== undefined) updates.baseBranch = body["baseBranch"] as string;
-        if (body["clearPlanningFolder"] !== undefined) updates.clearPlanningFolder = body["clearPlanningFolder"] as boolean;
-        if (body["planMode"] !== undefined) updates.planMode = body["planMode"] as boolean;
+        // Apply the same validation as PATCH: trim and non-empty check for name
+        if (body.name !== undefined) {
+          const trimmedName = body.name.trim();
+          if (trimmedName === "") {
+            return errorResponse("validation_error", "Name cannot be empty");
+          }
+          updates.name = trimmedName;
+        }
+        if (body.directory !== undefined) updates.directory = body.directory;
+        if (body.prompt !== undefined) updates.prompt = body.prompt;
+        if (body.maxIterations !== undefined) updates.maxIterations = body.maxIterations;
+        if (body.maxConsecutiveErrors !== undefined) updates.maxConsecutiveErrors = body.maxConsecutiveErrors;
+        if (body.activityTimeoutSeconds !== undefined) updates.activityTimeoutSeconds = body.activityTimeoutSeconds;
+        if (body.stopPattern !== undefined) updates.stopPattern = body.stopPattern;
+        if (body.baseBranch !== undefined) updates.baseBranch = body.baseBranch;
+        if (body.clearPlanningFolder !== undefined) updates.clearPlanningFolder = body.clearPlanningFolder;
+        if (body.planMode !== undefined) updates.planMode = body.planMode;
         
-        // Handle model config
-        if (body["model"] !== undefined) {
-          const modelBody = body["model"] as Record<string, unknown>;
+        // Handle model config - already validated by Zod
+        if (body.model !== undefined) {
           updates.model = {
-            providerID: modelBody["providerID"] as string,
-            modelID: modelBody["modelID"] as string,
+            providerID: body.model.providerID,
+            modelID: body.model.modelID,
+            variant: body.model.variant,
           };
         }
         
-        // Handle git config
-        if (body["git"] !== undefined) {
-          const gitBody = body["git"] as Record<string, unknown>;
+        // Handle git config - already validated by Zod
+        if (body.git !== undefined) {
           updates.git = {
-            branchPrefix: gitBody["branchPrefix"] as string,
-            commitPrefix: gitBody["commitPrefix"] as string,
+            branchPrefix: body.git.branchPrefix ?? loop.config.git.branchPrefix,
+            commitPrefix: body.git.commitPrefix ?? loop.config.git.commitPrefix,
           };
         }
 
@@ -624,10 +621,12 @@ export const loopsControlRoutes = {
      * @returns Updated Loop object
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      const body = await parseBody<{ planMode: boolean }>(req);
-      if (!body || typeof body.planMode !== "boolean") {
-        return errorResponse("invalid_body", "Request body must contain a 'planMode' boolean");
+      // Parse and validate request body using Zod schema
+      const validation = await parseAndValidate(StartDraftRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
       }
+      const body = validation.data;
 
       // Load the loop
       const loop = await loopManager.getLoop(req.params.id);
@@ -887,14 +886,12 @@ export const loopsControlRoutes = {
      * @returns Success response
      */
     async PUT(req: Request & { params: { id: string } }): Promise<Response> {
-      const body = await parseBody<{ prompt: string }>(req);
-      if (!body || typeof body.prompt !== "string") {
-        return errorResponse("invalid_body", "Request body must contain a 'prompt' string");
+      // Parse and validate request body using Zod schema
+      const validation = await parseAndValidate(PendingPromptRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
       }
-
-      if (!body.prompt.trim()) {
-        return errorResponse("validation_error", "Prompt cannot be empty");
-      }
+      const body = validation.data;
 
       const result = await loopManager.setPendingPrompt(req.params.id, body.prompt);
 
@@ -957,41 +954,29 @@ export const loopsControlRoutes = {
      * @returns Success response
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      const body = await parseBody<{ message?: string; model?: { providerID: string; modelID: string }; immediate?: boolean }>(req);
-      if (!body) {
-        return errorResponse("invalid_body", "Request body must be valid JSON");
+      // Parse and validate request body using Zod schema
+      const validation = await parseAndValidate(SetPendingRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
       }
+      const body = validation.data;
 
       // At least one of message or model must be provided
       if (body.message === undefined && body.model === undefined) {
         return errorResponse("validation_error", "At least one of 'message' or 'model' must be provided");
       }
 
-      // Validate message if provided
+      // Trim message if provided and validate non-empty
+      let trimmedMessage: string | undefined;
       if (body.message !== undefined) {
-        if (typeof body.message !== "string") {
-          return errorResponse("validation_error", "'message' must be a string");
-        }
-        const trimmedMessage = body.message.trim();
+        trimmedMessage = body.message.trim();
         if (trimmedMessage === "") {
           return errorResponse("validation_error", "'message' must be a non-empty string");
         }
-        body.message = trimmedMessage;
       }
 
-      // Validate model if provided
+      // Validate model is enabled before allowing the change
       if (body.model !== undefined) {
-        if (typeof body.model !== "object" || body.model === null) {
-          return errorResponse("validation_error", "'model' must be an object with providerID and modelID");
-        }
-        if (!body.model.providerID || typeof body.model.providerID !== "string") {
-          return errorResponse("validation_error", "'model.providerID' is required and must be a string");
-        }
-        if (!body.model.modelID || typeof body.model.modelID !== "string") {
-          return errorResponse("validation_error", "'model.modelID' is required and must be a string");
-        }
-
-        // Validate model is enabled before allowing the change
         const loop = await loopManager.getLoop(req.params.id);
         if (!loop) {
           return errorResponse("not_found", "Loop not found", 404);
@@ -1011,25 +996,20 @@ export const loopsControlRoutes = {
         }
       }
 
-      // Validate immediate if provided (must be boolean)
-      if (body.immediate !== undefined && typeof body.immediate !== "boolean") {
-        return errorResponse("validation_error", "'immediate' must be a boolean");
-      }
-
-      // Default to immediate: true
+      // Default to immediate: true (Zod already validated the type)
       const immediate = body.immediate ?? true;
 
       let result: { success: boolean; error?: string };
       if (immediate) {
         // Inject immediately by aborting current iteration
         result = await loopManager.injectPending(req.params.id, {
-          message: body.message,
+          message: trimmedMessage,
           model: body.model,
         });
       } else {
         // Queue for next natural iteration
         result = await loopManager.setPending(req.params.id, {
-          message: body.message,
+          message: trimmedMessage,
           model: body.model,
         });
       }
@@ -1084,14 +1064,12 @@ export const loopsControlRoutes = {
      * @returns Success response
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      const body = await parseBody<{ feedback: string }>(req);
-      if (!body || typeof body.feedback !== "string") {
-        return errorResponse("invalid_body", "Request body must contain a 'feedback' string");
+      // Parse and validate request body using Zod schema
+      const validation = await parseAndValidate(PlanFeedbackRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
       }
-
-      if (!body.feedback.trim()) {
-        return errorResponse("validation_error", "Feedback cannot be empty");
-      }
+      const body = validation.data;
 
       try {
         await loopManager.sendPlanFeedback(req.params.id, body.feedback);
@@ -1365,19 +1343,12 @@ export const loopsReviewRoutes = {
      * @returns AddressCommentsResponse with reviewCycle, branch, and commentIds
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
-      const body = await parseBody<AddressCommentsRequest>(req);
-      if (!body) {
-        return errorResponse("invalid_body", "Request body must be valid JSON");
+      // Parse and validate request body using Zod schema
+      const validation = await parseAndValidate(AddressCommentsRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
       }
-
-      // Validate comments field
-      if (body.comments === undefined || body.comments === null || typeof body.comments !== "string") {
-        return errorResponse("validation_error", "Comments field is required and must be a string");
-      }
-
-      if (body.comments.trim() === "") {
-        return errorResponse("validation_error", "Comments cannot be empty");
-      }
+      const body = validation.data;
 
       try {
         const result = await loopManager.addressReviewComments(req.params.id, body.comments);
