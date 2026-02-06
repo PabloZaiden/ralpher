@@ -1190,23 +1190,23 @@ export class LoopEngine {
               // Reset response log tracking
               currentResponseLogId = null;
               currentResponseLogContent = "";
-              // Log that AI started generating (trace level - very frequent)
-              this.emitLog("trace", "AI started generating response");
+              // Log that AI started generating (agent level - visible to user)
+              this.emitLog("agent", "AI started generating response");
               break;
 
             case "message.delta":
               responseContent += event.content;
-              // Combine consecutive deltas into the same log entry (trace level - very frequent)
+              // Combine consecutive deltas into the same log entry (agent level - visible to user)
               if (event.content.trim()) {
                 currentResponseLogContent += event.content;
                 if (currentResponseLogId) {
                   // Update existing log entry
-                  this.emitLog("trace", "AI generating response...", {
+                  this.emitLog("agent", "AI generating response...", {
                     responseContent: currentResponseLogContent,
                   }, currentResponseLogId);
                 } else {
                   // Create new log entry
-                  currentResponseLogId = this.emitLog("trace", "AI generating response...", {
+                  currentResponseLogId = this.emitLog("agent", "AI generating response...", {
                     responseContent: currentResponseLogContent,
                   });
                 }
@@ -1224,17 +1224,17 @@ export class LoopEngine {
             case "reasoning.delta":
               // AI reasoning/thinking content (chain of thought)
               reasoningContent += event.content;
-              // Combine consecutive reasoning deltas into the same log entry (trace level - very frequent)
+              // Combine consecutive reasoning deltas into the same log entry (agent level - visible to user)
               if (event.content.trim()) {
                 currentReasoningLogContent += event.content;
                 if (currentReasoningLogId) {
                   // Update existing log entry
-                  this.emitLog("trace", "AI reasoning...", {
+                  this.emitLog("agent", "AI reasoning...", {
                     responseContent: currentReasoningLogContent,
                   }, currentReasoningLogId);
                 } else {
                   // Create new log entry
-                  currentReasoningLogId = this.emitLog("trace", "AI reasoning...", {
+                  currentReasoningLogId = this.emitLog("agent", "AI reasoning...", {
                     responseContent: currentReasoningLogContent,
                   });
                 }
@@ -1419,8 +1419,8 @@ export class LoopEngine {
 
       this.emitLog("debug", "Exited event stream loop", { outcome, error });
 
-      // Check for stop pattern (trace level - internal evaluation details)
-      this.emitLog("trace", "Evaluating stop pattern...");
+      // Check for stop pattern
+      this.emitLog("info", "Evaluating stop pattern...");
       
       // In plan mode, check for PLAN_READY marker instead of the normal stop pattern
       const isInPlanMode = this.loop.state.status === "planning" && this.loop.state.planMode?.active;
@@ -1439,7 +1439,7 @@ export class LoopEngine {
           this.emitLog("info", "Stop pattern matched - task is complete");
           outcome = "complete";
         } else {
-          this.emitLog("trace", "Stop pattern not matched - will continue to next iteration");
+          this.emitLog("info", "Stop pattern not matched - will continue to next iteration");
         }
       }
 
