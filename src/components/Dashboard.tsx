@@ -49,6 +49,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
 
   // App settings state (reset functions)
   const [appSettingsResetting, setAppSettingsResetting] = useState(false);
+  const [appSettingsKilling, setAppSettingsKilling] = useState(false);
 
   // Reset all settings function
   const resetAllSettings = useCallback(async () => {
@@ -60,6 +61,23 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       return false;
     } finally {
       setAppSettingsResetting(false);
+    }
+  }, []);
+
+  // Kill server function (for container restart)
+  const killServer = useCallback(async () => {
+    setAppSettingsKilling(true);
+    try {
+      const response = await fetch("/api/server/kill", { method: "POST" });
+      if (!response.ok) {
+        log.error("Failed to kill server: HTTP", response.status);
+      }
+      return response.ok;
+    } catch (error) {
+      log.error("Failed to kill server:", error);
+      return false;
+    } finally {
+      setAppSettingsKilling(false);
     }
   }, []);
 
@@ -1113,6 +1131,8 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         onClose={() => setShowServerSettingsModal(false)}
         onResetAll={resetAllSettings}
         resetting={appSettingsResetting}
+        onKillServer={killServer}
+        killingServer={appSettingsKilling}
       />
 
       {/* Rename Loop modal */}
