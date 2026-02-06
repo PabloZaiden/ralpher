@@ -17,7 +17,13 @@ export const ServerModeSchema = z.enum(["spawn", "connect"]);
 /**
  * Schema for ServerSettings - server connection configuration.
  *
- * Matches the ServerSettings interface in types/settings.ts.
+ * This schema is the single source of truth. The ServerSettings type is inferred from it.
+ * - mode: Connection mode ("spawn" for local, "connect" for remote)
+ * - hostname: Hostname for connect mode (optional)
+ * - port: Port for connect mode (optional)
+ * - password: Password for connect mode (optional)
+ * - useHttps: Whether to use HTTPS for connect mode
+ * - allowInsecure: Whether to allow insecure connections (self-signed certs)
  */
 export const ServerSettingsSchema = z.object({
   mode: ServerModeSchema,
@@ -60,7 +66,15 @@ export const TestConnectionRequestSchema = z.object({
 });
 
 // Export inferred types
-export type ServerSettingsInput = z.infer<typeof ServerSettingsSchema>;
+/**
+ * ServerSettings type - inferred from ServerSettingsSchema.
+ * This is the single source of truth for server connection configuration.
+ */
+export type ServerSettings = z.infer<typeof ServerSettingsSchema>;
+
+// Alias for backwards compatibility
+export type ServerSettingsInput = ServerSettings;
+
 export type CreateWorkspaceRequestInput = z.infer<typeof CreateWorkspaceRequestSchema>;
 export type UpdateWorkspaceRequestInput = z.infer<typeof UpdateWorkspaceRequestSchema>;
 export type TestConnectionRequestInput = z.infer<typeof TestConnectionRequestSchema>;

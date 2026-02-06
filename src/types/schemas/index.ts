@@ -9,6 +9,7 @@
 // Model schemas
 export {
   ModelConfigSchema,
+  type ModelConfig,
   type ModelConfigInput,
 } from "./model";
 
@@ -38,6 +39,7 @@ export {
   CreateWorkspaceRequestSchema,
   UpdateWorkspaceRequestSchema,
   TestConnectionRequestSchema,
+  type ServerSettings,
   type ServerSettingsInput,
   type CreateWorkspaceRequestInput,
   type UpdateWorkspaceRequestInput,

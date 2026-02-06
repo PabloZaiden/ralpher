@@ -12,10 +12,10 @@ import { z } from "zod";
 /**
  * Schema for ModelConfig - AI model configuration.
  *
- * Matches the ModelConfig interface in types/loop.ts:
- * - providerID: Required non-empty string
- * - modelID: Required non-empty string
- * - variant: Optional string (empty string or undefined for default)
+ * This schema is the single source of truth. The ModelConfig type is inferred from it.
+ * - providerID: Required non-empty string (e.g., "anthropic", "openai", "bedrock")
+ * - modelID: Required non-empty string (e.g., "claude-sonnet-4-20250514", "gpt-4o")
+ * - variant: Optional string (e.g., "thinking", ""). Empty string or undefined for default.
  */
 export const ModelConfigSchema = z.object({
   providerID: z.string().min(1, "providerID is required and must be a non-empty string"),
@@ -25,6 +25,9 @@ export const ModelConfigSchema = z.object({
 
 /**
  * Inferred type from ModelConfigSchema.
- * Structurally identical to ModelConfig in types/loop.ts.
+ * This is the single source of truth for the ModelConfig type.
  */
-export type ModelConfigInput = z.infer<typeof ModelConfigSchema>;
+export type ModelConfig = z.infer<typeof ModelConfigSchema>;
+
+// Alias for backwards compatibility
+export type ModelConfigInput = ModelConfig;
