@@ -232,15 +232,16 @@ export interface LoopProgressEvent {
 }
 
 /**
- * Log level for application logs.
+ * Log levels for loop events.
  * - "agent": AI agent activity (prompts, responses, tool calls)
  * - "user": User-injected messages (mid-loop messages from the user)
  * - "info": General informational messages
  * - "warn": Warning messages
  * - "error": Error messages
  * - "debug": Debug/verbose messages
+ * - "trace": Very verbose trace messages (AI streaming, internal details)
  */
-export type LogLevel = "agent" | "user" | "info" | "warn" | "error" | "debug";
+export type LogLevel = "agent" | "user" | "info" | "warn" | "error" | "debug" | "trace";
 
 /**
  * Application-level log event.

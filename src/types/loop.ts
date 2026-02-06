@@ -181,7 +181,7 @@ export interface LoopLogEntry {
   /** Unique ID for the log entry (used for updates and deduplication) */
   id: string;
   /** Log level indicating the type/severity */
-  level: "agent" | "user" | "info" | "warn" | "error" | "debug";
+  level: "agent" | "user" | "info" | "warn" | "error" | "debug" | "trace";
   /** The log message content */
   message: string;
   /** Optional additional structured details */
