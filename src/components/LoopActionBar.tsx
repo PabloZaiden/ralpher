@@ -231,7 +231,7 @@ export function LoopActionBar({
   }, [disabled, isSubmitting, hasPending, onClearPending]);
 
   return (
-    <div className="sticky bottom-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 safe-area-bottom">
+    <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0 safe-area-bottom">
       {/* Pending indicator */}
       {hasPending && (
         <div className="px-3 sm:px-4 py-2 bg-yellow-50 dark:bg-yellow-900/20 border-b border-yellow-200 dark:border-yellow-800/50">

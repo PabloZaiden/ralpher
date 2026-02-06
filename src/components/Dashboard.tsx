@@ -426,7 +426,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   const unassignedStatusGroups = groupLoopsByStatus(unassignedLoops);
 
   return (
-    <div className="min-h-full flex flex-col overflow-x-hidden bg-gray-50 dark:bg-gray-900">
+    <div className="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
       {/* Header */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 safe-area-top">
         <div className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
@@ -488,7 +488,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       </header>
 
       {/* Main content */}
-      <main className="flex-1 px-4 sm:px-6 lg:px-8 py-8 safe-area-bottom">
+      <main className="flex-1 min-h-0 overflow-auto px-4 sm:px-6 lg:px-8 py-8 safe-area-bottom">
         {/* Error display */}
         {error && (
           <div className="mb-6 rounded-md bg-red-50 dark:bg-red-900/20 p-4">

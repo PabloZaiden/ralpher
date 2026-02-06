@@ -18,19 +18,19 @@
   }
 
   html {
-    @apply h-full overflow-x-hidden;
-    min-height: 100dvh; /* Dynamic viewport height for iOS - use min-height to allow content to grow */
+    @apply h-full overflow-hidden;
+    height: 100dvh; /* Dynamic viewport height for iOS */
     touch-action: pan-x pan-y; /* Control touch actions - prevent pinch zoom */
-    overscroll-behavior-x: none; /* Prevent horizontal overscroll/bounce effects */
+    overscroll-behavior: none; /* Prevent overscroll/bounce effects */
   }
 
   body {
-    @apply min-h-full m-0 overflow-x-hidden;
-    overscroll-behavior-x: none; /* Prevent horizontal overscroll/bounce effects */
+    @apply h-full m-0 overflow-hidden;
+    overscroll-behavior: none; /* Prevent overscroll/bounce effects */
   }
 
   #root {
-    @apply w-full min-h-full overflow-x-hidden;
+    @apply w-full h-full overflow-hidden;
   }
 
   /* Prevent text selection on interactive elements */
