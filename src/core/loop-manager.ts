@@ -145,44 +145,69 @@ export class LoopManager {
     const id = crypto.randomUUID();
     const now = createTimestamp();
 
-    // Generate loop name from prompt using opencode
+    // Debug logging for loop creation
+    log.debug("createLoop - Input", {
+      id,
+      draft: options.draft,
+      promptLength: options.prompt.length,
+      promptPreview: options.prompt.slice(0, 50),
+      workspaceId: options.workspaceId,
+    });
+
+    // Generate loop name
     let generatedName: string;
-    try {
-      // Get backend from global manager for this workspace
-      const backend = backendManager.getBackend(options.workspaceId);
-      
-      // Create a temporary session for name generation
-      const tempSession = await backend.createSession({
-        title: "Loop Name Generation",
-        directory: options.directory,
-      });
-      
+    
+    // For drafts, skip AI title generation and use prompt-based fallback
+    // This avoids backend interference issues and makes draft creation faster
+    if (options.draft) {
+      const fallbackName = options.prompt.slice(0, 50).trim();
+      generatedName = fallbackName || `Draft ${now.slice(0, 10)}`;
+      log.debug("createLoop - Using prompt-based name for draft", { generatedName });
+    } else {
+      // For non-drafts, use AI-based title generation
       try {
-        // Generate the name
-        generatedName = await generateLoopName({
-          prompt: options.prompt,
-          backend,
-          sessionId: tempSession.id,
-          timeoutMs: 10000,
+        // Get backend from global manager for this workspace
+        const backend = backendManager.getBackend(options.workspaceId);
+        
+        // Create a temporary session for name generation
+        const tempSession = await backend.createSession({
+          title: "Loop Name Generation",
+          directory: options.directory,
         });
         
-        log.info(`Generated loop name: ${generatedName}`);
-      } finally {
-        // Clean up temporary session
         try {
-          await backend.abortSession(tempSession.id);
-        } catch (cleanupError) {
-          log.warn(`Failed to clean up temporary session: ${String(cleanupError)}`);
+          // Generate the name
+          generatedName = await generateLoopName({
+            prompt: options.prompt,
+            backend,
+            sessionId: tempSession.id,
+            timeoutMs: 10000,
+          });
+          
+          log.info(`Generated loop name: ${generatedName}`);
+        } finally {
+          // Clean up temporary session
+          try {
+            await backend.abortSession(tempSession.id);
+          } catch (cleanupError) {
+            log.warn(`Failed to clean up temporary session: ${String(cleanupError)}`);
+          }
+        }
+      } catch (error) {
+        // If name generation fails, use prompt-based fallback
+        log.warn(`Failed to generate loop name: ${String(error)}, using fallback`);
+        const fallbackName = options.prompt.slice(0, 50).trim();
+        if (fallbackName) {
+          generatedName = fallbackName;
+        } else {
+          // Ultimate fallback if prompt is empty
+          const timestamp = new Date().toISOString()
+            .replace(/[T:.]/g, "-")
+            .replace(/Z$/, "")
+            .slice(0, 19);
+          generatedName = `loop-${timestamp}`;
         }
       }
-    } catch (error) {
-      // If name generation fails, use timestamp-based fallback
-      log.warn(`Failed to generate loop name: ${String(error)}, using fallback`);
-      const timestamp = new Date().toISOString()
-        .replace(/[T:.]/g, "-")
-        .replace(/Z$/, "")
-        .slice(0, 19);
-      generatedName = `loop-${timestamp}`;
     }
 
     const config: LoopConfig = {
@@ -598,6 +623,14 @@ Follow the standard loop execution flow:
     loopId: string,
     updates: Partial<Omit<LoopConfig, "id" | "createdAt">>
   ): Promise<Loop | null> {
+    // Debug logging for loop updates
+    log.debug("updateLoop - Input", {
+      loopId,
+      hasPromptUpdate: updates.prompt !== undefined,
+      promptLength: updates.prompt?.length,
+      promptPreview: updates.prompt?.slice(0, 50),
+    });
+
     const loop = await loadLoop(loopId);
     if (!loop) {
       return null;

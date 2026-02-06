@@ -462,6 +462,14 @@ export const loopsCrudRoutes = {
         return errorResponse("invalid_body", "Request body must be valid JSON");
       }
 
+      // Debug logging for draft update operations
+      log.debug("PUT /api/loops/:id - Request body", { 
+        loopId: req.params.id,
+        hasPrompt: body["prompt"] !== undefined,
+        promptLength: typeof body["prompt"] === "string" ? body["prompt"].length : 0,
+        promptPreview: typeof body["prompt"] === "string" ? (body["prompt"] as string).slice(0, 50) : null,
+      });
+
       try {
         // Transform request body to match LoopConfig format (partial updates)
         const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};

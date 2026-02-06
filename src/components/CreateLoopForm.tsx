@@ -137,6 +137,18 @@ export function CreateLoopForm({
   const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
   const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? true);
 
+  // Sync prompt state when initialLoopData changes (safety measure for component reuse)
+  // This handles both editing a draft (set to draft's prompt) and switching to create mode (reset to empty)
+  useEffect(() => {
+    const newPrompt = initialLoopData?.prompt ?? "";
+    log.debug('Syncing prompt from initialLoopData', { 
+      promptLength: newPrompt.length,
+      promptPreview: newPrompt.slice(0, 50),
+      hasInitialLoopData: !!initialLoopData
+    });
+    setPrompt(newPrompt);
+  }, [initialLoopData?.prompt]);
+
   // Check if the selected model is enabled (connected)
   // Format: providerID:modelID:variant (variant can be empty string)
   const isSelectedModelEnabled = (): boolean => {
@@ -277,6 +289,14 @@ export function CreateLoopForm({
 
   const handleSubmit = useCallback(async (e: FormEvent, asDraft = false) => {
     e.preventDefault();
+
+    // Debug logging for form submission
+    log.debug('handleSubmit - Form state', { 
+      asDraft,
+      promptLength: prompt.length,
+      promptPreview: prompt.slice(0, 50),
+      selectedWorkspaceId,
+    });
 
     // Workspace selection is required
     if (!selectedWorkspaceId) {
