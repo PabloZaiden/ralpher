@@ -227,11 +227,11 @@ export const loopsCrudRoutes = {
         }
       }
 
-      // Validate model is enabled if provided (skip for drafts and if using backend default)
-      // Drafts can be created with any model - validation happens when starting
+      // Validate model is enabled if provided
+      // All loops (including drafts) require a connected model to ensure valid configurations
       // NOTE: This is done AFTER preflight checks to avoid backend connection costs
       // for requests that will be rejected anyway (uncommitted changes, active loop exists)
-      if (!body.draft && body.model?.providerID && body.model?.modelID) {
+      if (body.model?.providerID && body.model?.modelID) {
         const modelValidation = await isModelEnabled(
           workspaceId,
           directory,

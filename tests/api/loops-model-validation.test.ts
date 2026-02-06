@@ -211,11 +211,11 @@ describe("Model Validation in API Endpoints", () => {
       }
     });
 
-    test("allows draft with any model (skips validation)", async () => {
+    test("rejects draft with disconnected model", async () => {
       const { workDir, workspaceId } = await createTestWorkDirWithWorkspace();
       try {
-        // Even with a disconnected model, draft should be allowed
-        // because we don't start the loop yet
+        // Drafts should also require a connected model
+        // This ensures consistent behavior and prevents saving invalid configurations
         const response = await fetch(`${baseUrl}/api/loops`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -231,10 +231,10 @@ describe("Model Validation in API Endpoints", () => {
           }),
         });
 
-        // Drafts skip model validation, so this should succeed
-        expect(response.status).toBe(201);
+        // Drafts also require connected models now
+        expect(response.status).toBe(400);
         const data = await response.json();
-        expect(data.state.status).toBe("draft"); // Draft stays in draft status
+        expect(data.message).toContain("not connected");
       } finally {
         await rm(workDir, { recursive: true, force: true });
       }

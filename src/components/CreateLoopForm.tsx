@@ -512,16 +512,11 @@ export function CreateLoopForm({
   }
 
   // Get connected providers (for display order), sorted by name
+  // Only connected providers are shown - disconnected models are not displayed
   const connectedProviders = Object.keys(modelsByProvider)
     .filter((provider) => {
       const providerModels = modelsByProvider[provider];
       return providerModels && providerModels.some((m) => m.connected);
-    })
-    .sort((a, b) => a.localeCompare(b));
-  const disconnectedProviders = Object.keys(modelsByProvider)
-    .filter((provider) => {
-      const providerModels = modelsByProvider[provider];
-      return providerModels && !providerModels.some((m) => m.connected);
     })
     .sort((a, b) => a.localeCompare(b));
 
@@ -680,33 +675,28 @@ export function CreateLoopForm({
           {!modelsLoading && models.length > 0 && (
             <>
               <option value="">Select a model...</option>
-              {/* Connected providers first */}
+              {/* Only show connected providers */}
               {connectedProviders.map((provider) => {
                 const providerModels = modelsByProvider[provider] ?? [];
                 return (
-                  <optgroup key={provider} label={`${provider} (connected)`}>
+                  <optgroup key={provider} label={provider}>
                     {providerModels.map((model) => renderModelOptions(model, false))}
                   </optgroup>
                 );
               })}
-              {/* Disconnected providers */}
-              {disconnectedProviders.map((provider) => {
-                const providerModels = modelsByProvider[provider] ?? [];
-                return (
-                  <optgroup key={provider} label={`${provider} (not connected)`}>
-                    {providerModels.map((model) => renderModelOptions(model, true))}
-                  </optgroup>
-                );
-              })}
+              {/* Show message if no providers are connected */}
+              {connectedProviders.length === 0 && (
+                <option value="" disabled>No connected providers available</option>
+              )}
             </>
           )}
         </select>
-        {!modelsLoading && models.length > 0 && selectedModel && !selectedModelEnabled && (
+        {!modelsLoading && models.length > 0 && connectedProviders.length === 0 && (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-            The selected model's provider is not connected. Please check your API credentials or select a different model.
+            No providers are connected. Please configure API credentials in the opencode server.
           </p>
         )}
-        {!modelsLoading && models.length > 0 && !selectedModel && (
+        {!modelsLoading && models.length > 0 && connectedProviders.length > 0 && !selectedModel && (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
             Model is required. Please select a model.
           </p>

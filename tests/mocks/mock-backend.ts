@@ -278,7 +278,7 @@ export class NeverCompletingMockBackend implements Backend {
   private readonly models: MockModelInfo[];
 
   constructor(options: NeverCompletingMockBackendOptions = {}) {
-    this.models = options.models ?? [];
+    this.models = options.models ?? [defaultTestModel];
   }
 
   async connect(config: BackendConnectionConfig): Promise<void> {
