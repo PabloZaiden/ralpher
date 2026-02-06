@@ -138,7 +138,7 @@ describe("Log Level Preference API", () => {
       expect(response.status).toBe(400);
       
       const body = await response.json();
-      expect(body.error).toBe("invalid_body");
+      expect(body.error).toBe("validation_error");
     });
 
     test("returns error for invalid log level", async () => {
@@ -172,7 +172,7 @@ describe("Log Level Preference API", () => {
       expect(response.status).toBe(400);
       
       const body = await response.json();
-      expect(body.error).toBe("invalid_body");
+      expect(body.error).toBe("validation_error");
     });
   });
 });

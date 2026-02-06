@@ -120,7 +120,7 @@ describe("Markdown Rendering Preference API", () => {
       expect(response.status).toBe(400);
       
       const body = await response.json();
-      expect(body.error).toBe("invalid_body");
+      expect(body.error).toBe("validation_error");
     });
 
     test("returns error for invalid body - non-boolean enabled", async () => {
@@ -137,7 +137,7 @@ describe("Markdown Rendering Preference API", () => {
       expect(response.status).toBe(400);
       
       const body = await response.json();
-      expect(body.error).toBe("invalid_body");
+      expect(body.error).toBe("validation_error");
     });
   });
 });

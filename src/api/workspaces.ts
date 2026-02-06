@@ -19,24 +19,15 @@ import {
 } from "../persistence/workspaces";
 import { backendManager } from "../core/backend-manager";
 import { log } from "../core/logger";
-import { getDefaultServerSettings, type ServerSettings } from "../types/settings";
-import type { 
-  Workspace, 
-  CreateWorkspaceRequest, 
-  UpdateWorkspaceRequest 
-} from "../types/workspace";
-
-/**
- * Safely parse JSON body from a request.
- * Returns null if the body is not valid JSON.
- */
-async function parseBody<T>(req: Request): Promise<T | null> {
-  try {
-    return await req.json() as T;
-  } catch {
-    return null;
-  }
-}
+import { getDefaultServerSettings } from "../types/settings";
+import type { Workspace } from "../types/workspace";
+import { parseAndValidate } from "./validation";
+import {
+  CreateWorkspaceRequestSchema,
+  UpdateWorkspaceRequestSchema,
+  ServerSettingsSchema,
+  TestConnectionRequestSchema,
+} from "../types/schemas";
 
 /**
  * Workspace API route handlers.
@@ -66,31 +57,14 @@ export const workspacesRoutes = {
      */
     async POST(req: Request) {
       log.debug("POST /api/workspaces - Creating new workspace");
-      const body = await parseBody<CreateWorkspaceRequest>(req);
+      const result = await parseAndValidate(CreateWorkspaceRequestSchema, req);
       
-      if (!body) {
-        log.warn("POST /api/workspaces - Invalid JSON body");
-        return Response.json(
-          { message: "Invalid JSON body" },
-          { status: 400 }
-        );
+      if (!result.success) {
+        log.warn("POST /api/workspaces - Validation failed");
+        return result.response;
       }
 
-      if (!body.name || typeof body.name !== "string" || !body.name.trim()) {
-        log.warn("POST /api/workspaces - Missing or empty name");
-        return Response.json(
-          { message: "name is required and must be a non-empty string" },
-          { status: 400 }
-        );
-      }
-
-      if (!body.directory || typeof body.directory !== "string" || !body.directory.trim()) {
-        log.warn("POST /api/workspaces - Missing or empty directory");
-        return Response.json(
-          { message: "directory is required and must be a non-empty string" },
-          { status: 400 }
-        );
-      }
+      const body = result.data;
 
       // Validate serverSettings - use default if not provided
       const serverSettings = body.serverSettings ?? getDefaultServerSettings();
@@ -200,15 +174,14 @@ export const workspacesRoutes = {
 
     if (method === "PUT") {
       log.debug("PUT /api/workspaces/:id", { workspaceId: id });
-      const body = await parseBody<UpdateWorkspaceRequest>(req);
+      const result = await parseAndValidate(UpdateWorkspaceRequestSchema, req);
       
-      if (!body) {
-        log.warn("PUT /api/workspaces/:id - Invalid JSON body", { workspaceId: id });
-        return Response.json(
-          { message: "Invalid JSON body" },
-          { status: 400 }
-        );
+      if (!result.success) {
+        log.warn("PUT /api/workspaces/:id - Validation failed", { workspaceId: id });
+        return result.response;
       }
+
+      const body = result.data;
 
       try {
         const workspace = await updateWorkspace(id, { 
@@ -328,22 +301,13 @@ export const workspacesRoutes = {
     }
 
     if (method === "PUT") {
-      const body = await parseBody<ServerSettings>(req);
+      const result = await parseAndValidate(ServerSettingsSchema, req);
       
-      if (!body) {
-        return Response.json(
-          { message: "Invalid JSON body" },
-          { status: 400 }
-        );
+      if (!result.success) {
+        return result.response;
       }
 
-      // Validate mode
-      if (body.mode !== "spawn" && body.mode !== "connect") {
-        return Response.json(
-          { message: "mode must be 'spawn' or 'connect'" },
-          { status: 400 }
-        );
-      }
+      const body = result.data;
 
       try {
         const workspace = await updateWorkspace(id, { serverSettings: body });
@@ -432,9 +396,23 @@ export const workspacesRoutes = {
       // Optionally accept settings in the body to test proposed settings
       // If no body, use the workspace's current settings
       let settings = workspace.serverSettings;
-      const body = await parseBody<ServerSettings>(req);
-      if (body && body.mode) {
-        settings = body;
+      
+      // Try to parse the body - if empty or invalid JSON, use current settings
+      try {
+        const bodyText = await req.text();
+        if (bodyText.trim()) {
+          const bodyJson = JSON.parse(bodyText);
+          // Only use the body if it has a mode (meaning it's a valid ServerSettings object)
+          if (bodyJson && bodyJson.mode) {
+            const result = ServerSettingsSchema.safeParse(bodyJson);
+            if (result.success) {
+              settings = result.data;
+            }
+            // If validation fails, just use current settings (backward compatible)
+          }
+        }
+      } catch {
+        // JSON parse error or empty body - use current settings
       }
 
       const result = await backendManager.testConnection(settings, workspace.directory);
@@ -489,18 +467,16 @@ export const workspacesRoutes = {
    */
   "/api/server-settings/test": {
     async POST(req: Request) {
-      try {
-        const body = await parseBody<{ settings: ServerSettings; directory: string }>(req);
-        if (!body || !body.settings || !body.directory) {
-          return Response.json(
-            { message: "Missing settings or directory in request body" },
-            { status: 400 }
-          );
-        }
+      const result = await parseAndValidate(TestConnectionRequestSchema, req);
+      if (!result.success) {
+        return result.response;
+      }
 
-        const { settings, directory } = body;
-        const result = await backendManager.testConnection(settings, directory);
-        return Response.json(result);
+      const { settings, directory } = result.data;
+      
+      try {
+        const testResult = await backendManager.testConnection(settings, directory);
+        return Response.json(testResult);
       } catch (error) {
         log.error("Failed to test connection:", String(error));
         return Response.json(

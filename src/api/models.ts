@@ -17,6 +17,13 @@ import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMark
 import { getDefaultServerSettings } from "../types/settings";
 import type { ErrorResponse, ModelInfo } from "../types/api";
 import { setLogLevel as setBackendLogLevel, type LogLevelName, VALID_LOG_LEVELS, isLogLevelFromEnv } from "../core/logger";
+import { parseAndValidate } from "./validation";
+import {
+  SetLastModelRequestSchema,
+  SetLastDirectoryRequestSchema,
+  SetMarkdownRenderingRequestSchema,
+  SetLogLevelRequestSchema,
+} from "../types/schemas";
 
 /**
  * Result of checking if a model is enabled/connected.
@@ -253,17 +260,16 @@ export const preferencesRoutes = {
      * @returns Success response
      */
     async PUT(req: Request): Promise<Response> {
-      try {
-        const body = await req.json() as { providerID: string; modelID: string; variant?: string };
-        
-        if (!body.providerID || !body.modelID) {
-          return errorResponse("invalid_body", "providerID and modelID are required");
-        }
+      const result = await parseAndValidate(SetLastModelRequestSchema, req);
+      if (!result.success) {
+        return result.response;
+      }
 
+      try {
         await setLastModel({
-          providerID: body.providerID,
-          modelID: body.modelID,
-          variant: body.variant,
+          providerID: result.data.providerID,
+          modelID: result.data.modelID,
+          variant: result.data.variant,
         });
 
         return Response.json({ success: true });
@@ -298,14 +304,13 @@ export const preferencesRoutes = {
      * @returns Success response
      */
     async PUT(req: Request): Promise<Response> {
-      try {
-        const body = await req.json() as { directory: string };
-        
-        if (!body.directory) {
-          return errorResponse("invalid_body", "directory is required");
-        }
+      const result = await parseAndValidate(SetLastDirectoryRequestSchema, req);
+      if (!result.success) {
+        return result.response;
+      }
 
-        await setLastDirectory(body.directory);
+      try {
+        await setLastDirectory(result.data.directory);
 
         return Response.json({ success: true });
       } catch (error) {
@@ -339,14 +344,13 @@ export const preferencesRoutes = {
      * @returns Success response
      */
     async PUT(req: Request): Promise<Response> {
-      try {
-        const body = await req.json() as { enabled: boolean };
-        
-        if (typeof body.enabled !== "boolean") {
-          return errorResponse("invalid_body", "enabled must be a boolean");
-        }
+      const result = await parseAndValidate(SetMarkdownRenderingRequestSchema, req);
+      if (!result.success) {
+        return result.response;
+      }
 
-        await setMarkdownRenderingEnabled(body.enabled);
+      try {
+        await setMarkdownRenderingEnabled(result.data.enabled);
 
         return Response.json({ success: true });
       } catch (error) {
@@ -386,24 +390,25 @@ export const preferencesRoutes = {
      * @returns Success response
      */
     async PUT(req: Request): Promise<Response> {
+      const result = await parseAndValidate(SetLogLevelRequestSchema, req);
+      if (!result.success) {
+        return result.response;
+      }
+
+      const level = result.data.level;
+
+      if (!VALID_LOG_LEVELS.includes(level as LogLevelName)) {
+        return errorResponse("invalid_level", `Invalid log level: ${level}. Valid levels are: ${VALID_LOG_LEVELS.join(", ")}`);
+      }
+
       try {
-        const body = await req.json() as { level: string };
-        
-        if (!body.level || typeof body.level !== "string") {
-          return errorResponse("invalid_body", "level is required and must be a string");
-        }
-
-        if (!VALID_LOG_LEVELS.includes(body.level as LogLevelName)) {
-          return errorResponse("invalid_level", `Invalid log level: ${body.level}. Valid levels are: ${VALID_LOG_LEVELS.join(", ")}`);
-        }
-
         // Save to preferences
-        await setLogLevelPreference(body.level as LogLevelName);
+        await setLogLevelPreference(level as LogLevelName);
         
         // Also update the backend logger in real-time
-        setBackendLogLevel(body.level as LogLevelName);
+        setBackendLogLevel(level as LogLevelName);
 
-        return Response.json({ success: true, level: body.level });
+        return Response.json({ success: true, level });
       } catch (error) {
         return errorResponse("save_failed", String(error), 500);
       }

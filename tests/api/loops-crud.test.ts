@@ -211,7 +211,7 @@ describe("Loops CRUD API Integration", () => {
 
       expect(response.status).toBe(400);
       const body = await response.json();
-      expect(body.error).toBe("invalid_body");
+      expect(body.error).toBe("invalid_json");
     });
 
     test("returns 400 for missing required fields", async () => {
@@ -356,7 +356,7 @@ describe("Loops CRUD API Integration", () => {
       expect(response.status).toBe(400);
 
       const body = await response.json();
-      expect(body.error).toBe("invalid_body");
+      expect(body.error).toBe("invalid_json");
     });
   });
 
