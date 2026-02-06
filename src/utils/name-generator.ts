@@ -29,35 +29,31 @@ export interface GenerateLoopNameOptions {
 
 /**
  * Sanitize a generated loop name.
- * - Converts to lowercase
- * - Replaces spaces and underscores with hyphens
- * - Removes special characters except hyphens
- * - Truncates to max 50 characters
- * - Trims leading/trailing hyphens
  * - Removes markdown formatting (backticks, asterisks, etc.)
+ * - Removes control characters
+ * - Trims leading/trailing whitespace
+ * - Truncates to max 100 characters
+ * - Preserves spaces and natural casing for readability
  */
 export function sanitizeLoopName(name: string): string {
   return name
-    .replace(/[`*~]/g, "")             // Remove markdown formatting (not underscores)
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, "-")       // Replace non-alphanumeric (including _) with -
-    .replace(/-+/g, "-")               // Collapse multiple hyphens
-    .replace(/^-|-$/g, "")             // Trim leading/trailing hyphens
-    .slice(0, 50);                     // Limit length to 50 chars
+    .replace(/[`*~#]/g, "")            // Remove markdown formatting
+    .replace(/[\x00-\x1F\x7F]/g, "")   // Remove control characters
+    .trim()                             // Trim whitespace
+    .slice(0, 100);                     // Limit length to 100 chars
 }
 
 /**
  * Generate a fallback name from the prompt using simple heuristics.
- * Extracts key words from the first 50 chars of the prompt.
+ * Extracts key words from the first 100 chars of the prompt.
  */
 function generateFallbackName(prompt: string): string {
-  // Take first 50 chars, split by spaces, take first 5 words
+  // Take first 100 chars, split by spaces, take first 8 words
   const words = prompt
-    .slice(0, 50)
-    .toLowerCase()
+    .slice(0, 100)
     .split(/\s+/)
     .filter(w => w.length > 2)  // Skip very short words
-    .slice(0, 5);
+    .slice(0, 8);
   
   if (words.length > 0) {
     return sanitizeLoopName(words.join(" "));
@@ -66,24 +62,24 @@ function generateFallbackName(prompt: string): string {
   // Ultimate fallback: timestamp-based name
   const now = new Date();
   const timestamp = now.toISOString()
-    .replace(/[T:.]/g, "-")
-    .replace(/Z$/, "")
-    .slice(0, 19);  // YYYY-MM-DD-HH-MM-SS
-  return `loop-${timestamp}`;
+    .replace(/T/, " ")
+    .replace(/\.\d+Z$/, "")
+    .slice(0, 19);  // YYYY-MM-DD HH:MM:SS
+  return `Loop ${timestamp}`;
 }
 
 /**
  * Generate a loop name from a prompt using opencode.
  * 
  * This function sends a prompt to opencode asking it to generate a short,
- * descriptive name for a coding task. The name is sanitized and validated
+ * descriptive title for a coding task. The title is sanitized and validated
  * before being returned.
  * 
  * If generation fails or times out, falls back to heuristic-based naming
  * or timestamp-based naming.
  * 
  * @param options - Options for name generation
- * @returns A sanitized loop name (kebab-case, max 50 chars)
+ * @returns A sanitized loop title (max 100 chars, preserves spaces and casing)
  * @throws Error if prompt is empty or backend/session is invalid
  */
 export async function generateLoopName(options: GenerateLoopNameOptions): Promise<string> {
@@ -104,20 +100,9 @@ export async function generateLoopName(options: GenerateLoopNameOptions): Promis
   const nameGenerationPrompt: PromptInput = {
     parts: [{
       type: "text",
-      text: `Generate a short, descriptive name for a coding task based on this prompt:
+      text: `Generate a title for a task with the following description. It should be 100 chars or less: ${truncatedPrompt}
 
-${truncatedPrompt}
-
-Requirements:
-- Maximum 50 characters
-- Lowercase with hyphens (kebab-case)
-- Capture the main goal/action of the task
-- Use action verbs when possible (add, fix, update, refactor, implement, etc.)
-- No special characters except hyphens
-- No markdown formatting
-- Be specific and descriptive
-
-Output ONLY the name, nothing else.`
+Output ONLY the title, nothing else. No quotes, no formatting, no explanation.`
     }],
   };
 

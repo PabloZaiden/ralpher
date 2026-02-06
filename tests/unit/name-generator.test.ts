@@ -8,47 +8,53 @@ import type { BackendInterface } from "../../src/utils/name-generator";
 import type { AgentResponse } from "../../src/backends/types";
 
 describe("sanitizeLoopName", () => {
-  test("converts to lowercase", () => {
-    expect(sanitizeLoopName("Add New Feature")).toBe("add-new-feature");
+  test("preserves natural casing", () => {
+    expect(sanitizeLoopName("Add New Feature")).toBe("Add New Feature");
   });
 
-  test("replaces spaces with hyphens", () => {
-    expect(sanitizeLoopName("fix login bug")).toBe("fix-login-bug");
+  test("preserves spaces", () => {
+    expect(sanitizeLoopName("fix login bug")).toBe("fix login bug");
   });
 
-  test("replaces underscores with hyphens", () => {
-    expect(sanitizeLoopName("update_user_profile")).toBe("update-user-profile");
+  test("preserves underscores", () => {
+    expect(sanitizeLoopName("update_user_profile")).toBe("update_user_profile");
   });
 
-  test("removes special characters", () => {
-    expect(sanitizeLoopName("add-feature!@#$%")).toBe("add-feature");
-  });
-
-  test("removes markdown formatting", () => {
+  test("removes markdown backticks", () => {
     expect(sanitizeLoopName("`add-feature`")).toBe("add-feature");
+  });
+
+  test("removes markdown asterisks", () => {
     expect(sanitizeLoopName("**add-feature**")).toBe("add-feature");
-    expect(sanitizeLoopName("_add-feature_")).toBe("add-feature");
   });
 
-  test("collapses multiple hyphens", () => {
-    expect(sanitizeLoopName("add---new---feature")).toBe("add-new-feature");
+  test("removes markdown tildes", () => {
+    expect(sanitizeLoopName("~add-feature~")).toBe("add-feature");
   });
 
-  test("trims leading and trailing hyphens", () => {
-    expect(sanitizeLoopName("-add-feature-")).toBe("add-feature");
+  test("removes markdown hash", () => {
+    expect(sanitizeLoopName("# Add Feature")).toBe("Add Feature");
   });
 
-  test("truncates to 50 characters", () => {
-    const longName = "a".repeat(100);
-    expect(sanitizeLoopName(longName)).toHaveLength(50);
+  test("trims leading and trailing whitespace", () => {
+    expect(sanitizeLoopName("  add feature  ")).toBe("add feature");
+  });
+
+  test("truncates to 100 characters", () => {
+    const longName = "a".repeat(150);
+    expect(sanitizeLoopName(longName)).toHaveLength(100);
   });
 
   test("handles empty string", () => {
     expect(sanitizeLoopName("")).toBe("");
   });
 
-  test("handles complex case", () => {
-    expect(sanitizeLoopName("Add **New** Feature_123!")).toBe("add-new-feature-123");
+  test("handles complex case with markdown", () => {
+    expect(sanitizeLoopName("Add **New** Feature 123!")).toBe("Add New Feature 123!");
+  });
+
+  test("preserves special characters except markdown", () => {
+    expect(sanitizeLoopName("Add feature (v2) - urgent!")).toBe("Add feature (v2) - urgent!");
   });
 });
 
@@ -58,7 +64,7 @@ describe("generateLoopName", () => {
       sendPrompt: mock(async (_sessionId: string, _prompt) => {
         return {
           id: "test-id",
-          content: "add-user-authentication",
+          content: "Add User Authentication",
           parts: [],
         } as AgentResponse;
       }),
@@ -70,16 +76,16 @@ describe("generateLoopName", () => {
       sessionId: "test-session",
     });
 
-    expect(name).toBe("add-user-authentication");
+    expect(name).toBe("Add User Authentication");
     expect(mockBackend.sendPrompt).toHaveBeenCalledTimes(1);
   });
 
-  test("sanitizes generated name", async () => {
+  test("sanitizes generated name (removes markdown)", async () => {
     const mockBackend: BackendInterface = {
       sendPrompt: mock(async (_sessionId: string, _prompt) => {
         return {
           id: "test-id",
-          content: "Add User Authentication!",
+          content: "**Add User Authentication**",
           parts: [],
         } as AgentResponse;
       }),
@@ -91,7 +97,7 @@ describe("generateLoopName", () => {
       sessionId: "test-session",
     });
 
-    expect(name).toBe("add-user-authentication");
+    expect(name).toBe("Add User Authentication");
   });
 
   test("truncates prompt to 1000 chars before sending", async () => {
@@ -139,10 +145,11 @@ describe("generateLoopName", () => {
       sessionId: "test-session",
     });
 
-    // Should return heuristic-based fallback
+    // Should return heuristic-based fallback with spaces preserved
     expect(name).toBeTruthy();
     expect(name.length).toBeGreaterThan(0);
-    expect(name).toMatch(/^[a-z0-9-]+$/); // Valid kebab-case
+    expect(name).toContain("Add");
+    expect(name).toContain("user");
   });
 
   test("falls back on timeout", async () => {
@@ -187,9 +194,10 @@ describe("generateLoopName", () => {
       sessionId: "test-session",
     });
 
-    // Should return heuristic-based fallback
+    // Should return heuristic-based fallback with original casing
     expect(name).toBeTruthy();
-    expect(name).toMatch(/add-user/); // Should extract key words
+    expect(name).toContain("Add");
+    expect(name).toContain("user");
   });
 
   test("falls back on very long response", async () => {
@@ -219,7 +227,7 @@ describe("generateLoopName", () => {
       sendPrompt: mock(async () => {
         return {
           id: "test-id",
-          content: "!@#$%^&*()", // Only special chars
+          content: "`*~#", // Only markdown chars that get removed
           parts: [],
         } as AgentResponse;
       }),
@@ -233,7 +241,8 @@ describe("generateLoopName", () => {
 
     // Should return heuristic-based fallback
     expect(name).toBeTruthy();
-    expect(name).toMatch(/add-user/);
+    expect(name).toContain("Add");
+    expect(name).toContain("user");
   });
 
   test("throws error on empty prompt", async () => {
@@ -289,11 +298,11 @@ describe("generateLoopName", () => {
       sessionId: "test-session",
     });
 
-    // Should return timestamp-based fallback
-    expect(name).toMatch(/^loop-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$/);
+    // Should return timestamp-based fallback with spaces
+    expect(name).toMatch(/^Loop \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
   });
 
-  test("heuristic fallback extracts key words", async () => {
+  test("heuristic fallback extracts key words with original casing", async () => {
     const mockBackend: BackendInterface = {
       sendPrompt: mock(async () => {
         throw new Error("Backend error");
@@ -306,9 +315,9 @@ describe("generateLoopName", () => {
       sessionId: "test-session",
     });
 
-    // Should extract first 5 meaningful words
+    // Should extract meaningful words preserving casing
     expect(name).toBeTruthy();
-    expect(name).toContain("add");
+    expect(name).toContain("Add");
     expect(name).toContain("user");
     expect(name).toContain("authentication");
   });
