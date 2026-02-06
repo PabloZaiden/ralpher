@@ -53,6 +53,14 @@ describe("sanitizeLoopName", () => {
     expect(sanitizeLoopName("Add **New** Feature 123!")).toBe("Add New Feature 123!");
   });
 
+  test("collapses consecutive spaces after removing markdown", () => {
+    expect(sanitizeLoopName("Add ** New ** Feature")).toBe("Add New Feature");
+  });
+
+  test("collapses multiple consecutive spaces", () => {
+    expect(sanitizeLoopName("Add    multiple   spaces")).toBe("Add multiple spaces");
+  });
+
   test("preserves special characters except markdown", () => {
     expect(sanitizeLoopName("Add feature (v2) - urgent!")).toBe("Add feature (v2) - urgent!");
   });

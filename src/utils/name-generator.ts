@@ -31,6 +31,7 @@ export interface GenerateLoopNameOptions {
  * Sanitize a generated loop name.
  * - Removes markdown formatting (backticks, asterisks, etc.)
  * - Removes control characters
+ * - Collapses consecutive whitespace to single spaces
  * - Trims leading/trailing whitespace
  * - Truncates to max 100 characters
  * - Preserves spaces and natural casing for readability
@@ -39,6 +40,7 @@ export function sanitizeLoopName(name: string): string {
   return name
     .replace(/[`*~#]/g, "")            // Remove markdown formatting
     .replace(/[\x00-\x1F\x7F]/g, "")   // Remove control characters
+    .replace(/\s+/g, " ")              // Collapse consecutive whitespace to single space
     .trim()                             // Trim whitespace
     .slice(0, 100);                     // Limit length to 100 chars
 }
@@ -63,7 +65,7 @@ function generateFallbackName(prompt: string): string {
   const now = new Date();
   const timestamp = now.toISOString()
     .replace(/T/, " ")
-    .replace(/\.\d+Z$/, "")
+    .replace(/\.\d+Z$/, "")  // \. matches literal period; removes fractional seconds like .123Z
     .slice(0, 19);  // YYYY-MM-DD HH:MM:SS
   return `Loop ${timestamp}`;
 }
