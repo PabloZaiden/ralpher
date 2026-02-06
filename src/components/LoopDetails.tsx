@@ -432,7 +432,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const isActive = isLoopActive(state.status);
 
   return (
-    <div className="h-screen bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col overflow-x-hidden">
       {/* Header - compact single line */}
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 safe-area-top">
         <div className="px-4 sm:px-6 lg:px-8 py-2">
@@ -531,7 +531,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         </div>
       </div>
 
-      <main className="px-4 sm:px-6 lg:px-8 py-3 flex flex-col flex-1 min-h-0 overflow-hidden">
+      <main className="px-4 sm:px-6 lg:px-8 py-3 flex flex-col flex-1 overflow-x-hidden">
         {/* Error display - from hook */}
         {error && (
           <div className="mb-3 rounded-md bg-red-50 dark:bg-red-900/20 p-3 flex-shrink-0">
@@ -563,7 +563,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         )}
 
         {/* Full width content area */}
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 flex flex-col">
             {state.status === "planning" ? (
               <PlanReviewPanel
                 loop={loop}
@@ -584,7 +584,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 logs={logs}
               />
             ) : (
-              <div className="flex flex-col flex-1 min-h-0">
+              <div className="flex flex-col flex-1">
                 {/* Tab navigation */}
                 <div className="flex border-b border-gray-200 dark:border-gray-700 mb-3 overflow-x-auto flex-shrink-0">
                   {tabs.map((tab) => {
@@ -609,14 +609,14 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 </div>
 
                 {/* Tab content */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex-1 min-h-0 flex flex-col">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex-1 flex flex-col">
                   {activeTab === "log" && (
-                    <div className="flex-1 min-h-0 flex flex-col">
+                    <div className="flex-1 flex flex-col">
                       {/* Side-by-side layout for logs and TODOs (75-25 split) */}
-                      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-4">
+                      <div className="flex-1 flex flex-col lg:flex-row gap-4 p-4">
                         {/* Logs section */}
                         <div className={`flex flex-col min-w-0 ${
-                          logsCollapsed ? 'flex-shrink-0' : `min-h-[100px] lg:min-h-0 ${todosCollapsed ? 'flex-1' : 'flex-[3]'}`
+                          logsCollapsed ? 'flex-shrink-0' : `min-h-[100px] ${todosCollapsed ? 'flex-1' : 'flex-[3]'}`
                         }`}>
                           <button
                             onClick={() => setLogsCollapsed(!logsCollapsed)}
@@ -641,7 +641,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                         
                         {/* TODOs section */}
                         <div className={`flex flex-col min-w-0 ${
-                          todosCollapsed ? 'flex-shrink-0' : `min-h-[100px] lg:min-h-0 ${logsCollapsed ? 'flex-1' : 'flex-1'}`
+                          todosCollapsed ? 'flex-shrink-0' : `min-h-[100px] ${logsCollapsed ? 'flex-1' : 'flex-1'}`
                         }`}>
                           <button
                             onClick={() => setTodosCollapsed(!todosCollapsed)}
@@ -685,7 +685,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "info" && (
-                    <div className="p-4 space-y-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
+                    <div className="p-4 space-y-4 flex-1 overflow-auto dark-scrollbar">
                       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Loop Information</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {/* Statistics */}
@@ -745,7 +745,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "prompt" && (
-                    <div className="p-4 space-y-6 flex-1 min-h-0 overflow-auto dark-scrollbar">
+                    <div className="p-4 space-y-6 flex-1 overflow-auto dark-scrollbar">
                       {/* Original Task Prompt (read-only) */}
                       <div>
                         <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
@@ -800,7 +800,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "plan" && (
-                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
+                    <div className="p-4 flex-1 overflow-auto dark-scrollbar">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
@@ -816,7 +816,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "status" && (
-                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
+                    <div className="p-4 flex-1 overflow-auto dark-scrollbar">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
@@ -832,7 +832,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "diff" && (
-                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
+                    <div className="p-4 flex-1 overflow-auto dark-scrollbar">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
@@ -913,7 +913,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "review" && (
-                    <div className="p-4 space-y-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
+                    <div className="p-4 space-y-4 flex-1 overflow-auto dark-scrollbar">
                       {loop.state.reviewMode ? (
                         <>
                           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -1057,7 +1057,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
 
                   {activeTab === "actions" && (
-                    <div className="p-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
+                    <div className="p-4 flex-1 overflow-auto dark-scrollbar">
                       <div className="max-w-md space-y-2">
                         {isFinalState(state.status) ? (
                           <>
