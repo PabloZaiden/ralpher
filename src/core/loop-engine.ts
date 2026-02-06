@@ -1229,14 +1229,16 @@ export class LoopEngine {
                 currentReasoningLogContent += event.content;
                 if (currentReasoningLogId) {
                   // Update existing log entry
+                  // Use trace level for console to reduce verbosity
                   this.emitLog("agent", "AI reasoning...", {
                     responseContent: currentReasoningLogContent,
-                  }, currentReasoningLogId);
+                  }, currentReasoningLogId, "trace");
                 } else {
                   // Create new log entry
+                  // Use trace level for console to reduce verbosity
                   currentReasoningLogId = this.emitLog("agent", "AI reasoning...", {
                     responseContent: currentReasoningLogContent,
-                  });
+                  }, undefined, "trace");
                 }
               }
               break;
@@ -1824,13 +1826,21 @@ Output ONLY the commit message, nothing else.`
    * Emit an application log event.
    * Used to communicate internal loop engine operations to the UI.
    * Also persists the log in the loop state for page refresh recovery.
+   * @param level - The log level for the event (used for SSE events and persistence)
+   * @param message - The log message
+   * @param details - Optional additional details
+   * @param id - Optional ID for updating existing log entries
+   * @param consoleLevel - Optional override for the server console log level (tslog).
+   *                       When provided, this level is used for console output instead of deriving from `level`.
+   *                       Useful for reducing console verbosity while keeping frontend events unchanged.
    * @returns The ID of the log entry (for updates)
    */
   private emitLog(
     level: LogLevel,
     message: string,
     details?: Record<string, unknown>,
-    id?: string
+    id?: string,
+    consoleLevel?: "trace" | "debug" | "info" | "warn" | "error"
   ): string {
     const logId = id ?? `log-${this.config.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const timestamp = createTimestamp();
@@ -1838,27 +1848,52 @@ Output ONLY the commit message, nothing else.`
     // Also log to app logger for holistic view
     const loopPrefix = `[Loop:${this.config.name}]`;
     const detailsStr = details ? ` ${JSON.stringify(details)}` : "";
-    switch (level) {
-      case "error":
-        log.error(`${loopPrefix} ${message}${detailsStr}`);
-        break;
-      case "warn":
-        log.warn(`${loopPrefix} ${message}${detailsStr}`);
-        break;
-      case "info":
-        log.info(`${loopPrefix} ${message}${detailsStr}`);
-        break;
-      case "debug":
-        log.debug(`${loopPrefix} ${message}${detailsStr}`);
-        break;
-      case "trace":
-        log.trace(`${loopPrefix} ${message}${detailsStr}`);
-        break;
-      case "agent":
-      case "user":
-        // Log agent and user messages at info level
-        log.info(`${loopPrefix} [${level}] ${message}${detailsStr}`);
-        break;
+    
+    // If consoleLevel is provided, use it for server console output
+    // Otherwise, derive from level (existing behavior)
+    if (consoleLevel) {
+      const levelTag = level === "agent" || level === "user" ? ` [${level}]` : "";
+      const logMessage = `${loopPrefix}${levelTag} ${message}${detailsStr}`;
+      switch (consoleLevel) {
+        case "trace":
+          log.trace(logMessage);
+          break;
+        case "debug":
+          log.debug(logMessage);
+          break;
+        case "info":
+          log.info(logMessage);
+          break;
+        case "warn":
+          log.warn(logMessage);
+          break;
+        case "error":
+          log.error(logMessage);
+          break;
+      }
+    } else {
+      switch (level) {
+        case "error":
+          log.error(`${loopPrefix} ${message}${detailsStr}`);
+          break;
+        case "warn":
+          log.warn(`${loopPrefix} ${message}${detailsStr}`);
+          break;
+        case "info":
+          log.info(`${loopPrefix} ${message}${detailsStr}`);
+          break;
+        case "debug":
+          log.debug(`${loopPrefix} ${message}${detailsStr}`);
+          break;
+        case "trace":
+          log.trace(`${loopPrefix} ${message}${detailsStr}`);
+          break;
+        case "agent":
+        case "user":
+          // Log agent and user messages at info level
+          log.info(`${loopPrefix} [${level}] ${message}${detailsStr}`);
+          break;
+      }
     }
     
     // Persist log in loop state (for page refresh recovery)
