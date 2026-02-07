@@ -6,8 +6,8 @@
 
 | Severity | Count | Description |
 |----------|-------|-------------|
-| Critical | 8 | Issues that can cause data loss, security vulnerabilities, or silent failures in production |
-| Major | 80 | Significant code quality, maintainability, or correctness issues |
+| Critical | 7 | Issues that can cause data loss, security vulnerabilities, or silent failures in production |
+| Major | 79 | Significant code quality, maintainability, or correctness issues |
 | Minor | 123 | Style, convention, or low-risk issues |
 | Suggestion | 22 | Recommendations for improvement, not defects |
 
@@ -16,7 +16,7 @@
 | Directory | Critical | Major | Minor | Suggestion |
 |-----------|----------|-------|-------|------------|
 | src/core/ | 1 | 13 | 14 | 6 |
-| src/api/ | 1 | 13 | 24 | 1 |
+| src/api/ | 0 | 12 | 24 | 1 |
 | src/persistence/ | 2 | 8 | 19 | 2 |
 | src/backends/ | 1 | 8 | 6 | 2 |
 | src/types/ | 0 | 6 | 8 | 5 |
@@ -26,7 +26,7 @@
 | src/lib/ | 0 | 2 | 3 | 0 |
 | Entry Points & Config | 0 | 4 | 11 | 3 |
 | Tests | 1 | 3 | 2 | 0 |
-| **Total** | **8** | **80** | **123** | **22** |
+| **Total** | **7** | **79** | **123** | **22** |
 
 ---
 
@@ -229,8 +229,8 @@ No findings. Clean barrel export.
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
-| 1 | Critical | Security | 115 | `POST /api/server/kill` has no authentication — any client can terminate the server. |
-| 2 | Major | Security | 79 | `POST /api/settings/reset-all` is destructive with no authentication or confirmation. |
+| 1 | ~~Critical~~ N/A | ~~Security~~ | 115 | ~~`POST /api/server/kill` has no authentication — any client can terminate the server.~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level. |
+| 2 | ~~Major~~ N/A | ~~Security~~ | 79 | ~~`POST /api/settings/reset-all` is destructive with no authentication or confirmation.~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level. |
 | 3 | Major | Code duplication | scattered | `errorResponse` duplicated (3rd copy across API files). |
 | 4 | Minor | Consistency of patterns | scattered | Inconsistent logger initialization (uses `createLogger("api:settings")` while loops.ts uses `import { log }`). |
 

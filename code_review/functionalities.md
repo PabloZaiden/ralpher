@@ -14,11 +14,11 @@ This document analyzes the Ralpher codebase by **functionality** — tracing eac
 
 | Severity | Count |
 |----------|-------|
-| Critical | 5 |
-| Major | 32 |
+| Critical | 4 |
+| Major | 31 |
 | Minor | 21 |
 | Suggestion | 8 |
-| **Total** | **66** |
+| **Total** | **64** |
 
 ### Key Cross-Cutting Themes
 
@@ -432,8 +432,8 @@ User changes log level in UI:
 
 | # | Severity | Dimension | Location | Finding |
 |---|----------|-----------|----------|---------|
-| 7.1 | **Critical** | Security | `api/settings.ts:115` | `POST /api/server/kill` calls `process.exit(0)` with no authentication. Any client with network access can terminate the server. |
-| 7.2 | **Major** | Security | `api/settings.ts:79` | `POST /api/settings/reset-all` is destructive (deletes entire database) with no authentication or confirmation. |
+| 7.1 | ~~**Critical**~~ N/A | ~~Security~~ | `api/settings.ts:115` | ~~`POST /api/server/kill` calls `process.exit(0)` with no authentication. Any client with network access can terminate the server.~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level. |
+| 7.2 | ~~**Major**~~ N/A | ~~Security~~ | `api/settings.ts:79` | ~~`POST /api/settings/reset-all` is destructive (deletes entire database) with no authentication or confirmation.~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level. |
 | 7.3 | **Major** | Bug | `core/logger.ts:103-108` | `setLogLevel()` only updates the parent logger. Sub-loggers created via `createLogger()` retain their original level. Runtime log level changes silently fail for all sub-loggers on the backend. The frontend `lib/logger.ts` correctly caches and updates sub-loggers. |
 | 7.4 | **Major** | Code duplication | `core/logger.ts` vs `lib/logger.ts` | Logger constants (`LogLevelName`, `LOG_LEVELS`, `LOG_LEVEL_NAMES`, `DEFAULT_LOG_LEVEL`) are fully duplicated between the two files. Identical definitions maintained independently. |
 | 7.5 | **Major** | Code duplication | `api/settings.ts:31-34` | `errorResponse()` helper is the 3rd copy across API files (also in loops.ts, models.ts). |
@@ -443,11 +443,10 @@ User changes log level in UI:
 ### Integration Concerns
 
 - **Behavioral inconsistency between frontend and backend loggers**: The frontend logger correctly propagates level changes to sub-loggers; the backend does not. This means changing the log level via the UI works for frontend logging but silently fails for most backend modules (which use `createLogger()` to create sub-loggers).
-- **Destructive endpoints without protection**: Both server kill and database reset are one-click operations with no confirmation gate at the API level.
 
 ### Recommendations
 
-1. **Add authentication** to `POST /api/server/kill` — at minimum a token-based check
+1. ~~**Add authentication** to `POST /api/server/kill` — at minimum a token-based check~~ **Not Applicable** — authentication is enforced by reverse proxy
 2. **Port sub-logger caching** from `lib/logger.ts` to `core/logger.ts`
 3. **Extract shared logger constants** to a shared module imported by both
 4. **Extract shared `errorResponse()`** to a single location
@@ -489,7 +488,7 @@ LoopEngine needs to send prompt:
 | 8.2 | **Major** | Type safety | `backends/types.ts:getSdkClient()` | Returns `unknown`, forcing all consumers to use unsafe `as unknown as OpencodeClient` double casts. |
 | 8.3 | **Major** | Type safety | `backends/types.ts:getModels()` | Returns `Promise<unknown[]>`, providing zero type information. Consumers must cast to `ModelInfo[]`. |
 | 8.4 | **Major** | Code duplication | `opencode/index.ts:335-341` vs `375-381` | Prompt construction logic duplicated between `sendPrompt` and `sendPromptAsync`. |
-| 8.5 | **Major** | Error handling | `opencode/index.ts:298-301` | `getSession()` catches all errors and returns `null`, treating server errors, network timeouts, and auth failures identically to "session not found." |
+| 8.5 | **Major** | Error handling | `opencode/index.ts:298-301` | `getSession()` catches all errors and returns `null`, treating server errors, network timeouts, and SDK-level session authentication failures identically to "session not found." *(Note: this refers to SDK-level session authentication between Ralpher and the opencode backend, not user-facing auth which is handled by reverse proxy.)* |
 | 8.6 | **Major** | Complexity | `opencode/index.ts:translateEvent()` | Function accepts 8 parameters — a strong indicator of too many responsibilities. Should use an options object or be a class method. |
 | 8.7 | **Minor** | Dead code | `opencode/index.ts:1011-1015` | `getServerUrl()` method is unused and breaks encapsulation. |
 | 8.8 | **Minor** | Concurrency | `opencode/index.ts` scattered | `connected` flag may be out of sync with actual `client` state across async boundaries. |
@@ -725,6 +724,6 @@ They share identical constant definitions but diverge in behavior. Some modules 
 | 5 | Add React Error Boundary + toast notifications | Major — gives users error visibility | Low |
 | 6 | Fix backend logger sub-logger sync | Major — runtime log level changes work | Low |
 | 7 | Add AbortController to hooks | Major — prevents race conditions | Low |
-| 8 | Add authentication to destructive endpoints | Critical — security | Low |
+| 8 | ~~Add authentication to destructive endpoints~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level | ~~Critical~~ N/A — ~~security~~ | ~~Low~~ N/A |
 | 9 | Replace INSERT OR REPLACE with upsert | Major — prevents cascade deletes | Low |
 | 10 | ~~Add hook tests with renderHook~~ **Resolved** | ~~Major~~ — ~~covers highest-risk untested code~~ **Done:** 121 hook tests added | ~~Medium~~ N/A |

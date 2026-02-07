@@ -15,12 +15,12 @@ This document analyzes the Ralpher codebase by **architectural layer** — evalu
 | # | Layer | Files | LOC | Health | Critical | Major | Minor | Suggestion |
 |---|-------|------:|----:|:------:|---------:|------:|------:|-----------:|
 | 1 | Presentation | 35 | 9,490 | C | 1 | 11 | 10 | 2 |
-| 2 | API | 10 | 3,170 | C+ | 1 | 9 | 6 | 1 |
+| 2 | API | 10 | 3,170 | C+ | 0 | 8 | 6 | 1 |
 | 3 | Core Business Logic | 5 | 5,450 | C+ | 1 | 8 | 5 | 2 |
 | 4 | Data Access | 7 | 1,948 | B- | 1 | 6 | 5 | 1 |
 | 5 | External Integration | 6 | 2,475 | C | 1 | 7 | 3 | 1 |
 | 6 | Shared Infrastructure | 14 | 2,100 | B | 0 | 5 | 5 | 2 |
-| | **Totals** | **77** | **24,633** | **C+** | **5** | **46** | **34** | **9** |
+| | **Totals** | **77** | **24,633** | **C+** | **4** | **45** | **34** | **9** |
 
 **Note:** 6 config/entry files (`src/index.ts`, `src/build.ts`, `src/frontend.tsx`, `src/index.html`, `src/index.css`, `src/App.tsx`) span multiple layers. They are discussed in the layer most relevant to their primary role and also referenced in the Cross-Layer Analysis.
 
@@ -219,8 +219,8 @@ The API layer has good organizational structure (one file per resource) and a cl
 
 | # | Severity | Dimension | Location | Finding |
 |---|----------|-----------|----------|---------|
-| A1 | **Critical** | Security | `api/settings.ts:115` | `POST /api/server/kill` calls `process.exit(0)` with no authentication. Any client with network access can terminate the server. |
-| A2 | **Major** | Security | `api/settings.ts:79` | `POST /api/settings/reset-all` is destructive (deletes entire database) with no authentication or confirmation. |
+| A1 | ~~**Critical**~~ N/A | ~~Security~~ | `api/settings.ts:115` | ~~`POST /api/server/kill` calls `process.exit(0)` with no authentication. Any client with network access can terminate the server.~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level. See `AGENTS.md` § Authentication & Authorization. |
+| A2 | ~~**Major**~~ N/A | ~~Security~~ | `api/settings.ts:79` | ~~`POST /api/settings/reset-all` is destructive (deletes entire database) with no authentication or confirmation.~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level. |
 | A3 | **Major** | Layering violation | `api/loops.ts:22-23` | Direct imports from persistence layer: `updateLoopState`, `getActiveLoopByDirectory`, `getReviewComments`. Bypasses `LoopManager` business rules and event emission. |
 | A4 | **Major** | Layering violation | `api/loops.ts:695-702` | Draft-to-planning transition directly mutates `loop.state.status` and `loop.state.planMode`, then calls `updateLoopState()` from persistence. Bypasses `LoopManager.startPlanMode()`. |
 | A5 | **Major** | Code duplication | `api/loops.ts`, `models.ts`, `settings.ts` | `errorResponse()` helper independently defined in 3 files with identical implementation. |
@@ -265,7 +265,7 @@ The API layer has good organizational structure (one file per resource) and a cl
 
 ### Recommendations (Prioritized)
 
-1. **Add authentication** to `POST /api/server/kill` — at minimum a token check
+1. ~~**Add authentication** to `POST /api/server/kill` — at minimum a token check~~ **Not Applicable** — authentication is enforced by reverse proxy
 2. **Route all persistence calls through Core** — remove direct `updateLoopState` imports from API handlers
 3. **Extract shared `errorResponse()`** to `api/helpers.ts` or `api/validation.ts`
 4. **Migrate `workspaces.ts` to named method handlers** — align with other API files
@@ -511,7 +511,7 @@ The External Integration layer has a well-designed abstraction (`Backend` interf
 | E2 | **Major** | Type safety | `backends/types.ts:getSdkClient()` | Returns `unknown`, forcing all consumers to use unsafe `as unknown as OpencodeClient` double casts. Should be generic: `Backend<TClient>`. |
 | E3 | **Major** | Type safety | `backends/types.ts:getModels()` | Returns `Promise<unknown[]>`. Zero type information for consumers. Must cast to `ModelInfo[]`. |
 | E4 | **Major** | Code duplication | `opencode/index.ts:335-341` vs `375-381` | Prompt construction logic duplicated between `sendPrompt` and `sendPromptAsync`. |
-| E5 | **Major** | Error handling | `opencode/index.ts:298-301` | `getSession()` catches all errors and returns `null`. Server errors, network timeouts, and auth failures indistinguishable from 404. |
+| E5 | **Major** | Error handling | `opencode/index.ts:298-301` | `getSession()` catches all errors and returns `null`. Server errors, network timeouts, and SDK-level session authentication failures indistinguishable from 404. *(Note: this refers to SDK-level session authentication between Ralpher and the opencode backend, not user-facing auth which is handled by reverse proxy.)* |
 | E6 | **Major** | Complexity | `opencode/index.ts:translateEvent()` | Function accepts 8 parameters. Should use an options object or be a method on a class with injected dependencies. |
 | E7 | **Major** | Code duplication | `backend-manager.ts` scattered | `getCommandExecutor` (sync) and `getCommandExecutorAsync` (async) contain nearly identical logic. Should be unified. |
 | E8 | **Major** | Type safety | `backend-manager.ts:getSdkClient()` | Uses double unsafe cast `as unknown as OpencodeClient` to get SDK client for remote executor creation. |
@@ -798,7 +798,7 @@ These recommendations address systemic issues that span multiple layers and repr
 | 4 | **Extract shared helpers to eliminate duplication** — `errorResponse()` (3 copies), `apiCall<T>()` wrapper (13 action functions), `ModelSelector` component (2 copies), `requireWorkspace()` (5 copies). Estimated ~530 LOC savings. | API, Presentation | Major — reduces maintenance burden | Low |
 | 5 | **Add error boundaries and user-facing error feedback** — Root `<ErrorBoundary>` in `frontend.tsx`, toast/notification system for transient errors, error states in Dashboard and LoopDetails. | Presentation | Major — users can see and recover from errors | Low |
 | 6 | **Fix backend logger sub-logger sync** — Port the sub-logger caching pattern from `lib/logger.ts` to `core/logger.ts`. Extract shared constants to a shared module. | Shared Infra | Major — runtime log level changes work for all modules | Low |
-| 7 | **Add authentication to destructive endpoints** — `POST /api/server/kill` and `POST /api/settings/reset-all` need at minimum a token-based check. | API | Critical — prevents unauthorized server termination | Low |
+| 7 | ~~**Add authentication to destructive endpoints** — `POST /api/server/kill` and `POST /api/settings/reset-all` need at minimum a token-based check.~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level. See `AGENTS.md` § Authentication & Authorization. | API | ~~Critical~~ N/A — ~~prevents unauthorized server termination~~ | ~~Low~~ N/A |
 | 8 | **Decompose Dashboard.tsx** — Extract `LoopList`, `DashboardHeader`, `DashboardModals`, `LoopGroupSection` sub-components. Move inline fetch calls to hooks. | Presentation | Major — improves testability and maintainability | Medium |
 | 9 | **Fix data integrity risks in Data Access** — Replace `INSERT OR REPLACE` with upsert to prevent cascade deletes. Add try/catch to `JSON.parse` calls in `rowToLoop()`. Validate table names in `getTableColumns()`. | Data Access | Major — prevents data loss and crash-on-corruption | Low |
 | 10 | ~~**Add test coverage for hooks and utilities**~~ **Largely Resolved** — 698 frontend tests added (121 hook tests, 508 component tests, 50 E2E scenario tests, 19 infra tests). Remaining gaps: `useWebSocket`, `loop-status.ts`, `sanitizeBranchName`, `event-stream.ts`. | Presentation, Shared Infra | ~~Major~~ Minor — highest-risk code now covered | ~~Medium~~ N/A |
@@ -812,7 +812,7 @@ These recommendations address systemic issues that span multiple layers and repr
 | Code duplication | 0 | 12 | 2 | 0 | 14 |
 | Error handling | 0 | 7 | 4 | 1 | 12 |
 | Type safety | 0 | 4 | 1 | 1 | 6 |
-| Security | 1 | 1 | 3 | 1 | 6 |
+| Security | 0 | 0 | 3 | 1 | 4 |
 | Best practices | 2 | 2 | 1 | 1 | 6 |
 | Consistency | 0 | 2 | 4 | 0 | 6 |
 | Complexity | 1 | 3 | 0 | 1 | 5 |
@@ -832,7 +832,7 @@ These recommendations address systemic issues that span multiple layers and repr
 | Bug | 0 | 2 | 0 | 1 | 3 |
 | UX | 0 | 1 | 0 | 0 | 1 |
 | Testability | 0 | 0 | 1 | 0 | 1 |
-| **Totals** | **5** | **46** | **34** | **9** | **94** |
+| **Totals** | **4** | **45** | **34** | **9** | **92** |
 
 ---
 

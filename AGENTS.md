@@ -27,6 +27,14 @@ Ralpher is a full-stack Bun + React application for controlling and managing Ral
 
 For more project information, see the [README.md](README.md).
 
+## Authentication & Authorization
+
+Ralpher runs behind a reverse proxy that enforces authentication and authorization. The application itself does not implement authentication or authorization — all access control is handled at the infrastructure level before requests reach Ralpher. This means:
+
+- API endpoints do not require authentication tokens or session validation
+- Destructive endpoints (server kill, database reset) are protected by the reverse proxy
+- WebSocket connections are authenticated at the proxy level
+
 ## Remote Command Execution Architecture
 
 **CRITICAL: All operations on workspace repositories MUST be executed on the remote opencode server, NEVER locally on the Ralpher server.**

@@ -68,9 +68,9 @@ The Ralpher codebase is **functional and well-organized at the directory level**
 
 | Severity | files.md | modules.md | functionalities.md | layers.md | Description |
 |----------|:--------:|:----------:|:-------------------:|:---------:|-------------|
-| Critical | 8 | 6 | 5 | 5 | Data loss, security vulnerabilities, or silent failures in production |
-| Major | 80 | 52 | 32 | 46 | Significant code quality, maintainability, or correctness issues |
-| Minor | 123 | 32 | 21 | 34 | Style, convention, or low-risk issues |
+| Critical | 7 | 5 | 4 | 4 | Data loss, security vulnerabilities, or silent failures in production |
+| Major | 79 | 52 | 31 | 45 | Significant code quality, maintainability, or correctness issues |
+| Minor | 123 | 31 | 21 | 34 | Style, convention, or low-risk issues |
 | Suggestion | 22 | 3 | 8 | 9 | Recommendations for improvement, not defects |
 
 **Note:** Finding counts differ between documents because each perspective groups and counts issues differently. A single underlying problem (e.g., fire-and-forget async) may appear as one finding at the layer level but as three findings at the file level (once per occurrence).
@@ -86,7 +86,7 @@ The most prevalent issue categories, ordered by frequency:
 | **Consistency** | 20+ | Mixed patterns for error responses, logger init, HTTP handlers, barrel exports |
 | **Dead/legacy code** | 15+ | 16 unused type aliases, dead functions, vestigial modules |
 | **Type safety** | 12+ | `unknown` returns, unsafe casts, no typed API client |
-| **Security** | 10+ | Unauthenticated destructive endpoints, SQL injection pattern, no WebSocket origin check |
+| **Security** | 10+ | SQL injection pattern, no WebSocket origin check |
 | **Complexity** | 8+ | God methods (200+ LOC), god component, 8-parameter functions |
 | **Performance** | 8+ | Unbounded buffers, missing memoization, unnecessary async overhead |
 | **State management** | 6+ | No state machine, scattered transitions, direct mutation before persistence |
@@ -104,11 +104,13 @@ These are the highest-severity issues that should be addressed first:
 
 `engine.start().catch()` is called without `await`, meaning the API returns "success" before the engine finishes starting. If the engine fails, the loop silently enters an inconsistent state with no error surfaced. This directly violates the AGENTS.md guideline: "CRITICAL: Always await async operations in API handlers."
 
-### 2. Unauthenticated Destructive Endpoints (Security)
+### 2. ~~Unauthenticated Destructive Endpoints (Security)~~ — Not Applicable
 **Files:** `api/settings.ts:115` (server kill), `api/settings.ts:79` (DB reset)
 **Analysis:** `layers.md` § A1, A2, `functionalities.md` § 7.1, 7.2
 
-`POST /api/server/kill` calls `process.exit(0)` with no authentication. Any client with network access can terminate the server. `POST /api/settings/reset-all` deletes the entire database with no confirmation gate.
+~~`POST /api/server/kill` calls `process.exit(0)` with no authentication. Any client with network access can terminate the server. `POST /api/settings/reset-all` deletes the entire database with no confirmation gate.~~
+
+**Not Applicable:** Ralpher runs behind a reverse proxy that enforces authentication and authorization at the infrastructure level. All destructive endpoints are protected by the proxy before requests reach the application. See `AGENTS.md` § Authentication & Authorization.
 
 ### 3. SQL Injection Pattern (Security)
 **Files:** `persistence/migrations/index.ts:57`
@@ -224,7 +226,7 @@ These address the highest-impact systemic issues spanning multiple layers. They 
 | # | Recommendation | Impact | Complexity | Where to Read More |
 |---|---------------|--------|:----------:|-------------------|
 | 1 | **Fix fire-and-forget async** — Await `engine.start()` in LoopManager and the async IIFE in `translateEvent()` | Critical | Low | `layers.md` § B1, `functionalities.md` § 1.1 |
-| 2 | **Add authentication to destructive endpoints** — `POST /api/server/kill` and `/api/settings/reset-all` need auth | Critical | Low | `layers.md` § A1, A2 |
+| 2 | ~~**Add authentication to destructive endpoints** — `POST /api/server/kill` and `/api/settings/reset-all` need auth~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level | ~~Critical~~ N/A | ~~Low~~ N/A | `layers.md` § A1, A2 |
 | 3 | **Introduce a loop state machine** — Centralize all status transitions with a transition table | Major | Medium | `layers.md` § B2, `functionalities.md` § CF-5 |
 | 4 | **Enforce layered architecture** — Remove direct persistence imports from API. Add query methods to LoopManager | Major | Medium | `layers.md` § A3, A4, `functionalities.md` § CF-2 |
 | 5 | **Extract shared helpers** — `errorResponse()`, `apiCall<T>()`, `ModelSelector`, `requireWorkspace()` (~530 LOC savings) | Major | Low | `functionalities.md` § CF-3, `modules.md` § C2.2 |
@@ -241,7 +243,7 @@ These address the highest-impact systemic issues spanning multiple layers. They 
 ### [files.md](files.md) — File-by-File Analysis
 
 **Scope:** Every source file in the codebase reviewed individually.
-**Findings:** 8 Critical, 80 Major, 123 Minor, 22 Suggestions (233 total)
+**Findings:** 7 Critical, 79 Major, 123 Minor, 22 Suggestions (231 total)
 **Structure:**
 - Files grouped by directory (`src/core/`, `src/api/`, `src/persistence/`, etc.)
 - Each file has: purpose, LOC, and a findings table with severity, dimension, line numbers, and description
@@ -253,7 +255,7 @@ These address the highest-impact systemic issues spanning multiple layers. They 
 ### [modules.md](modules.md) — Module-Level Analysis
 
 **Scope:** 10 `src/` modules reviewed as architectural units.
-**Findings:** 6 Critical, 52 Major, 32 Minor, 3 Suggestions (93 total)
+**Findings:** 5 Critical, 52 Major, 31 Minor, 3 Suggestions (91 total)
 **Structure:**
 - Executive summary table with per-module health metrics
 - Each module has: file inventory, LOC breakdown, module-level findings, API surface analysis, cohesion & coupling assessment, and prioritized recommendations
@@ -263,7 +265,7 @@ These address the highest-impact systemic issues spanning multiple layers. They 
 ### [functionalities.md](functionalities.md) — Cross-Cutting Functionality Analysis
 
 **Scope:** 10 end-to-end functionalities traced through all layers.
-**Findings:** 5 Critical, 32 Major, 21 Minor, 8 Suggestions (66 total)
+**Findings:** 4 Critical, 31 Major, 21 Minor, 8 Suggestions (64 total)
 **Structure:**
 - Each functionality has: description, files involved (per layer), data flow diagram, findings table, integration concerns, and recommendations
 - Ends with 7 cross-functionality concerns (CF-1 through CF-7) and overall prioritized recommendations
@@ -285,7 +287,7 @@ These address the highest-impact systemic issues spanning multiple layers. They 
 ### [layers.md](layers.md) — Architectural Layer Analysis
 
 **Scope:** 6 architectural layers with cross-layer interaction analysis.
-**Findings:** 5 Critical, 46 Major, 34 Minor, 9 Suggestions (94 total)
+**Findings:** 4 Critical, 45 Major, 34 Minor, 9 Suggestions (92 total)
 **Structure:**
 - Layer overview with health scores (A-F scale)
 - Each layer has: files, LOC, health score, pattern analysis (strengths + anti-patterns), findings, interface quality (inbound/outbound), test coverage, and recommendations

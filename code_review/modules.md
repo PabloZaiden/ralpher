@@ -11,7 +11,7 @@
 | Module | Files | LOC | Critical | Major | Minor | Suggestion |
 |--------|------:|----:|---------:|------:|------:|-----------:|
 | `src/core/` | 10 | 6,456 | 1 | 8 | 5 | 1 |
-| `src/api/` | 9 | 3,034 | 1 | 8 | 4 | 0 |
+| `src/api/` | 9 | 3,034 | 0 | 8 | 3 | 0 |
 | `src/persistence/` | 7 | 1,948 | 1 | 6 | 4 | 1 |
 | `src/backends/` | 3 | 1,260 | 1 | 6 | 2 | 0 |
 | `src/types/` | 11 | 1,596 | 0 | 3 | 4 | 1 |
@@ -20,7 +20,7 @@
 | `src/hooks/` | 9 | 2,263 | 0 | 6 | 3 | 0 |
 | `src/lib/` | 2 | 178 | 0 | 2 | 1 | 0 |
 | Entry Points & Config | 8+ | ~350 | 0 | 3 | 4 | 0 |
-| **Totals** | **87** | **24,673** | **6** | **52** | **32** | **3** |
+| **Totals** | **87** | **24,673** | **5** | **52** | **31** | **3** |
 
 **Overall Assessment:** The codebase is functional and well-organized at the directory level, but suffers from concentrated complexity in a handful of oversized files, systematic code duplication (especially in API layers and hooks), and several genuine runtime bugs (fire-and-forget async, timer leaks, SQL injection). The separation between frontend and backend modules is clean. The primary architectural debt lies in the `core/` module, where two 2000+ LOC files carry the entire business logic without a formal state machine, and in `components/` where Dashboard.tsx has grown into a god component.
 
@@ -129,7 +129,7 @@
 
 | # | Severity | Dimension | Finding |
 |---|----------|-----------|---------|
-| C2.1 | **Critical** | Security | `POST /api/server/kill` in `settings.ts:115` calls `process.exit(0)` with no authentication. Any client with network access to the server can terminate it. In the Docker deployment (port 80), this is directly exploitable. While the endpoint is intentional for container restart workflows, it needs at minimum an auth token or rate limiting. |
+| C2.1 | ~~**Critical**~~ N/A | ~~Security~~ | ~~`POST /api/server/kill` in `settings.ts:115` calls `process.exit(0)` with no authentication. Any client with network access to the server can terminate it. In the Docker deployment (port 80), this is directly exploitable. While the endpoint is intentional for container restart workflows, it needs at minimum an auth token or rate limiting.~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level. See `AGENTS.md` § Authentication & Authorization. |
 | C2.2 | **Major** | Code Duplication | `errorResponse()` helper function is independently defined in 3 files: `loops.ts:48-53`, `models.ts` (similar pattern), and `settings.ts:31-34`. All three are identical in signature and behavior. This should be a single shared function in `validation.ts` or a new `api/helpers.ts`. |
 | C2.3 | **Major** | Consistency | Error response shapes differ across modules. `loops.ts`, `models.ts`, and `settings.ts` use `{ error: string, message: string }` (the `ErrorResponse` type). `workspaces.ts` sometimes uses `{ error: string }` without `message`. This makes client-side error handling fragile. |
 | C2.4 | **Major** | Consistency | `workspaces.ts` uses an `if (req.method === "GET")` / `if (req.method === "POST")` branching pattern, while all other API files use Bun's named method handlers (`{ GET(req) {}, POST(req) {} }`). This inconsistency makes the module harder to maintain and doesn't benefit from Bun's method-based routing optimizations. |
@@ -140,7 +140,7 @@
 | C2.9 | **Major** | Code Duplication | `git.ts` has two endpoint handlers (`/api/git/:workspaceId/branches` and `/api/git/:workspaceId/repo-info`) that share ~20 lines of identical boilerplate: workspace lookup, command executor creation, GitService instantiation, and error handling. |
 | C2.10 | **Minor** | Consistency | Logger initialization is inconsistent across the module. `loops.ts` imports the singleton `log` from `core/logger`, while `settings.ts` and `models.ts` use `createLogger("api:settings")` to create named sub-loggers. Both patterns work but produce different log output. |
 | C2.11 | **Minor** | Race Condition | Loop creation and workspace creation have TOCTOU (time-of-check-time-of-use) race conditions. The "check if active loop exists for directory" query and the subsequent "create loop" call are not atomic. Two concurrent creation requests for the same directory could both pass validation. |
-| C2.12 | **Minor** | Security | No authentication on any destructive endpoint (DELETE loops, POST discard, POST reset-all). While acceptable for a local development tool, the Docker deployment with `EXPOSE 80` makes this a concern for shared environments. |
+| C2.12 | ~~**Minor**~~ N/A | ~~Security~~ | ~~No authentication on any destructive endpoint (DELETE loops, POST discard, POST reset-all). While acceptable for a local development tool, the Docker deployment with `EXPOSE 80` makes this a concern for shared environments.~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level. |
 | C2.13 | **Minor** | Security | WebSocket endpoint (`/api/ws`) has no connection limits or origin validation. A malicious client could open thousands of WebSocket connections to exhaust server resources. |
 
 ### API Surface Analysis
@@ -166,7 +166,7 @@
 
 ### Top Recommendations (Prioritized)
 
-1. **Add authentication** to `POST /api/server/kill` — even a simple token-based check
+1. ~~**Add authentication** to `POST /api/server/kill` — even a simple token-based check~~ **Not Applicable** — authentication is enforced by reverse proxy
 2. **Extract shared `errorResponse()`** to `validation.ts` or `helpers.ts`
 3. **Route all state mutations through LoopManager** — remove direct `updateLoopState()` calls
 4. **Standardize error response shape** — enforce `ErrorResponse` type everywhere
@@ -266,7 +266,7 @@
 | C4.5 | **Major** | Function Signature | `translateEvent()` accepts 8 parameters: `(sdkEvent, push, end, fail, sessionId, eventStream, connectionInfo, log)`. This is a code smell indicating the function has too many responsibilities. Parameters should be bundled into an options object or the function should be a method on a class with injected dependencies. |
 | C4.6 | **Major** | Type Safety | The `client` parameter in several internal functions is typed as `any`. The OpenCode SDK provides proper TypeScript types that should be used. |
 | C4.7 | **Major** | Code Duplication | Prompt construction logic is duplicated between `sendPrompt()` and `sendPromptAsync()`. Both methods build the same SDK prompt object from the `PromptInput` type, including model mapping. A shared `buildSdkPrompt()` helper would eliminate this duplication. |
-| C4.8 | **Major** | Error Handling | `getSession()` catches all errors and returns `null`, treating every failure as "session not found." This means a 500 server error, a network timeout, or an auth failure are all indistinguishable from a genuine 404. Callers cannot differentiate recoverable from non-recoverable errors. |
+| C4.8 | **Major** | Error Handling | `getSession()` catches all errors and returns `null`, treating every failure as "session not found." This means a 500 server error, a network timeout, or an SDK-level session authentication failure are all indistinguishable from a genuine 404. Callers cannot differentiate recoverable from non-recoverable errors. *(Note: this refers to SDK-level session authentication between Ralpher and the opencode backend, not user-facing auth which is handled by reverse proxy.)* |
 | C4.9 | **Minor** | Dead Code | `getServerUrl()` method exists but is not used externally. It also breaks encapsulation by exposing internal connection details that should be accessed through `getConnectionInfo()`. |
 | C4.10 | **Minor** | Timeout Handling | `customFetch()` disables request timeouts for all SDK calls by setting a very high or infinite timeout. While some operations (like long prompt completions) genuinely need extended timeouts, this applies globally, meaning even health checks or metadata requests have no timeout protection. |
 
@@ -771,10 +771,10 @@ There is no error boundary at any level of the React tree, no toast/notification
 | ID | Module | Finding | Impact |
 |----|--------|---------|--------|
 | C1.1 | core | Fire-and-forget async in `startLoop()` | Loops can silently enter inconsistent state |
-| C2.1 | api | Unauthenticated `POST /api/server/kill` | Any network client can kill the server |
+| C2.1 | api | ~~Unauthenticated `POST /api/server/kill`~~ Not Applicable (reverse proxy) | ~~Any network client can kill the server~~ N/A |
 | C3.1 | persistence | SQL injection in `getTableColumns()` | Currently safe but pattern is exploitable |
 | C4.1 | backends | Fire-and-forget async IIFE in `translateEvent()` | Events silently lost, errors swallowed |
 | C6.1 | utils | Timer leak in `name-generator.ts` | Memory pressure under rapid loop creation |
 | C7.1 | components | Dashboard.tsx god component (~1,250 LOC, 20+ state vars) | Unmaintainable, performance issues (now has 31 tests, but decomposition still recommended) |
 
-**Total findings: 6 Critical, 50 Major (2 resolved), 32 Minor, 3 Suggestions = 93 findings across 10 modules.**
+**Total findings: 5 Critical (1 N/A), 50 Major (2 resolved), 31 Minor (1 N/A), 3 Suggestions = 91 findings across 10 modules.**
