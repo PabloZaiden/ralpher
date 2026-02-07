@@ -7,26 +7,26 @@
 | Severity | Count | Description |
 |----------|-------|-------------|
 | Critical | 8 | Issues that can cause data loss, security vulnerabilities, or silent failures in production |
-| Major | 68 | Significant code quality, maintainability, or correctness issues |
-| Minor | 96 | Style, convention, or low-risk issues |
+| Major | 80 | Significant code quality, maintainability, or correctness issues |
+| Minor | 123 | Style, convention, or low-risk issues |
 | Suggestion | 22 | Recommendations for improvement, not defects |
 
 ### Findings by Directory
 
 | Directory | Critical | Major | Minor | Suggestion |
 |-----------|----------|-------|-------|------------|
-| src/core/ | 1 | 14 | 14 | 5 |
-| src/api/ | 1 | 11 | 16 | 1 |
-| src/persistence/ | 1 | 7 | 11 | 2 |
-| src/backends/ | 1 | 7 | 7 | 2 |
-| src/types/ | 0 | 7 | 5 | 4 |
-| src/utils/ | 1 | 5 | 3 | 2 |
-| src/components/ | 1 | 7 | 10 | 0 |
-| src/hooks/ | 0 | 5 | 14 | 1 |
-| src/lib/ | 0 | 2 | 2 | 0 |
-| Entry Points & Config | 1 | 3 | 7 | 2 |
+| src/core/ | 1 | 13 | 14 | 6 |
+| src/api/ | 1 | 13 | 24 | 1 |
+| src/persistence/ | 2 | 8 | 19 | 2 |
+| src/backends/ | 1 | 8 | 6 | 2 |
+| src/types/ | 0 | 6 | 8 | 5 |
+| src/utils/ | 1 | 8 | 5 | 2 |
+| src/components/ | 1 | 8 | 13 | 0 |
+| src/hooks/ | 0 | 7 | 18 | 1 |
+| src/lib/ | 0 | 2 | 3 | 0 |
+| Entry Points & Config | 0 | 4 | 11 | 3 |
 | Tests | 1 | 3 | 2 | 0 |
-| **Total** | **8** | **71** | **84** | **19** |
+| **Total** | **8** | **80** | **123** | **22** |
 
 ---
 
@@ -685,6 +685,18 @@ No findings. Clean type definitions.
 |---|----------|-----------|-------|---------|
 | 1 | Major | Code duplication | 87-119 | Model grouping/sorting logic duplicated from CreateLoopForm. |
 | 2 | Minor | Performance & resource management | scattered | Inline arrow functions with `e.stopPropagation()` create new references each render. |
+
+---
+
+### src/components/LoopCard.tsx
+
+**Purpose:** Loop summary card for the dashboard grid — shows status, git info, iteration count, and action buttons.
+**LOC:** ~280
+
+| # | Severity | Dimension | Lines | Finding |
+|---|----------|-----------|-------|---------|
+| 1 | Minor | Code duplication | 73-88 | Status indicator ping animation for active/planning states is duplicated — only differs by color (blue vs cyan). Could extract a `PingIndicator` component with a color prop. |
+| 2 | Minor | Simplicity | 176-274 | Deeply nested ternary chain for action buttons (draft vs planning vs final vs active). Would benefit from extracting into a `LoopCardActions` sub-component or a switch/map pattern. |
 
 ---
 
