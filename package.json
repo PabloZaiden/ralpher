@@ -7,7 +7,9 @@
     "dev": "bun --hot src/index.ts",
     "start": "NODE_ENV=production bun src/index.ts",
     "build": "bun run tsc; export workspace_dir=$(pwd); (cd /tmp; bun $workspace_dir/src/build.ts)",
-    "test": "RALPHER_LOG_LEVEL=fatal bun test --timeout 15000",
+    "test": "RALPHER_LOG_LEVEL=fatal bun test --timeout 15000 tests/unit tests/api tests/e2e tests/integration && bun test --timeout 15000 --preload ./tests/frontend/setup.ts tests/frontend",
+    "test:backend": "RALPHER_LOG_LEVEL=fatal bun test --timeout 15000 tests/unit tests/api tests/e2e tests/integration",
+    "test:frontend": "bun test --timeout 15000 --preload ./tests/frontend/setup.ts tests/frontend",
     "tsc": "bunx tsc --noEmit"
   },
   "dependencies": {
@@ -23,6 +25,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@happy-dom/global-registrator": "^20.5.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/bun": "1.3.8",
     "@types/react": "19.2.10",
     "@types/react-dom": "19.2.3",
