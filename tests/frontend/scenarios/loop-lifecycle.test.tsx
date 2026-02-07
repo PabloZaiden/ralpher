@@ -65,7 +65,7 @@ afterEach(() => {
 describe("loop lifecycle scenario", () => {
   test("running loop appears on dashboard and user navigates to details", async () => {
     const loop = createLoopWithStatus("running", {
-      config: { id: LOOP_ID, name: "Feature Loop", directory: "/workspaces/my-project" },
+      config: { id: LOOP_ID, name: "Feature Loop", directory: "/workspaces/my-project", workspaceId: "ws-1" },
     });
     setupApi(loop);
 
@@ -89,7 +89,7 @@ describe("loop lifecycle scenario", () => {
 
   test("completed loop shows accept and delete actions", async () => {
     const loop = createLoopWithStatus("completed", {
-      config: { id: LOOP_ID, name: "Done Loop", directory: "/workspaces/my-project" },
+      config: { id: LOOP_ID, name: "Done Loop", directory: "/workspaces/my-project", workspaceId: "ws-1" },
     });
     setupApi(loop);
 
@@ -109,12 +109,12 @@ describe("loop lifecycle scenario", () => {
     // Should show accept and delete actions
     await waitFor(() => {
       const acceptBtn = Array.from(document.querySelectorAll("button")).find(
-        (b) => b.textContent?.includes("Accept") && b.textContent?.includes("Merge"),
+        (b) => b.textContent?.includes("Accept") && b.textContent?.includes("merge or push"),
       );
       expect(acceptBtn).toBeTruthy();
 
       const deleteBtn = Array.from(document.querySelectorAll("button")).find(
-        (b) => b.textContent?.includes("Delete"),
+        (b) => b.textContent?.includes("Delete Loop"),
       );
       expect(deleteBtn).toBeTruthy();
     });
@@ -122,18 +122,13 @@ describe("loop lifecycle scenario", () => {
 
   test("accept loop flow: click accept, confirm merge, loop status updates", async () => {
     const loop = createLoopWithStatus("completed", {
-      config: { id: LOOP_ID, name: "Accept Loop", directory: "/workspaces/my-project" },
+      config: { id: LOOP_ID, name: "Accept Loop", directory: "/workspaces/my-project", workspaceId: "ws-1" },
     });
     setupApi(loop);
     api.post("/api/loops/:id/accept", () => ({
       success: true,
       mergeCommit: "abc123def",
     }));
-    // After accept, loop becomes merged
-    const mergedLoop = createLoopWithStatus("merged", {
-      config: { id: LOOP_ID, name: "Accept Loop", directory: "/workspaces/my-project" },
-    });
-    api.get("/api/loops/:id", () => mergedLoop);
 
     window.location.hash = `/loop/${LOOP_ID}`;
     const { getByText, user } = renderWithUser(<App />);
@@ -145,16 +140,16 @@ describe("loop lifecycle scenario", () => {
     // Go to Actions tab
     await user.click(getByText("Actions"));
 
-    // Click Accept
+    // Click Accept button
     await waitFor(() => {
       const acceptBtn = Array.from(document.querySelectorAll("button")).find(
-        (b) => b.textContent?.includes("Accept") && b.textContent?.includes("Merge"),
+        (b) => b.textContent?.includes("Accept") && b.textContent?.includes("merge or push"),
       );
       expect(acceptBtn).toBeTruthy();
     });
 
     const acceptBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Accept") && b.textContent?.includes("Merge"),
+      (b) => b.textContent?.includes("Accept") && b.textContent?.includes("merge or push"),
     );
     await user.click(acceptBtn!);
 
@@ -163,9 +158,9 @@ describe("loop lifecycle scenario", () => {
       expect(getByText("Finalize Loop")).toBeTruthy();
     });
 
-    // Click "Merge" in the modal
+    // Click "Accept & Merge" in the modal
     const mergeBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.trim() === "Merge",
+      (b) => b.textContent?.includes("Accept & Merge"),
     );
     expect(mergeBtn).toBeTruthy();
     await user.click(mergeBtn!);
@@ -179,7 +174,7 @@ describe("loop lifecycle scenario", () => {
 
   test("delete loop flow: click delete, confirm, navigates back to dashboard", async () => {
     const loop = createLoopWithStatus("running", {
-      config: { id: LOOP_ID, name: "Delete Me Loop", directory: "/workspaces/my-project" },
+      config: { id: LOOP_ID, name: "Delete Me Loop", directory: "/workspaces/my-project", workspaceId: "ws-1" },
     });
     setupApi(loop);
     api.delete("/api/loops/:id", () => ({ success: true }));
@@ -196,16 +191,16 @@ describe("loop lifecycle scenario", () => {
     // Go to Actions tab
     await user.click(getByText("Actions"));
 
-    // Click Delete
+    // Click Delete Loop button (text: "Delete Loop" + "Cancel and delete this loop")
     await waitFor(() => {
       const deleteBtn = Array.from(document.querySelectorAll("button")).find(
-        (b) => b.textContent?.includes("Delete") && b.textContent?.includes("Stop"),
+        (b) => b.textContent?.includes("Delete Loop") && b.textContent?.includes("Cancel and delete"),
       );
       expect(deleteBtn).toBeTruthy();
     });
 
     const deleteBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Delete") && b.textContent?.includes("Stop"),
+      (b) => b.textContent?.includes("Delete Loop") && b.textContent?.includes("Cancel and delete"),
     );
     await user.click(deleteBtn!);
 
@@ -230,18 +225,13 @@ describe("loop lifecycle scenario", () => {
 
   test("push loop flow: click accept, push to remote", async () => {
     const loop = createLoopWithStatus("completed", {
-      config: { id: LOOP_ID, name: "Push Loop", directory: "/workspaces/my-project" },
+      config: { id: LOOP_ID, name: "Push Loop", directory: "/workspaces/my-project", workspaceId: "ws-1" },
     });
     setupApi(loop);
     api.post("/api/loops/:id/push", () => ({
       success: true,
       remoteBranch: "ralph/push-loop",
     }));
-    // After push, loop becomes pushed
-    const pushedLoop = createLoopWithStatus("pushed", {
-      config: { id: LOOP_ID, name: "Push Loop", directory: "/workspaces/my-project" },
-    });
-    api.get("/api/loops/:id", () => pushedLoop);
 
     window.location.hash = `/loop/${LOOP_ID}`;
     const { getByText, user } = renderWithUser(<App />);
@@ -256,13 +246,13 @@ describe("loop lifecycle scenario", () => {
     // Click Accept button to open AcceptLoopModal
     await waitFor(() => {
       const acceptBtn = Array.from(document.querySelectorAll("button")).find(
-        (b) => b.textContent?.includes("Accept") && b.textContent?.includes("Merge"),
+        (b) => b.textContent?.includes("Accept") && b.textContent?.includes("merge or push"),
       );
       expect(acceptBtn).toBeTruthy();
     });
 
     const acceptBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Accept") && b.textContent?.includes("Merge"),
+      (b) => b.textContent?.includes("Accept") && b.textContent?.includes("merge or push"),
     );
     await user.click(acceptBtn!);
 
@@ -271,9 +261,9 @@ describe("loop lifecycle scenario", () => {
       expect(getByText("Finalize Loop")).toBeTruthy();
     });
 
-    // Click "Push" in the modal
+    // Click "Push to Remote" in the modal
     const pushBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.trim() === "Push",
+      (b) => b.textContent?.includes("Push to Remote"),
     );
     expect(pushBtn).toBeTruthy();
     await user.click(pushBtn!);
@@ -287,7 +277,7 @@ describe("loop lifecycle scenario", () => {
 
   test("back button from loop details returns to dashboard", async () => {
     const loop = createLoopWithStatus("running", {
-      config: { id: LOOP_ID, name: "Nav Loop", directory: "/workspaces/my-project" },
+      config: { id: LOOP_ID, name: "Nav Loop", directory: "/workspaces/my-project", workspaceId: "ws-1" },
     });
     setupApi(loop);
 
