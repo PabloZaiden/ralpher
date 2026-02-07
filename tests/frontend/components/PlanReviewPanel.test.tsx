@@ -8,9 +8,8 @@
 import { test, expect, describe, mock, beforeEach, afterEach } from "bun:test";
 import { PlanReviewPanel } from "@/components/PlanReviewPanel";
 import { renderWithUser, waitFor } from "../helpers/render";
-import { createLoop, createLoopWithStatus } from "../helpers/factories";
+import { createLoopWithStatus } from "../helpers/factories";
 import { createMockApi } from "../helpers/mock-api";
-import type { Loop } from "@/types";
 
 // Mock API for the markdown preference hook
 const api = createMockApi();

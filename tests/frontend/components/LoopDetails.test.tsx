@@ -8,9 +8,8 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
-import { renderWithUser, waitFor, act } from "../helpers/render";
+import { renderWithUser, waitFor } from "../helpers/render";
 import {
-  createLoop,
   createLoopWithStatus,
   createFileDiff,
 } from "../helpers/factories";

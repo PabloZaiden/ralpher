@@ -107,7 +107,7 @@ describe("loop details route", () => {
 
 describe("hash change navigation", () => {
   test("navigates from Dashboard to LoopDetails on hash change", async () => {
-    const { getByText, queryByText } = renderWithUser(<App />);
+    const { getByText } = renderWithUser(<App />);
 
     // Starts on Dashboard
     await waitFor(() => {
@@ -128,7 +128,7 @@ describe("hash change navigation", () => {
   test("navigates from LoopDetails back to Dashboard on hash change", async () => {
     window.location.hash = "/loop/test-789";
 
-    const { getByText, queryByText } = renderWithUser(<App />);
+    const { getByText } = renderWithUser(<App />);
 
     // Starts on LoopDetails
     await waitFor(() => {

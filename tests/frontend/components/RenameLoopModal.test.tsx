@@ -94,7 +94,7 @@ describe("RenameLoopModal", () => {
     });
 
     test("shows error when submitting empty name", async () => {
-      const { getByRole, getByLabelText, getByText, user } = renderWithUser(
+      const { getByLabelText, getByText, user } = renderWithUser(
         <RenameLoopModal {...defaultProps()} currentName="" />
       );
       // Type something then clear to make submit possible via form submit
@@ -117,7 +117,7 @@ describe("RenameLoopModal", () => {
       const longName = "a".repeat(101);
       const props = defaultProps();
       props.currentName = longName;
-      const { getByRole, getByText } = renderWithUser(
+      const { getByRole } = renderWithUser(
         <RenameLoopModal {...props} />
       );
       await getByRole("button", { name: "Save" });

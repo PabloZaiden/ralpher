@@ -8,12 +8,12 @@
 import { test, expect, describe } from "bun:test";
 import { LogViewer } from "@/components/LogViewer";
 import type { LogEntry } from "@/components/LogViewer";
-import { renderWithUser, waitFor } from "../helpers/render";
+import { renderWithUser } from "../helpers/render";
 import {
   createMessageData,
   createToolCallData,
 } from "../helpers/factories";
-import type { MessageData, ToolCallData } from "@/types";
+import type { MessageData } from "@/types";
 
 // Helper to create a log entry
 function createLogEntry(overrides?: Partial<LogEntry>): LogEntry {

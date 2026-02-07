@@ -172,7 +172,7 @@ describe("LoopActionBar", () => {
     });
 
     test("calls onQueuePending with message when submitted", async () => {
-      const onQueuePending = mock(async () => true);
+      const onQueuePending = mock(async (_data: { message?: string; model?: ModelConfig }) => true);
       const { getByPlaceholderText, getByRole, user } = renderWithUser(
         <LoopActionBar {...defaultProps({ onQueuePending })} />
       );
@@ -183,12 +183,12 @@ describe("LoopActionBar", () => {
       await waitFor(() => {
         expect(onQueuePending).toHaveBeenCalledTimes(1);
       });
-      const callArgs = onQueuePending.mock.calls[0]?.[0] as { message?: string; model?: ModelConfig };
+      const callArgs = onQueuePending.mock.calls[0]![0];
       expect(callArgs.message).toBe("Hello agent");
     });
 
     test("calls onQueuePending with model when model is changed", async () => {
-      const onQueuePending = mock(async () => true);
+      const onQueuePending = mock(async (_data: { message?: string; model?: ModelConfig }) => true);
       const models = [
         createModelInfo({ providerID: "anthropic", modelID: "claude-1", modelName: "Claude 1", providerName: "Anthropic", connected: true }),
         createModelInfo({ providerID: "openai", modelID: "gpt-4", modelName: "GPT-4", providerName: "OpenAI", connected: true }),
@@ -205,7 +205,7 @@ describe("LoopActionBar", () => {
       await waitFor(() => {
         expect(onQueuePending).toHaveBeenCalledTimes(1);
       });
-      const callArgs = onQueuePending.mock.calls[0]?.[0] as { message?: string; model?: ModelConfig };
+      const callArgs = onQueuePending.mock.calls[0]![0];
       expect(callArgs.model).toEqual({ providerID: "openai", modelID: "gpt-4", variant: "" });
     });
 

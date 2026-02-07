@@ -8,8 +8,8 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
-import { renderWithUser, waitFor, act } from "../helpers/render";
-import { createLoop, createLoopWithStatus, createWorkspace } from "../helpers/factories";
+import { renderWithUser, waitFor } from "../helpers/render";
+import { createLoopWithStatus, createWorkspace } from "../helpers/factories";
 import { Dashboard } from "@/components/Dashboard";
 
 const api = createMockApi();
@@ -360,7 +360,7 @@ describe("delete loop modal", () => {
     api.get("/api/workspaces", () => [workspace]);
     api.delete("/api/loops/:id", () => ({ success: true }));
 
-    const { getByText, getByRole, user } = renderWithUser(<Dashboard />);
+    const { getByText, user } = renderWithUser(<Dashboard />);
 
     await waitFor(() => {
       expect(getByText("Delete Me")).toBeTruthy();
@@ -493,7 +493,7 @@ describe("rename loop modal", () => {
     api.get("/api/loops", () => [loop]);
     api.get("/api/workspaces", () => [workspace]);
 
-    const { getByText, user, getByLabelText } = renderWithUser(<Dashboard />);
+    const { getByText, user } = renderWithUser(<Dashboard />);
 
     await waitFor(() => {
       expect(getByText("Rename Me")).toBeTruthy();
@@ -533,7 +533,7 @@ describe("app settings modal", () => {
 
 describe("create workspace modal", () => {
   test("opens create workspace modal when 'New Workspace' is clicked", async () => {
-    const { getByRole, getByText, user } = renderWithUser(<Dashboard />);
+    const { getByRole, user } = renderWithUser(<Dashboard />);
 
     await waitFor(() => {
       expect(getByRole("button", { name: "New Workspace" })).toBeTruthy();
@@ -686,7 +686,7 @@ describe("workspace settings modal", () => {
 
     api.get("/api/loops", () => [loop]);
     api.get("/api/workspaces", () => [workspace]);
-    api.get("/api/workspaces/:id", (req) => workspace);
+    api.get("/api/workspaces/:id", () => workspace);
     api.get("/api/workspaces/:id/status", () => ({ connected: true }));
 
     const { getByText, user } = renderWithUser(<Dashboard />);

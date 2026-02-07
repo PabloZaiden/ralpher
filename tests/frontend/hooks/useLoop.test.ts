@@ -53,7 +53,7 @@ async function waitForWs() {
 
 describe("initial fetch", () => {
   test("fetches loop on mount and sets loading to false", async () => {
-    const loop = setupLoop();
+    setupLoop();
     const { result } = renderHook(() => useLoop(LOOP_ID));
 
     expect(result.current.loading).toBe(true);
@@ -565,7 +565,7 @@ describe("accept", () => {
     const { result } = renderHook(() => useLoop(LOOP_ID));
     await waitForLoad(result);
 
-    let acceptResult = { success: false, mergeCommit: undefined as string | undefined };
+    let acceptResult: { success: boolean; mergeCommit?: string } = { success: false };
     await act(async () => {
       acceptResult = await result.current.accept();
     });
@@ -606,7 +606,7 @@ describe("push", () => {
     const { result } = renderHook(() => useLoop(LOOP_ID));
     await waitForLoad(result);
 
-    let pushResult = { success: false, remoteBranch: undefined as string | undefined };
+    let pushResult: { success: boolean; remoteBranch?: string } = { success: false };
     await act(async () => {
       pushResult = await result.current.push();
     });
@@ -849,7 +849,7 @@ describe("addressReviewComments", () => {
     const { result } = renderHook(() => useLoop(LOOP_ID));
     await waitForLoad(result);
 
-    let addressResult = { success: false, reviewCycle: undefined as number | undefined };
+    let addressResult: { success: boolean; reviewCycle?: number } = { success: false };
     await act(async () => {
       addressResult = await result.current.addressReviewComments("Fix the typo");
     });

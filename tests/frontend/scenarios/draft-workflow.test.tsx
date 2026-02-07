@@ -45,6 +45,7 @@ function draftLoop(id = "draft-1", name = "My Draft") {
       workspaceId: "ws-1",
       prompt: "Build a feature",
       model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+      planMode: false,
     },
   });
 }
@@ -96,8 +97,8 @@ describe("draft workflow scenario", () => {
     // Should be in Drafts section
     expect(getByText(/Drafts \(1\)/)).toBeTruthy();
 
-    // Should show Draft badge
-    expect(getByText("Draft")).toBeTruthy();
+    // Should show Draft badge (getStatusLabel returns lowercase "draft")
+    expect(getByText("draft")).toBeTruthy();
 
     // Should show Edit button (not "Accept")
     expect(getByText("Edit")).toBeTruthy();
@@ -165,7 +166,7 @@ describe("draft workflow scenario", () => {
     api.get("/api/workspaces", () => [WORKSPACE]);
     api.post("/api/loops/:id/draft/start", () => ({ success: true }));
 
-    const { getByText, getByRole, queryByText, user } = renderWithUser(<App />);
+    const { getByText, getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getByText("My Draft")).toBeTruthy();
@@ -224,11 +225,13 @@ describe("draft workflow scenario", () => {
       expect(getByText(/Are you sure/i)).toBeTruthy();
     });
 
-    // Confirm delete
-    const confirmBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.trim() === "Delete" || b.textContent?.trim() === "Delete Loop",
+    // Confirm delete - find the Delete button inside the modal footer
+    // The modal's confirm button is a danger-variant button, distinct from the card's ghost "Delete"
+    const allDeleteBtns = Array.from(document.querySelectorAll("button")).filter(
+      (b) => b.textContent?.trim() === "Delete",
     );
-    // There should be a confirm button in the modal
+    // The last "Delete" button is the one in the confirmation modal
+    const confirmBtn = allDeleteBtns[allDeleteBtns.length - 1];
     expect(confirmBtn).toBeTruthy();
     await user.click(confirmBtn!);
 
@@ -247,7 +250,7 @@ describe("draft workflow scenario", () => {
     api.put("/api/preferences/last-model", () => ({ success: true }));
     api.put("/api/preferences/last-directory", () => ({ success: true }));
 
-    const { getByText, getByRole, getByLabelText, queryByText, user } = renderWithUser(<App />);
+    const { getByText, getByRole, getByLabelText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getByText("Ralpher")).toBeTruthy();
@@ -286,8 +289,8 @@ describe("draft workflow scenario", () => {
     await waitFor(() => {
       const calls = api.calls("/api/loops", "POST");
       expect(calls.length).toBeGreaterThan(0);
-      const body = calls[0]!.body;
-      expect(body.draft).toBe(true);
+      const body = calls[0]!.body as Record<string, unknown>;
+      expect(body["draft"]).toBe(true);
     });
   });
 });

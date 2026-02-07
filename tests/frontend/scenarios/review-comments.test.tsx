@@ -110,7 +110,7 @@ describe("review comments scenario", () => {
     setupApi(loop);
     api.post("/api/loops/:id/address-comments", () => ({ success: true }));
 
-    const { getByText, user, queryByText } = renderWithUser(<App />);
+    const { getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getByText("Pushed Loop")).toBeTruthy();
@@ -125,8 +125,11 @@ describe("review comments scenario", () => {
     });
 
     // Description shows loop name and review cycle
-    expect(getByText(/Pushed Loop/)).toBeTruthy();
-    expect(getByText(/Review Cycle 2/)).toBeTruthy();
+    // Use getAllByText since "Pushed Loop" appears in both the card title and modal description
+    const pushedLoopTexts = Array.from(document.querySelectorAll("*")).filter(
+      (el) => el.textContent?.includes("Pushed Loop") && el.textContent?.includes("Review Cycle 2"),
+    );
+    expect(pushedLoopTexts.length).toBeGreaterThan(0);
 
     // Fill in comments
     const textarea = document.querySelector("#reviewer-comments") as HTMLTextAreaElement;

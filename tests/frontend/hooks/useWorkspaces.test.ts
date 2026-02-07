@@ -106,7 +106,8 @@ describe("createWorkspace", () => {
       });
     });
 
-    expect(created).toEqual(newWorkspace);
+    expect(created).not.toBeNull();
+    expect(created!).toEqual(newWorkspace);
     expect(result.current.saving).toBe(false);
 
     const postCalls = api.calls("/api/workspaces", "POST");
@@ -142,7 +143,8 @@ describe("createWorkspace", () => {
       });
     });
 
-    expect(created).toEqual(existingWorkspace);
+    expect(created).not.toBeNull();
+    expect(created!).toEqual(existingWorkspace);
     expect(result.current.error).toBeNull();
   });
 
@@ -193,7 +195,8 @@ describe("updateWorkspace", () => {
       updatedResult = await result.current.updateWorkspace("ws-1", "New Name");
     });
 
-    expect(updatedResult).toEqual(updated);
+    expect(updatedResult).not.toBeNull();
+    expect(updatedResult!).toEqual(updated);
     const putCalls = api.calls("/api/workspaces/:id", "PUT");
     expect(putCalls).toHaveLength(1);
     expect(putCalls[0]!.body).toEqual({ name: "New Name" });
@@ -305,7 +308,8 @@ describe("getWorkspaceByDirectory", () => {
       found = await result.current.getWorkspaceByDirectory("/workspaces/my-project");
     });
 
-    expect(found).toEqual(ws);
+    expect(found).not.toBeNull();
+    expect(found!).toEqual(ws);
   });
 
   test("returns null on 404", async () => {

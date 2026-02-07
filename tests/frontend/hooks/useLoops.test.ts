@@ -203,8 +203,8 @@ describe("createLoop", () => {
       createResult = await result.current.createLoop({
         prompt: "Do something",
         workspaceId: "ws-1",
-        providerID: "anthropic",
-        modelID: "claude-sonnet-4-20250514",
+        model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+        planMode: false,
       });
     });
 
@@ -215,8 +215,8 @@ describe("createLoop", () => {
     expect(postCalls[0]!.body).toEqual({
       prompt: "Do something",
       workspaceId: "ws-1",
-      providerID: "anthropic",
-      modelID: "claude-sonnet-4-20250514",
+      model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+      planMode: false,
     });
   });
 
@@ -241,8 +241,8 @@ describe("createLoop", () => {
       createResult = await result.current.createLoop({
         prompt: "Do something",
         workspaceId: "ws-1",
-        providerID: "anthropic",
-        modelID: "claude-sonnet-4-20250514",
+        model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+        planMode: false,
       });
     });
 
@@ -268,8 +268,8 @@ describe("createLoop", () => {
       createResult = await result.current.createLoop({
         prompt: "Do something",
         workspaceId: "ws-1",
-        providerID: "bad",
-        modelID: "bad",
+        model: { providerID: "bad", modelID: "bad" },
+        planMode: false,
       });
     });
 
@@ -391,7 +391,7 @@ describe("acceptLoop", () => {
       expect(result.current.loops).toHaveLength(1);
     });
 
-    let acceptResult = { success: false, mergeCommit: undefined as string | undefined };
+    let acceptResult: { success: boolean; mergeCommit?: string } = { success: false };
     await act(async () => {
       acceptResult = await result.current.acceptLoop("loop-1");
     });
@@ -442,7 +442,7 @@ describe("pushLoop", () => {
       expect(result.current.loops).toHaveLength(1);
     });
 
-    let pushResult = { success: false, remoteBranch: undefined as string | undefined };
+    let pushResult: { success: boolean; remoteBranch?: string } = { success: false };
     await act(async () => {
       pushResult = await result.current.pushLoop("loop-1");
     });
@@ -545,7 +545,7 @@ describe("addressReviewComments", () => {
       expect(result.current.loops).toHaveLength(1);
     });
 
-    let addressResult = { success: false, reviewCycle: undefined as number | undefined };
+    let addressResult: { success: boolean; reviewCycle?: number } = { success: false };
     await act(async () => {
       addressResult = await result.current.addressReviewComments("loop-1", "Fix the typo");
     });

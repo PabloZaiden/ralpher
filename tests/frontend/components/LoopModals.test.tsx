@@ -11,7 +11,7 @@ import {
   MarkMergedModal,
   UncommittedChangesModal,
 } from "@/components/LoopModals";
-import { renderWithUser, waitFor } from "../helpers/render";
+import { renderWithUser } from "../helpers/render";
 import type { UncommittedChangesError } from "@/types/api";
 
 describe("DeleteLoopModal", () => {

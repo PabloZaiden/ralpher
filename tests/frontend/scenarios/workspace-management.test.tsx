@@ -66,9 +66,11 @@ describe("workspace management scenario", () => {
     // Click "New Workspace"
     await user.click(getByText("New Workspace"));
 
-    // Create Workspace modal appears
+    // Create Workspace modal appears (use heading role to avoid ambiguity with submit button)
     await waitFor(() => {
-      expect(getByText("Create Workspace")).toBeTruthy();
+      expect(
+        document.querySelector("h2")?.textContent?.includes("Create Workspace"),
+      ).toBe(true);
     });
 
     // Form fields exist
@@ -98,7 +100,9 @@ describe("workspace management scenario", () => {
     // Open create workspace modal
     await user.click(getByText("New Workspace"));
     await waitFor(() => {
-      expect(getByText("Create Workspace")).toBeTruthy();
+      expect(
+        document.querySelector("h2")?.textContent?.includes("Create Workspace"),
+      ).toBe(true);
     });
 
     // Fill name
@@ -141,7 +145,9 @@ describe("workspace management scenario", () => {
 
     await user.click(getByText("New Workspace"));
     await waitFor(() => {
-      expect(getByText("Create Workspace")).toBeTruthy();
+      expect(
+        document.querySelector("h2")?.textContent?.includes("Create Workspace"),
+      ).toBe(true);
     });
 
     // Click Cancel

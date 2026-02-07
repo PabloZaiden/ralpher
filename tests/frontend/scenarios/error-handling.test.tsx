@@ -163,10 +163,10 @@ describe("error handling scenario", () => {
     const wsSelect = document.querySelector("select#workspace") as HTMLSelectElement;
     await user.selectOptions(wsSelect, "ws-1");
 
-    // Wait for form ready
+    // Wait for form ready (planMode defaults to true, so button text is "Create Plan")
     await waitFor(() => {
       const btn = Array.from(document.querySelectorAll("button")).find(
-        (b) => b.textContent?.includes("Create Loop"),
+        (b) => b.textContent?.includes("Create Plan"),
       );
       expect(btn).toBeTruthy();
     });
@@ -177,7 +177,7 @@ describe("error handling scenario", () => {
 
     // Submit
     const submitBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Create Loop"),
+      (b) => b.textContent?.includes("Create Plan"),
     );
     await user.click(submitBtn!);
 
