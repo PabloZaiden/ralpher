@@ -152,11 +152,12 @@ The Presentation layer is functional but carries the most technical debt of any 
 
 | Area | LOC | Tests | Coverage |
 |------|----:|:-----:|----------|
-| Components | 7,163 | None | 0% |
-| Hooks | 2,263 | None | 0% |
+| Components | 7,163 | **508 tests** (31 files) | ~70% (common: 101, feature: 308, container: 99) |
+| Hooks | 2,263 | **121 tests** (4 files) | ~65% (useLoop: 37, useLoops: 24, useWorkspaces: 15, loopActions: 45) |
 | Lib | 178 | None | 0% |
+| E2E scenarios | — | **50 tests** (8 files) | Good workflow coverage |
 
-**Assessment: Zero automated test coverage.** The hooks contain the highest-risk untested code in the entire codebase: complex async state management, WebSocket integration, race conditions, and memory growth. React Testing Library's `renderHook` utility is purpose-built for testing these patterns.
+**Assessment:** ~~Zero automated test coverage.~~ **Updated:** 698 frontend tests now exist. Components and hooks — the highest-risk code — have good coverage. `useWebSocket` remains untested directly (exercised indirectly). `lib/logger.ts` has no tests. Remaining untested components (`MarkdownRenderer`, `ServerSettingsForm`, `AppSettingsModal`, `WorkspaceSettingsModal`, `CreateWorkspaceModal`, `Icons`, `LogLevelInitializer`) are lower-risk configuration/utility components.
 
 ### Recommendations (Prioritized)
 
@@ -168,7 +169,7 @@ The Presentation layer is functional but carries the most technical debt of any 
 6. **Add focus trapping** to Modal component
 7. **Add user-facing error notifications** — toast component or error state display
 8. **Fix double-fetch** by removing array lengths from refresh dependency array
-9. **Add hook tests** using `renderHook` — prioritize `useLoop`, `useLoops`, `useWebSocket`
+9. ~~**Add hook tests**~~ **Resolved** — 121 hook tests added using `renderHook` covering `useLoop`, `useLoops`, `useWorkspaces`, and all `loopActions` API functions
 10. **Memoize expensive computations** with `useMemo` (loop grouping, workspace filtering)
 
 ---
@@ -800,7 +801,7 @@ These recommendations address systemic issues that span multiple layers and repr
 | 7 | **Add authentication to destructive endpoints** — `POST /api/server/kill` and `POST /api/settings/reset-all` need at minimum a token-based check. | API | Critical — prevents unauthorized server termination | Low |
 | 8 | **Decompose Dashboard.tsx** — Extract `LoopList`, `DashboardHeader`, `DashboardModals`, `LoopGroupSection` sub-components. Move inline fetch calls to hooks. | Presentation | Major — improves testability and maintainability | Medium |
 | 9 | **Fix data integrity risks in Data Access** — Replace `INSERT OR REPLACE` with upsert to prevent cascade deletes. Add try/catch to `JSON.parse` calls in `rowToLoop()`. Validate table names in `getTableColumns()`. | Data Access | Major — prevents data loss and crash-on-corruption | Low |
-| 10 | **Add test coverage for hooks and utilities** — `useLoop`, `useLoops`, `useWebSocket` (highest risk), `loop-status.ts`, `sanitizeBranchName`, `event-stream.ts`. Use React Testing Library's `renderHook`. | Presentation, Shared Infra | Major — covers highest-risk untested code | Medium |
+| 10 | ~~**Add test coverage for hooks and utilities**~~ **Largely Resolved** — 698 frontend tests added (121 hook tests, 508 component tests, 50 E2E scenario tests, 19 infra tests). Remaining gaps: `useWebSocket`, `loop-status.ts`, `sanitizeBranchName`, `event-stream.ts`. | Presentation, Shared Infra | ~~Major~~ Minor — highest-risk code now covered | ~~Medium~~ N/A |
 
 ---
 

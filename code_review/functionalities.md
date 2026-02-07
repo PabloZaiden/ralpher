@@ -684,20 +684,23 @@ Loop status transitions are scattered across:
 
 No single module owns the transition rules. Invalid transitions are prevented only by scattered if-checks that are easy to miss.
 
-### CF-6: Test Coverage Gaps (Major)
+### CF-6: Test Coverage Gaps (~~Major~~ **Largely Resolved**)
 
 **Affects:** All functionalities
 
 | Area | LOC | Tests |
 |------|-----|-------|
-| React hooks | 2,263 | None |
-| React components | 7,163 | None |
+| React hooks | 2,263 | **121 tests** (useLoop: 37, useLoops: 24, useWorkspaces: 15, loopActions: 45) |
+| React components | 7,163 | **508 tests** (101 common + 308 feature + 99 container) |
 | Utility functions | 425 | Partial (name-generator only) |
 | API endpoints | 3,034 | Some integration tests |
 | Core business logic | 6,456 | Good unit + scenario coverage |
 | Persistence | 1,948 | Good migration tests |
+| E2E scenarios (frontend) | — | **50 tests** (8 scenario files) |
 
-The frontend (9,426 LOC combined) has zero automated tests. The hooks contain the most complex async state management in the codebase (race conditions, memory growth, WebSocket integration) and are the highest-risk untested code.
+~~The frontend (9,426 LOC combined) has zero automated tests.~~ **Updated:** 698 frontend tests now cover hooks, components, and E2E user workflows. The highest-risk code (hooks with complex async state management, WebSocket integration, race conditions) is now tested.
+
+**Remaining gaps:** `useWebSocket` (no direct tests), utility functions (`loop-status.ts`, `event-stream.ts`, `sanitizeBranchName`), `git.ts` API endpoints, `websocket.ts` API handler. Utility functions and `useWebSocket` remain the primary untested areas.
 
 ### CF-7: Dual Logger Systems (Minor)
 
@@ -724,4 +727,4 @@ They share identical constant definitions but diverge in behavior. Some modules 
 | 7 | Add AbortController to hooks | Major — prevents race conditions | Low |
 | 8 | Add authentication to destructive endpoints | Critical — security | Low |
 | 9 | Replace INSERT OR REPLACE with upsert | Major — prevents cascade deletes | Low |
-| 10 | Add hook tests with renderHook | Major — covers highest-risk untested code | Medium |
+| 10 | ~~Add hook tests with renderHook~~ **Resolved** | ~~Major~~ — ~~covers highest-risk untested code~~ **Done:** 121 hook tests added | ~~Medium~~ N/A |

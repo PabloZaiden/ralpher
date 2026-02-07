@@ -1198,11 +1198,45 @@ No findings. Clean implementation.
 | # | Severity | Dimension | Area | Finding |
 |---|----------|-----------|------|---------|
 | 1 | Critical | Test coverage gaps | src/utils/ | No tests for `loop-status.ts`, `event-stream.ts`, or `sanitizeBranchName` — all contain critical logic. |
-| 2 | Major | Test coverage gaps | src/hooks/ | No tests for any React hooks (`useLoop`, `useLoops`, `useWebSocket`, etc.). |
+| 2 | ~~Major~~ **Resolved** | Test coverage gaps | src/hooks/ | ~~No tests for any React hooks.~~ **Updated:** 121 hook tests now exist across 4 test files (`useLoop.test.ts`, `useLoops.test.ts`, `useWorkspaces.test.ts`, `loopActions.test.ts`). `useWebSocket` remains untested directly (tested indirectly via hook integration tests). |
 | 3 | Major | Test coverage gaps | src/api/ | No API tests for `git.ts` endpoints or `websocket.ts`. |
 | 4 | Major | Test coverage gaps | src/backends/ | `opencode-backend.test.ts` mostly tests "not connected" error throwing — minimal positive-path coverage. |
 | 5 | Minor | Best practices | scattered | Some tests use `await new Promise(resolve => setTimeout(resolve, 100))` — flaky test risk. |
 | 6 | Minor | Consistency of patterns | review-mode.test.ts | Uses try/finally instead of beforeEach/afterEach — inconsistent with other test files. |
+
+---
+
+### Frontend Test Files (Added Post-Review)
+
+698 frontend tests were added across 31 test files in `tests/frontend/`. Key infrastructure files:
+
+**`tests/frontend/setup.ts`** — Frontend test environment setup with happy-dom registration, ResizeObserver mock, matchMedia mock, scrollTo/IntersectionObserver polyfills.
+
+**`tests/frontend/helpers/factories.ts`** (~536 lines) — Test data factories for all frontend types: `createLoop()`, `createWorkspace()`, `createModelInfo()`, `createBranchInfo()`, `createLoopEvent()`, etc. Well-designed with override support via partial parameters.
+
+**`tests/frontend/helpers/mock-api.ts`** — Fetch interceptor with route matching, HTTP method support, URL parameter extraction, call tracking for assertions. Clean implementation.
+
+**`tests/frontend/helpers/mock-websocket.ts`** — WebSocket mock with auto-open, event sending, query parameter parsing, reconnection simulation.
+
+**`tests/frontend/helpers/render.ts`** — Custom render helper wrapping `@testing-library/react`. Note: does NOT export `screen` (critical design decision — `screen` evaluates at module load time and causes errors in subdirectories).
+
+**Test coverage by category:**
+| Category | Files | Tests | Coverage |
+|----------|------:|------:|----------|
+| Common components (Button, Modal, Badge, Card) | 4 | 101 | Good |
+| Feature components (LoopCard, CreateLoopForm, etc.) | 11 | 308 | Good |
+| Hooks (useLoop, useLoops, useWorkspaces, loopActions) | 4 | 121 | Good |
+| Container components (App, Dashboard, LoopDetails) | 3 | 99 | Good |
+| E2E scenarios (lifecycle, plan mode, errors, etc.) | 8 | 50 | Good |
+| Infrastructure validation | 1 | 19 | Good |
+
+**Known test infrastructure issues:**
+- `user.type()` causes OOM on CreateLoopForm due to cascading useEffect re-renders per keystroke — workaround: `setInputValue` helper with single-char type
+- `user.selectOptions(select, "")` also causes OOM on CreateLoopForm — workaround: native DOM setter pattern
+- `user.paste()` doesn't trigger React 19's onChange in happy-dom
+- Factory's `maxIterations: Infinity` becomes `null` through JSON round-trip — requires property-level assertions
+
+No structural findings. The test infrastructure is well-designed with proper abstractions and reusable helpers.
 
 ---
 
@@ -1212,3 +1246,4 @@ No findings. Clean implementation.
 - `loop-engine.test.ts` is the largest test file (~1375 lines) with good coverage of iteration logic.
 - E2E tests provide good scenario coverage: full loop lifecycle, plan mode, multi-workspace, git workflows, draft workflows.
 - Test infrastructure (`setup.ts`) follows best practices with proper cleanup and deterministic polling helpers.
+- **Frontend tests** (698 tests across 31 files) provide comprehensive coverage of components, hooks, and user workflows. Infrastructure uses proper mocking patterns (fetch interceptor, WebSocket mock, data factories).

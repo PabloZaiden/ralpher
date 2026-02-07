@@ -547,7 +547,7 @@ These should arguably live closer to their consumers: loop-status near component
 | C8.3 | **Major** | Race Condition | `useLoop.ts` has a race condition when switching between loops. When the user navigates from loop A to loop B, the hook calls `resetState()` and then `fetchLoop(newId)`. If the fetch for loop A's data was still in-flight, its response may arrive after the reset and overwrite loop B's state with loop A's data. No AbortController is used to cancel stale requests. |
 | C8.4 | **Major** | Memory | `useLoop.ts` appends to `messages` and `toolCalls` arrays on every iteration event. For long-running loops with thousands of iterations, these arrays grow without bound. There is no pagination, virtualization, or maximum size limit. On a loop running for hours, this will cause increasing memory pressure and slower renders. |
 | C8.5 | **Major** | Code Duplication | `loopActions.ts` contains 13 functions (`acceptLoopApi`, `pushLoopApi`, `discardLoopApi`, `deleteLoopApi`, `purgeLoopApi`, `markMergedApi`, `setPendingPromptApi`, `clearPendingPromptApi`, `sendPlanFeedbackApi`, `acceptPlanApi`, `discardPlanApi`, `setPendingApi`, `clearPendingApi`) that all follow the same pattern: log, fetch, check `!response.ok`, parse error, throw, log success, return. The only differences are URL, method, body, and return shape. A generic `apiCall<T>(url, options)` wrapper would eliminate ~250 lines of boilerplate. |
-| C8.6 | **Major** | Test Coverage | No unit tests exist for any hook. Custom hooks with complex state management (especially `useLoop.ts` with its WebSocket integration and race conditions) are critical to test. React Testing Library's `renderHook` utility is designed for exactly this purpose. |
+| C8.6 | ~~Major~~ **Resolved** | Test Coverage | ~~No unit tests exist for any hook.~~ **Updated:** 121 hook tests now exist across 4 test files: `loopActions.test.ts` (45 tests covering all 14 API functions), `useLoops.test.ts` (24 tests), `useLoop.test.ts` (37 tests), `useWorkspaces.test.ts` (15 tests). `useWebSocket` remains untested directly but is exercised indirectly. `useLogLevelPreference` and `useMarkdownPreference` remain untested (low-risk utility hooks). |
 | C8.7 | **Minor** | Fragile Coupling | WebSocket event handlers in `useLoop` and `useLoops` rely on `useWebSocket`'s internal ref-based callback pattern. The handlers are registered via refs and called synchronously in the WebSocket `onmessage` handler. If the internal implementation changes (e.g., to use `useEffect` cleanup for unregistration), the event delivery guarantees could break. |
 | C8.8 | **Minor** | Missing AbortController | No async operation in any hook uses `AbortController` for cancellation. When components unmount during an in-flight fetch, the response handler still runs and attempts to set state on an unmounted component. While React 18+ suppresses the warning, this wastes resources and can cause subtle bugs. |
 | C8.9 | **Minor** | Inconsistent Return Types | `loopActions.ts` returns `boolean` (true) for simple operations (discard, delete, purge) but returns typed result objects (`AcceptLoopResult`, `PushLoopResult`, `SetPendingResult`) for operations with data. This inconsistency makes the API surface harder to learn. All actions should return a consistent `{ success: true, data?: T }` shape. |
@@ -720,13 +720,20 @@ Most consumers bypass barrels and import directly. This suggests the barrel patt
 
 **Recommendation:** Either commit to barrel-only imports (add lint rule, complete all barrels) or remove barrels in favor of explicit direct imports (which is the actual pattern).
 
-### XM-4: No Test Coverage for Hooks and Components (Major)
+### XM-4: ~~No~~ Test Coverage for Hooks and Components (~~Major~~ **Largely Resolved**)
 
 **Affected modules:** `hooks/`, `components/`
 
-Combined 9,426 LOC across hooks and components with zero automated tests. The hooks contain complex async state management with race conditions, memory growth, and WebSocket integration — exactly the kind of code that benefits most from testing.
+~~Combined 9,426 LOC across hooks and components with zero automated tests.~~ **Updated:** 698 frontend tests now exist across 31 test files:
+- **Hooks:** 121 tests (loopActions: 45, useLoops: 24, useLoop: 37, useWorkspaces: 15)
+- **Common components:** 101 tests (Button: 21, Modal: 29, Badge: 28, Card: 23)
+- **Feature components:** 308 tests (LoopCard: 48, CreateLoopForm: 48, LoopActionBar: 24, PlanReviewPanel: 25, LogViewer: 33, TodoViewer: 26, LoopModals: 31, AcceptLoopModal: 25, AddressCommentsModal: 15, RenameLoopModal: 17, WorkspaceSelector: 16)
+- **Container components:** 99 tests (App: 13, Dashboard: 31, LoopDetails: 55)
+- **E2E scenarios:** 50 tests across 8 scenario files
 
-**Recommendation:** Add tests for hooks first (easier to test with `renderHook`, highest risk-to-effort ratio), then key components (Dashboard state management, Modal accessibility).
+**Remaining gaps:** `useWebSocket` (no direct tests), `useLogLevelPreference`, `useMarkdownPreference`, `useWorkspaceServerSettings`, `Icons.tsx`, `MarkdownRenderer.tsx`, `LogLevelInitializer.tsx`, `ServerSettingsForm.tsx`, `CreateWorkspaceModal.tsx`, `AppSettingsModal.tsx`, `WorkspaceSettingsModal.tsx`. These are lower-risk components/hooks.
+
+**Recommendation:** The highest-risk code is now covered. Remaining untested components are mostly configuration forms and low-complexity utility hooks. Add tests for these as they are modified.
 
 ### XM-5: Direct Persistence Access from API Layer (Major)
 
@@ -768,6 +775,6 @@ There is no error boundary at any level of the React tree, no toast/notification
 | C3.1 | persistence | SQL injection in `getTableColumns()` | Currently safe but pattern is exploitable |
 | C4.1 | backends | Fire-and-forget async IIFE in `translateEvent()` | Events silently lost, errors swallowed |
 | C6.1 | utils | Timer leak in `name-generator.ts` | Memory pressure under rapid loop creation |
-| C7.1 | components | Dashboard.tsx god component (~1,250 LOC, 20+ state vars) | Unmaintainable, untestable, performance issues |
+| C7.1 | components | Dashboard.tsx god component (~1,250 LOC, 20+ state vars) | Unmaintainable, performance issues (now has 31 tests, but decomposition still recommended) |
 
-**Total findings: 6 Critical, 52 Major, 32 Minor, 3 Suggestions = 93 findings across 10 modules.**
+**Total findings: 6 Critical, 50 Major (2 resolved), 32 Minor, 3 Suggestions = 93 findings across 10 modules.**
