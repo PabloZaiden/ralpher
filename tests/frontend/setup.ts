@@ -3,8 +3,6 @@
  *
  * This file registers the happy-dom global DOM environment and sets up
  * necessary mocks for browser APIs used by the React components.
- *
- * It is loaded as a preload script for frontend tests only (via bunfig.toml).
  */
 
 import { GlobalRegistrator } from "@happy-dom/global-registrator";
