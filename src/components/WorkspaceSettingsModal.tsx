@@ -3,12 +3,13 @@
  * Allows editing workspace name and server connection settings.
  */
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useCallback, type FormEvent } from "react";
 import { Modal, Button, Badge } from "./common";
 import { ServerSettingsForm } from "./ServerSettingsForm";
 import type { ServerSettings, ConnectionStatus } from "../types/settings";
 import type { Workspace } from "../types/workspace";
 import { createLogger } from "../lib/logger";
+import { useAgentsMdOptimizer } from "../hooks/useAgentsMdOptimizer";
 
 const log = createLogger("WorkspaceSettingsModal");
 
@@ -90,6 +91,40 @@ export function WorkspaceSettingsModal({
     log.trace("Server settings changed", { mode: settings.mode, isValid });
     setServerSettings(settings);
     setIsServerSettingsValid(isValid);
+  }
+
+  // AGENTS.md optimizer
+  const optimizer = useAgentsMdOptimizer();
+  const [optimizeSuccess, setOptimizeSuccess] = useState<boolean | null>(null);
+
+  // Fetch AGENTS.md status when modal opens with a connected workspace
+  const fetchOptimizerStatus = useCallback(async () => {
+    if (isOpen && workspace && status?.connected) {
+      setOptimizeSuccess(null);
+      await optimizer.fetchStatus(workspace.id);
+    }
+  }, [isOpen, workspace?.id, status?.connected]);
+
+  useEffect(() => {
+    fetchOptimizerStatus();
+  }, [fetchOptimizerStatus]);
+
+  // Reset optimizer state when modal closes
+  useEffect(() => {
+    if (!isOpen) {
+      optimizer.reset();
+      setOptimizeSuccess(null);
+    }
+  }, [isOpen]);
+
+  // Handle applying optimization
+  async function handleOptimize() {
+    if (!workspace) return;
+    setOptimizeSuccess(null);
+    const result = await optimizer.optimize(workspace.id);
+    if (result) {
+      setOptimizeSuccess(true);
+    }
   }
 
   // Validation
@@ -182,6 +217,77 @@ export function WorkspaceSettingsModal({
           />
         )}
 
+        {/* AGENTS.md Optimization */}
+        {workspace && status?.connected && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                AGENTS.md Optimization
+              </h3>
+              {optimizer.status?.analysis.isOptimized && (
+                <Badge variant="success" size="sm">Optimized</Badge>
+              )}
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Add planning and progress tracking conventions to the workspace&apos;s AGENTS.md
+              so Ralpher loops can track their work reliably across iterations.
+            </p>
+
+            {optimizer.error && (
+              <div className="mb-3 p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900">
+                <p className="text-sm text-red-700 dark:text-red-300">{optimizer.error}</p>
+              </div>
+            )}
+
+            {optimizeSuccess && (
+              <div className="mb-3 p-3 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900">
+                <p className="text-sm text-green-700 dark:text-green-300">
+                  {optimizer.status?.analysis.isOptimized
+                    ? "AGENTS.md is already optimized."
+                    : "AGENTS.md optimized successfully."}
+                </p>
+              </div>
+            )}
+
+            {optimizer.status && !optimizer.status.analysis.isOptimized && (
+              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
+                <DocumentIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {optimizer.status.fileExists
+                    ? "AGENTS.md exists but is not optimized for Ralpher."
+                    : "No AGENTS.md file found. One will be created."}
+                </span>
+              </div>
+            )}
+
+            {optimizer.status?.analysis.updateAvailable && optimizer.status.analysis.isOptimized && (
+              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900">
+                <span className="text-sm text-blue-700 dark:text-blue-300">
+                  An updated version of the Ralpher guidelines is available.
+                </span>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              {(!optimizer.status?.analysis.isOptimized || optimizer.status?.analysis.updateAvailable) && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleOptimize}
+                  loading={optimizer.loading}
+                  disabled={optimizer.loading}
+                >
+                  <OptimizeIcon className="w-4 h-4 mr-2" />
+                  {optimizer.status?.analysis.updateAvailable && optimizer.status.analysis.isOptimized
+                    ? "Update AGENTS.md"
+                    : "Optimize AGENTS.md"}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Reset Connection */}
         {onResetConnection && (
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
@@ -227,6 +333,48 @@ function RefreshIcon({ className }: { className?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Simple document icon for AGENTS.md status.
+ */
+function DocumentIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Simple optimize/sparkle icon.
+ */
+function OptimizeIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
       />
     </svg>
   );

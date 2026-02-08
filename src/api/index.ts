@@ -11,6 +11,7 @@
  * - settings: Server configuration and connection management
  * - git: Git repository information
  * - workspaces: Workspace CRUD operations
+ * - agents-md: AGENTS.md optimization for Ralpher
  * - websocket: Real-time event streaming (handled separately)
  * 
  * @module api
@@ -22,6 +23,7 @@ import { modelsAndPreferencesRoutes } from "./models";
 import { settingsRoutes } from "./settings";
 import { gitRoutes } from "./git";
 import { workspacesRoutes } from "./workspaces";
+import { agentsMdRoutes } from "./agents-md";
 
 /**
  * All API routes combined.
@@ -46,6 +48,7 @@ export const apiRoutes = {
   ...settingsRoutes,
   ...gitRoutes,
   ...workspacesRoutes,
+  ...agentsMdRoutes,
 };
 
 // Re-export individual route modules
@@ -55,4 +58,5 @@ export * from "./models";
 export * from "./settings";
 export * from "./git";
 export * from "./workspaces";
+export * from "./agents-md";
 export * from "./websocket";
