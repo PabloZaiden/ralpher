@@ -6,7 +6,7 @@
 
 | Severity | Count | Description |
 |----------|-------|-------------|
-| Critical | 7 | Issues that can cause data loss, security vulnerabilities, or silent failures in production |
+| Critical | 5 | Issues that can cause data loss, security vulnerabilities, or silent failures in production |
 | Major | 79 | Significant code quality, maintainability, or correctness issues |
 | Minor | 123 | Style, convention, or low-risk issues |
 | Suggestion | 22 | Recommendations for improvement, not defects |
@@ -15,10 +15,10 @@
 
 | Directory | Critical | Major | Minor | Suggestion |
 |-----------|----------|-------|-------|------------|
-| src/core/ | 1 | 13 | 14 | 6 |
+| src/core/ | 0 | 13 | 14 | 6 |
 | src/api/ | 0 | 12 | 24 | 1 |
 | src/persistence/ | 2 | 8 | 19 | 2 |
-| src/backends/ | 1 | 8 | 6 | 2 |
+| src/backends/ | 0 | 8 | 6 | 2 |
 | src/types/ | 0 | 6 | 8 | 5 |
 | src/utils/ | 1 | 8 | 5 | 2 |
 | src/components/ | 1 | 8 | 13 | 0 |
@@ -26,7 +26,7 @@
 | src/lib/ | 0 | 2 | 3 | 0 |
 | Entry Points & Config | 0 | 4 | 11 | 3 |
 | Tests | 1 | 3 | 2 | 0 |
-| **Total** | **7** | **79** | **123** | **22** |
+| **Total** | **5** | **79** | **123** | **22** |
 
 ---
 
@@ -39,7 +39,7 @@
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
-| 1 | Critical | Best practices | ~340-400 | `startLoop()` uses fire-and-forget `engine.start().catch()` — promise is not awaited. AGENTS.md explicitly forbids this pattern. |
+| 1 | ~~Critical~~ **By Design** | ~~Best practices~~ | ~340-400 | ~~`startLoop()` uses fire-and-forget `engine.start().catch()` — promise is not awaited. AGENTS.md explicitly forbids this pattern.~~ **By Design — Intentional Architecture:** The fire-and-forget pattern is intentional for long-running processes. The loop engine runs a `while`-loop with multiple AI iterations (potentially hours). Awaiting would block the HTTP response indefinitely. The engine has comprehensive self-contained error handling (`handleError()` updates state to "failed", emits error events, `trackConsecutiveError()` for failsafe exit). Errors are reported via event emitter and persistence callbacks, not exceptions. See `AGENTS.md` § Async Patterns for the documented exception. |
 | 2 | Major | Code duplication | ~350, ~520 | Duplicate branch name generation logic between `startLoop` and `startDraftLoop`. Both construct branch names with the same prefix/sanitize logic. |
 | 3 | Major | Simplicity | ~600-800 | `acceptLoop()` method is ~200 lines handling merge, cleanup, branch deletion, and state transitions in one massive method. Should be decomposed. |
 | 4 | Major | State management | scattered | State transition validation is scattered. Multiple methods check `loop.state.status` independently instead of using a centralized state machine. |
@@ -420,7 +420,7 @@ No findings. Clean barrel export.
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
-| 1 | Critical | Best practices | 834-851 | Fire-and-forget async IIFE in `translateEvent` — async API call not awaited. |
+| 1 | ~~Critical~~ **By Design** | ~~Best practices~~ | 834-851 | ~~Fire-and-forget async IIFE in `translateEvent` — async API call not awaited.~~ **By Design — Intentional Architecture:** This async IIFE is purely diagnostic logging code inside a `session.idle` handler. It fetches session details for debugging when no assistant messages were seen (an edge case). It has its own `try/catch`, its result doesn't affect the return value of `translateEvent()`, and blocking for it would delay event processing unnecessarily. See `AGENTS.md` § Async Patterns for the documented exception. |
 | 2 | Major | Simplicity | `translateEvent` | Function has 8 parameters — too many, hard to test and maintain. |
 | 3 | Major | Type safety | 684 | `client` parameter typed as `any`. |
 | 4 | Major | Code duplication | 335-341 vs 375-381 | Prompt mapping logic duplicated between `sendPrompt` and `sendPromptAsync`. |

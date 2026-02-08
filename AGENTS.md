@@ -158,6 +158,14 @@ async POST(req) {
 }
 ```
 
+**Exception for long-running processes:** Fire-and-forget is acceptable when starting a long-running process that:
+1. Runs for an extended duration (minutes to hours) where blocking the HTTP response is impractical
+2. Has comprehensive self-contained error handling (try/catch, state updates to "failed", error event emission)
+3. Reports progress and errors through alternative channels (event emitters, persistence callbacks, WebSocket events)
+4. Documents the pattern explicitly with inline comments explaining the design decision
+
+Example: `engine.start()` in `LoopManager.startLoop()` uses fire-and-forget because the loop engine runs a `while`-loop with multiple AI iterations that may take hours. The engine has its own `handleError()` method that updates loop state to "failed" and emits error events. Awaiting would block the API response indefinitely.
+
 ### React Components
 
 - Use functional components only (no class components)

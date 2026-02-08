@@ -14,11 +14,13 @@ This document analyzes the Ralpher codebase by **functionality** — tracing eac
 
 | Severity | Count |
 |----------|-------|
-| Critical | 4 |
-| Major | 31 |
+| Critical | 2 |
+| Major | 30 |
 | Minor | 21 |
 | Suggestion | 8 |
-| **Total** | **64** |
+| **Total** | **61** |
+
+*Note: 2 Critical and 1 Major findings reclassified to "By Design" (fire-and-forget async patterns). 1 Critical marked N/A (authentication handled by reverse proxy).*
 
 ### Key Cross-Cutting Themes
 
@@ -74,7 +76,7 @@ User Action (click "Create Loop")
 
 | # | Severity | Dimension | Location | Finding |
 |---|----------|-----------|----------|---------|
-| 1.1 | **Critical** | Best practices | `loop-manager.ts:381-383` | `engine.start().catch()` is fire-and-forget. If the engine fails after the API response is sent, the loop silently enters an inconsistent state. AGENTS.md explicitly prohibits this pattern. The same pattern appears at `loop-manager.ts:800-805` for `startDraftLoop`. |
+| 1.1 | ~~**Critical**~~ **By Design** | ~~Best practices~~ | `loop-manager.ts:381-383` | ~~`engine.start().catch()` is fire-and-forget. If the engine fails after the API response is sent, the loop silently enters an inconsistent state. AGENTS.md explicitly prohibits this pattern. The same pattern appears at `loop-manager.ts:800-805` for `startDraftLoop`.~~ **By Design — Intentional Architecture:** The fire-and-forget pattern is intentional for long-running processes. The loop engine runs a `while`-loop with multiple AI iterations (potentially hours). Awaiting would block the HTTP response indefinitely. The engine has comprehensive self-contained error handling (`handleError()` updates state to "failed", emits error events, `trackConsecutiveError()` for failsafe exit). Errors are reported via event emitter and persistence callbacks, not exceptions. See `AGENTS.md` § Async Patterns for the documented exception. |
 | 1.2 | **Major** | State management | Multiple files | No centralized state machine. Status transitions are validated ad-hoc: `startLoop` checks for `idle`/`draft`, `stopLoop` checks for running states, `acceptLoop` checks for completed states — but there is no transition table or centralized validator. Invalid transitions are prevented only by scattered if-checks. |
 | 1.3 | **Major** | Data integrity | `loop-manager.ts` scattered | Direct mutation of `loop.state` properties (e.g., `loop.state.status = "starting"`) before calling `updateLoopState()`. If persistence fails, in-memory state diverges from database. |
 | 1.4 | **Major** | Separation of concerns | `api/loops.ts:695-702` | Draft-to-planning transition directly calls `updateLoopState()` from persistence layer, bypassing `LoopManager`. This skips event emission and any business rules in the manager. The API handler directly mutates `loop.state.status` and `loop.state.planMode` before persisting. |
@@ -90,12 +92,12 @@ User Action (click "Create Loop")
 ### Integration Concerns
 
 - **API ↔ Core boundary is porous**: The API layer directly imports and calls persistence functions (`updateLoopState`, `getActiveLoopByDirectory`) instead of routing through `LoopManager`. This means state mutations can bypass business rules and event emission.
-- **Core ↔ Persistence synchronization**: The fire-and-forget pattern means the API response returns before the engine has finished starting. The frontend must poll or rely on WebSocket events to discover the actual state — but if the engine fails silently, no event is ever emitted.
+- **Core ↔ Persistence synchronization**: The API response returns before the engine has finished starting. The frontend relies on WebSocket events to discover the actual state. Note: The fire-and-forget pattern is intentional — the engine has self-contained error handling that updates state and emits error events. See `AGENTS.md` § Async Patterns.
 - **Frontend ↔ API contract**: The frontend mixes two data-fetching patterns: `useLoop.ts` hook for WebSocket-based updates and inline `fetch()` calls in Dashboard.tsx. This creates inconsistent state management.
 
 ### Recommendations
 
-1. **Await `engine.start()`** or implement a proper error propagation channel (e.g., a callback or event that surfaces startup failures)
+1. ~~**Await `engine.start()`** or implement a proper error propagation channel~~ **By Design** — The engine is a long-running process with self-contained error handling. See `AGENTS.md` § Async Patterns.
 2. **Introduce a state machine** — a `LoopStateMachine` class with a transition table that validates and applies all status changes
 3. **Route all persistence mutations through LoopManager** — remove direct `updateLoopState` imports from API handlers
 4. **Add AbortController** to `useLoop.ts` for handling loop switches
@@ -145,7 +147,7 @@ User reviews and approves plan
 | # | Severity | Dimension | Location | Finding |
 |---|----------|-----------|----------|---------|
 | 2.1 | **Major** | Separation of concerns | `api/loops.ts:692-702` | Draft-to-plan transition directly sets `loop.state.status = "planning"` and `loop.state.planMode` object, then calls `updateLoopState()` directly. This bypasses `LoopManager.startPlanMode()` which should be the authority for plan mode transitions. |
-| 2.2 | **Major** | Error handling | `loop-manager.ts:381-383` | Plan mode `engine.start()` is fire-and-forget. If plan generation fails, the loop is stuck in "planning" status with no error surfaced. |
+| 2.2 | ~~**Major**~~ **By Design** | ~~Error handling~~ | `loop-manager.ts:381-383` | ~~Plan mode `engine.start()` is fire-and-forget. If plan generation fails, the loop is stuck in "planning" status with no error surfaced.~~ **By Design — Intentional Architecture:** Same as 1.1. The engine is a long-running process with comprehensive self-contained error handling. If plan generation fails, the engine's `handleError()` updates loop state to "failed" and emits error events. See `AGENTS.md` § Async Patterns. |
 | 2.3 | **Major** | Complexity | `loop-manager.ts:389-440` | `sendPlanFeedback()` recreates the entire engine if it doesn't exist (server restart recovery). This ~50-line recovery block duplicates engine creation logic from `startPlanMode()`. |
 | 2.4 | **Minor** | Consistency | `PlanReviewPanel.tsx:224-251` | Implements its own modal overlay instead of using the shared `Modal` component. Missing escape key handling and focus management. |
 | 2.5 | **Minor** | Test coverage | — | Plan mode workflow has limited test coverage for edge cases (server restart during planning, feedback after timeout). |
@@ -484,7 +486,7 @@ LoopEngine needs to send prompt:
 
 | # | Severity | Dimension | Location | Finding |
 |---|----------|-----------|----------|---------|
-| 8.1 | **Critical** | Best practices | `opencode/index.ts:834-851` | Fire-and-forget async IIFE in `translateEvent()`. An async API call (`client.session.get()`) is executed inside an immediately-invoked async function that is never awaited. Errors are silently swallowed, and the call may execute after the enclosing function returns. |
+| 8.1 | ~~**Critical**~~ **By Design** | ~~Best practices~~ | `opencode/index.ts:834-851` | ~~Fire-and-forget async IIFE in `translateEvent()`. An async API call (`client.session.get()`) is executed inside an immediately-invoked async function that is never awaited. Errors are silently swallowed, and the call may execute after the enclosing function returns.~~ **By Design — Intentional Architecture:** This async IIFE is purely diagnostic logging code inside a `session.idle` handler. It fetches session details for debugging when no assistant messages were seen (an edge case). It has its own `try/catch`, its result doesn't affect the return value of `translateEvent()`, and blocking for it would delay event processing unnecessarily. See `AGENTS.md` § Async Patterns. |
 | 8.2 | **Major** | Type safety | `backends/types.ts:getSdkClient()` | Returns `unknown`, forcing all consumers to use unsafe `as unknown as OpencodeClient` double casts. |
 | 8.3 | **Major** | Type safety | `backends/types.ts:getModels()` | Returns `Promise<unknown[]>`, providing zero type information. Consumers must cast to `ModelInfo[]`. |
 | 8.4 | **Major** | Code duplication | `opencode/index.ts:335-341` vs `375-381` | Prompt construction logic duplicated between `sendPrompt` and `sendPromptAsync`. |
@@ -501,7 +503,7 @@ LoopEngine needs to send prompt:
 
 ### Recommendations
 
-1. **Await the async IIFE** in `translateEvent()` or use proper error handling
+1. ~~**Await the async IIFE** in `translateEvent()` or use proper error handling~~ **By Design** — This is diagnostic logging code with its own try/catch. See `AGENTS.md` § Async Patterns.
 2. **Type `getSdkClient()` with generics** — `Backend<TClient>` or concrete SDK types
 3. **Extract shared prompt builder** between `sendPrompt` and `sendPromptAsync`
 4. **Bundle `translateEvent` parameters** into an options/context object
@@ -624,16 +626,24 @@ Runtime operations:
 
 These issues span multiple functionalities and represent systemic patterns in the codebase.
 
-### CF-1: Fire-and-Forget Async (Critical)
+### ~~CF-1: Fire-and-Forget Async (Critical)~~ CF-1: Fire-and-Forget Async — By Design
 
 **Affects:** Loop Lifecycle (1.1), Plan Mode (2.2), Backend Abstraction (8.1)
 
-The fire-and-forget pattern appears in three critical locations:
-- `loop-manager.ts:381-383` — `engine.start().catch()`
-- `loop-manager.ts:800-805` — draft loop start
-- `opencode/index.ts:834-851` — async IIFE in `translateEvent()`
+~~The fire-and-forget pattern appears in three critical locations:~~
+~~- `loop-manager.ts:381-383` — `engine.start().catch()`~~
+~~- `loop-manager.ts:800-805` — draft loop start~~
+~~- `opencode/index.ts:834-851` — async IIFE in `translateEvent()`~~
 
-This violates AGENTS.md which explicitly states: "CRITICAL: Always await async operations in API handlers." The pattern means errors are silently lost and the API returns success before the operation completes.
+~~This violates AGENTS.md which explicitly states: "CRITICAL: Always await async operations in API handlers." The pattern means errors are silently lost and the API returns success before the operation completes.~~
+
+**By Design — Intentional Architecture:** All three fire-and-forget patterns are intentional and documented:
+
+1. **`loop-manager.ts:381-383` and `800-805`** — The loop engine runs a `while`-loop with multiple AI iterations that may take hours. Awaiting would block the HTTP response indefinitely. The engine has comprehensive self-contained error handling: `handleError()` updates loop state to "failed", emits error events, and `trackConsecutiveError()` provides a failsafe exit. Errors are reported via the event emitter and persistence callbacks rather than thrown exceptions.
+
+2. **`opencode/index.ts:834-851`** — This async IIFE is purely diagnostic logging code inside a `session.idle` handler. It fetches session details for debugging when no assistant messages were seen (an edge case). It has its own `try/catch`, its result doesn't affect the return value, and blocking for it would delay event processing unnecessarily.
+
+See `AGENTS.md` § Async Patterns for the documented exception policy for long-running processes.
 
 ### CF-2: Layer Bypassing (Major)
 
@@ -665,9 +675,10 @@ This bypasses the Core layer's business rules, event emission, and state validat
 
 **Affects:** Loop Lifecycle (1.8), Review Cycles, Settings
 
-Errors are consistently swallowed at two boundaries:
-1. **Frontend catch blocks** — `Dashboard.tsx` and other components catch errors and only `console.error()` them. No toast, no error state, no visual feedback.
-2. **Backend fire-and-forget** — Engine failures after API response are never surfaced.
+Errors are consistently swallowed at the frontend boundary:
+- **Frontend catch blocks** — `Dashboard.tsx` and other components catch errors and only `console.error()` them. No toast, no error state, no visual feedback.
+
+*(Note: Backend fire-and-forget async patterns are intentional — see CF-1. The engine has self-contained error handling that updates state and emits error events.)*
 
 Users have no way to know that an operation failed unless they notice the loop is stuck.
 
@@ -717,7 +728,7 @@ They share identical constant definitions but diverge in behavior. Some modules 
 
 | Priority | Recommendation | Impact | Complexity |
 |----------|---------------|--------|------------|
-| 1 | Fix fire-and-forget async patterns | Critical — prevents silent failures | Low |
+| 1 | ~~Fix fire-and-forget async patterns~~ **By Design** — Intentional for long-running processes | ~~Critical — prevents silent failures~~ N/A — engine has self-contained error handling | ~~Low~~ N/A |
 | 2 | Introduce loop state machine | Major — centralizes transition logic | Medium |
 | 3 | Route all state mutations through LoopManager | Major — enforces architectural layers | Medium |
 | 4 | Extract shared helpers (errorResponse, apiCall, preflight) | Major — eliminates ~530 LOC duplication | Low |

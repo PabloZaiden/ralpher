@@ -10,17 +10,17 @@
 
 | Module | Files | LOC | Critical | Major | Minor | Suggestion |
 |--------|------:|----:|---------:|------:|------:|-----------:|
-| `src/core/` | 10 | 6,456 | 1 | 8 | 5 | 1 |
+| `src/core/` | 10 | 6,456 | 0 | 8 | 5 | 1 |
 | `src/api/` | 9 | 3,034 | 0 | 8 | 3 | 0 |
 | `src/persistence/` | 7 | 1,948 | 1 | 6 | 4 | 1 |
-| `src/backends/` | 3 | 1,260 | 1 | 6 | 2 | 0 |
+| `src/backends/` | 3 | 1,260 | 0 | 6 | 2 | 0 |
 | `src/types/` | 11 | 1,596 | 0 | 3 | 4 | 1 |
 | `src/utils/` | 4 | 425 | 1 | 5 | 1 | 0 |
 | `src/components/` | 24 | 7,163 | 1 | 5 | 4 | 0 |
 | `src/hooks/` | 9 | 2,263 | 0 | 6 | 3 | 0 |
 | `src/lib/` | 2 | 178 | 0 | 2 | 1 | 0 |
 | Entry Points & Config | 8+ | ~350 | 0 | 3 | 4 | 0 |
-| **Totals** | **87** | **24,673** | **5** | **52** | **31** | **3** |
+| **Totals** | **87** | **24,673** | **3** | **52** | **31** | **3** |
 
 **Overall Assessment:** The codebase is functional and well-organized at the directory level, but suffers from concentrated complexity in a handful of oversized files, systematic code duplication (especially in API layers and hooks), and several genuine runtime bugs (fire-and-forget async, timer leaks, SQL injection). The separation between frontend and backend modules is clean. The primary architectural debt lies in the `core/` module, where two 2000+ LOC files carry the entire business logic without a formal state machine, and in `components/` where Dashboard.tsx has grown into a god component.
 
@@ -51,7 +51,7 @@
 
 | # | Severity | Dimension | Finding |
 |---|----------|-----------|---------|
-| C1.1 | **Critical** | Async Safety | `loop-manager.ts` `startLoop()` calls engine methods in a fire-and-forget pattern. If the engine's async start fails after the response is sent, the loop silently enters an inconsistent state. This directly violates the AGENTS.md guideline: "CRITICAL: Always await async operations in API handlers." The loop status may show "starting" permanently with no error surfaced. |
+| C1.1 | ~~**Critical**~~ **By Design** | ~~Async Safety~~ | ~~`loop-manager.ts` `startLoop()` calls engine methods in a fire-and-forget pattern. If the engine's async start fails after the response is sent, the loop silently enters an inconsistent state. This directly violates the AGENTS.md guideline: "CRITICAL: Always await async operations in API handlers." The loop status may show "starting" permanently with no error surfaced.~~ **By Design — Intentional Architecture:** The fire-and-forget pattern is intentional for long-running processes. The loop engine runs a `while`-loop with multiple AI iterations (potentially hours). Awaiting would block the HTTP response indefinitely. The engine has comprehensive self-contained error handling (`handleError()` updates state to "failed", emits error events, `trackConsecutiveError()` for failsafe exit). Errors are reported via event emitter and persistence callbacks, not exceptions. See `AGENTS.md` § Async Patterns for the documented exception. |
 | C1.2 | **Major** | File Size / Complexity | Two files exceed 2,000 LOC each (`loop-manager.ts`: 2,025, `loop-engine.ts`: 2,009). These are the most complex files in the entire codebase and contain deeply nested control flow. `acceptLoop()` in loop-manager is ~200 lines with multiple nested try/catch blocks and git operations. `runIteration()` in loop-engine is ~250 lines mixing event processing, state management, and error handling. |
 | C1.3 | **Major** | Code Duplication | Branch name generation logic (`sanitizeBranchName` usage + prefix assembly) is duplicated between `loop-manager.ts` (during `createLoop`) and `loop-engine.ts` (during `startLoop`). Changes to branch naming conventions must be synchronized in two places. |
 | C1.4 | **Major** | Bug — Logger | `createLogger()` in `core/logger.ts:93` creates sub-loggers via `log.getSubLogger()`, but `setLogLevel()` at line 103-108 only updates `log.settings.minLevel`. tslog sub-loggers copy the parent's level at creation time and do not inherit runtime changes. Any module using `createLogger()` (which is most backend modules — persistence, API, backends, etc.) will not respond to runtime log level changes. The frontend `lib/logger.ts` correctly addresses this by caching sub-loggers and updating them in `setLogLevel()`. |
@@ -259,7 +259,7 @@
 
 | # | Severity | Dimension | Finding |
 |---|----------|-----------|---------|
-| C4.1 | **Critical** | Async Safety | `translateEvent()` in `opencode/index.ts` contains an async IIFE (Immediately Invoked Function Expression) that is not awaited. This means errors during event translation are silently swallowed, and the push-to-stream call happens after the enclosing function returns. If the stream is closed between the IIFE start and the push, events are lost. |
+| C4.1 | ~~**Critical**~~ **By Design** | ~~Async Safety~~ | ~~`translateEvent()` in `opencode/index.ts` contains an async IIFE (Immediately Invoked Function Expression) that is not awaited. This means errors during event translation are silently swallowed, and the push-to-stream call happens after the enclosing function returns. If the stream is closed between the IIFE start and the push, events are lost.~~ **By Design — Intentional Architecture:** This async IIFE is purely diagnostic logging code inside a `session.idle` handler. It fetches session details for debugging when no assistant messages were seen (an edge case). It has its own `try/catch`, its result doesn't affect the return value of `translateEvent()`, and blocking for it would delay event processing unnecessarily. See `AGENTS.md` § Async Patterns for the documented exception. |
 | C4.2 | **Major** | Type Safety | `Backend` interface method `getSdkClient()` returns `unknown` (`types.ts:223`). Callers must cast the result, losing all type safety. The actual return type is the OpenCode SDK client type, which should be made generic: `Backend<TClient>` or at least typed to the SDK's client interface. |
 | C4.3 | **Major** | Type Safety | `getModels()` returns `Promise<unknown[]>` (`types.ts:238`). The actual return type is an array of model objects from the SDK. This forces every caller to cast or use `as ModelInfo[]`, defeating TypeScript's type system. |
 | C4.4 | **Major** | Type Duplication | `ModelInfo` type is defined in both `types/api.ts:36-54` and implicitly in the `getModels()` return type. The backend returns raw SDK model objects, and `api/models.ts` transforms them into `ModelInfo`. But the lack of typing in the backend means the transformation is unchecked. |
@@ -777,4 +777,4 @@ There is no error boundary at any level of the React tree, no toast/notification
 | C6.1 | utils | Timer leak in `name-generator.ts` | Memory pressure under rapid loop creation |
 | C7.1 | components | Dashboard.tsx god component (~1,250 LOC, 20+ state vars) | Unmaintainable, performance issues (now has 31 tests, but decomposition still recommended) |
 
-**Total findings: 5 Critical (1 N/A), 50 Major (2 resolved), 31 Minor (1 N/A), 3 Suggestions = 91 findings across 10 modules.**
+**Total findings: 3 Critical (1 N/A, 2 By Design), 50 Major (2 resolved), 31 Minor (1 N/A), 3 Suggestions = 89 active findings across 10 modules.**

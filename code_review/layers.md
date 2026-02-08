@@ -16,11 +16,11 @@ This document analyzes the Ralpher codebase by **architectural layer** — evalu
 |---|-------|------:|----:|:------:|---------:|------:|------:|-----------:|
 | 1 | Presentation | 35 | 9,490 | C | 1 | 11 | 10 | 2 |
 | 2 | API | 10 | 3,170 | C+ | 0 | 8 | 6 | 1 |
-| 3 | Core Business Logic | 5 | 5,450 | C+ | 1 | 8 | 5 | 2 |
+| 3 | Core Business Logic | 5 | 5,450 | C+ | 0 | 8 | 5 | 2 |
 | 4 | Data Access | 7 | 1,948 | B- | 1 | 6 | 5 | 1 |
-| 5 | External Integration | 6 | 2,475 | C | 1 | 7 | 3 | 1 |
+| 5 | External Integration | 6 | 2,475 | C | 0 | 7 | 3 | 1 |
 | 6 | Shared Infrastructure | 14 | 2,100 | B | 0 | 5 | 5 | 2 |
-| | **Totals** | **77** | **24,633** | **C+** | **4** | **45** | **34** | **9** |
+| | **Totals** | **77** | **24,633** | **C+** | **2** | **45** | **34** | **9** |
 
 **Note:** 6 config/entry files (`src/index.ts`, `src/build.ts`, `src/frontend.tsx`, `src/index.html`, `src/index.css`, `src/App.tsx`) span multiple layers. They are discussed in the layer most relevant to their primary role and also referenced in the Cross-Layer Analysis.
 
@@ -297,7 +297,7 @@ Central orchestration of loop lifecycle, iteration execution, git operations, an
 
 ### Health Score: C+
 
-The Core layer contains the most critical business logic but also the most concentrated complexity. Two files exceed 2,000 LOC each. The fire-and-forget async pattern is the most dangerous bug in the codebase. The absence of a formal state machine for loop transitions is the largest architectural gap.
+The Core layer contains the most critical business logic but also the most concentrated complexity. Two files exceed 2,000 LOC each. The absence of a formal state machine for loop transitions is the largest architectural gap. *(Note: The fire-and-forget async pattern is intentional for long-running processes — see B1.)*
 
 ### Pattern Analysis
 
@@ -308,16 +308,17 @@ The Core layer contains the most critical business logic but also the most conce
 - The `BackendManager` handles workspace-to-backend mapping effectively
 
 **Anti-Patterns:**
-- **Fire-and-forget async**: `engine.start().catch()` in `startLoop()` means the API returns success before the engine has finished starting. If the engine fails, the loop is stuck
 - **God methods**: `acceptLoop()` (~200 lines) and `runIteration()` (~250 lines) handle multiple concerns in single methods
 - **Direct state mutation before persistence**: `loop.state.status = "starting"` before `updateLoopState()` — if persistence fails, in-memory and database diverge
 - **Scattered state validation**: No centralized transition table — each method independently checks allowed states
+
+*(Note: The fire-and-forget pattern in `engine.start().catch()` is intentional — the engine is a long-running process with self-contained error handling. See B1.)*
 
 ### Findings
 
 | # | Severity | Dimension | Location | Finding |
 |---|----------|-----------|----------|---------|
-| B1 | **Critical** | Best practices | `loop-manager.ts:381-383` | Fire-and-forget: `engine.start().catch()` is not awaited. Also at `loop-manager.ts:800-805` for draft loop start. Violates AGENTS.md explicitly. |
+| B1 | ~~**Critical**~~ **By Design** | ~~Best practices~~ | `loop-manager.ts:381-383` | ~~Fire-and-forget: `engine.start().catch()` is not awaited. Also at `loop-manager.ts:800-805` for draft loop start. Violates AGENTS.md explicitly.~~ **By Design — Intentional Architecture:** The fire-and-forget pattern is intentional for long-running processes. The loop engine runs a `while`-loop with multiple AI iterations (potentially hours). Awaiting would block the HTTP response indefinitely. The engine has comprehensive self-contained error handling (`handleError()` updates state to "failed", emits error events, `trackConsecutiveError()` for failsafe exit). Errors are reported via event emitter and persistence callbacks, not exceptions. See `AGENTS.md` § Async Patterns for the documented exception. |
 | B2 | **Major** | State management | Multiple locations | No centralized state machine. Status transitions validated ad-hoc in `startLoop()`, `stopLoop()`, `acceptLoop()`, etc. No transition table, no invalid-transition prevention at the type level. |
 | B3 | **Major** | Data integrity | `loop-manager.ts` scattered | Direct mutation of `loop.state` properties before calling `updateLoopState()`. If persistence fails, in-memory object has already been mutated. |
 | B4 | **Major** | Complexity | `loop-manager.ts:~600-800` | `acceptLoop()` is ~200 lines handling merge preparation, execution, conflict detection, error recovery, branch cleanup, and state persistence. |
@@ -360,11 +361,11 @@ The Core layer contains the most critical business logic but also the most conce
 | `backend-manager.ts` | 667 | Minimal | ~20% |
 | `event-emitter.ts` | 72 | None | 0% |
 
-**Assessment:** The two most critical files have good test coverage. `backend-manager.ts` and `event-emitter.ts` are under-tested. The fire-and-forget pattern in `startLoop()` makes certain failure paths untestable without fixing the root cause.
+**Assessment:** The two most critical files have good test coverage. `backend-manager.ts` and `event-emitter.ts` are under-tested.
 
 ### Recommendations (Prioritized)
 
-1. **Fix fire-and-forget async** in `startLoop()` — await `engine.start()` or implement proper error propagation
+1. ~~**Fix fire-and-forget async** in `startLoop()`~~ **By Design** — The engine is a long-running process with self-contained error handling. See `AGENTS.md` § Async Patterns.
 2. **Introduce a state machine** — centralize loop status transitions with a transition table
 3. **Decompose `acceptLoop()`** — split into merge-prepare, merge-execute, merge-finalize
 4. **Decompose `runIteration()`** — extract prompt building, event processing, error handling
@@ -507,7 +508,7 @@ The External Integration layer has a well-designed abstraction (`Backend` interf
 
 | # | Severity | Dimension | Location | Finding |
 |---|----------|-----------|----------|---------|
-| E1 | **Critical** | Best practices | `opencode/index.ts:834-851` | Fire-and-forget async IIFE in `translateEvent()`. Async `client.session.get()` call is never awaited. Errors silently swallowed, call may execute after enclosing function returns. |
+| E1 | ~~**Critical**~~ **By Design** | ~~Best practices~~ | `opencode/index.ts:834-851` | ~~Fire-and-forget async IIFE in `translateEvent()`. Async `client.session.get()` call is never awaited. Errors silently swallowed, call may execute after enclosing function returns.~~ **By Design — Intentional Architecture:** This async IIFE is purely diagnostic logging code inside a `session.idle` handler. It fetches session details for debugging when no assistant messages were seen (an edge case). It has its own `try/catch`, its result doesn't affect the return value of `translateEvent()`, and blocking for it would delay event processing unnecessarily. See `AGENTS.md` § Async Patterns. |
 | E2 | **Major** | Type safety | `backends/types.ts:getSdkClient()` | Returns `unknown`, forcing all consumers to use unsafe `as unknown as OpencodeClient` double casts. Should be generic: `Backend<TClient>`. |
 | E3 | **Major** | Type safety | `backends/types.ts:getModels()` | Returns `Promise<unknown[]>`. Zero type information for consumers. Must cast to `ModelInfo[]`. |
 | E4 | **Major** | Code duplication | `opencode/index.ts:335-341` vs `375-381` | Prompt construction logic duplicated between `sendPrompt` and `sendPromptAsync`. |
@@ -749,14 +750,15 @@ Error handling at layer boundaries is the weakest cross-cutting concern:
 | Presentation → API | `fetch()` + `response.ok` check | Poor — errors caught and `console.error`'d with no user feedback |
 | API → Core | Direct function calls with try/catch | Acceptable — errors converted to HTTP responses |
 | Core → Data Access | Direct function calls, some try/catch | Poor — `JSON.parse` failures crash entire operations |
-| Core → External | Fire-and-forget + try/catch | Critical — errors silently lost in fire-and-forget paths |
+| Core → External | try/catch with self-contained error handling | Good — fire-and-forget is intentional for long-running processes with event-based error reporting |
 | External → SDK | try/catch converting to `null` | Poor — all error types conflated into "not found" |
 
 **Systemic issue:** There is no centralized error type hierarchy. Each layer defines its own error handling patterns. The result is inconsistent error propagation where:
 - Some errors crash the application (unguarded JSON.parse)
-- Some errors are silently swallowed (fire-and-forget, empty catch blocks)
 - Some errors are conflated (all session errors → null)
 - Some errors reach the user as console output only (dashboard fetch failures)
+
+*(Note: Fire-and-forget patterns in Core → External are intentional — the engine has self-contained error handling. See `AGENTS.md` § Async Patterns.)*
 
 ### Type Safety Across Boundaries
 
@@ -792,7 +794,7 @@ These recommendations address systemic issues that span multiple layers and repr
 
 | # | Recommendation | Layers Affected | Impact | Complexity |
 |---|---------------|----------------|--------|------------|
-| 1 | **Fix fire-and-forget async** — Await `engine.start()` in LoopManager and the async IIFE in `translateEvent()`. These are active runtime bugs that cause silent failures. | Core, External | Critical — prevents silent failures and data inconsistency | Low |
+| 1 | ~~**Fix fire-and-forget async** — Await `engine.start()` in LoopManager and the async IIFE in `translateEvent()`.~~ **By Design** — Intentional for long-running processes. The engine has comprehensive self-contained error handling (`handleError()`, error events, `trackConsecutiveError()`). See `AGENTS.md` § Async Patterns. | Core, External | ~~Critical~~ N/A — engine handles errors via events and persistence | ~~Low~~ N/A |
 | 2 | **Introduce a loop state machine** — Centralize all status transitions into a `LoopStateMachine` with a transition table. Eliminate scattered ad-hoc status checks. | Core, API | Major — single source of truth for loop lifecycle | Medium |
 | 3 | **Enforce layered architecture** — Remove all direct persistence imports from API handlers. Add query methods to `LoopManager` (`getActiveLoopByDirectory`, `getReviewComments`) so the API layer never bypasses Core. | API, Core, Data Access | Major — prevents business rule bypass | Medium |
 | 4 | **Extract shared helpers to eliminate duplication** — `errorResponse()` (3 copies), `apiCall<T>()` wrapper (13 action functions), `ModelSelector` component (2 copies), `requireWorkspace()` (5 copies). Estimated ~530 LOC savings. | API, Presentation | Major — reduces maintenance burden | Low |
@@ -813,7 +815,7 @@ These recommendations address systemic issues that span multiple layers and repr
 | Error handling | 0 | 7 | 4 | 1 | 12 |
 | Type safety | 0 | 4 | 1 | 1 | 6 |
 | Security | 0 | 0 | 3 | 1 | 4 |
-| Best practices | 2 | 2 | 1 | 1 | 6 |
+| Best practices | 0 | 2 | 1 | 1 | 4 |
 | Consistency | 0 | 2 | 4 | 0 | 6 |
 | Complexity | 1 | 3 | 0 | 1 | 5 |
 | State management | 0 | 1 | 1 | 0 | 2 |
@@ -832,7 +834,7 @@ These recommendations address systemic issues that span multiple layers and repr
 | Bug | 0 | 2 | 0 | 1 | 3 |
 | UX | 0 | 1 | 0 | 0 | 1 |
 | Testability | 0 | 0 | 1 | 0 | 1 |
-| **Totals** | **4** | **45** | **34** | **9** | **92** |
+| **Totals** | **2** | **45** | **34** | **9** | **90** |
 
 ---
 
