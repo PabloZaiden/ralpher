@@ -152,16 +152,46 @@ export class GitService {
    * This is especially important when a loop is forcefully stopped while git operations
    * are in progress.
    * 
-   * @param directory - The git repository directory
+   * Handles both regular repos (lock at `.git/index.lock`) and worktrees
+   * (lock at the gitdir path referenced by the `.git` file).
+   * 
+   * @param directory - The git repository or worktree directory
    * @param retries - Number of times to retry cleanup (default: 3)
    * @param delayMs - Delay between retries in milliseconds (default: 100)
    * @returns true if any lock files were cleaned up, false otherwise
    */
   static async cleanupStaleLockFiles(directory: string, retries = 3, delayMs = 100): Promise<boolean> {
     const path = await import("path");
-    const { rm, stat } = await import("fs/promises");
+    const { rm, stat, readFile } = await import("fs/promises");
     
-    const lockFile = path.join(directory, ".git", "index.lock");
+    // Determine the correct lock file path.
+    // In a worktree, .git is a file containing "gitdir: <path>".
+    // In a regular repo, .git is a directory.
+    let lockFile: string;
+    const dotGitPath = path.join(directory, ".git");
+    
+    try {
+      const dotGitStat = await stat(dotGitPath);
+      if (dotGitStat.isFile()) {
+        // Worktree: read the gitdir reference
+        const content = await readFile(dotGitPath, "utf-8");
+        const match = content.match(/^gitdir:\s*(.+)$/m);
+        if (match?.[1]) {
+          const gitDir = match[1].trim();
+          // Resolve relative paths against the worktree directory
+          const resolvedGitDir = path.isAbsolute(gitDir) ? gitDir : path.resolve(directory, gitDir);
+          lockFile = path.join(resolvedGitDir, "index.lock");
+        } else {
+          lockFile = path.join(directory, ".git", "index.lock");
+        }
+      } else {
+        lockFile = path.join(directory, ".git", "index.lock");
+      }
+    } catch {
+      // .git doesn't exist at all, nothing to clean
+      return false;
+    }
+    
     let cleaned = false;
     
     for (let attempt = 0; attempt < retries; attempt++) {
@@ -676,10 +706,8 @@ export class GitService {
     branchName: string,
     remote = "origin"
   ): Promise<string> {
-    // First checkout the branch to push
-    await this.checkoutBranch(directory, branchName);
-
     // Push to remote with -u flag to set upstream
+    // No checkout needed - git push works on branch refs directly
     const result = await this.runGitCommand(directory, [
       "push",
       "-u",
@@ -920,6 +948,240 @@ export class GitService {
     }
 
     return diffsWithContent;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Git Worktree Operations
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Create a new git worktree with a new branch.
+   * 
+   * This creates a worktree at `worktreePath` and checks out a new branch
+   * `branchName` based on `baseBranch`. Also ensures the worktree directory
+   * is excluded from git tracking via `.git/info/exclude`.
+   * 
+   * @param repoDirectory - The main git repository directory
+   * @param worktreePath - Absolute path for the new worktree
+   * @param branchName - The new branch name to create
+   * @param baseBranch - The base branch to create the worktree from (optional, defaults to HEAD)
+   */
+  async createWorktree(
+    repoDirectory: string,
+    worktreePath: string,
+    branchName: string,
+    baseBranch?: string
+  ): Promise<void> {
+    // Ensure .ralph-worktrees is excluded from git tracking
+    await this.ensureWorktreeExcluded(repoDirectory);
+
+    // Ensure the parent directory exists
+    await this.executor.exec("mkdir", ["-p", worktreePath]);
+
+    // Remove the directory we just created — git worktree add requires the target not to exist
+    await this.executor.exec("rmdir", [worktreePath]);
+
+    // Build the git worktree add command
+    const args = ["worktree", "add", worktreePath, "-b", branchName];
+    if (baseBranch) {
+      args.push(baseBranch);
+    }
+
+    const result = await this.runGitCommand(repoDirectory, args);
+    if (!result.success) {
+      throw new Error(`Failed to create worktree at ${worktreePath}: ${result.stderr}`);
+    }
+
+    log.info(`[GitService] Created worktree at ${worktreePath} with branch ${branchName}`);
+  }
+
+  /**
+   * Add an existing branch to a new worktree (without creating a new branch).
+   * 
+   * Used when a worktree needs to be recreated for an existing branch
+   * (e.g., after manual deletion, or for jumpstart/review reuse).
+   * 
+   * @param repoDirectory - The main git repository directory
+   * @param worktreePath - Absolute path for the new worktree
+   * @param branchName - The existing branch name to checkout in the worktree
+   */
+  async addWorktreeForExistingBranch(
+    repoDirectory: string,
+    worktreePath: string,
+    branchName: string
+  ): Promise<void> {
+    // Ensure .ralph-worktrees is excluded from git tracking
+    await this.ensureWorktreeExcluded(repoDirectory);
+
+    // Ensure the parent directory exists
+    await this.executor.exec("mkdir", ["-p", worktreePath]);
+
+    // Remove the directory we just created — git worktree add requires the target not to exist
+    await this.executor.exec("rmdir", [worktreePath]);
+
+    const result = await this.runGitCommand(repoDirectory, [
+      "worktree", "add", worktreePath, branchName,
+    ]);
+    if (!result.success) {
+      throw new Error(`Failed to add worktree for branch ${branchName} at ${worktreePath}: ${result.stderr}`);
+    }
+
+    log.info(`[GitService] Added worktree at ${worktreePath} for existing branch ${branchName}`);
+  }
+
+  /**
+   * Remove a git worktree.
+   * 
+   * @param repoDirectory - The main git repository directory
+   * @param worktreePath - Absolute path of the worktree to remove
+   * @param options - Options for removal (force: true to remove even with uncommitted changes)
+   */
+  async removeWorktree(
+    repoDirectory: string,
+    worktreePath: string,
+    options?: { force?: boolean }
+  ): Promise<void> {
+    const args = ["worktree", "remove", worktreePath];
+    if (options?.force) {
+      args.push("--force");
+    }
+
+    const result = await this.runGitCommand(repoDirectory, args);
+    if (!result.success) {
+      throw new Error(`Failed to remove worktree at ${worktreePath}: ${result.stderr}`);
+    }
+
+    log.info(`[GitService] Removed worktree at ${worktreePath}`);
+  }
+
+  /**
+   * List all worktrees for a repository.
+   * 
+   * @param repoDirectory - The main git repository directory
+   * @returns Array of worktree entries with path, HEAD SHA, and branch name
+   */
+  async listWorktrees(
+    repoDirectory: string
+  ): Promise<Array<{ path: string; head: string; branch: string }>> {
+    const result = await this.runGitCommand(repoDirectory, [
+      "worktree", "list", "--porcelain",
+    ]);
+    if (!result.success) {
+      throw new Error(`Failed to list worktrees: ${result.stderr}`);
+    }
+
+    const output = result.stdout.replace(/\r\n/g, "\n").trim();
+    if (!output) return [];
+
+    // Parse porcelain output: blocks separated by blank lines
+    // Each block has: worktree <path>\nHEAD <sha>\nbranch <ref>\n
+    const entries: Array<{ path: string; head: string; branch: string }> = [];
+    const blocks = output.split("\n\n");
+
+    for (const block of blocks) {
+      const lines = block.trim().split("\n");
+      let path = "";
+      let head = "";
+      let branch = "";
+
+      for (const line of lines) {
+        if (line.startsWith("worktree ")) {
+          path = line.substring("worktree ".length);
+        } else if (line.startsWith("HEAD ")) {
+          head = line.substring("HEAD ".length);
+        } else if (line.startsWith("branch ")) {
+          // branch refs/heads/main -> main
+          const ref = line.substring("branch ".length);
+          branch = ref.replace(/^refs\/heads\//, "");
+        }
+      }
+
+      if (path) {
+        entries.push({ path, head, branch });
+      }
+    }
+
+    return entries;
+  }
+
+  /**
+   * Prune stale worktree entries (worktrees whose directory no longer exists).
+   * 
+   * @param repoDirectory - The main git repository directory
+   */
+  async pruneWorktrees(repoDirectory: string): Promise<void> {
+    const result = await this.runGitCommand(repoDirectory, ["worktree", "prune"]);
+    if (!result.success) {
+      throw new Error(`Failed to prune worktrees: ${result.stderr}`);
+    }
+
+    log.info(`[GitService] Pruned stale worktree entries in ${repoDirectory}`);
+  }
+
+  /**
+   * Check if a worktree exists at the given path.
+   * 
+   * @param repoDirectory - The main git repository directory
+   * @param worktreePath - The worktree path to check
+   * @returns true if the worktree exists in the git worktree list
+   */
+  async worktreeExists(
+    repoDirectory: string,
+    worktreePath: string
+  ): Promise<boolean> {
+    const worktrees = await this.listWorktrees(repoDirectory);
+    return worktrees.some(wt => wt.path === worktreePath);
+  }
+
+  /**
+   * Ensure that `.ralph-worktrees` is listed in `.git/info/exclude` for the repo.
+   * This prevents the worktree directory from being tracked by git.
+   * 
+   * Called on every worktree creation to guard against the exclude entry
+   * being manually removed or `.git/info/exclude` being reset.
+   * 
+   * @param repoDirectory - The main git repository directory
+   */
+  async ensureWorktreeExcluded(repoDirectory: string): Promise<void> {
+    const excludePath = `${repoDirectory}/.git/info/exclude`;
+    const excludePattern = ".ralph-worktrees";
+
+    try {
+      // Read the current exclude file
+      const content = await this.executor.readFile(excludePath);
+      
+      if (content === null) {
+        throw new Error("File not found");
+      }
+
+      // Check if already excluded
+      const lines = content.split("\n");
+      const alreadyExcluded = lines.some(
+        (line) => line.trim() === excludePattern || line.trim() === `${excludePattern}/`
+      );
+
+      if (alreadyExcluded) {
+        log.trace(`[GitService] .ralph-worktrees already in .git/info/exclude`);
+        return;
+      }
+
+      // Append the exclude pattern
+      const newContent = content.endsWith("\n")
+        ? `${content}${excludePattern}\n`
+        : `${content}\n${excludePattern}\n`;
+
+      // Write back via a shell command (using executor for remote compat)
+      await this.executor.exec("sh", ["-c", `cat > "${excludePath}" << 'EXCLUDE_EOF'\n${newContent}EXCLUDE_EOF`]);
+      log.info(`[GitService] Added .ralph-worktrees to .git/info/exclude`);
+    } catch {
+      // If the exclude file doesn't exist, create it
+      log.trace(`[GitService] .git/info/exclude not found, creating it`);
+      // Ensure the info directory exists
+      await this.executor.exec("mkdir", ["-p", `${repoDirectory}/.git/info`]);
+      const content = `# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n${excludePattern}\n`;
+      await this.executor.exec("sh", ["-c", `cat > "${excludePath}" << 'EXCLUDE_EOF'\n${content}EXCLUDE_EOF`]);
+      log.info(`[GitService] Created .git/info/exclude with .ralph-worktrees entry`);
+    }
   }
 
   /**

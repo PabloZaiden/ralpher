@@ -19,7 +19,6 @@ import {
   deleteLoop as deleteLoopFile,
   listLoops,
   updateLoopState,
-  getActiveLoopByDirectory,
   resetStaleLoops,
 } from "../persistence/loops";
 import { insertReviewComment } from "../persistence/database";
@@ -111,31 +110,6 @@ export class LoopManager {
     this.emitter = options?.eventEmitter ?? loopEventEmitter;
   }
 
-  /**
-   * Validates that no other active loop exists for the given directory.
-   * Throws an error with code "ACTIVE_LOOP_EXISTS" if a conflicting loop is found.
-   * 
-   * @param directory - The directory to check
-   * @param excludeLoopId - The current loop's ID to exclude from the check
-   */
-  private async validateNoActiveLoopForDirectory(directory: string, excludeLoopId: string): Promise<void> {
-    const existingActiveLoop = await getActiveLoopByDirectory(directory);
-    if (existingActiveLoop && existingActiveLoop.config.id !== excludeLoopId) {
-      const error = new Error(
-        `Another loop is already active for this directory: "${existingActiveLoop.config.name}". ` +
-        `Please stop or complete the existing loop before starting a new one.`
-      ) as Error & {
-        code: string;
-        conflictingLoop: { id: string; name: string };
-      };
-      error.code = "ACTIVE_LOOP_EXISTS";
-      error.conflictingLoop = {
-        id: existingActiveLoop.config.id,
-        name: existingActiveLoop.config.name,
-      };
-      throw error;
-    }
-  }
 
   /**
    * Create a new loop.
@@ -289,31 +263,13 @@ export class LoopManager {
       throw new Error("Loop plan mode is already running");
     }
 
-    // Check if another active loop exists for the same directory
-    await this.validateNoActiveLoopForDirectory(loop.config.directory, loopId);
+    // No directory conflict check needed — each loop operates in its own worktree
 
     // Get the appropriate command executor
     const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
     const git = GitService.withExecutor(executor);
 
-    // Check for uncommitted changes
-    const hasChanges = await git.hasUncommittedChanges(loop.config.directory);
-    if (hasChanges) {
-      const changedFiles = await git.getChangedFiles(loop.config.directory);
-      
-      // In plan mode, always allow uncommitted changes in .planning/ only
-      const onlyPlanningChanges = changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
-      
-      if (!onlyPlanningChanges) {
-        const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
-          code: string;
-          changedFiles: string[];
-        };
-        error.code = "UNCOMMITTED_CHANGES";
-        error.changedFiles = changedFiles;
-        throw error;
-      }
-    }
+    // No uncommitted-changes check needed — worktrees are isolated from the main checkout
 
     // Clear .planning folder BEFORE starting session (if requested)
     if (loop.config.clearPlanningFolder && !loop.state.planMode?.planningFolderCleared) {
@@ -745,8 +701,7 @@ Follow the standard loop execution flow:
       throw new Error("Loop is already running");
     }
 
-    // Check if another active loop exists for the same directory
-    await this.validateNoActiveLoopForDirectory(loop.config.directory, loopId);
+    // No directory conflict check needed — each loop operates in its own worktree
 
     // Get the appropriate command executor for the current mode
     // (local for spawn mode, remote for connect mode)
@@ -754,28 +709,7 @@ Follow the standard loop execution flow:
     const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
     const git = GitService.withExecutor(executor);
 
-    // Check for uncommitted changes - fail immediately if found
-    const hasChanges = await git.hasUncommittedChanges(loop.config.directory);
-
-    if (hasChanges) {
-      const changedFiles = await git.getChangedFiles(loop.config.directory);
-      
-      // If the loop has plan mode and folder was already cleared, or if clearPlanningFolder is enabled,
-      // allow uncommitted changes in .planning/ only (since we're about to clear it or already cleared it)
-      const shouldAllowPlanningChanges = 
-        (loop.state.planMode?.planningFolderCleared || loop.config.clearPlanningFolder) &&
-        changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
-      
-      if (!shouldAllowPlanningChanges) {
-        const error = new Error("Directory has uncommitted changes. Please commit or stash your changes before starting a loop.") as Error & {
-          code: string;
-          changedFiles: string[];
-        };
-        error.code = "UNCOMMITTED_CHANGES";
-        error.changedFiles = changedFiles;
-        throw error;
-      }
-    }
+    // No uncommitted-changes check needed — worktrees are isolated from the main checkout
 
     // Get backend from global manager for this workspace
     const backend = backendManager.getBackend(loop.config.workspaceId);
@@ -1023,8 +957,8 @@ Follow the standard loop execution flow:
   }
 
   /**
-   * Discard a completed loop (delete git branch without merging).
-   * Resets the working directory to a clean state.
+   * Discard a completed loop (mark as deleted without merging).
+   * The worktree and branch are preserved until purgeLoop() is called.
    */
   async discardLoop(loopId: string): Promise<{ success: boolean; error?: string }> {
     // Use getLoop to check engine state first
@@ -1039,28 +973,9 @@ Follow the standard loop execution flow:
     }
 
     try {
-      // Get the appropriate command executor for the current mode
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
-      const git = GitService.withExecutor(executor);
-
-      // First, reset any uncommitted changes on the working branch
-      await git.resetHard(loop.config.directory, {
-        expectedBranch: loop.state.git.workingBranch,
-      });
-
-      // Checkout original branch
-      await git.checkoutBranch(
-        loop.config.directory,
-        loop.state.git.originalBranch
-      );
-
-      // Reset original branch to clean state too (in case of any issues)
-      await git.resetHard(loop.config.directory, {
-        expectedBranch: loop.state.git.originalBranch,
-      });
-
-      // Delete the working branch
-      await git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
+      // With worktrees, discard just marks the loop as deleted.
+      // The worktree and branch are preserved until purgeLoop() handles cleanup.
+      // No need to reset or checkout - the main working directory is not affected.
 
       // Update status to 'deleted' (final state)
       const updatedState = {
@@ -1088,7 +1003,8 @@ Follow the standard loop execution flow:
   /**
    * Purge a loop (permanently delete files).
    * Only allowed for loops in 'merged', 'pushed', or 'deleted' states.
-   * Cleans up review branches and marks as non-addressable before deletion.
+   * Cleans up worktree, working branch, review branches, and marks as non-addressable before deletion.
+   * This is the ONLY place worktrees are removed.
    */
   async purgeLoop(loopId: string): Promise<{ success: boolean; error?: string }> {
     const loop = await loadLoop(loopId);
@@ -1101,25 +1017,58 @@ Follow the standard loop execution flow:
       return { success: false, error: `Cannot purge loop in status: ${loop.state.status}. Only merged, pushed, or deleted loops can be purged.` };
     }
 
-    // Clean up review branches if review mode is active
-    if (loop.state.reviewMode?.addressable && loop.state.reviewMode.reviewBranches.length > 0) {
-      try {
-        const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
-        const git = GitService.withExecutor(executor);
-        
-        // Try to delete review branches (ignore errors - they might already be deleted)
+    try {
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+      const git = GitService.withExecutor(executor);
+
+      // Step 1: Remove the worktree (if it exists)
+      const worktreePath = loop.state.git?.worktreePath;
+      if (worktreePath) {
+        try {
+          const exists = await git.worktreeExists(loop.config.directory, worktreePath);
+          if (exists) {
+            await git.removeWorktree(loop.config.directory, worktreePath, { force: true });
+            log.debug(`[LoopManager] purgeLoop: Removed worktree for loop ${loopId}: ${worktreePath}`);
+          }
+        } catch (error) {
+          log.warn(`[LoopManager] purgeLoop: Failed to remove worktree: ${String(error)}`);
+          // Continue with purge even if worktree removal fails
+        }
+      }
+
+      // Step 2: Delete the working branch (now safe since worktree is removed)
+      if (loop.state.git?.workingBranch) {
+        try {
+          await git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
+          log.debug(`[LoopManager] purgeLoop: Deleted working branch for loop ${loopId}`);
+        } catch (error) {
+          log.debug(`[LoopManager] purgeLoop: Could not delete working branch: ${String(error)}`);
+        }
+      }
+
+      // Step 3: Clean up review branches if review mode was active
+      if (loop.state.reviewMode?.reviewBranches && loop.state.reviewMode.reviewBranches.length > 0) {
         for (const branchName of loop.state.reviewMode.reviewBranches) {
+          // Skip the working branch if it was already deleted above
+          if (branchName === loop.state.git?.workingBranch) continue;
           try {
             await git.deleteBranch(loop.config.directory, branchName);
-            log.debug(`Cleaned up review branch: ${branchName}`);
+            log.debug(`[LoopManager] purgeLoop: Cleaned up review branch: ${branchName}`);
           } catch (error) {
-            log.debug(`Could not delete branch ${branchName}: ${String(error)}`);
+            log.debug(`[LoopManager] purgeLoop: Could not delete branch ${branchName}: ${String(error)}`);
           }
         }
-      } catch (error) {
-        log.warn(`Failed to clean up review branches: ${String(error)}`);
-        // Continue with purge even if branch cleanup fails
       }
+
+      // Step 4: Prune stale worktree references
+      try {
+        await git.pruneWorktrees(loop.config.directory);
+      } catch (error) {
+        log.debug(`[LoopManager] purgeLoop: Worktree prune failed: ${String(error)}`);
+      }
+    } catch (error) {
+      log.warn(`[LoopManager] purgeLoop: Git cleanup failed: ${String(error)}`);
+      // Continue with purge even if git cleanup fails
     }
 
     // Mark as non-addressable before deletion
@@ -1139,9 +1088,8 @@ Follow the standard loop execution flow:
 
   /**
    * Mark a loop as merged (externally merged via PR).
-   * Switches back to the original branch, pulls latest changes, and deletes the working branch.
-   * Used when the loop's branch was merged externally (e.g., via GitHub PR) and the user
-   * wants to sync their local environment.
+   * With worktrees, no checkout/reset operations are needed on the main repo.
+   * The worktree and branch are preserved until purgeLoop() is called.
    * 
    * Only works for loops in final states: pushed, merged, completed, max_iterations, deleted.
    */
@@ -1174,37 +1122,9 @@ Follow the standard loop execution flow:
     }
 
     try {
-      // Get the appropriate command executor for the current mode
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
-      const git = GitService.withExecutor(executor);
-
-      // First, reset any uncommitted changes on the working branch
-      await git.resetHard(loop.config.directory, {
-        expectedBranch: gitState.workingBranch,
-      });
-
-      // Checkout original branch
-      await git.checkoutBranch(
-        loop.config.directory,
-        gitState.originalBranch
-      );
-
-      // Pull latest changes from remote (this handles failures gracefully)
-      const pullSucceeded = await git.pull(loop.config.directory, gitState.originalBranch);
-      if (pullSucceeded) {
-        log.info(`[LoopManager] markMerged: Pulled latest changes for loop ${loopId}`);
-      } else {
-        log.info(`[LoopManager] markMerged: Pull skipped or failed for loop ${loopId} (non-fatal)`);
-      }
-
-      // Delete the working branch
-      try {
-        await git.deleteBranch(loop.config.directory, gitState.workingBranch);
-        log.debug(`[LoopManager] markMerged: Deleted working branch for loop ${loopId}`);
-      } catch (error) {
-        // Log but don't fail - branch might already be deleted
-        log.warn(`[LoopManager] markMerged: Failed to delete branch: ${String(error)}`);
-      }
+      // With worktrees, markMerged just updates the loop status.
+      // No need to reset, checkout, or delete branches - the worktree isolates everything.
+      // Branch and worktree cleanup happens in purgeLoop().
 
       // Update status to 'deleted' (final cleanup state)
       // Also clear reviewMode.addressable so the loop cannot be addressed again
@@ -1483,13 +1403,6 @@ Follow the standard loop execution flow:
       return { success: false, error: `Loop cannot be jumpstarted from status: ${loop.state.status}` };
     }
 
-    // Check if another active loop exists for the same directory
-    try {
-      await this.validateNoActiveLoopForDirectory(loop.config.directory, loopId);
-    } catch (validationError) {
-      return { success: false, error: String(validationError) };
-    }
-
     // Set pending values in the state
     if (options.message !== undefined) {
       loop.state.pendingPrompt = options.message;
@@ -1571,6 +1484,7 @@ Follow the standard loop execution flow:
   /**
    * Jumpstart a loop on its existing working branch.
    * Used when the loop was NOT merged/accepted and should continue its previous work.
+   * With worktrees, no checkout is needed - the branch is already checked out in the worktree.
    * @param isPlanning - Whether this is a planning loop (affects log messages only)
    */
   private async jumpstartOnExistingBranch(loopId: string, loop: Loop, isPlanning = false): Promise<{ success: boolean; error?: string }> {
@@ -1580,34 +1494,15 @@ Follow the standard loop execution flow:
       const git = GitService.withExecutor(executor);
       const backend = backendManager.getBackend(loop.config.workspaceId);
 
-      // Check out the existing working branch with retry logic for lock file issues
       const workingBranch = loop.state.git!.workingBranch;
       const loopType = isPlanning ? "planning loop" : "loop";
       log.info(`Jumpstarting ${loopType} ${loopId} on existing branch: ${workingBranch}`);
-      
-      // Retry checkout up to 3 times to handle race conditions with in-flight git operations
-      const maxRetries = 3;
-      for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        // Clean up any stale git lock files from previously killed processes
-        // This can happen when a loop is forcefully stopped mid-git-operation
-        await GitService.cleanupStaleLockFiles(loop.config.directory, 1, 0);
-        
-        try {
-          await git.checkoutBranch(loop.config.directory, workingBranch);
-          break; // Success - exit retry loop
-        } catch (checkoutError) {
-          const errorStr = String(checkoutError);
-          if (errorStr.includes("index.lock") && attempt < maxRetries) {
-            log.warn(`[LoopManager] Checkout failed due to lock file, retrying (${attempt}/${maxRetries})...`);
-            await new Promise(resolve => setTimeout(resolve, 100 * attempt)); // Exponential backoff
-            continue;
-          }
-          throw checkoutError; // Not a lock issue or max retries exceeded
-        }
-      }
+
+      // With worktrees, the branch is already checked out in the worktree.
+      // No checkout or lock file cleanup needed - just create a new engine.
 
       // Create and start a new loop engine with skipGitSetup
-      // (branch is already checked out, no need to create a new one)
+      // (worktree already has the branch checked out, no need to create a new one)
       const engine = new LoopEngine({
         loop: { config: loop.config, state: loop.state },
         backend,
@@ -1616,7 +1511,7 @@ Follow the standard loop execution flow:
         onPersistState: async (state) => {
           await updateLoopState(loopId, state);
         },
-        skipGitSetup: true, // Don't create a new branch - continue on existing
+        skipGitSetup: true, // Don't create a new branch - continue on existing worktree
       });
       this.engines.set(loopId, engine);
 
@@ -1692,8 +1587,8 @@ Follow the standard loop execution flow:
           return { success: false, error: "No working branch found for pushed loop" };
         }
 
-        // Check out the existing working branch
-        await git.checkoutBranch(loop.config.directory, loop.state.git.workingBranch);
+        // With worktrees, the branch is already checked out in the worktree.
+        // No checkout needed.
 
         // Increment review cycles
         loop.state.reviewMode.reviewCycles += 1;
@@ -1751,7 +1646,7 @@ Follow the standard loop execution flow:
         };
 
       } else {
-        // MERGED LOOP: Create a new review branch
+        // MERGED LOOP: Create a new review branch with its own worktree
         if (!loop.state.git?.originalBranch) {
           return { success: false, error: "No original branch found for merged loop" };
         }
@@ -1763,12 +1658,25 @@ Follow the standard loop execution flow:
         const safeName = sanitizeBranchName(loop.config.name);
         const reviewBranchName = `${loop.config.git.branchPrefix}${safeName}-review-${loop.state.reviewMode.reviewCycles}`;
 
-        // Check out original branch and create new review branch
-        await git.checkoutBranch(loop.config.directory, loop.state.git.originalBranch);
-        await git.createBranch(loop.config.directory, reviewBranchName);
+        // Create a new worktree for the review branch (branched from original)
+        const worktreePath = `${loop.config.directory}/.ralph-worktrees/${loop.config.id}`;
+        
+        // Remove old worktree first if it exists (from previous iteration)
+        const oldWorktreeExists = await git.worktreeExists(loop.config.directory, worktreePath);
+        if (oldWorktreeExists) {
+          await git.removeWorktree(loop.config.directory, worktreePath, { force: true });
+        }
+        
+        await git.createWorktree(
+          loop.config.directory,
+          worktreePath,
+          reviewBranchName,
+          loop.state.git.originalBranch
+        );
 
         // Update git state
         loop.state.git.workingBranch = reviewBranchName;
+        loop.state.git.worktreePath = worktreePath;
         loop.state.reviewMode.reviewBranches.push(reviewBranchName);
 
         // Set status to idle so engine.start() can run (it will set to running)

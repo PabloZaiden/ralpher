@@ -19,7 +19,7 @@ import { loopManager } from "../core/loop-manager";
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
 import { setLastModel } from "../persistence/preferences";
-import { updateLoopState, getActiveLoopByDirectory } from "../persistence/loops";
+import { updateLoopState } from "../persistence/loops";
 import { getReviewComments } from "../persistence/database";
 import { getWorkspaceByDirectory } from "../persistence/workspaces";
 import { log } from "../core/logger";
@@ -118,10 +118,9 @@ export const loopsCrudRoutes = {
      * - planMode: Start in plan creation mode
      * - draft: Save as draft without starting
      * 
-     * Errors:
-     * - 400: Validation error or invalid JSON body
-     * - 409: Directory has uncommitted changes
-     * - 500: Loop created but failed to start
+      * Errors:
+      * - 400: Validation error or invalid JSON body
+      * - 500: Loop created but failed to start
      * 
      * @returns Created Loop object with 201 status
      */
@@ -165,56 +164,8 @@ export const loopsCrudRoutes = {
         return git;
       };
 
-      // Skip preflight check for drafts (drafts don't modify git)
-      if (!body.draft) {
-        // Preflight check: verify no uncommitted changes before creating the loop
-        // This prevents creating loops that can never be started
-        try {
-          const gitService = await getGitService();
-          const hasChanges = await gitService.hasUncommittedChanges(directory);
-
-          if (hasChanges) {
-            const changedFiles = await gitService.getChangedFiles(directory);
-            
-            // If planMode and clearPlanningFolder are enabled, allow uncommitted changes in .planning/ only
-            const onlyPlanningChanges = body.planMode && body.clearPlanningFolder &&
-              changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
-            
-            if (!onlyPlanningChanges) {
-              return Response.json(
-                {
-                  error: "uncommitted_changes",
-                  message: "Directory has uncommitted changes. Please commit or stash your changes before creating a loop.",
-                  changedFiles,
-                },
-                { status: 409 }
-              );
-            }
-          }
-        } catch (preflightError) {
-          return errorResponse("preflight_failed", `Failed to check for uncommitted changes: ${String(preflightError)}`, 500);
-        }
-
-        // Check if another active loop exists for this directory
-        try {
-          const existingActiveLoop = await getActiveLoopByDirectory(directory);
-          if (existingActiveLoop) {
-            return Response.json(
-              {
-                error: "active_loop_exists",
-                message: `Another loop is already active for this directory: "${existingActiveLoop.config.name}". Please stop or complete the existing loop before starting a new one.`,
-                conflictingLoop: {
-                  id: existingActiveLoop.config.id,
-                  name: existingActiveLoop.config.name,
-                },
-              },
-              { status: 409 }
-            );
-          }
-        } catch (checkError) {
-          return errorResponse("preflight_failed", `Failed to check for existing active loops: ${String(checkError)}`, 500);
-        }
-      }
+      // With worktrees, each loop operates in its own isolated directory.
+      // No need to check for uncommitted changes or active loops in the main repo.
 
       // Validate model is enabled if provided
       // All loops (including drafts) require a connected model to ensure valid configurations
@@ -305,7 +256,6 @@ export const loopsCrudRoutes = {
           }
         } else {
           // Always start the loop immediately after creation (normal mode)
-          // Since we pre-checked for uncommitted changes, this should succeed
           try {
             await loopManager.startLoop(loop.config.id);
             // Return the loop with updated state after starting
@@ -616,7 +566,6 @@ export const loopsControlRoutes = {
      * Errors:
      * - 400: Loop is not in draft status or invalid body
      * - 404: Loop not found
-     * - 409: Directory has uncommitted changes
      * 
      * @returns Updated Loop object
      */
@@ -639,53 +588,8 @@ export const loopsControlRoutes = {
         return errorResponse("not_draft", "Loop is not in draft status", 400);
       }
 
-      // Check if another active loop exists for this directory
-      try {
-        const existingActiveLoop = await getActiveLoopByDirectory(loop.config.directory);
-        if (existingActiveLoop) {
-          return Response.json(
-            {
-              error: "active_loop_exists",
-              message: `Another loop is already active for this directory: "${existingActiveLoop.config.name}". Please stop or complete the existing loop before starting a new one.`,
-              conflictingLoop: {
-                id: existingActiveLoop.config.id,
-                name: existingActiveLoop.config.name,
-              },
-            },
-            { status: 409 }
-          );
-        }
-      } catch (checkError) {
-        return errorResponse("preflight_failed", `Failed to check for existing active loops: ${String(checkError)}`, 500);
-      }
-
-      // Preflight check: verify no uncommitted changes before starting
-      try {
-        const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
-        const git = GitService.withExecutor(executor);
-        const hasChanges = await git.hasUncommittedChanges(loop.config.directory);
-
-        if (hasChanges) {
-          const changedFiles = await git.getChangedFiles(loop.config.directory);
-          
-          // If planMode and clearPlanningFolder are enabled, allow uncommitted changes in .planning/ only
-          const onlyPlanningChanges = body.planMode && loop.config.clearPlanningFolder &&
-            changedFiles.every((file) => file.startsWith(".planning/") || file === ".planning");
-          
-          if (!onlyPlanningChanges) {
-            return Response.json(
-              {
-                error: "uncommitted_changes",
-                message: "Directory has uncommitted changes. Please commit or stash your changes before starting a loop.",
-                changedFiles,
-              },
-              { status: 409 }
-            );
-          }
-        }
-      } catch (preflightError) {
-        return errorResponse("preflight_failed", `Failed to check for uncommitted changes: ${String(preflightError)}`, 500);
-      }
+      // With worktrees, each loop operates in its own isolated directory.
+      // No need to check for active loops or uncommitted changes.
 
       // Transition draft to appropriate status before starting
       // This is necessary because engine.start() only accepts idle/stopped/planning status
@@ -1171,11 +1075,13 @@ export const loopsDataRoutes = {
 
       try {
         // Get mode-appropriate git service
-        const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+        // Use worktree path if available (loop runs in its own worktree)
+        const workDir = loop.state.git.worktreePath ?? loop.config.directory;
+        const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workDir);
         const git = GitService.withExecutor(executor);
 
         const diffs = await git.getDiffWithContent(
-          loop.config.directory,
+          workDir,
           loop.state.git.originalBranch
         );
         return Response.json(diffs);
@@ -1201,8 +1107,10 @@ export const loopsDataRoutes = {
       }
 
       // Get mode-appropriate command executor
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
-      const planPath = `${loop.config.directory}/.planning/plan.md`;
+      // Use worktree path if available (loop runs in its own worktree)
+      const workDir = loop.state.git?.worktreePath ?? loop.config.directory;
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workDir);
+      const planPath = `${workDir}/.planning/plan.md`;
 
       const response: FileContentResponse = {
         content: "",
@@ -1235,8 +1143,10 @@ export const loopsDataRoutes = {
       }
 
       // Get mode-appropriate command executor
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
-      const statusPath = `${loop.config.directory}/.planning/status.md`;
+      // Use worktree path if available (loop runs in its own worktree)
+      const workDir = loop.state.git?.worktreePath ?? loop.config.directory;
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workDir);
+      const statusPath = `${workDir}/.planning/status.md`;
 
       const response: FileContentResponse = {
         content: "",

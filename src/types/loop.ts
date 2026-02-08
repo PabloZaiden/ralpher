@@ -282,6 +282,8 @@ export interface GitState {
   originalBranch: string;
   /** The branch created for this loop's work */
   workingBranch: string;
+  /** Absolute path to the git worktree directory for this loop */
+  worktreePath?: string;
   /** Commits made during loop execution */
   commits: GitCommit[];
 }

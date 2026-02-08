@@ -456,6 +456,25 @@ export const migrations: Migration[] = [
       }
     },
   },
+
+  // Migration 14: Add git_worktree_path column for per-loop git worktrees
+  {
+    version: 14,
+    name: "add_git_worktree_path",
+    up: (db) => {
+      if (!tableExists(db, "loops")) {
+        log.debug("loops table does not exist, skipping migration 14");
+        return;
+      }
+
+      const columns = getTableColumns(db, "loops");
+
+      if (!columns.includes("git_worktree_path")) {
+        db.run("ALTER TABLE loops ADD COLUMN git_worktree_path TEXT");
+        log.info("Added git_worktree_path column to loops table");
+      }
+    },
+  },
 ];
 
 /**
