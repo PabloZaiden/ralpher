@@ -425,9 +425,12 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   const unassignedLoops = loops.filter((loop) => !loop.config.workspaceId);
   const unassignedStatusGroups = groupLoopsByStatus(unassignedLoops);
 
+  // Status section key type for compile-time safety
+  type StatusSectionKey = keyof ReturnType<typeof groupLoopsByStatus>;
+
   // Section configuration: defines order, labels, and default collapsed state
   const sectionConfig: Array<{
-    key: keyof ReturnType<typeof groupLoopsByStatus>;
+    key: StatusSectionKey;
     label: string;
     defaultCollapsed: boolean;
   }> = [
@@ -439,37 +442,48 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     { key: "archived", label: "Archived", defaultCollapsed: true },
   ];
 
-  // Helper to get LoopCard action props based on section type
-  function getLoopCardActions(sectionKey: string, loopId: string) {
-    const actions: Record<string, () => void> = {
+  // Explicit action props type for LoopCard (excludes 'loop' which is always provided separately)
+  interface LoopCardActions {
+    onClick?: () => void;
+    onAccept?: () => void;
+    onDelete?: () => void;
+    onPurge?: () => void;
+    onAddressComments?: () => void;
+    onRename?: () => void;
+  }
+
+  // Helper to get LoopCard action props based on section type.
+  // Returns a typed object matching LoopCardProps action callbacks.
+  function getLoopCardActions(sectionKey: StatusSectionKey, loopId: string): LoopCardActions {
+    const actions: LoopCardActions = {
       onRename: () => setRenameModal({ open: true, loopId }),
     };
 
     // onClick: drafts use edit, everything else uses select
     if (sectionKey === "draft") {
-      actions["onClick"] = () => handleEditDraft(loopId);
+      actions.onClick = () => handleEditDraft(loopId);
     } else {
-      actions["onClick"] = () => onSelectLoop?.(loopId);
+      actions.onClick = () => onSelectLoop?.(loopId);
     }
 
     // onAccept: completed and other sections
     if (sectionKey === "completed" || sectionKey === "other") {
-      actions["onAccept"] = () => setAcceptModal({ open: true, loopId });
+      actions.onAccept = () => setAcceptModal({ open: true, loopId });
     }
 
     // onDelete: draft, active, completed, and other sections
     if (sectionKey === "draft" || sectionKey === "active" || sectionKey === "completed" || sectionKey === "other") {
-      actions["onDelete"] = () => setDeleteModal({ open: true, loopId });
+      actions.onDelete = () => setDeleteModal({ open: true, loopId });
     }
 
     // onPurge: awaitingFeedback and archived sections
     if (sectionKey === "awaitingFeedback" || sectionKey === "archived") {
-      actions["onPurge"] = () => setPurgeModal({ open: true, loopId });
+      actions.onPurge = () => setPurgeModal({ open: true, loopId });
     }
 
     // onAddressComments: awaitingFeedback section only
     if (sectionKey === "awaitingFeedback") {
-      actions["onAddressComments"] = () => setAddressCommentsModal({ open: true, loopId });
+      actions.onAddressComments = () => setAddressCommentsModal({ open: true, loopId });
     }
 
     return actions;
@@ -490,6 +504,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           title={label}
           count={sectionLoops.length}
           defaultCollapsed={defaultCollapsed}
+          idPrefix={`${keyPrefix}-${key}`}
         >
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
             {sectionLoops.map((loop) => (
