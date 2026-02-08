@@ -23,6 +23,7 @@ describe("TODO Display User Scenarios", () => {
     beforeAll(async () => {
       ctx = await setupTestServer({
         mockResponses: [
+          "todo-test-1",  // Name generation for test 1
           "Working on iteration 1...",
           "Working on iteration 2...",
           "Done! <promise>COMPLETE</promise>",
@@ -90,6 +91,7 @@ describe("TODO Display User Scenarios", () => {
     test("handles TODO updates with different statuses", async () => {
       // Reset mock backend
       ctx.mockBackend.reset([
+        "todo-test-2",  // Name generation (unique to avoid branch collision)
         "Working on iteration 1...",
         "Done! <promise>COMPLETE</promise>",
       ]);
@@ -151,6 +153,7 @@ describe("TODO Display User Scenarios", () => {
     test("handles empty TODO list", async () => {
       // Reset mock backend
       ctx.mockBackend.reset([
+        "todo-test-3",  // Name generation (unique to avoid branch collision)
         "Working on iteration 1...",
         "Done! <promise>COMPLETE</promise>",
       ]);
@@ -185,6 +188,7 @@ describe("TODO Display User Scenarios", () => {
     test("handles multiple TODO updates during execution", async () => {
       // Reset mock backend
       ctx.mockBackend.reset([
+        "todo-test-4",  // Name generation (unique to avoid branch collision)
         "Working on iteration 1...",
         "Working on iteration 2...",
         "Done! <promise>COMPLETE</promise>",

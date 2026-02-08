@@ -63,8 +63,8 @@ describe("Review Cycle User Scenarios", () => {
       expect(pushedLoop.state.reviewMode?.completionAction).toBe("push");
       expect(pushedLoop.state.reviewMode?.reviewCycles).toBe(0);
 
-      // Verify still on same branch
-      expect(await getCurrentBranch(ctx.workDir)).toBe(workingBranch);
+      // With worktrees, main checkout stays on original branch — verify branch exists in git
+      expect(await branchExists(ctx.workDir, workingBranch)).toBe(true);
 
       // Address reviewer comments
       const addressResponse = await fetch(`${ctx.baseUrl}/api/loops/${loop.config.id}/address-comments`, {
@@ -84,7 +84,7 @@ describe("Review Cycle User Scenarios", () => {
       expect(addressedLoop.state.reviewMode?.reviewCycles).toBe(1);
 
       // Verify still on same branch (pushed loops don't create new branches)
-      expect(await getCurrentBranch(ctx.workDir)).toBe(workingBranch);
+      expect(await branchExists(ctx.workDir, workingBranch)).toBe(true);
 
       // Can push again after addressing comments
       const { status: push2Status, body: push2Body } = await pushLoopViaAPI(ctx.baseUrl, loop.config.id);
@@ -180,8 +180,8 @@ describe("Review Cycle User Scenarios", () => {
       expect(history.history.addressable).toBe(true);
       expect(history.history.completionAction).toBe("push");
 
-      // All cycles should be on same branch
-      expect(await getCurrentBranch(ctx.workDir)).toBe(workingBranch);
+      // All cycles should be on same branch — verify the branch still exists
+      expect(await branchExists(ctx.workDir, workingBranch)).toBe(true);
     });
   });
 
@@ -467,7 +467,17 @@ describe("Review Cycle User Scenarios", () => {
 
     beforeAll(async () => {
       ctx = await setupTestServer({
-        mockResponses: ["Done! <promise>COMPLETE</promise>"],
+        mockResponses: [
+          // Test 1: "cannot address comments on non-addressable loop"
+          "edge-case-test-1",  // name generation
+          "Done! <promise>COMPLETE</promise>",
+          // Test 2: "cannot address comments with empty comment string"
+          "edge-case-test-2",  // name generation
+          "Done! <promise>COMPLETE</promise>",
+          // Test 3: "review history returns correct info"
+          "edge-case-test-3",  // name generation
+          "Done! <promise>COMPLETE</promise>",
+        ],
         withPlanningDir: true,
         withRemote: true,
       });
