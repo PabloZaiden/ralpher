@@ -9,6 +9,7 @@ import { join } from "path";
 import { randomUUID } from "crypto";
 import type { Workspace } from "../../src/types/workspace";
 import { getDefaultServerSettings } from "../../src/types/settings";
+import { DEFAULT_LOOP_CONFIG } from "../../src/types/loop";
 
 // We need to set the env var before importing the module
 let testDataDir: string;
@@ -298,7 +299,7 @@ describe("Workspace Persistence", () => {
             git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
             maxIterations: Infinity,
             maxConsecutiveErrors: 10,
-            activityTimeoutSeconds: 180,
+            activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
             clearPlanningFolder: false,
             planMode: false,
             workspaceId: workspace.id,
@@ -348,7 +349,7 @@ describe("Workspace Persistence", () => {
           git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
           maxIterations: Infinity,
           maxConsecutiveErrors: 10,
-          activityTimeoutSeconds: 180,
+          activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
           clearPlanningFolder: false,
           planMode: false,
           workspaceId: workspace.id,

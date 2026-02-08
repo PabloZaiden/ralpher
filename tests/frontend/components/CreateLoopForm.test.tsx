@@ -415,12 +415,12 @@ describe("CreateLoopForm", () => {
       expect((getByLabelText("Max Consecutive Errors") as HTMLInputElement).value).toBe("10");
     });
 
-    test("activity timeout defaults to 180", async () => {
+    test("activity timeout defaults to 900", async () => {
       const { getByText, getByLabelText, user } = renderWithUser(
         <CreateLoopForm {...defaultProps()} />
       );
       await user.click(getByText("Show advanced options"));
-      expect((getByLabelText("Activity Timeout (seconds)") as HTMLInputElement).value).toBe("180");
+      expect((getByLabelText("Activity Timeout (seconds)") as HTMLInputElement).value).toBe("900");
     });
   });
 

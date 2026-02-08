@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
 import type { CreateLoopRequest, ModelInfo, BranchInfo } from "../types";
 import type { WorkspaceWithLoopCount } from "../types/workspace";
+import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import { Button } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
 import { createLogger } from "../lib/logger";
@@ -132,7 +133,7 @@ export function CreateLoopForm({
   const [prompt, setPrompt] = useState(initialLoopData?.prompt ?? "");
   const [maxIterations, setMaxIterations] = useState<string>(initialLoopData?.maxIterations?.toString() ?? "");
   const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>(initialLoopData?.maxConsecutiveErrors?.toString() ?? "10");
-  const [activityTimeoutSeconds, setActivityTimeoutSeconds] = useState<string>(initialLoopData?.activityTimeoutSeconds?.toString() ?? "180");
+  const [activityTimeoutSeconds, setActivityTimeoutSeconds] = useState<string>(initialLoopData?.activityTimeoutSeconds?.toString() ?? String(DEFAULT_LOOP_CONFIG.activityTimeoutSeconds));
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>("");
@@ -822,11 +823,11 @@ export function CreateLoopForm({
               value={activityTimeoutSeconds}
               onChange={(e) => setActivityTimeoutSeconds(e.target.value)}
               min="60"
-              placeholder="180"
+              placeholder={String(DEFAULT_LOOP_CONFIG.activityTimeoutSeconds)}
               className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Time without AI activity before treating as error and retrying. Minimum: 60 seconds. (default: 180)
+              Time without AI activity before treating as error and retrying. Minimum: 60 seconds. (default: {DEFAULT_LOOP_CONFIG.activityTimeoutSeconds})
             </p>
           </div>
 

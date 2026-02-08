@@ -50,7 +50,7 @@ export interface CreateLoopOptions {
   maxIterations?: number;
   /** Maximum consecutive identical errors before failsafe exit (default: 10) */
   maxConsecutiveErrors?: number;
-  /** Activity timeout in seconds - time without events before treating as error (default: 180 = 3 minutes) */
+  /** Activity timeout in seconds - time without events before treating as error (default: 900 = 15 minutes) */
   activityTimeoutSeconds?: number;
   /** Custom stop pattern (default: "<promise>COMPLETE</promise>$") */
   stopPattern?: string;

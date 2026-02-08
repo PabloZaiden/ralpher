@@ -110,7 +110,7 @@ export const loopsCrudRoutes = {
      * - model: { providerID, modelID } for AI model selection
      * - maxIterations: Maximum iterations (unlimited if not set)
      * - maxConsecutiveErrors: Max identical errors before failsafe (default: 10)
-     * - activityTimeoutSeconds: Seconds without events before error (default: 180, min: 60)
+     * - activityTimeoutSeconds: Seconds without events before error (default: 900, min: 60)
      * - stopPattern: Regex for completion detection
      * - git: { branchPrefix, commitPrefix } for git integration
      * - baseBranch: Base branch to create loop from

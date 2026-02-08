@@ -13,6 +13,7 @@ import {
 } from "../../src/core/loop-engine";
 import { SimpleEventEmitter } from "../../src/core/event-emitter";
 import type { Loop, LoopConfig, LoopState } from "../../src/types/loop";
+import { DEFAULT_LOOP_CONFIG } from "../../src/types/loop";
 import type { LoopEvent } from "../../src/types/events";
 import type {
   AgentSession,
@@ -136,7 +137,7 @@ describe("LoopEngine Pending Model", () => {
       },
       maxIterations: Infinity,
       maxConsecutiveErrors: 10,
-      activityTimeoutSeconds: 180,
+      activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
       clearPlanningFolder: false,
       planMode: false,
       ...overrides,
