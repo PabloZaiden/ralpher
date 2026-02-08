@@ -1568,7 +1568,9 @@ export class LoopEngine {
 ${feedback}
 ---
 
-Please update the plan in \`./.planning/plan.md\` based on this feedback.
+**FIRST**: Immediately add this feedback as a pending item in \`./.planning/status.md\` so it is tracked and preserved even if the conversation context is compacted.
+
+Then, update the plan in \`./.planning/plan.md\` based on this feedback.
 
 When the updated plan is ready, end your response with:
 
@@ -1603,7 +1605,7 @@ When the updated plan is ready, end your response with:
 
     // Build the prompt with original goal always present, and user message as an addition
     const userMessageSection = userMessage
-      ? `\n- **User Message**: The user has added the following message. This should be your primary focus for this iteration. Address it while keeping the original goal in mind:\n\n${userMessage}\n`
+      ? `\n- **User Message**: The user has added the following message. This should be your primary focus for this iteration. Address it while keeping the original goal in mind. **Before starting work on this message, immediately add it as a pending task in \`./.planning/status.md\`** so it is tracked and preserved even if the conversation context is compacted:\n\n${userMessage}\n`
       : "";
 
     const text = `- Original Goal: ${this.config.prompt}
@@ -1619,6 +1621,13 @@ ${userMessageSection}
 - Add tasks to the plan to achieve the goal.
 
 - Never ask for input from the user or any questions. This will always run unattended
+
+- **IMPORTANT — Pre-compaction persistence**: Before ending your response, you MUST update \`./.planning/status.md\` with:
+  - The task you are currently working on and its current state
+  - Updated status of all tasks in the plan
+  - Any new learnings, discoveries, or important context gathered during this iteration
+  - What the next steps should be when work resumes
+  This ensures that your progress is preserved even if the conversation context is compacted or summarized between iterations. The status file is your persistent memory — treat it as the source of truth for what has been done and what remains.
 
 - When you think you're done, check the plan and status files to ensure all tasks are actually marked as completed.
 

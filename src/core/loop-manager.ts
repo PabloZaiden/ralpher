@@ -529,7 +529,7 @@ export class LoopManager {
 Follow the standard loop execution flow:
 - Read AGENTS.md and the plan in .planning/plan.md
 - Pick up the most important task to continue with
-- Update .planning/status.md with your progress
+- **IMPORTANT — Pre-compaction persistence**: Before ending your response, you MUST update .planning/status.md with the current task and its state, updated status of all tasks, any new learnings or discoveries, and what the next steps should be. This ensures progress is preserved even if the conversation context is compacted or summarized between iterations.
 - If you complete all tasks in the plan, end your response with:
 
 <promise>COMPLETE</promise>`;
@@ -1840,8 +1840,9 @@ ${comments}
 
 Instructions:
 - Read AGENTS.md and .planning/status.md to understand what was previously done
+- **FIRST**: Immediately add each reviewer comment as a pending task in .planning/status.md before starting to address any of them. This ensures the feedback is tracked and preserved even if the conversation context is compacted.
 - Make targeted changes to address each reviewer comment
-- Update .planning/status.md with your progress addressing the feedback
+- Update .planning/status.md with your progress as you address each comment
 - Test your changes to ensure they work correctly
 - When all comments are fully addressed, end your response with:
 
