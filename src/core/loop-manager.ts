@@ -485,7 +485,8 @@ export class LoopManager {
 Follow the standard loop execution flow:
 - Read AGENTS.md and the plan in .planning/plan.md
 - Pick up the most important task to continue with
-- **IMPORTANT — Pre-compaction persistence**: Before ending your response, you MUST update .planning/status.md with the current task and its state, updated status of all tasks, any new learnings or discoveries, and what the next steps should be. This ensures progress is preserved even if the conversation context is compacted or summarized between iterations.
+- **IMPORTANT — Incremental progress tracking**: After completing each individual task, immediately update .planning/status.md to mark it as completed and note any relevant findings. Do not wait until the end — update after every task so progress is preserved if the iteration is interrupted.
+- **IMPORTANT — Pre-compaction persistence**: Before ending your response, you MUST also update .planning/status.md with the current task and its state, updated status of all tasks, any new learnings or discoveries, and what the next steps should be. This ensures progress is preserved even if the conversation context is compacted or summarized between iterations.
 - If you complete all tasks in the plan, end your response with:
 
 <promise>COMPLETE</promise>`;
@@ -1750,7 +1751,7 @@ Instructions:
 - Read AGENTS.md and .planning/status.md to understand what was previously done
 - **FIRST**: Immediately add each reviewer comment as a pending task in .planning/status.md before starting to address any of them. This ensures the feedback is tracked and preserved even if the conversation context is compacted.
 - Make targeted changes to address each reviewer comment
-- Update .planning/status.md with your progress as you address each comment
+- **IMPORTANT — Incremental progress tracking**: After addressing each individual reviewer comment, immediately update .planning/status.md to mark it as resolved and note what was changed. Do not batch updates — persist progress after each comment so it is preserved if the iteration is interrupted.
 - Test your changes to ensure they work correctly
 - When all comments are fully addressed, end your response with:
 

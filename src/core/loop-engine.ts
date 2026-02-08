@@ -1618,7 +1618,9 @@ ${userMessageSection}
 
 - Never ask for input from the user or any questions. This will always run unattended
 
-- **IMPORTANT — Pre-compaction persistence**: Before ending your response, you MUST update \`./.planning/status.md\` with:
+- **IMPORTANT — Incremental progress tracking**: After completing each individual task, immediately update \`./.planning/status.md\` to mark the task as completed and note any relevant findings or context. Do NOT wait until the end of the iteration to update status — update it after every task so that progress is preserved even if the iteration is interrupted or the conversation context is compacted mid-work.
+
+- **IMPORTANT — Pre-compaction persistence**: Before ending your response, you MUST also update \`./.planning/status.md\` with:
   - The task you are currently working on and its current state
   - Updated status of all tasks in the plan
   - Any new learnings, discoveries, or important context gathered during this iteration
