@@ -111,7 +111,7 @@ describe("Branch Safety - Worktree Isolation", () => {
       });
       const loop = body as Loop;
 
-      const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
 
       // Main checkout stays on original branch (worktree isolation)
       expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);

@@ -408,8 +408,7 @@ describe("Plan + Loop User Scenarios", () => {
         await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
 
         // Wait for completion
-        const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
-        const workingBranch = completedLoop.state.git!.workingBranch;
+        await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
 
         // Discard the loop
         const { status, body: discardBody } = await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
@@ -654,8 +653,7 @@ describe("Plan + Loop User Scenarios", () => {
         await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
 
         // Wait for completion
-        const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
-        const workingBranch = completedLoop.state.git!.workingBranch;
+        await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
 
         // Discard
         const { status } = await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
