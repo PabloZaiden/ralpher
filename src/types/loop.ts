@@ -340,7 +340,7 @@ export const DEFAULT_LOOP_CONFIG = {
   stopPattern: "<promise>COMPLETE</promise>$",
   maxIterations: Infinity,
   maxConsecutiveErrors: 10,
-  activityTimeoutSeconds: 180, // 3 minutes
+  activityTimeoutSeconds: 900, // 15 minutes
   clearPlanningFolder: false,
   planMode: true,
   git: {

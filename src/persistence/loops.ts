@@ -4,6 +4,7 @@
  */
 
 import type { Loop, LoopConfig, LoopState } from "../types";
+import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import { getDatabase } from "./database";
 import { createLogger } from "../core/logger";
 
@@ -181,7 +182,7 @@ function rowToLoop(row: Record<string, unknown>): Loop {
     // Mandatory fields with defaults for backward compatibility with old data
     maxIterations: (row["max_iterations"] as number | null) ?? Infinity,
     maxConsecutiveErrors: (row["max_consecutive_errors"] as number | null) ?? 10,
-    activityTimeoutSeconds: (row["activity_timeout_seconds"] as number | null) ?? 180,
+    activityTimeoutSeconds: (row["activity_timeout_seconds"] as number | null) ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
     clearPlanningFolder: row["clear_planning_folder"] === 1,
     planMode: row["plan_mode"] === 1,
   };

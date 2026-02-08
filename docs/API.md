@@ -111,7 +111,7 @@ Loop names are **automatically generated** from the prompt using AI. The `name` 
 | `model.modelID` | string | No | Model ID (e.g., "claude-sonnet-4-20250514") |
 | `maxIterations` | number | No | Maximum iterations (unlimited if not set) |
 | `maxConsecutiveErrors` | number | No | Max errors before failsafe (default: 10) |
-| `activityTimeoutSeconds` | number | No | Seconds without events before treating as error (default: 180, min: 60) |
+| `activityTimeoutSeconds` | number | No | Seconds without events before treating as error (default: 900, min: 60) |
 | `stopPattern` | string | No | Completion regex (default: `<promise>COMPLETE</promise>$`) |
 | `git` | object | No | Git configuration |
 | `git.branchPrefix` | string | No | Branch prefix (default: "ralph/") |

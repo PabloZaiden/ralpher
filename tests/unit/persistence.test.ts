@@ -7,6 +7,7 @@ import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import type { Loop, LoopStatus } from "../../src/types/loop";
+import { DEFAULT_LOOP_CONFIG } from "../../src/types/loop";
 import { getDefaultServerSettings } from "../../src/types/settings";
 
 // We need to set the env var before importing the module
@@ -60,7 +61,7 @@ function createTestLoop(overrides: {
       git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
       maxIterations: Infinity,
       maxConsecutiveErrors: 10,
-      activityTimeoutSeconds: 180,
+      activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
       clearPlanningFolder: false,
       planMode: false,
     },
