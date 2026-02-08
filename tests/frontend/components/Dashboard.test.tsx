@@ -425,6 +425,12 @@ describe("purge loop modal", () => {
 
     const { getByText, user } = renderWithUser(<Dashboard />);
 
+    // Archived section is collapsed by default, expand it first
+    await waitFor(() => {
+      expect(getByText(/Archived\s*\(/)).toBeTruthy();
+    });
+    await user.click(getByText(/Archived\s*\(/));
+
     await waitFor(() => {
       expect(getByText("Purge Me")).toBeTruthy();
     });
