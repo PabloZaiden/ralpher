@@ -5,7 +5,7 @@
 import { useState, useCallback, useEffect } from "react";
 import type { UncommittedChangesError, ModelInfo, HealthResponse, BranchInfo } from "../types";
 import { useLoops, useWorkspaces } from "../hooks";
-import { Button, Modal } from "./common";
+import { Button, Modal, CollapsibleSection } from "./common";
 import { LoopCard } from "./LoopCard";
 import { CreateLoopForm, type CreateLoopFormActionState } from "./CreateLoopForm";
 import { AppSettingsModal } from "./AppSettingsModal";
@@ -425,6 +425,101 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   const unassignedLoops = loops.filter((loop) => !loop.config.workspaceId);
   const unassignedStatusGroups = groupLoopsByStatus(unassignedLoops);
 
+  // Status section key type for compile-time safety
+  type StatusSectionKey = keyof ReturnType<typeof groupLoopsByStatus>;
+
+  // Section configuration: defines order, labels, and default collapsed state
+  const sectionConfig: Array<{
+    key: StatusSectionKey;
+    label: string;
+    defaultCollapsed: boolean;
+  }> = [
+    { key: "active", label: "Active", defaultCollapsed: false },
+    { key: "completed", label: "Completed", defaultCollapsed: false },
+    { key: "awaitingFeedback", label: "Awaiting Feedback", defaultCollapsed: false },
+    { key: "other", label: "Other", defaultCollapsed: false },
+    { key: "draft", label: "Drafts", defaultCollapsed: false },
+    { key: "archived", label: "Archived", defaultCollapsed: true },
+  ];
+
+  // Explicit action props type for LoopCard (excludes 'loop' which is always provided separately)
+  interface LoopCardActions {
+    onClick?: () => void;
+    onAccept?: () => void;
+    onDelete?: () => void;
+    onPurge?: () => void;
+    onAddressComments?: () => void;
+    onRename?: () => void;
+  }
+
+  // Helper to get LoopCard action props based on section type.
+  // Returns a typed object matching LoopCardProps action callbacks.
+  function getLoopCardActions(sectionKey: StatusSectionKey, loopId: string): LoopCardActions {
+    const actions: LoopCardActions = {
+      onRename: () => setRenameModal({ open: true, loopId }),
+    };
+
+    // onClick: drafts use edit, everything else uses select
+    if (sectionKey === "draft") {
+      actions.onClick = () => handleEditDraft(loopId);
+    } else {
+      actions.onClick = () => onSelectLoop?.(loopId);
+    }
+
+    // onAccept: completed and other sections
+    if (sectionKey === "completed" || sectionKey === "other") {
+      actions.onAccept = () => setAcceptModal({ open: true, loopId });
+    }
+
+    // onDelete: draft, active, completed, and other sections
+    if (sectionKey === "draft" || sectionKey === "active" || sectionKey === "completed" || sectionKey === "other") {
+      actions.onDelete = () => setDeleteModal({ open: true, loopId });
+    }
+
+    // onPurge: awaitingFeedback and archived sections
+    if (sectionKey === "awaitingFeedback" || sectionKey === "archived") {
+      actions.onPurge = () => setPurgeModal({ open: true, loopId });
+    }
+
+    // onAddressComments: awaitingFeedback section only
+    if (sectionKey === "awaitingFeedback") {
+      actions.onAddressComments = () => setAddressCommentsModal({ open: true, loopId });
+    }
+
+    return actions;
+  }
+
+  // Renders status sections for a given set of status groups
+  function renderStatusSections(
+    statusGroups: ReturnType<typeof groupLoopsByStatus>,
+    keyPrefix: string,
+  ) {
+    return sectionConfig.map(({ key, label, defaultCollapsed }) => {
+      const sectionLoops = statusGroups[key];
+      if (sectionLoops.length === 0) return null;
+
+      return (
+        <CollapsibleSection
+          key={`${keyPrefix}-${key}`}
+          title={label}
+          count={sectionLoops.length}
+          defaultCollapsed={defaultCollapsed}
+          idPrefix={`${keyPrefix}-${key}`}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+            {sectionLoops.map((loop) => (
+              <LoopCard
+                key={loop.config.id}
+                loop={loop}
+                {...getLoopCardActions(key, loop.config.id)}
+              />
+            ))}
+          </div>
+        </CollapsibleSection>
+      );
+    });
+  }
+
   return (
     <div className="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -568,128 +663,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
 
               {/* Status sections within workspace */}
               <div className="space-y-6 pl-2">
-                {/* Drafts */}
-                {statusGroups.draft.length > 0 && (
-                  <section>
-                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                      Drafts ({statusGroups.draft.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                      {statusGroups.draft.map((loop) => (
-                        <LoopCard
-                          key={loop.config.id}
-                          loop={loop}
-                          onClick={() => handleEditDraft(loop.config.id)}
-                          onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
-                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {/* Active */}
-                {statusGroups.active.length > 0 && (
-                  <section>
-                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                      Active ({statusGroups.active.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                      {statusGroups.active.map((loop) => (
-                        <LoopCard
-                          key={loop.config.id}
-                          loop={loop}
-                          onClick={() => onSelectLoop?.(loop.config.id)}
-                          onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
-                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {/* Completed */}
-                {statusGroups.completed.length > 0 && (
-                  <section>
-                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                      Completed ({statusGroups.completed.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                      {statusGroups.completed.map((loop) => (
-                        <LoopCard
-                          key={loop.config.id}
-                          loop={loop}
-                          onClick={() => onSelectLoop?.(loop.config.id)}
-                          onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
-                          onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
-                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {/* Awaiting Feedback */}
-                {statusGroups.awaitingFeedback.length > 0 && (
-                  <section>
-                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                      Awaiting Feedback ({statusGroups.awaitingFeedback.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                      {statusGroups.awaitingFeedback.map((loop) => (
-                        <LoopCard
-                          key={loop.config.id}
-                          loop={loop}
-                          onClick={() => onSelectLoop?.(loop.config.id)}
-                          onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
-                          onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
-                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {/* Other */}
-                {statusGroups.other.length > 0 && (
-                  <section>
-                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                      Other ({statusGroups.other.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                      {statusGroups.other.map((loop) => (
-                        <LoopCard
-                          key={loop.config.id}
-                          loop={loop}
-                          onClick={() => onSelectLoop?.(loop.config.id)}
-                          onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
-                          onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
-                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
-
-                {/* Archived */}
-                {statusGroups.archived.length > 0 && (
-                  <section>
-                    <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                      Archived ({statusGroups.archived.length})
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                      {statusGroups.archived.map((loop) => (
-                        <LoopCard
-                          key={loop.config.id}
-                          loop={loop}
-                          onClick={() => onSelectLoop?.(loop.config.id)}
-                          onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
-                          onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                )}
+                {renderStatusSections(statusGroups, `workspace-${workspace.id}`)}
               </div>
             </div>
           );
@@ -715,128 +689,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
 
             {/* Status sections within unassigned */}
             <div className="space-y-6 pl-2">
-              {/* Drafts */}
-              {unassignedStatusGroups.draft.length > 0 && (
-                <section>
-                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                    Drafts ({unassignedStatusGroups.draft.length})
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                    {unassignedStatusGroups.draft.map((loop) => (
-                      <LoopCard
-                        key={loop.config.id}
-                        loop={loop}
-                        onClick={() => handleEditDraft(loop.config.id)}
-                        onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
-                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Active */}
-              {unassignedStatusGroups.active.length > 0 && (
-                <section>
-                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                    Active ({unassignedStatusGroups.active.length})
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                    {unassignedStatusGroups.active.map((loop) => (
-                      <LoopCard
-                        key={loop.config.id}
-                        loop={loop}
-                        onClick={() => onSelectLoop?.(loop.config.id)}
-                        onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
-                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Completed */}
-              {unassignedStatusGroups.completed.length > 0 && (
-                <section>
-                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                    Completed ({unassignedStatusGroups.completed.length})
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                    {unassignedStatusGroups.completed.map((loop) => (
-                      <LoopCard
-                        key={loop.config.id}
-                        loop={loop}
-                        onClick={() => onSelectLoop?.(loop.config.id)}
-                        onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
-                        onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
-                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Awaiting Feedback */}
-              {unassignedStatusGroups.awaitingFeedback.length > 0 && (
-                <section>
-                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                    Awaiting Feedback ({unassignedStatusGroups.awaitingFeedback.length})
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                    {unassignedStatusGroups.awaitingFeedback.map((loop) => (
-                      <LoopCard
-                        key={loop.config.id}
-                        loop={loop}
-                        onClick={() => onSelectLoop?.(loop.config.id)}
-                        onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
-                        onAddressComments={() => setAddressCommentsModal({ open: true, loopId: loop.config.id })}
-                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Other */}
-              {unassignedStatusGroups.other.length > 0 && (
-                <section>
-                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                    Other ({unassignedStatusGroups.other.length})
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                    {unassignedStatusGroups.other.map((loop) => (
-                      <LoopCard
-                        key={loop.config.id}
-                        loop={loop}
-                        onClick={() => onSelectLoop?.(loop.config.id)}
-                        onAccept={() => setAcceptModal({ open: true, loopId: loop.config.id })}
-                        onDelete={() => setDeleteModal({ open: true, loopId: loop.config.id })}
-                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Archived */}
-              {unassignedStatusGroups.archived.length > 0 && (
-                <section>
-                  <h3 className="text-md font-semibold text-gray-700 dark:text-gray-300 mb-3">
-                    Archived ({unassignedStatusGroups.archived.length})
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-                    {unassignedStatusGroups.archived.map((loop) => (
-                      <LoopCard
-                        key={loop.config.id}
-                        loop={loop}
-                        onClick={() => onSelectLoop?.(loop.config.id)}
-                        onPurge={() => setPurgeModal({ open: true, loopId: loop.config.id })}
-                        onRename={() => setRenameModal({ open: true, loopId: loop.config.id })}
-                      />
-                    ))}
-                  </div>
-                </section>
-              )}
+              {renderStatusSections(unassignedStatusGroups, "unassigned")}
             </div>
           </div>
         )}
