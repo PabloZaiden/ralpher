@@ -633,9 +633,12 @@ describe("StopPatternDetector", () => {
     }, 10000);
 
     test("setupGitBranch preserves existing originalBranch", async () => {
+      // Get the actual default branch name (varies by environment: main vs master)
+      const defaultBranch = (await Bun.$`git branch --show-current`.cwd(testDir).text()).trim();
+      
       const loop = createTestLoop({ maxIterations: 1 });
       loop.state.git = {
-        originalBranch: "main",
+        originalBranch: defaultBranch,
         workingBranch: "ralph/existing",
         commits: [],
       };
@@ -651,7 +654,7 @@ describe("StopPatternDetector", () => {
       await engine.start();
 
       expect(engine.state.status).toBe("completed");
-      expect(engine.state.git?.originalBranch).toBe("main");
+      expect(engine.state.git?.originalBranch).toBe(defaultBranch);
     }, 10000);
 
   test("setPendingPrompt updates state", async () => {
@@ -1017,6 +1020,12 @@ describe("StopPatternDetector", () => {
   }, 10000);
 
   describe("clearPlanningFolder", () => {
+    // Helper to get the worktree path from engine state
+    function getWorktreePlanningDir(engine: LoopEngine): string {
+      const worktreePath = engine.state.git?.worktreePath;
+      return join(worktreePath ?? testDir, ".planning");
+    }
+
     test("clears .planning folder when clearPlanningFolder is true", async () => {
       // Create .planning folder with files
       const planningDir = join(testDir, ".planning");
@@ -1025,7 +1034,7 @@ describe("StopPatternDetector", () => {
       await writeFile(join(planningDir, "status.md"), "# Old Status\nPrevious status");
       await writeFile(join(planningDir, ".gitkeep"), "");
       
-      // Commit the .planning folder so there are no uncommitted changes
+      // Commit the .planning folder so the files are in the worktree
       await Bun.$`git add .`.cwd(testDir).quiet();
       await Bun.$`git commit -m "Add planning files"`.cwd(testDir).quiet();
 
@@ -1046,9 +1055,10 @@ describe("StopPatternDetector", () => {
 
       expect(engine.state.status).toBe("completed");
 
-      // Verify .planning folder was cleared (only .gitkeep should remain)
+      // Verify .planning folder was cleared in the worktree (only .gitkeep should remain)
       const { readdir } = await import("fs/promises");
-      const files = await readdir(planningDir);
+      const wtPlanningDir = getWorktreePlanningDir(engine);
+      const files = await readdir(wtPlanningDir);
       expect(files).toEqual([".gitkeep"]);
       
       // Check that log event was emitted for clearing
@@ -1065,7 +1075,7 @@ describe("StopPatternDetector", () => {
       await writeFile(join(planningDir, "plan.md"), "# Existing Plan");
       await writeFile(join(planningDir, "status.md"), "# Existing Status");
       
-      // Commit the .planning folder so there are no uncommitted changes
+      // Commit the .planning folder so the files are in the worktree
       await Bun.$`git add .`.cwd(testDir).quiet();
       await Bun.$`git commit -m "Add planning files"`.cwd(testDir).quiet();
 
@@ -1086,13 +1096,14 @@ describe("StopPatternDetector", () => {
 
       expect(engine.state.status).toBe("completed");
 
-      // Verify .planning folder still has all files
+      // Verify .planning folder still has all files in the worktree
       const { readdir, readFile } = await import("fs/promises");
-      const files = await readdir(planningDir);
+      const wtPlanningDir = getWorktreePlanningDir(engine);
+      const files = await readdir(wtPlanningDir);
       expect(files.sort()).toEqual(["plan.md", "status.md"]);
       
       // Verify content is preserved
-      const planContent = await readFile(join(planningDir, "plan.md"), "utf-8");
+      const planContent = await readFile(join(wtPlanningDir, "plan.md"), "utf-8");
       expect(planContent).toBe("# Existing Plan");
       
       // Check that no clear log event was emitted
@@ -1133,11 +1144,10 @@ describe("StopPatternDetector", () => {
     }, 10000);
 
     test("handles empty .planning folder gracefully", async () => {
-      // Create empty .planning folder
+      // Create .planning folder with only .gitkeep, commit, then remove .gitkeep and commit.
+      // Git doesn't track empty directories, so the worktree won't have the .planning dir at all.
       const planningDir = join(testDir, ".planning");
       await Bun.$`mkdir -p ${planningDir}`.quiet();
-      
-      // Commit the .planning folder so there are no uncommitted changes
       await writeFile(join(planningDir, ".gitkeep"), "");
       await Bun.$`git add .`.cwd(testDir).quiet();
       await Bun.$`git commit -m "Add empty planning folder"`.cwd(testDir).quiet();
@@ -1162,9 +1172,10 @@ describe("StopPatternDetector", () => {
 
       expect(engine.state.status).toBe("completed");
       
-      // Check that debug log was emitted about empty directory
+      // Git doesn't track empty directories, so the worktree won't have the .planning dir.
+      // clearPlanningFolder should report it as "does not exist" rather than "already empty".
       const debugLogs = emittedEvents.filter(
-        (e) => e.type === "loop.log" && e.message.includes("already empty")
+        (e) => e.type === "loop.log" && e.message.includes("does not exist")
       );
       expect(debugLogs.length).toBe(1);
     }, 10000);
@@ -1177,7 +1188,7 @@ describe("StopPatternDetector", () => {
       await writeFile(join(planningDir, "status.md"), "# Status to delete");
       await writeFile(join(planningDir, ".gitkeep"), "");
       
-      // Commit the .planning folder so there are no uncommitted changes
+      // Commit the .planning folder so the files are in the worktree
       await Bun.$`git add .`.cwd(testDir).quiet();
       await Bun.$`git commit -m "Add planning files with gitkeep"`.cwd(testDir).quiet();
 
@@ -1198,9 +1209,10 @@ describe("StopPatternDetector", () => {
 
       expect(engine.state.status).toBe("completed");
 
-      // Verify only .gitkeep remains
+      // Verify only .gitkeep remains in the worktree
       const { readdir } = await import("fs/promises");
-      const files = await readdir(planningDir);
+      const wtPlanningDir = getWorktreePlanningDir(engine);
+      const files = await readdir(wtPlanningDir);
       expect(files).toEqual([".gitkeep"]);
       
       // Check log shows correct count of deleted files
@@ -1219,7 +1231,7 @@ describe("StopPatternDetector", () => {
       await writeFile(join(subDir, "nested.md"), "# Nested file");
       await writeFile(join(planningDir, ".gitkeep"), "");
       
-      // Commit the .planning folder so there are no uncommitted changes
+      // Commit the .planning folder so the files are in the worktree
       await Bun.$`git add .`.cwd(testDir).quiet();
       await Bun.$`git commit -m "Add nested planning files"`.cwd(testDir).quiet();
 
@@ -1240,9 +1252,10 @@ describe("StopPatternDetector", () => {
 
       expect(engine.state.status).toBe("completed");
 
-      // Verify only .gitkeep remains (subdirectory should be deleted)
+      // Verify only .gitkeep remains in the worktree (subdirectory should be deleted)
       const { readdir } = await import("fs/promises");
-      const files = await readdir(planningDir);
+      const wtPlanningDir = getWorktreePlanningDir(engine);
+      const files = await readdir(wtPlanningDir);
       expect(files).toEqual([".gitkeep"]);
     }, 10000);
 
