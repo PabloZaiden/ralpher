@@ -1143,8 +1143,33 @@ export class GitService {
    * @param repoDirectory - The main git repository directory
    */
   async ensureWorktreeExcluded(repoDirectory: string): Promise<void> {
-    const excludePath = `${repoDirectory}/.git/info/exclude`;
     const excludePattern = ".ralph-worktrees";
+
+    // Resolve the correct exclude file path via git.
+    // This handles both regular repos (where .git is a directory) and worktree
+    // checkouts (where .git is a file containing a gitdir pointer).
+    // `git rev-parse --git-path info/exclude` returns the correct path in both cases.
+    let excludePath: string;
+    try {
+      const result = await this.runGitCommand(repoDirectory, ["rev-parse", "--git-path", "info/exclude"]);
+      if (result.success && result.stdout.trim()) {
+        const resolvedPath = result.stdout.trim();
+        // git rev-parse --git-path may return a relative path; resolve against repoDirectory
+        if (resolvedPath.startsWith("/")) {
+          excludePath = resolvedPath;
+        } else {
+          excludePath = `${repoDirectory}/${resolvedPath}`;
+        }
+      } else {
+        // Fallback if rev-parse fails (shouldn't happen in a valid git repo)
+        excludePath = `${repoDirectory}/.git/info/exclude`;
+      }
+    } catch {
+      excludePath = `${repoDirectory}/.git/info/exclude`;
+    }
+
+    // Derive the parent directory of the exclude file for mkdir -p
+    const excludeDir = excludePath.substring(0, excludePath.lastIndexOf("/"));
 
     try {
       // Read the current exclude file
@@ -1177,7 +1202,7 @@ export class GitService {
       // If the exclude file doesn't exist, create it
       log.trace(`[GitService] .git/info/exclude not found, creating it`);
       // Ensure the info directory exists
-      await this.executor.exec("mkdir", ["-p", `${repoDirectory}/.git/info`]);
+      await this.executor.exec("mkdir", ["-p", excludeDir]);
       const content = `# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n${excludePattern}\n`;
       await this.executor.exec("sh", ["-c", `cat > "${excludePath}" << 'EXCLUDE_EOF'\n${content}EXCLUDE_EOF`]);
       log.info(`[GitService] Created .git/info/exclude with .ralph-worktrees entry`);

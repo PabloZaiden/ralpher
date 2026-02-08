@@ -311,6 +311,28 @@ describe("GitService Worktree Operations", () => {
       const count = (content.match(/\.ralph-worktrees/g) || []).length;
       expect(count).toBe(1);
     });
+
+    test("works when called from a worktree directory (where .git is a file)", async () => {
+      // Create a worktree first
+      const worktreePath = join(testDir, ".ralph-worktrees", "wt-exclude-test");
+      await git.createWorktree(testDir, worktreePath, "ralph/wt-exclude-test");
+
+      // Clear the exclude file to reset state
+      const mainExcludePath = join(testDir, ".git", "info", "exclude");
+      await Bun.write(mainExcludePath, "# empty\n");
+
+      // Verify the worktree's .git is a file (gitdir pointer), not a directory
+      const dotGitContent = await readFile(join(worktreePath, ".git"), "utf-8");
+      expect(dotGitContent).toContain("gitdir:");
+
+      // Call ensureWorktreeExcluded with the worktree path (not the main repo)
+      await git.ensureWorktreeExcluded(worktreePath);
+
+      // The exclude entry should be written to the main repo's .git/info/exclude,
+      // not to a non-existent .git/info/exclude inside the worktree
+      const content = await readFile(mainExcludePath, "utf-8");
+      expect(content).toContain(".ralph-worktrees");
+    });
   });
 
   describe("worktree isolation", () => {
