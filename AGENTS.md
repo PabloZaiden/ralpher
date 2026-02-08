@@ -27,6 +27,14 @@ Ralpher is a full-stack Bun + React application for controlling and managing Ral
 
 For more project information, see the [README.md](README.md).
 
+## Authentication & Authorization
+
+Ralpher runs behind a reverse proxy that enforces authentication and authorization. The application itself does not implement authentication or authorization — all access control is handled at the infrastructure level before requests reach Ralpher. This means:
+
+- API endpoints do not require authentication tokens or session validation
+- Destructive endpoints (server kill, database reset) are protected by the reverse proxy
+- WebSocket connections are authenticated at the proxy level
+
 ## Remote Command Execution Architecture
 
 **CRITICAL: All operations on workspace repositories MUST be executed on the remote opencode server, NEVER locally on the Ralpher server.**
@@ -149,6 +157,14 @@ async POST(req) {
   }
 }
 ```
+
+**Exception for long-running processes:** Fire-and-forget is acceptable when starting a long-running process that:
+1. Runs for an extended duration (minutes to hours) where blocking the HTTP response is impractical
+2. Has comprehensive self-contained error handling (try/catch, state updates to "failed", error event emission)
+3. Reports progress and errors through alternative channels (event emitters, persistence callbacks, WebSocket events)
+4. Documents the pattern explicitly with inline comments explaining the design decision
+
+Example: `engine.start()` in `LoopManager.startLoop()` uses fire-and-forget because the loop engine runs a `while`-loop with multiple AI iterations that may take hours. The engine has its own `handleError()` method that updates loop state to "failed" and emits error events. Awaiting would block the API response indefinitely.
 
 ### React Components
 
