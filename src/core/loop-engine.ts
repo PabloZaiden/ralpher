@@ -204,6 +204,15 @@ export class LoopEngine {
   }
 
   /**
+   * Get the effective working directory for this loop.
+   * Returns the worktree path if available, otherwise falls back to config.directory.
+   * This is the directory where the AI session runs and where file operations happen.
+   */
+  get workingDirectory(): string {
+    return this.loop.state.git?.worktreePath ?? this.loop.config.directory;
+  }
+
+  /**
    * Set a pending prompt that will be used for the next iteration.
    * This overrides the config.prompt for one iteration only.
    */
@@ -519,11 +528,11 @@ export class LoopEngine {
    * If any tracked files were deleted, commits the changes.
    */
   private async clearPlanningFolder(): Promise<void> {
-    const planningDir = `${this.config.directory}/.planning`;
+    const planningDir = `${this.workingDirectory}/.planning`;
     
     try {
-      // Get command executor for the directory
-      const executor = await backendManager.getCommandExecutorAsync(this.config.workspaceId, this.config.directory);
+      // Get command executor for the worktree directory
+      const executor = await backendManager.getCommandExecutorAsync(this.config.workspaceId, this.workingDirectory);
       
       // Check if .planning directory exists
       const exists = await executor.directoryExists(planningDir);
@@ -552,7 +561,7 @@ export class LoopEngine {
       // Delete all files except .gitkeep using rm command
       const fileArgs = filesToDelete.map((file) => `${planningDir}/${file}`);
       const result = await executor.exec("rm", ["-rf", ...fileArgs], {
-        cwd: this.config.directory,
+        cwd: this.workingDirectory,
       });
       
       if (!result.success) {
@@ -566,12 +575,12 @@ export class LoopEngine {
       
       // Check if clearing caused any uncommitted changes (deleted tracked files)
       // If so, commit them so the loop can proceed cleanly
-      const hasChanges = await this.git.hasUncommittedChanges(this.config.directory);
+      const hasChanges = await this.git.hasUncommittedChanges(this.workingDirectory);
       if (hasChanges) {
         this.emitLog("info", "Committing cleared .planning folder...");
         try {
           const commitInfo = await this.git.commit(
-            this.config.directory,
+            this.workingDirectory,
             `${this.config.git.commitPrefix} Clear .planning folder for fresh start`,
             { expectedBranch: this.loop.state.git?.workingBranch }
           );
@@ -591,11 +600,11 @@ export class LoopEngine {
   }
 
   /**
-   * Set up git branch for the loop.
-   * Creates or checks out the working branch.
-   * @param allowPlanningFolderChanges - If true, allow uncommitted changes in .planning folder only
+   * Set up git branch for the loop using a git worktree.
+   * Creates a new worktree with a dedicated branch for the loop, isolated from the main checkout.
+   * @param allowPlanningFolderChanges - If true, allow uncommitted changes in .planning folder only (unused with worktrees, kept for API compatibility)
    */
-  private async setupGitBranch(allowPlanningFolderChanges = false): Promise<void> {
+  private async setupGitBranch(_allowPlanningFolderChanges = false): Promise<void> {
     const directory = this.config.directory;
     
     // Generate branch name using loop name and start timestamp
@@ -613,37 +622,9 @@ export class LoopEngine {
       throw new Error(`Directory is not a git repository: ${directory}`);
     }
 
-    // Check for uncommitted changes
-    this.emitLog("debug", "Checking for uncommitted changes");
-    const hasChanges = await this.git.hasUncommittedChanges(directory);
-    if (hasChanges) {
-      // If allowing .planning folder changes (plan mode acceptance), check if only .planning has changes
-      if (allowPlanningFolderChanges) {
-        const changedFiles = await this.git.getChangedFiles(directory);
-        // Also check for ".planning/" (with trailing slash) which is how git reports untracked directories
-        const onlyPlanningChanges = changedFiles.every(
-          (file) => file.startsWith(".planning/") || file === ".planning" || file === ".planning/"
-        );
-        if (!onlyPlanningChanges) {
-          throw new Error("Directory has uncommitted changes. Please commit or stash them first.");
-        }
-        // Allow .planning changes to proceed
-        this.emitLog("debug", "Allowing uncommitted changes in .planning folder for plan mode acceptance");
-      } else {
-        throw new Error("Directory has uncommitted changes. Please commit or stash them first.");
-      }
-    }
+    // No uncommitted-changes check needed — worktrees are isolated from the main checkout
 
-    // If a base branch was specified, checkout that branch first (unless it's a working branch)
-    if (this.config.baseBranch && !this.config.baseBranch.startsWith(this.config.git.branchPrefix)) {
-      const currentBranch = await this.git.getCurrentBranch(directory);
-      if (currentBranch !== this.config.baseBranch) {
-        this.emitLog("info", `Switching to base branch: ${this.config.baseBranch}`);
-        await this.git.checkoutBranch(directory, this.config.baseBranch);
-      }
-    }
-
-    // Get the current branch (original branch / base branch)
+    // Get the original (base) branch
     // If we already have git state with originalBranch, preserve it
     // (This handles plan mode where branch setup happens after plan acceptance)
     let originalBranch: string;
@@ -665,6 +646,7 @@ export class LoopEngine {
     }
 
     // Pull latest changes from the base branch to minimize merge conflicts
+    // Pull happens on the main checkout (config.directory), not the worktree
     this.emitLog("info", `Pulling latest changes from remote for branch: ${originalBranch}`);
     const pullSucceeded = await this.git.pull(directory, originalBranch);
     if (pullSucceeded) {
@@ -673,23 +655,34 @@ export class LoopEngine {
       this.emitLog("debug", `Skipped pull for ${originalBranch} (no remote or upstream configured)`);
     }
 
+    // Compute the worktree path
+    const worktreePath = `${directory}/.ralph-worktrees/${this.config.id}`;
+
     // Check if the working branch already exists
     const branchExists = await this.git.branchExists(directory, branchName);
-    if (branchExists) {
-      // Checkout existing branch
-      this.emitLog("info", `Checking out existing branch: ${branchName}`);
-      await this.git.checkoutBranch(directory, branchName);
+    
+    // Check if the worktree already exists
+    const wtExists = await this.git.worktreeExists(directory, worktreePath);
+
+    if (wtExists) {
+      // Worktree already exists — reuse it (e.g., jumpstart or review cycle)
+      this.emitLog("info", `Reusing existing worktree at: ${worktreePath}`);
+    } else if (branchExists) {
+      // Branch exists but worktree doesn't — recreate the worktree for the existing branch
+      this.emitLog("info", `Recreating worktree for existing branch: ${branchName}`);
+      await this.git.addWorktreeForExistingBranch(directory, worktreePath, branchName);
     } else {
-      // Create new branch
-      this.emitLog("info", `Creating new branch: ${branchName}`);
-      await this.git.createBranch(directory, branchName);
+      // Create new worktree with a new branch
+      this.emitLog("info", `Creating new worktree with branch: ${branchName} at ${worktreePath}`);
+      await this.git.createWorktree(directory, worktreePath, branchName, originalBranch);
     }
 
-    // Update state with git info
+    // Update state with git info including the worktree path
     this.updateState({
       git: {
         originalBranch,
         workingBranch: branchName,
+        worktreePath,
         commits: this.loop.state.git?.commits ?? [],
       },
     });
@@ -697,7 +690,8 @@ export class LoopEngine {
     log.trace("[LoopEngine] About to emit 'Git branch setup complete' log");
     this.emitLog("info", `Git branch setup complete`, { 
       originalBranch, 
-      workingBranch: branchName 
+      workingBranch: branchName,
+      worktreePath,
     });
     log.trace("[LoopEngine] Exiting setupGitBranch");
   }
@@ -723,7 +717,7 @@ export class LoopEngine {
         port: settings.port,
       });
       log.trace("[LoopEngine] setupSession: About to call backend.connect");
-      await this.backend.connect(buildConnectionConfig(settings, this.config.directory));
+      await this.backend.connect(buildConnectionConfig(settings, this.workingDirectory));
       log.trace("[LoopEngine] setupSession: backend.connect completed");
       this.emitLog("info", "Backend connection established");
     } else {
@@ -735,7 +729,7 @@ export class LoopEngine {
     this.emitLog("info", "Creating new AI session...");
     const session = await this.backend.createSession({
       title: `Ralph Loop: ${this.config.name}`,
-      directory: this.config.directory,
+      directory: this.workingDirectory,
     });
     log.trace("[LoopEngine] setupSession: Session created", { sessionId: session.id });
 
@@ -790,7 +784,7 @@ export class LoopEngine {
           hostname: settings.hostname,
           port: settings.port,
         });
-        await this.backend.connect(buildConnectionConfig(settings, this.config.directory));
+        await this.backend.connect(buildConnectionConfig(settings, this.workingDirectory));
         this.emitLog("info", "Backend connection re-established");
       }
       
@@ -890,9 +884,11 @@ export class LoopEngine {
           // Read plan content from .planning/plan.md if possible
           let planContent: string | undefined;
           try {
-            const planFile = Bun.file(`${this.config.directory}/.planning/plan.md`);
-            if (await planFile.exists()) {
-              planContent = await planFile.text();
+            const planExecutor = await backendManager.getCommandExecutorAsync(this.config.workspaceId, this.workingDirectory);
+            const planFilePath = `${this.workingDirectory}/.planning/plan.md`;
+            const planFileExists = await planExecutor.fileExists(planFilePath);
+            if (planFileExists) {
+              planContent = await planExecutor.readFile(planFilePath) ?? undefined;
             }
           } catch {
             // Ignore errors reading plan file
@@ -1646,7 +1642,7 @@ ${userMessageSection}
    * Generates a meaningful commit message based on the changes made.
    */
   private async commitIteration(iteration: number, responseContent: string): Promise<void> {
-    const directory = this.config.directory;
+    const directory = this.workingDirectory;
     const hasChanges = await this.git.hasUncommittedChanges(directory);
 
     if (!hasChanges) {
@@ -1718,7 +1714,7 @@ ${userMessageSection}
     }
 
     // Get the list of changed files
-    const changedFiles = await this.git.getChangedFiles(this.config.directory);
+    const changedFiles = await this.git.getChangedFiles(this.workingDirectory);
     if (changedFiles.length === 0) {
       return `${this.config.git.commitPrefix} Iteration ${iteration}`;
     }

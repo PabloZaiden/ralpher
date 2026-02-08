@@ -58,16 +58,16 @@ describe("Git Workflow", () => {
       // Wait for completion
       await waitForEvent(ctx.events, "loop.completed");
 
-      // Check that we're on the working branch
+      // With worktrees, main checkout stays on original branch
       const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
-      expect(currentBranch).toMatch(/^ralph\//);
-      expect(currentBranch).not.toBe(originalBranch);
+      expect(currentBranch).toBe(originalBranch);
 
-      // Verify the loop state has git info
+      // Verify the loop state has git info with the working branch
       const finalLoop = await ctx.manager.getLoop(loop.config.id);
       expect(finalLoop!.state.git).toBeDefined();
       expect(finalLoop!.state.git!.originalBranch).toBe(originalBranch);
-      expect(finalLoop!.state.git!.workingBranch).toBe(currentBranch);
+      expect(finalLoop!.state.git!.workingBranch).toMatch(/^ralph\//);
+      expect(finalLoop!.state.git!.worktreePath).toBeDefined();
     });
 
     test("uses custom branch prefix", async () => {
@@ -83,8 +83,9 @@ describe("Git Workflow", () => {
       await ctx.manager.startLoop(loop.config.id);
       await waitForEvent(ctx.events, "loop.completed");
 
-      const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
-      expect(currentBranch).toMatch(/^feature\//);
+      // With worktrees, check the loop state's working branch, not the main checkout
+      const finalLoop = await ctx.manager.getLoop(loop.config.id);
+      expect(finalLoop!.state.git!.workingBranch).toMatch(/^feature\//);
     });
 
     test("branch name includes loop name and timestamp", async () => {
@@ -99,13 +100,15 @@ describe("Git Workflow", () => {
       await ctx.manager.startLoop(loop.config.id);
       await waitForEvent(ctx.events, "loop.completed");
 
-      const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
+      // With worktrees, check the loop state's working branch, not the main checkout
+      const finalLoop = await ctx.manager.getLoop(loop.config.id);
+      const workingBranch = finalLoop!.state.git!.workingBranch;
       // Branch should contain the sanitized loop name
-      expect(currentBranch).toContain("branch-id-loop");
+      expect(workingBranch).toContain("branch-id-loop");
       // Branch should start with ralph/ prefix
-      expect(currentBranch).toStartWith("ralph/");
+      expect(workingBranch).toStartWith("ralph/");
       // Branch should contain a date component (YYYY-MM-DD format)
-      expect(currentBranch).toMatch(/\d{4}-\d{2}-\d{2}/);
+      expect(workingBranch).toMatch(/\d{4}-\d{2}-\d{2}/);
     });
   });
 
@@ -169,7 +172,7 @@ describe("Git Workflow", () => {
   });
 
   describe("Uncommitted Changes Handling", () => {
-    test("throws error when starting with uncommitted changes", async () => {
+    test("allows starting loop with uncommitted changes (worktree isolation)", async () => {
       // Create uncommitted changes
       await writeFile(join(ctx.workDir, "uncommitted.txt"), "uncommitted content");
       await Bun.$`git add .`.cwd(ctx.workDir).quiet();
@@ -182,14 +185,19 @@ describe("Git Workflow", () => {
         workspaceId: testWorkspaceId,
       });
 
-      try {
-        await ctx.manager.startLoop(loop.config.id);
-        expect.unreachable("Should have thrown");
-      } catch (error: any) {
-        expect(error.code).toBe("UNCOMMITTED_CHANGES");
-        expect(error.changedFiles).toBeDefined();
-        expect(error.changedFiles.length).toBeGreaterThan(0);
-      }
+      // With worktrees, uncommitted changes in main checkout don't block loop creation
+      await ctx.manager.startLoop(loop.config.id);
+      await waitForEvent(ctx.events, "loop.completed");
+
+      // Verify loop completed successfully
+      const finalLoop = await ctx.manager.getLoop(loop.config.id);
+      expect(finalLoop!.state.status).toBe("completed");
+      expect(finalLoop!.state.git!.workingBranch).toMatch(/^ralph\//);
+
+      // Clean up uncommitted changes
+      await Bun.$`git reset HEAD -- .`.cwd(ctx.workDir).quiet().nothrow();
+      await Bun.$`git checkout -- .`.cwd(ctx.workDir).quiet().nothrow();
+      await Bun.$`git clean -fd`.cwd(ctx.workDir).quiet().nothrow();
     });
 
   });
@@ -254,8 +262,8 @@ describe("Git Workflow", () => {
     });
   });
 
-  describe("Discard Loop (Delete Branch)", () => {
-    test("deletes branch on discard", async () => {
+  describe("Discard Loop", () => {
+    test("discards loop without modifying main checkout", async () => {
       const loop = await ctx.manager.createLoop({
         ...testModelFields,
         directory: ctx.workDir,
@@ -269,22 +277,16 @@ describe("Git Workflow", () => {
       await ctx.manager.startLoop(loop.config.id);
       await waitForEvent(ctx.events, "loop.completed");
 
-      // Get the working branch name from in-memory engine
-      const loopAfterComplete = await ctx.manager.getLoop(loop.config.id);
-      const workingBranch = loopAfterComplete!.state.git!.workingBranch;
-
       // Discard the loop
       const result = await ctx.manager.discardLoop(loop.config.id);
 
       expect(result.success).toBe(true);
 
-      // Verify we're back on original branch
+      // Main checkout stays on original branch (worktrees don't modify it)
       const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
       expect(currentBranch).toBe(originalBranch);
 
-      // Verify working branch was deleted
-      const branchExists = await ctx.git.branchExists(ctx.workDir, workingBranch);
-      expect(branchExists).toBe(false);
+      // With worktrees, discard no longer deletes the branch (only purge does)
 
       // Verify event was emitted
       expect(countEvents(ctx.events, "loop.discarded")).toBe(1);
@@ -292,7 +294,7 @@ describe("Git Workflow", () => {
   });
 
   describe("Mark as Merged", () => {
-    test("switches to original branch, deletes working branch, and marks as deleted", async () => {
+    test("marks loop as deleted without modifying main checkout", async () => {
       const loop = await ctx.manager.createLoop({
         ...testModelFields,
         directory: ctx.workDir,
@@ -306,22 +308,14 @@ describe("Git Workflow", () => {
       await ctx.manager.startLoop(loop.config.id);
       await waitForEvent(ctx.events, "loop.completed");
 
-      // Get the working branch name from in-memory engine
-      const loopAfterComplete = await ctx.manager.getLoop(loop.config.id);
-      const workingBranch = loopAfterComplete!.state.git!.workingBranch;
-
       // Mark as merged
       const result = await ctx.manager.markMerged(loop.config.id);
 
       expect(result.success).toBe(true);
 
-      // Verify we're back on original branch
+      // Main checkout stays on original branch (worktrees don't modify it)
       const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
       expect(currentBranch).toBe(originalBranch);
-
-      // Verify working branch was deleted
-      const branchExists = await ctx.git.branchExists(ctx.workDir, workingBranch);
-      expect(branchExists).toBe(false);
 
       // Verify loop status is now deleted
       const finalLoop = await ctx.manager.getLoop(loop.config.id);
@@ -347,7 +341,6 @@ describe("Git Workflow", () => {
 
       // Get the working branch name
       const loopAfterComplete = await ctx.manager.getLoop(loop.config.id);
-      const workingBranch = loopAfterComplete!.state.git!.workingBranch;
 
       // Push the loop (simulates pushing to remote, but no actual remote exists)
       // For this test, we manually set status to pushed since there's no remote
@@ -362,13 +355,9 @@ describe("Git Workflow", () => {
 
       expect(result.success).toBe(true);
 
-      // Verify we're back on original branch
+      // Main checkout stays on original branch
       const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
       expect(currentBranch).toBe(originalBranch);
-
-      // Verify working branch was deleted
-      const branchExists = await ctx.git.branchExists(ctx.workDir, workingBranch);
-      expect(branchExists).toBe(false);
 
       // Verify loop status is deleted
       const finalLoop = await ctx.manager.getLoop(loop.config.id);

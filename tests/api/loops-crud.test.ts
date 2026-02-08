@@ -86,7 +86,26 @@ describe("Loops CRUD API Integration", () => {
     await Bun.$`git -C ${testWorkDir} commit -m "Initial commit"`.quiet();
 
     // Set up backend manager with test executor factory
-    backendManager.setBackendForTesting(createMockBackend());
+    // Use a mock backend that generates unique loop names to avoid branch name collisions.
+    // The default createMockBackend() returns "<promise>COMPLETE</promise>" for sendPrompt
+    // (name generation), causing all loops to get the same branch name and collide.
+    const mockBackend = createMockBackend();
+    let nameCounter = 0;
+    const originalSendPrompt = mockBackend.sendPrompt.bind(mockBackend);
+    mockBackend.sendPrompt = async (sessionId, prompt) => {
+      // Check if this is a name generation prompt (contains "Generate a title")
+      const promptText = prompt.parts?.map((p: { text?: string }) => p.text).join("") ?? "";
+      if (promptText.includes("Generate a title")) {
+        nameCounter++;
+        return {
+          id: `msg-name-${Date.now()}`,
+          content: `crud-test-loop-${nameCounter}`,
+          parts: [{ type: "text" as const, text: `crud-test-loop-${nameCounter}` }],
+        };
+      }
+      return originalSendPrompt(sessionId, prompt);
+    };
+    backendManager.setBackendForTesting(mockBackend);
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
 
     // Start test server on random port

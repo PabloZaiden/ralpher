@@ -125,13 +125,16 @@ describe("Regular Loop User Scenarios", () => {
         hasError: false,
       });
 
-      // Verify .planning files were cleared (folder should be empty or only have .gitkeep)
-      const planningDir = join(ctx.workDir, ".planning");
-      const filesAfterClear = await readdir(planningDir);
-      // The folder should have been cleared before the loop started
-      // But the loop may have created new files, so we just check it was processed
+      // Verify clearPlanningFolder was set
       expect(completedLoop.config.clearPlanningFolder).toBe(true);
-      // After clearing, the folder should be empty or have minimal files
+      // With worktrees, the clearing happens in the worktree's .planning dir, not main checkout.
+      // Verify the worktree's .planning was cleared by checking the loop completed successfully
+      // (clearing happens before iterations start in the worktree).
+      const worktreePath = completedLoop.state.git?.worktreePath;
+      expect(worktreePath).toBeDefined();
+      // The worktree's .planning should have been cleared (only .gitkeep or files created by the loop)
+      const worktreePlanningDir = join(worktreePath!, ".planning");
+      const filesAfterClear = await readdir(worktreePlanningDir);
       expect(filesAfterClear.length).toBeLessThanOrEqual(2); // May have .gitkeep or be empty
 
       // Clean up
@@ -186,9 +189,11 @@ describe("Regular Loop User Scenarios", () => {
       expect(completedLoop.state.recentIterations[1]?.outcome).toBe("continue");
       expect(completedLoop.state.recentIterations[2]?.outcome).toBe("complete");
 
-      // Verify we're on a ralph/ branch
-      const currentBranch = await getCurrentBranch(ctx.workDir);
-      expect(currentBranch).toMatch(/^ralph\//);
+      // With worktrees, main checkout stays on original branch
+      // Verify the working branch exists (it's checked out in the worktree, not main checkout)
+      const workingBranch = completedLoop.state.git!.workingBranch;
+      expect(workingBranch).toMatch(/^ralph\//);
+      expect(await branchExists(ctx.workDir, workingBranch)).toBe(true);
 
       // Verify diff endpoint works
       const { status: diffStatus, body: diffBody } = await getLoopDiffViaAPI(ctx.baseUrl, loop.config.id);
@@ -248,8 +253,8 @@ describe("Regular Loop User Scenarios", () => {
       const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
       const workingBranch = completedLoop.state.git!.workingBranch;
 
-      // Verify we're on the working branch
-      expect(await getCurrentBranch(ctx.workDir)).toBe(workingBranch);
+      // With worktrees, main checkout stays on original branch throughout
+      expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
       expect(await branchExists(ctx.workDir, workingBranch)).toBe(true);
 
       // Accept the loop via API (simulating UI "Accept" button)
@@ -259,7 +264,7 @@ describe("Regular Loop User Scenarios", () => {
       expect(acceptBody.success).toBe(true);
       expect(acceptBody.mergeCommit).toBeDefined();
 
-      // Verify we're back on the original branch
+      // Main checkout stays on original branch (worktrees don't modify it)
       expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
 
       // Verify the working branch was NOT deleted (kept for review mode)
@@ -378,11 +383,11 @@ describe("Regular Loop User Scenarios", () => {
       expect(status).toBe(200);
       expect(discardBody.success).toBe(true);
 
-      // Verify we're back on the original branch
+      // Main checkout stays on original branch (worktrees don't modify it)
       expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
 
-      // Verify the working branch was deleted
-      expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
+      // With worktrees, discard no longer deletes the branch (only purge does)
+      // The branch may still exist — that's expected
 
       // Verify the loop state is now "deleted"
       const deletedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "deleted");
@@ -398,7 +403,17 @@ describe("Regular Loop User Scenarios", () => {
 
     beforeAll(async () => {
       ctx = await setupTestServer({
-        mockResponses: ["<promise>COMPLETE</promise>"],
+        mockResponses: [
+          "test-loop-name",  // Name generation response
+          "<promise>COMPLETE</promise>",
+          // Extra responses for the "cannot accept a loop that is not completed" test
+          "test-loop-name-2",
+          "Still working...",
+          "More work...",
+          "Even more...",
+          "Almost done...",
+          "<promise>COMPLETE</promise>",
+        ],
         withPlanningDir: true,
       });
     });
@@ -407,23 +422,25 @@ describe("Regular Loop User Scenarios", () => {
       await teardownTestServer(ctx);
     });
 
-    test("returns error when creating loop with uncommitted changes", async () => {
-      // Create uncommitted changes
+    test("allows creating loop even with uncommitted changes in main checkout", async () => {
+      // Create uncommitted changes in the main checkout
       await writeFile(join(ctx.workDir, "uncommitted.txt"), "uncommitted content");
       await Bun.$`git -C ${ctx.workDir} add .`.quiet();
 
-      // Try to create a loop
+      // With worktrees, uncommitted changes in main checkout don't block loop creation
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
-        prompt: "This should fail",
-        planMode: false, // Regular execution, not plan mode
+        prompt: "This should succeed with worktrees",
+        planMode: false,
       });
 
-      expect(status).toBe(409);
-      const error = body as { error: string; message: string; changedFiles?: string[] };
-      expect(error.error).toBe("uncommitted_changes");
-      expect(error.changedFiles).toBeDefined();
-      expect(error.changedFiles!.length).toBeGreaterThan(0);
+      // Loop creation succeeds — worktrees isolate the loop from main checkout state
+      expect(status).toBe(201);
+      const loop = body as Loop;
+      expect(loop.config.id).toBeDefined();
+
+      // Wait for loop to complete
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
 
       // Clean up the uncommitted change
       await Bun.$`git -C ${ctx.workDir} reset HEAD -- . 2>/dev/null || true`.quiet().nothrow();
@@ -443,6 +460,7 @@ describe("Regular Loop User Scenarios", () => {
       
       // Create a loop but don't wait for completion
       ctx.mockBackend.reset([
+        "cannot-accept-test",  // Name generation response (unique to avoid branch collision)
         "Still working...",
         "More work...",
         "Even more...",

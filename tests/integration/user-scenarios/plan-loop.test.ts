@@ -408,8 +408,7 @@ describe("Plan + Loop User Scenarios", () => {
         await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
 
         // Wait for completion
-        const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
-        const workingBranch = completedLoop.state.git!.workingBranch;
+        await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
 
         // Discard the loop
         const { status, body: discardBody } = await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
@@ -419,8 +418,7 @@ describe("Plan + Loop User Scenarios", () => {
         // Verify we're back on original branch
         expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
 
-        // Verify working branch was deleted
-        expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
+        // With worktrees, discard no longer deletes the branch (only purge does)
 
         // Verify final state
         const deletedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "deleted");
@@ -655,8 +653,7 @@ describe("Plan + Loop User Scenarios", () => {
         await acceptPlanViaAPI(ctx.baseUrl, loop.config.id);
 
         // Wait for completion
-        const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
-        const workingBranch = completedLoop.state.git!.workingBranch;
+        await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
 
         // Discard
         const { status } = await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
@@ -664,7 +661,7 @@ describe("Plan + Loop User Scenarios", () => {
 
         // Verify cleanup
         expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
-        expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
+        // With worktrees, discard no longer deletes the branch (only purge does)
 
         // Verify final state
         const deletedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "deleted");
@@ -689,7 +686,10 @@ describe("Plan + Loop User Scenarios", () => {
 
     test("returns error when sending feedback to non-planning loop", async () => {
       // Create a normal loop (not plan mode)
-      ctx.mockBackend.reset(["<promise>COMPLETE</promise>"]);
+      ctx.mockBackend.reset([
+        "error-handling-test-1",  // Name generation
+        "<promise>COMPLETE</promise>",
+      ]);
 
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
@@ -717,7 +717,10 @@ describe("Plan + Loop User Scenarios", () => {
 
     test("returns error when accepting plan on non-planning loop", async () => {
       // Create a normal loop (not plan mode)
-      ctx.mockBackend.reset(["<promise>COMPLETE</promise>"]);
+      ctx.mockBackend.reset([
+        "error-handling-test-2",  // Name generation (unique to avoid branch collision)
+        "<promise>COMPLETE</promise>",
+      ]);
 
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,

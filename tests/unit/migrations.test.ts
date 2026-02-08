@@ -1189,4 +1189,66 @@ describe("migrations - migrate existing loops to workspaces (migration #11)", ()
     const workspace = db.query("SELECT name FROM workspaces LIMIT 1").get() as { name: string };
     expect(workspace.name).toBe("project");
   });
+
+  // ==========================================================================
+  // Migration 14: add_git_worktree_path
+  // ==========================================================================
+
+  test("migration 14 adds git_worktree_path column to loops table", () => {
+    // Verify column doesn't exist before migration 14
+    const columnsBefore = getTableColumns(db, "loops");
+    expect(columnsBefore).not.toContain("git_worktree_path");
+
+    // Run all migrations
+    runMigrations(db);
+
+    // Verify column now exists
+    const columnsAfter = getTableColumns(db, "loops");
+    expect(columnsAfter).toContain("git_worktree_path");
+  });
+
+  test("migration 14 is idempotent", () => {
+    // Run migrations twice — should not fail
+    runMigrations(db);
+    runMigrations(db);
+
+    // Column should still exist
+    const columns = getTableColumns(db, "loops");
+    expect(columns).toContain("git_worktree_path");
+  });
+
+  test("migration 14 preserves existing loop data", () => {
+    // Run migrations up to 13 first
+    runMigrations(db);
+
+    // Insert a loop (after migrations so schema is complete)
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-wt-1', 'Worktree Loop', '/home/user/project', 'test prompt', '2026-02-08T10:00:00Z', '2026-02-08T10:00:00Z', 'STOP', 'ralph/', '[Ralph]')
+    `);
+
+    // Run migrations again (idempotent)
+    runMigrations(db);
+
+    // Verify the loop still exists with null worktree path
+    const loop = db.query("SELECT id, name, git_worktree_path FROM loops WHERE id = 'loop-wt-1'").get() as { id: string; name: string; git_worktree_path: string | null };
+    expect(loop.id).toBe("loop-wt-1");
+    expect(loop.name).toBe("Worktree Loop");
+    expect(loop.git_worktree_path).toBeNull();
+  });
+
+  test("migration 14 allows setting git_worktree_path value", () => {
+    // Run all migrations
+    runMigrations(db);
+
+    // Insert a loop with a worktree path
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix, git_worktree_path)
+      VALUES ('loop-wt-2', 'Loop With Worktree', '/home/user/project', 'test', '2026-02-08T10:00:00Z', '2026-02-08T10:00:00Z', 'STOP', 'ralph/', '[Ralph]', '/home/user/project/.ralph-worktrees/loop-wt-2')
+    `);
+
+    // Verify the worktree path is stored
+    const loop = db.query("SELECT git_worktree_path FROM loops WHERE id = 'loop-wt-2'").get() as { git_worktree_path: string };
+    expect(loop.git_worktree_path).toBe("/home/user/project/.ralph-worktrees/loop-wt-2");
+  });
 });

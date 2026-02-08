@@ -1,7 +1,8 @@
 /**
- * Integration tests for branch safety during external branch switches.
- * These tests verify that Ralpher correctly handles scenarios where
- * the repository is switched to a different branch externally (by user, IDE, etc.)
+ * Integration tests for branch safety with worktrees.
+ * With per-loop worktrees, loops never modify the main checkout.
+ * These tests verify that loop operations work correctly regardless
+ * of the main checkout's branch state (worktree isolation).
  */
 
 import { test, expect, describe, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
@@ -24,8 +25,8 @@ import {
 } from "./helpers";
 import type { Loop } from "../../../src/types/loop";
 
-describe("Branch Safety - External Branch Switch Recovery", () => {
-  describe("Loop commits correctly after external branch switch", () => {
+describe("Branch Safety - Worktree Isolation", () => {
+  describe("Loop commits correctly with worktree isolation", () => {
     let ctx: TestServerContext;
 
     beforeAll(async () => {
@@ -44,21 +45,21 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       await teardownTestServer(ctx);
     });
 
-    test("loop continues correctly even if user switches branch externally during iteration", async () => {
-      // This test creates a loop, then simulates an external branch switch
-      // between iterations. Ralpher should auto-checkout back to the working branch.
+    test("loop completes without modifying main checkout branch", async () => {
+      // Get the original branch before creating the loop
+      const originalBranch = await getCurrentBranch(ctx.workDir);
 
       // Create loop
       const { status, body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Complete a multi-step task",
-        planMode: false, // Regular execution, not plan mode
+        planMode: false,
       });
 
       expect(status).toBe(201);
       const loop = body as Loop;
 
-      // Wait for completion - Ralpher should handle any branch mismatches internally
+      // Wait for completion
       const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
 
       // Validate the loop completed successfully
@@ -68,16 +69,19 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
         hasError: false,
       });
 
-      // Verify we're on the working branch
+      // Main checkout should still be on the original branch (worktree isolation)
       const currentBranch = await getCurrentBranch(ctx.workDir);
-      expect(currentBranch).toBe(completedLoop.state.git!.workingBranch);
+      expect(currentBranch).toBe(originalBranch);
+
+      // The working branch should exist (checked out in the worktree)
+      expect(await branchExists(ctx.workDir, completedLoop.state.git!.workingBranch)).toBe(true);
 
       // Clean up
       await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
     });
   });
 
-  describe("Loop discard handles external branch switch", () => {
+  describe("Loop discard with worktree isolation", () => {
     let ctx: TestServerContext;
 
     beforeEach(async () => {
@@ -95,7 +99,7 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       await teardownTestServer(ctx);
     });
 
-    test("discard succeeds when on different branch than working branch", async () => {
+    test("discard succeeds and main checkout stays unchanged", async () => {
       // Get the original branch
       const originalBranch = await getCurrentBranch(ctx.workDir);
 
@@ -103,32 +107,23 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Make some changes",
-        planMode: false, // Regular execution, not plan mode
+        planMode: false,
       });
       const loop = body as Loop;
 
-      const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
-      const workingBranch = completedLoop.state.git!.workingBranch;
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
 
-      // Verify we're on the working branch
-      expect(await getCurrentBranch(ctx.workDir)).toBe(workingBranch);
-
-      // Simulate external branch switch back to original branch
-      await waitForGitAvailable(ctx.workDir);
-      await Bun.$`git -C ${ctx.workDir} checkout ${originalBranch}`.quiet();
+      // Main checkout stays on original branch (worktree isolation)
       expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
 
-      // Discard should still work - it should auto-recover and reset properly
+      // Discard the loop
       const { status, body: discardBody } = await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
 
       expect(status).toBe(200);
       expect(discardBody.success).toBe(true);
 
-      // Verify we're on the original branch
+      // Main checkout still on original branch
       expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
-
-      // Verify the working branch was deleted
-      expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
 
       // Verify the loop state is now "deleted"
       const deletedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "deleted");
@@ -138,15 +133,17 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       });
     });
 
-    test("discard succeeds when on unrelated third branch", async () => {
+    test("discard succeeds even when user is on a different branch in main checkout", async () => {
       // Get the original branch
       const originalBranch = await getCurrentBranch(ctx.workDir);
 
-      // Create a third unrelated branch
+      // Create a third unrelated branch in the main checkout
       await Bun.$`git -C ${ctx.workDir} checkout -b unrelated-branch`.quiet();
       await writeFile(join(ctx.workDir, "unrelated.txt"), "unrelated content");
       await Bun.$`git -C ${ctx.workDir} add .`.quiet();
       await Bun.$`git -C ${ctx.workDir} commit -m "Unrelated commit"`.quiet();
+
+      // Switch back to original to create loop
       await Bun.$`git -C ${ctx.workDir} checkout ${originalBranch}`.quiet();
 
       // Reset mock for this test
@@ -160,36 +157,33 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Make some changes",
-        planMode: false, // Regular execution, not plan mode
+        planMode: false,
       });
       const loop = body as Loop;
 
-      const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
-      const workingBranch = completedLoop.state.git!.workingBranch;
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
 
-      // Simulate external switch to the unrelated branch
+      // Now switch to the unrelated branch in main checkout
       await waitForGitAvailable(ctx.workDir);
       await Bun.$`git -C ${ctx.workDir} checkout unrelated-branch`.quiet();
       expect(await getCurrentBranch(ctx.workDir)).toBe("unrelated-branch");
 
-      // Discard should still work
+      // Discard should still work - worktree is independent of main checkout
       const { status, body: discardBody } = await discardLoopViaAPI(ctx.baseUrl, loop.config.id);
 
       expect(status).toBe(200);
       expect(discardBody.success).toBe(true);
 
-      // Verify we're on the original branch (not unrelated-branch)
-      expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
-
-      // Verify the working branch was deleted
-      expect(await branchExists(ctx.workDir, workingBranch)).toBe(false);
+      // Main checkout stays on whatever branch the user left it on
+      expect(await getCurrentBranch(ctx.workDir)).toBe("unrelated-branch");
 
       // Clean up the unrelated branch
+      await Bun.$`git -C ${ctx.workDir} checkout ${originalBranch}`.quiet();
       await Bun.$`git -C ${ctx.workDir} branch -D unrelated-branch`.quiet();
     });
   });
 
-  describe("Accept loop handles external branch switch", () => {
+  describe("Accept loop with worktree isolation", () => {
     let ctx: TestServerContext;
 
     beforeEach(async () => {
@@ -207,7 +201,7 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       await teardownTestServer(ctx);
     });
 
-    test("accept succeeds when on different branch than working branch", async () => {
+    test("accept succeeds regardless of main checkout branch state", async () => {
       // Get the original branch
       const originalBranch = await getCurrentBranch(ctx.workDir);
 
@@ -215,29 +209,23 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Make some changes",
-        planMode: false, // Regular execution, not plan mode
+        planMode: false,
       });
       const loop = body as Loop;
 
-      const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
-      const workingBranch = completedLoop.state.git!.workingBranch;
+      await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
 
-      // Verify we're on the working branch
-      expect(await getCurrentBranch(ctx.workDir)).toBe(workingBranch);
-
-      // Simulate external branch switch to original branch
-      await waitForGitAvailable(ctx.workDir);
-      await Bun.$`git -C ${ctx.workDir} checkout ${originalBranch}`.quiet();
+      // Main checkout stays on original branch (worktree isolation)
       expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
 
-      // Accept should still work - mergeBranch handles checkout internally
+      // Accept should work - merge happens on the main repo
       const { status, body: acceptBody } = await acceptLoopViaAPI(ctx.baseUrl, loop.config.id);
 
       expect(status).toBe(200);
       expect(acceptBody.success).toBe(true);
       expect(acceptBody.mergeCommit).toBeDefined();
 
-      // Verify we're on the original branch after merge
+      // Main checkout stays on original branch after merge
       expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
 
       // Verify the loop state is now "merged"
@@ -249,7 +237,7 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
     });
   });
 
-  describe("Push loop handles external branch switch", () => {
+  describe("Push loop with worktree isolation", () => {
     let ctx: TestServerContext;
 
     beforeEach(async () => {
@@ -268,7 +256,7 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       await teardownTestServer(ctx);
     });
 
-    test("push succeeds when on different branch than working branch", async () => {
+    test("push succeeds regardless of main checkout branch state", async () => {
       // Verify we have a remote configured
       expect(ctx.remoteDir).toBeDefined();
 
@@ -279,22 +267,17 @@ describe("Branch Safety - External Branch Switch Recovery", () => {
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,
         prompt: "Make some changes",
-        planMode: false, // Regular execution, not plan mode
+        planMode: false,
       });
       const loop = body as Loop;
 
       const completedLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "completed");
       const workingBranch = completedLoop.state.git!.workingBranch;
 
-      // Verify we're on the working branch
-      expect(await getCurrentBranch(ctx.workDir)).toBe(workingBranch);
-
-      // Simulate external branch switch to original branch
-      await waitForGitAvailable(ctx.workDir);
-      await Bun.$`git -C ${ctx.workDir} checkout ${originalBranch}`.quiet();
+      // Main checkout stays on original branch (worktree isolation)
       expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
 
-      // Push should still work - pushBranch handles checkout internally
+      // Push should work from the worktree
       const { status, body: pushBody } = await pushLoopViaAPI(ctx.baseUrl, loop.config.id);
 
       expect(status).toBe(200);

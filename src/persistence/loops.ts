@@ -65,6 +65,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "plan_is_ready",
   "review_mode",
   "todos",
+  "git_worktree_path",
 ]);
 
 /**
@@ -118,6 +119,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     error_timestamp: state.error?.timestamp ?? null,
     git_original_branch: state.git?.originalBranch ?? null,
     git_working_branch: state.git?.workingBranch ?? null,
+    git_worktree_path: state.git?.worktreePath ?? null,
     git_commits: state.git?.commits ? JSON.stringify(state.git.commits) : null,
     recent_iterations: JSON.stringify(state.recentIterations),
     logs: state.logs ? JSON.stringify(state.logs) : null,
@@ -232,6 +234,9 @@ function rowToLoop(row: Record<string, unknown>): Loop {
       workingBranch: row["git_working_branch"] as string,
       commits: row["git_commits"] ? JSON.parse(row["git_commits"] as string) : [],
     };
+    if (row["git_worktree_path"] !== null && row["git_worktree_path"] !== undefined) {
+      state.git.worktreePath = row["git_worktree_path"] as string;
+    }
   }
   if (row["consecutive_errors"] !== null) {
     state.consecutiveErrors = JSON.parse(row["consecutive_errors"] as string);

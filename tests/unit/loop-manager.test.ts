@@ -11,6 +11,9 @@ import { SimpleEventEmitter } from "../../src/core/event-emitter";
 import type { LoopEvent } from "../../src/types/events";
 import { updateLoopState } from "../../src/persistence/loops";
 import { getDefaultServerSettings } from "../../src/types/settings";
+import { backendManager } from "../../src/core/backend-manager";
+import { createMockBackend } from "../mocks/mock-backend";
+import { TestCommandExecutor } from "../mocks/mock-executor";
 
 describe("LoopManager", () => {
   let testDataDir: string;
@@ -50,6 +53,12 @@ describe("LoopManager", () => {
       serverSettings: getDefaultServerSettings(),
     });
 
+    // Set up test backend to avoid real backend connections during name generation.
+    // Without this, createLoop() attempts real OpenCodeBackend sessions which can
+    // hang or timeout in some environments, causing flaky test failures.
+    backendManager.setBackendForTesting(createMockBackend());
+    backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
+
     // Set up event emitter
     emittedEvents = [];
     emitter = new SimpleEventEmitter<LoopEvent>();
@@ -64,6 +73,9 @@ describe("LoopManager", () => {
   afterEach(async () => {
     // Shutdown manager
     await manager.shutdown();
+
+    // Reset backend manager test state
+    backendManager.resetForTesting();
 
     // Close database connection
     const { closeDatabase } = await import("../../src/persistence/database");
