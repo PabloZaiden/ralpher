@@ -96,11 +96,13 @@ export function WorkspaceSettingsModal({
   // AGENTS.md optimizer
   const optimizer = useAgentsMdOptimizer();
   const [optimizeSuccess, setOptimizeSuccess] = useState<boolean | null>(null);
+  const [wasAlreadyOptimized, setWasAlreadyOptimized] = useState(false);
 
   // Fetch AGENTS.md status when modal opens with a connected workspace
   const fetchOptimizerStatus = useCallback(async () => {
     if (isOpen && workspace && status?.connected) {
       setOptimizeSuccess(null);
+      setWasAlreadyOptimized(false);
       await optimizer.fetchStatus(workspace.id);
     }
   }, [isOpen, workspace?.id, status?.connected]);
@@ -114,6 +116,7 @@ export function WorkspaceSettingsModal({
     if (!isOpen) {
       optimizer.reset();
       setOptimizeSuccess(null);
+      setWasAlreadyOptimized(false);
     }
   }, [isOpen]);
 
@@ -121,9 +124,11 @@ export function WorkspaceSettingsModal({
   async function handleOptimize() {
     if (!workspace) return;
     setOptimizeSuccess(null);
+    setWasAlreadyOptimized(false);
     const result = await optimizer.optimize(workspace.id);
     if (result) {
       setOptimizeSuccess(true);
+      setWasAlreadyOptimized(result.alreadyOptimized);
     }
   }
 
@@ -242,7 +247,7 @@ export function WorkspaceSettingsModal({
             {optimizeSuccess && (
               <div className="mb-3 p-3 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-900">
                 <p className="text-sm text-green-700 dark:text-green-300">
-                  {optimizer.status?.analysis.isOptimized
+                  {wasAlreadyOptimized
                     ? "AGENTS.md is already optimized."
                     : "AGENTS.md optimized successfully."}
                 </p>

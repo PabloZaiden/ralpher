@@ -89,4 +89,37 @@ describe("writeFile", () => {
     const readBack = await executor.readFile(filePath);
     expect(readBack).toBe("");
   });
+
+  test("handles paths with spaces and special characters", async () => {
+    const filePath = join(testDir, "dir with spaces", "file name.txt");
+    const content = "Content in a spaced path";
+
+    const result = await executor.writeFile(filePath, content);
+
+    expect(result).toBe(true);
+    const readBack = await executor.readFile(filePath);
+    expect(readBack).toBe(content);
+  });
+
+  test("handles paths with double quotes", async () => {
+    const filePath = join(testDir, 'dir"quoted', "file.txt");
+    const content = "Content with quoted path";
+
+    const result = await executor.writeFile(filePath, content);
+
+    expect(result).toBe(true);
+    const readBack = await executor.readFile(filePath);
+    expect(readBack).toBe(content);
+  });
+
+  test("handles paths with dollar signs and backticks", async () => {
+    const filePath = join(testDir, "dir$var", "file`cmd`.txt");
+    const content = "Content with shell-sensitive path";
+
+    const result = await executor.writeFile(filePath, content);
+
+    expect(result).toBe(true);
+    const readBack = await executor.readFile(filePath);
+    expect(readBack).toBe(content);
+  });
 });

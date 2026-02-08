@@ -166,6 +166,94 @@ describe("optimizeContent", () => {
     expect(ralpherIndex).toBeLessThan(otherIndex);
   });
 
+  test("replaces old version when blank lines exist between marker and heading", () => {
+    const existing = [
+      "# My Project",
+      "",
+      "<!-- ralpher-optimized-v0 -->",
+      "",
+      "## Agentic Workflow — Planning & Progress Tracking",
+      "",
+      "Old ralpher content.",
+      "",
+      "### Old subsection",
+      "",
+      "More old content.",
+    ].join("\n");
+
+    const result = optimizeContent(existing);
+
+    // Should contain new version marker
+    expect(result).toContain(`<!-- ralpher-optimized-v${RALPHER_OPTIMIZATION_VERSION} -->`);
+
+    // Should NOT contain old version marker
+    expect(result).not.toContain("<!-- ralpher-optimized-v0 -->");
+
+    // Should NOT contain old content
+    expect(result).not.toContain("Old ralpher content.");
+    expect(result).not.toContain("More old content.");
+
+    // Should preserve content before the section
+    expect(result).toContain("# My Project");
+  });
+
+  test("replaces old version with blank lines and preserves content after", () => {
+    const existing = [
+      "# My Project",
+      "",
+      "<!-- ralpher-optimized-v0 -->",
+      "",
+      "## Agentic Workflow — Planning & Progress Tracking",
+      "",
+      "Old ralpher content.",
+      "",
+      "## Other Section",
+      "",
+      "This should be preserved.",
+    ].join("\n");
+
+    const result = optimizeContent(existing);
+
+    // Should have new version
+    expect(result).toContain(`<!-- ralpher-optimized-v${RALPHER_OPTIMIZATION_VERSION} -->`);
+
+    // Should preserve content after the Ralpher section
+    expect(result).toContain("## Other Section");
+    expect(result).toContain("This should be preserved.");
+
+    // Should NOT contain old content
+    expect(result).not.toContain("Old ralpher content.");
+  });
+
+  test("replaces old version when separated by horizontal rule", () => {
+    const existing = [
+      "# My Project",
+      "",
+      "<!-- ralpher-optimized-v0 -->",
+      "## Agentic Workflow — Planning & Progress Tracking",
+      "",
+      "Old ralpher content.",
+      "",
+      "---",
+      "",
+      "## Other Section",
+      "",
+      "This should be preserved.",
+    ].join("\n");
+
+    const result = optimizeContent(existing);
+
+    // Should have new version
+    expect(result).toContain(`<!-- ralpher-optimized-v${RALPHER_OPTIMIZATION_VERSION} -->`);
+
+    // Should NOT contain old content
+    expect(result).not.toContain("Old ralpher content.");
+
+    // Should preserve content after the horizontal rule
+    expect(result).toContain("## Other Section");
+    expect(result).toContain("This should be preserved.");
+  });
+
   test("handles content that doesn't end with newline", () => {
     const existing = "# My Project\n\nNo trailing newline";
     const result = optimizeContent(existing);

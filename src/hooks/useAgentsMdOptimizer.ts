@@ -6,6 +6,7 @@
 
 import { useCallback, useState } from "react";
 import type { OptimizationAnalysis, OptimizationPreview } from "../core/agents-md-optimizer";
+import { analyzeAgentsMd } from "../core/agents-md-optimizer";
 import { log } from "../lib/logger";
 
 /** Result of reading the current AGENTS.md state */
@@ -20,6 +21,7 @@ export interface OptimizeResult {
   success: boolean;
   alreadyOptimized: boolean;
   content: string;
+  analysis?: OptimizationAnalysis;
 }
 
 export interface UseAgentsMdOptimizerResult {
@@ -116,14 +118,12 @@ export function useAgentsMdOptimizer(): UseAgentsMdOptimizerResult {
       const data = (await response.json()) as OptimizeResult;
       // Update local status after successful optimization
       if (data.success) {
+        // Derive analysis from the returned content, or use analysis from server if provided
+        const derivedAnalysis = data.analysis ?? analyzeAgentsMd(data.content);
         setStatus({
           content: data.content,
           fileExists: true,
-          analysis: {
-            isOptimized: true,
-            currentVersion: null, // Will be refreshed on next fetch
-            updateAvailable: false,
-          },
+          analysis: derivedAnalysis,
         });
         setPreview(null);
       }

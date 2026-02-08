@@ -65,6 +65,16 @@ export const agentsMdRoutes = {
       const agentsMdPath = getAgentsMdPath(workspace.directory);
       const fileExists = await executor.fileExists(agentsMdPath);
       const content = fileExists ? await executor.readFile(agentsMdPath) : null;
+
+      // If the file exists but we couldn't read it, treat as a server error
+      if (fileExists && content === null) {
+        log.error("AGENTS.md exists but could not be read", { workspaceId: id });
+        return Response.json(
+          { message: "AGENTS.md exists but could not be read (possible permissions or transient error)" },
+          { status: 500 }
+        );
+      }
+
       const analysis = analyzeAgentsMd(content);
 
       return Response.json({
@@ -111,6 +121,16 @@ export const agentsMdRoutes = {
       const agentsMdPath = getAgentsMdPath(workspace.directory);
       const fileExists = await executor.fileExists(agentsMdPath);
       const content = fileExists ? await executor.readFile(agentsMdPath) : null;
+
+      // If the file exists but we couldn't read it, treat as a server error
+      if (fileExists && content === null) {
+        log.error("AGENTS.md exists but could not be read for preview", { workspaceId: id });
+        return Response.json(
+          { message: "AGENTS.md exists but could not be read (possible permissions or transient error)" },
+          { status: 500 }
+        );
+      }
+
       const preview = previewOptimization(content, fileExists);
 
       return Response.json(preview);
@@ -155,6 +175,16 @@ export const agentsMdRoutes = {
       const agentsMdPath = getAgentsMdPath(workspace.directory);
       const fileExists = await executor.fileExists(agentsMdPath);
       const currentContent = fileExists ? await executor.readFile(agentsMdPath) : null;
+
+      // If the file exists but we couldn't read it, treat as a server error
+      if (fileExists && currentContent === null) {
+        log.error("AGENTS.md exists but could not be read for optimization", { workspaceId: id });
+        return Response.json(
+          { message: "AGENTS.md exists but could not be read (possible permissions or transient error)" },
+          { status: 500 }
+        );
+      }
+
       const analysis = analyzeAgentsMd(currentContent);
 
       // Already optimized at current version — no-op
@@ -163,7 +193,8 @@ export const agentsMdRoutes = {
         return Response.json({
           success: true,
           alreadyOptimized: true,
-          content: currentContent,
+          content: currentContent ?? "",
+          analysis,
         });
       }
 
@@ -190,6 +221,7 @@ export const agentsMdRoutes = {
         success: true,
         alreadyOptimized: false,
         content: optimizedContent,
+        analysis: analyzeAgentsMd(optimizedContent),
       });
     } catch (error) {
       log.error("Failed to optimize AGENTS.md", { workspaceId: id, error: String(error) });

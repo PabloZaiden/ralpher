@@ -173,7 +173,8 @@ export function optimizeContent(
 /**
  * Replace an existing Ralpher section with a new one.
  * Finds the marker and replaces everything from the marker to the next
- * section heading of equal or higher level, or to the end of the file.
+ * peer-level heading (## but not ###) or horizontal rule (---), or to the
+ * end of the file.
  */
 function replaceRalpherSection(content: string, newSection: string): string {
   const markerIndex = content.search(MARKER_PATTERN);
@@ -184,27 +185,32 @@ function replaceRalpherSection(content: string, newSection: string): string {
   }
 
   // Find the end of the Ralpher section.
-  // The section starts at the marker. We look for the next top-level heading
-  // (## at the start of a line) that is NOT part of our section (i.e., not
-  // indented under our ## heading). We also check for --- horizontal rules
-  // that might separate sections.
+  // Phase 1: Skip lines until we find the first ## heading after the marker.
+  // Phase 2: After finding the section's own heading, look for the next peer
+  //          ## heading or --- horizontal rule that signals the end of our section.
   const afterMarker = content.substring(markerIndex);
   const lines = afterMarker.split("\n");
 
-  // Skip the marker line and the section heading (## Agentic Workflow...)
   let endIndex = afterMarker.length; // default: rest of file
   let lineOffset = 0;
+  let foundSectionHeading = false;
 
   for (let i = 0; i < lines.length; i++) {
-    if (i <= 1) {
-      // Skip marker line and the first heading
-      lineOffset += lines[i]!.length + 1;
+    const line = lines[i]!;
+    const isTopLevelHeading = /^## [^#]/.test(line);
+    const isHorizontalRule = /^---\s*$/.test(line);
+
+    if (!foundSectionHeading) {
+      // Phase 1: skip everything until we find the section's own ## heading
+      lineOffset += line.length + 1;
+      if (isTopLevelHeading) {
+        foundSectionHeading = true;
+      }
       continue;
     }
 
-    const line = lines[i]!;
-    // A new top-level section heading (## but not ###) indicates end of our section
-    if (/^## [^#]/.test(line)) {
+    // Phase 2: look for the next peer ## heading or --- horizontal rule
+    if (isTopLevelHeading || isHorizontalRule) {
       endIndex = lineOffset;
       break;
     }
