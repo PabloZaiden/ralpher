@@ -16,6 +16,7 @@ import {
 } from "../helpers/factories";
 import type { ModelInfo, CreateLoopRequest } from "@/types";
 import type { WorkspaceWithLoopCount } from "@/types/workspace";
+import { DEFAULT_LOOP_CONFIG } from "@/types/loop";
 
 /**
  * Helper to set a textarea/input value for form testing.
@@ -415,12 +416,12 @@ describe("CreateLoopForm", () => {
       expect((getByLabelText("Max Consecutive Errors") as HTMLInputElement).value).toBe("10");
     });
 
-    test("activity timeout defaults to 900", async () => {
+    test(`activity timeout defaults to ${DEFAULT_LOOP_CONFIG.activityTimeoutSeconds}`, async () => {
       const { getByText, getByLabelText, user } = renderWithUser(
         <CreateLoopForm {...defaultProps()} />
       );
       await user.click(getByText("Show advanced options"));
-      expect((getByLabelText("Activity Timeout (seconds)") as HTMLInputElement).value).toBe("900");
+      expect((getByLabelText("Activity Timeout (seconds)") as HTMLInputElement).value).toBe(String(DEFAULT_LOOP_CONFIG.activityTimeoutSeconds));
     });
   });
 
