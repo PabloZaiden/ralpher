@@ -205,11 +205,20 @@ export class LoopEngine {
 
   /**
    * Get the effective working directory for this loop.
-   * Returns the worktree path if available, otherwise falls back to config.directory.
-   * This is the directory where the AI session runs and where file operations happen.
+   * Returns the worktree path. Every loop must operate in its own worktree.
+   * Throws if the worktree path is not set -- this indicates a bug in the
+   * lifecycle (e.g., calling this before setupGitBranch() completes).
    */
   get workingDirectory(): string {
-    return this.loop.state.git?.worktreePath ?? this.loop.config.directory;
+    const worktreePath = this.loop.state.git?.worktreePath;
+    if (!worktreePath) {
+      throw new Error(
+        `Loop ${this.config.id} has no worktree path. ` +
+        `Every loop must operate in its own worktree. ` +
+        `This is a bug -- workingDirectory was accessed before setupGitBranch() set the worktree path.`
+      );
+    }
+    return worktreePath;
   }
 
   /**

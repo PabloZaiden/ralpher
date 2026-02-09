@@ -268,14 +268,15 @@ describe("Loops Control API Integration", () => {
       // Create workspace for this directory
       const workspaceId = await getOrCreateWorkspace(planTestDir);
 
-      // Use draft mode to avoid starting the loop in the background
+      // Start the loop (non-draft) so a worktree is created.
+      // The mock backend completes immediately, and the worktree inherits
+      // the .planning/plan.md file from the main repo's branch.
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workspaceId,
           prompt: "Test",
-          draft: true,
           planMode: false,
           model: testModel,
         }),
@@ -284,6 +285,9 @@ describe("Loops Control API Integration", () => {
       const createBody = await createResponse.json();
       expect(createBody.config).toBeDefined();
       const loopId = createBody.config.id;
+
+      // Wait for the loop to complete so the worktree is fully set up
+      await waitForLoopCompletion(loopId);
 
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/plan`);
 
@@ -300,8 +304,8 @@ describe("Loops Control API Integration", () => {
       expect(response.status).toBe(404);
     });
 
-    test("returns exists=false for missing plan.md", async () => {
-      // Create a new workdir without .planning (but with git)
+    test("returns 400 for draft loop without worktree", async () => {
+      // Create a new workdir (with git but without .planning)
       const emptyWorkDir = await mkdtemp(join(tmpdir(), "ralpher-empty-work-"));
       await Bun.$`git init ${emptyWorkDir}`.quiet();
       await Bun.$`git -C ${emptyWorkDir} config user.email "test@test.com"`.quiet();
@@ -313,7 +317,7 @@ describe("Loops Control API Integration", () => {
       // Create workspace for this directory
       const workspaceId = await getOrCreateWorkspace(emptyWorkDir);
 
-      // Use draft mode to avoid starting the loop in the background
+      // Use draft mode -- no worktree is created
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -332,10 +336,9 @@ describe("Loops Control API Integration", () => {
 
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/plan`);
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(400);
       const body = await response.json();
-      expect(body.exists).toBe(false);
-      expect(body.content).toBe("");
+      expect(body.error).toBe("no_worktree");
 
       await rm(emptyWorkDir, { recursive: true, force: true });
     });
@@ -357,14 +360,15 @@ describe("Loops Control API Integration", () => {
       // Create workspace for this directory
       const workspaceId = await getOrCreateWorkspace(statusTestDir);
 
-      // Use draft mode to avoid starting the loop in the background
+      // Start the loop (non-draft) so a worktree is created.
+      // The mock backend completes immediately, and the worktree inherits
+      // the .planning/status.md file from the main repo's branch.
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workspaceId,
           prompt: "Test",
-          draft: true,
           planMode: false,
           model: testModel,
         }),
@@ -373,6 +377,9 @@ describe("Loops Control API Integration", () => {
       const createBody = await createResponse.json();
       expect(createBody.config).toBeDefined();
       const loopId = createBody.config.id;
+
+      // Wait for the loop to complete so the worktree is fully set up
+      await waitForLoopCompletion(loopId);
 
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/status-file`);
 
