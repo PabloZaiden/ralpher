@@ -272,8 +272,11 @@ export class LoopManager {
 
     // No uncommitted-changes check needed — worktrees are isolated from the main checkout
 
-    // Set startedAt before creating engine so setupGitBranch can use it for branch naming
-    loop.state.startedAt = createTimestamp();
+    // Only set startedAt if not already present (e.g., during a jumpstart retry,
+    // the original startedAt is preserved so branch naming remains stable/idempotent).
+    if (!loop.state.startedAt) {
+      loop.state.startedAt = createTimestamp();
+    }
     await updateLoopState(loopId, loop.state);
 
     // Get backend from global manager for this workspace
