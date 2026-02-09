@@ -245,7 +245,8 @@ export class LoopManager {
 
   /**
    * Start a loop in plan mode (plan creation phase).
-   * This creates the plan and sets up the planning session.
+   * Creates a worktree+branch first, then clears .planning in the worktree,
+   * and starts the AI session inside the worktree.
    */
   async startPlanMode(loopId: string): Promise<void> {
     const loop = await loadLoop(loopId);
@@ -271,20 +272,55 @@ export class LoopManager {
 
     // No uncommitted-changes check needed — worktrees are isolated from the main checkout
 
-    // Clear .planning folder BEFORE starting session (if requested)
+    // Only set startedAt if not already present (e.g., during a jumpstart retry,
+    // the original startedAt is preserved so branch naming remains stable/idempotent).
+    if (!loop.state.startedAt) {
+      loop.state.startedAt = createTimestamp();
+    }
+    await updateLoopState(loopId, loop.state);
+
+    // Get backend from global manager for this workspace
+    const backend = backendManager.getBackend(loop.config.workspaceId);
+
+    // Create engine first, then set up git branch before starting the engine.
+    // This ensures the worktree exists before the AI session runs, so the AI
+    // operates in an isolated worktree rather than the main checkout directory.
+    const engine = new LoopEngine({
+      loop,
+      backend,
+      gitService: git,
+      eventEmitter: this.emitter,
+      onPersistState: async (state) => {
+        await updateLoopState(loopId, state);
+      },
+    });
+
+    // Create worktree+branch before starting the engine.
+    // This is the key change: plan mode now gets its own worktree from the start,
+    // so multiple loops can be in plan mode simultaneously without conflicts.
+    try {
+      await engine.setupGitBranchForPlanAcceptance();
+    } catch (error) {
+      throw new Error(`Failed to set up git branch for plan mode: ${String(error)}`);
+    }
+
+    // Now that the worktree exists, use the worktree path for .planning operations
+    const worktreePath = engine.workingDirectory;
+
+    // Clear .planning folder in the worktree (if requested)
     if (loop.config.clearPlanningFolder && !loop.state.planMode?.planningFolderCleared) {
-      const planningDir = `${loop.config.directory}/.planning`;
+      const planningDir = `${worktreePath}/.planning`;
       
       try {
         const exists = await executor.directoryExists(planningDir);
         if (exists) {
           const files = await executor.listDirectory(planningDir);
-          const filesToDelete = files.filter((file) => file !== ".gitkeep");
+          const filesToDelete = files.filter((file: string) => file !== ".gitkeep");
           
           if (filesToDelete.length > 0) {
-            const fileArgs = filesToDelete.map((file) => `${planningDir}/${file}`);
+            const fileArgs = filesToDelete.map((file: string) => `${planningDir}/${file}`);
             await executor.exec("rm", ["-rf", ...fileArgs], {
-              cwd: loop.config.directory,
+              cwd: worktreePath,
             });
           }
         }
@@ -302,30 +338,16 @@ export class LoopManager {
     // Always clear plan.md when starting plan mode, regardless of clearPlanningFolder setting.
     // This ensures the UI doesn't display stale plan content from a previous session while
     // the AI is generating a new plan. The old plan is always irrelevant in a fresh plan session.
-    const planFilePath = `${loop.config.directory}/.planning/plan.md`;
+    const planFilePath = `${worktreePath}/.planning/plan.md`;
     try {
       const planFileExists = await executor.fileExists(planFilePath);
       if (planFileExists) {
-        await executor.exec("rm", ["-f", planFilePath], { cwd: loop.config.directory });
+        await executor.exec("rm", ["-f", planFilePath], { cwd: worktreePath });
         log.debug("Cleared stale plan.md file before starting plan mode");
       }
     } catch (error) {
       log.warn(`Failed to clear plan.md: ${String(error)}`);
     }
-
-    // Get backend from global manager for this workspace
-    const backend = backendManager.getBackend(loop.config.workspaceId);
-
-    // Create engine with plan mode prompt
-    const engine = new LoopEngine({
-      loop,
-      backend,
-      gitService: git,
-      eventEmitter: this.emitter,
-      onPersistState: async (state) => {
-        await updateLoopState(loopId, state);
-      },
-    });
 
     this.engines.set(loopId, engine);
 
@@ -454,12 +476,7 @@ export class LoopManager {
     const planSessionId = engine.state.session?.id;
     const planServerUrl = engine.state.session?.serverUrl;
 
-    // Set up git branch now (was skipped during plan mode)
-    try {
-      await engine.setupGitBranchForPlanAcceptance();
-    } catch (error) {
-      throw new Error(`Failed to set up git branch: ${String(error)}`);
-    }
+    // Git branch and worktree already exist from startPlanMode() — no setup needed here.
 
     // Update state to transition from planning to running
     // Mark plan mode as no longer active but preserve all existing planMode fields

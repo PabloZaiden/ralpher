@@ -351,7 +351,10 @@ export class LoopEngine {
     const isInPlanMode = this.loop.state.status === "planning";
     this.updateState({
       status: isInPlanMode ? "planning" : "starting",
-      startedAt: createTimestamp(),
+      // Preserve existing startedAt (e.g., set by startPlanMode, or from a previous run
+      // during jumpstart/review). Only set if not already present, so the timestamp
+      // used for branch naming stays consistent with the persisted startedAt.
+      startedAt: this.loop.state.startedAt ?? createTimestamp(),
       currentIteration: 0,
       recentIterations: [],
       error: undefined,
@@ -359,7 +362,7 @@ export class LoopEngine {
 
     try {
       // Set up git branch first (before any file modifications)
-      // Skip git setup in plan mode - it will happen when plan is accepted
+      // Skip git setup in plan mode - already set up in startPlanMode()
       // Skip git setup for review cycles - branch is already set up
       if (!isInPlanMode && !this.skipGitSetup) {
         this.emitLog("info", "Setting up git branch...");
@@ -478,8 +481,9 @@ export class LoopEngine {
   }
 
   /**
-   * Set up git branch for the loop (public method for plan mode acceptance).
-   * This is called when transitioning from planning to execution.
+   * Set up git branch and worktree for the loop (public method for plan mode).
+   * Called from startPlanMode() to create the worktree before the AI session starts.
+   * Idempotent: if the worktree already exists, it will be reused.
    */
   async setupGitBranchForPlanAcceptance(): Promise<void> {
     await this.setupGitBranch(true);
@@ -607,13 +611,28 @@ export class LoopEngine {
   private async setupGitBranch(_allowPlanningFolderChanges = false): Promise<void> {
     const directory = this.config.directory;
     
-    // Generate branch name using loop name and start timestamp
-    const startTimestamp = this.loop.state.startedAt ?? createTimestamp();
-    const branchName = generateBranchName(
-      this.config.git.branchPrefix,
-      this.config.name,
-      startTimestamp
-    );
+    // Determine branch name: reuse existing workingBranch if present (idempotent),
+    // otherwise generate from the loop name + startedAt timestamp.
+    let branchName: string;
+    if (this.loop.state.git?.workingBranch) {
+      // Branch was already created (e.g., retry, jumpstart, or plan mode setup).
+      // Reuse the authoritative name rather than regenerating from timestamp.
+      branchName = this.loop.state.git.workingBranch;
+    } else {
+      // First-time setup: generate branch name from startedAt.
+      // startedAt must already be set by the caller (engine.start() or startPlanMode()).
+      // If missing, this is a programming error — fail loudly rather than silently
+      // generating a one-off timestamp that can't be reproduced.
+      const startTimestamp = this.loop.state.startedAt;
+      if (!startTimestamp) {
+        throw new Error("Cannot set up git branch: loop.state.startedAt is not set. Ensure startedAt is set before calling setupGitBranch.");
+      }
+      branchName = generateBranchName(
+        this.config.git.branchPrefix,
+        this.config.name,
+        startTimestamp
+      );
+    }
 
     // Check if we're in a git repo
     this.emitLog("debug", "Checking if directory is a git repository", { directory });

@@ -108,13 +108,15 @@ describe("Plan + Loop User Scenarios", () => {
         },
       });
 
-      // In plan mode, the git branch is NOT set up until plan is accepted
-      // So we should still be on the default branch
+      // In plan mode, the git branch and worktree are created at plan mode start.
+      // The main checkout should still be on the default branch (worktree is separate).
       const currentBranch = await getCurrentBranch(ctx.workDir);
       expect(currentBranch).toBe(ctx.defaultBranch);
 
-      // Verify no git state is set yet (branch is created on plan acceptance)
-      expect(planningLoop.state.git).toBeUndefined();
+      // Verify git state is set (worktree+branch created at plan mode start)
+      expect(planningLoop.state.git).toBeDefined();
+      expect(planningLoop.state.git?.workingBranch).toBeDefined();
+      expect(planningLoop.state.git?.worktreePath).toBeDefined();
 
       // Clean up - wait for status to confirm deletion
       await discardPlanViaAPI(ctx.baseUrl, loop.config.id);
@@ -126,6 +128,7 @@ describe("Plan + Loop User Scenarios", () => {
         createPlanModeMockResponses({
           planIterations: 1,
           executionResponses: ["<promise>COMPLETE</promise>"],
+          loopName: "test-loop-clearfolder",
         })
       );
 
@@ -157,8 +160,11 @@ describe("Plan + Loop User Scenarios", () => {
       // Wait for planning status
       await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
 
-      // Verify .planning was cleared
-      const planningDir = join(ctx.workDir, ".planning");
+      // Verify .planning was cleared in the worktree (not the main checkout)
+      const planLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
+      const worktreePath = planLoop.state.git?.worktreePath;
+      expect(worktreePath).toBeDefined();
+      const planningDir = join(worktreePath!, ".planning");
       const files = await readdir(planningDir);
       // Should be cleared (may have new files created by the agent)
       expect(files.length).toBeLessThanOrEqual(2);
@@ -198,10 +204,11 @@ describe("Plan + Loop User Scenarios", () => {
       // Wait for planning status
       const planningLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
 
-      // In plan mode, no git branch is created until plan is accepted
-      // So we should still be on the original branch
+      // In plan mode, the git branch and worktree are created at plan mode start.
+      // The main checkout should still be on the original branch (worktree is separate).
       expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
-      expect(planningLoop.state.git).toBeUndefined();
+      expect(planningLoop.state.git).toBeDefined();
+      expect(planningLoop.state.git?.workingBranch).toBeDefined();
 
       // Discard the plan via API (simulating UI "Discard Plan" button)
       const { status, body: discardBody } = await discardPlanViaAPI(ctx.baseUrl, loop.config.id);
@@ -804,7 +811,7 @@ describe("Plan + Loop User Scenarios", () => {
     });
 
     test("returns error when sending empty feedback", async () => {
-      ctx.mockBackend.reset(createPlanModeMockResponses({ planIterations: 1 }));
+      ctx.mockBackend.reset(createPlanModeMockResponses({ planIterations: 1, loopName: "empty-feedback-test" }));
 
       const { body } = await createLoopViaAPI(ctx.baseUrl, {
         directory: ctx.workDir,

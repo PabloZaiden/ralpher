@@ -187,10 +187,13 @@ describe("Plan Mode E2E Workflow", () => {
   });
 
   test("plan mode with clearPlanningFolder preserves plan after acceptance", async () => {
-    // Setup: Create existing files to be cleared
+    // Setup: Create existing files to be cleared and commit them to git
+    // (files must be committed so they appear in the worktree checkout)
     const planningDir = join(ctx.workDir, ".planning");
     await mkdir(planningDir, { recursive: true });
     await writeFile(join(planningDir, "old-file.md"), "Old content");
+    await Bun.$`git -C ${ctx.workDir} add .`.quiet();
+    await Bun.$`git -C ${ctx.workDir} commit -m "Add old planning file"`.quiet();
 
     // Create loop with clearPlanningFolder enabled
     const loop = await ctx.manager.createLoop({
@@ -210,16 +213,22 @@ describe("Plan Mode E2E Workflow", () => {
     // Wait for plan to be ready (ensures plan mode started and clearing happened)
     await waitForPlanReady(ctx.manager, loopId);
 
-    // Verify old file was cleared
-    expect(await exists(join(planningDir, "old-file.md"))).toBe(false);
+    // Get the worktree path — clearing happens there, not in ctx.workDir
+    const loopData2 = await ctx.manager.getLoop(loopId);
+    const worktreePath = loopData2!.state.git?.worktreePath;
+    expect(worktreePath).toBeDefined();
+    const wtPlanningDir = join(worktreePath!, ".planning");
 
-    // Create new plan (simulating AI)
-    await writeFile(join(planningDir, "plan.md"), "# New Plan");
-    await writeFile(join(planningDir, "status.md"), "Status: In progress");
+    // Verify old file was cleared in the worktree
+    expect(await exists(join(wtPlanningDir, "old-file.md"))).toBe(false);
 
-    // Verify new files exist
-    expect(await exists(join(planningDir, "plan.md"))).toBe(true);
-    expect(await exists(join(planningDir, "status.md"))).toBe(true);
+    // Create new plan in the worktree (simulating AI)
+    await writeFile(join(wtPlanningDir, "plan.md"), "# New Plan");
+    await writeFile(join(wtPlanningDir, "status.md"), "Status: In progress");
+
+    // Verify new files exist in the worktree
+    expect(await exists(join(wtPlanningDir, "plan.md"))).toBe(true);
+    expect(await exists(join(wtPlanningDir, "status.md"))).toBe(true);
 
     // Accept the plan
     await ctx.manager.acceptPlan(loopId);
@@ -227,9 +236,9 @@ describe("Plan Mode E2E Workflow", () => {
     // Wait for transition from planning
     await waitForLoopStatus(ctx.manager, loopId, ["running", "completed", "max_iterations", "stopped"]);
 
-    // Verify files still exist (not cleared on accept)
-    expect(await exists(join(planningDir, "plan.md"))).toBe(true);
-    expect(await exists(join(planningDir, "status.md"))).toBe(true);
+    // Verify files still exist in the worktree (not cleared on accept)
+    expect(await exists(join(wtPlanningDir, "plan.md"))).toBe(true);
+    expect(await exists(join(wtPlanningDir, "status.md"))).toBe(true);
 
     // Verify planningFolderCleared flag is set
     const loopData: Loop | null = await ctx.manager.getLoop(loopId);

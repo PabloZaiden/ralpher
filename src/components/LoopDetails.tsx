@@ -726,6 +726,12 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                                 <span className="text-gray-500 dark:text-gray-400">Commits: </span>
                                 <span className="font-medium text-gray-900 dark:text-gray-100">{state.git.commits.length}</span>
                               </div>
+                              {state.git.worktreePath && (
+                                <div className="text-sm">
+                                  <span className="text-gray-500 dark:text-gray-400">Worktree: </span>
+                                  <span className="font-mono font-medium text-gray-900 dark:text-gray-100 break-all">{state.git.worktreePath}</span>
+                                </div>
+                              )}
                             </>
                           )}
                           <div className="text-sm">
