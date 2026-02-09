@@ -258,10 +258,13 @@ describe("Plan Mode API Integration", () => {
     });
 
     test("clears planning folder before plan creation when clearPlanningFolder is true", async () => {
-      // Setup: Create existing files in .planning folder
+      // Setup: Create existing files in .planning folder and commit them
+      // (files must be committed so they appear in the worktree)
       const planningDir = join(currentTestWorkDir, ".planning");
       await mkdir(planningDir, { recursive: true });
       await writeFile(join(planningDir, "old-plan.md"), "Old content");
+      await Bun.$`git -C ${currentTestWorkDir} add .`.quiet();
+      await Bun.$`git -C ${currentTestWorkDir} commit -m "Add old plan file"`.quiet();
 
       const response = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
@@ -279,11 +282,17 @@ describe("Plan Mode API Integration", () => {
       expect(response.ok).toBe(true);
       const data = await response.json();
 
-      // Wait for file to be cleared
-      await waitForFileDeleted(join(planningDir, "old-plan.md"));
+      // Wait for planning status to get the worktree path
+      const planLoop = await waitForStatus(data.config.id, ["planning"]);
+      const worktreePath = (planLoop as { state: { git?: { worktreePath?: string } } }).state.git?.worktreePath;
+      expect(worktreePath).toBeDefined();
 
-      // Verify file was cleared
-      expect(await exists(join(planningDir, "old-plan.md"))).toBe(false);
+      // The planning folder is cleared in the worktree, not the main checkout
+      const wtPlanningDir = join(worktreePath!, ".planning");
+      await waitForFileDeleted(join(wtPlanningDir, "old-plan.md"));
+
+      // Verify file was cleared in worktree
+      expect(await exists(join(wtPlanningDir, "old-plan.md"))).toBe(false);
 
       // Verify state tracks clearing
       const getResponse2 = await fetch(`${baseUrl}/api/loops/${data.config.id}`);

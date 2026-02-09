@@ -359,7 +359,7 @@ export class LoopEngine {
 
     try {
       // Set up git branch first (before any file modifications)
-      // Skip git setup in plan mode - it will happen when plan is accepted
+      // Skip git setup in plan mode - already set up in startPlanMode()
       // Skip git setup for review cycles - branch is already set up
       if (!isInPlanMode && !this.skipGitSetup) {
         this.emitLog("info", "Setting up git branch...");
@@ -478,8 +478,9 @@ export class LoopEngine {
   }
 
   /**
-   * Set up git branch for the loop (public method for plan mode acceptance).
-   * This is called when transitioning from planning to execution.
+   * Set up git branch and worktree for the loop (public method for plan mode).
+   * Called from startPlanMode() to create the worktree before the AI session starts.
+   * Idempotent: if the worktree already exists, it will be reused.
    */
   async setupGitBranchForPlanAcceptance(): Promise<void> {
     await this.setupGitBranch(true);

@@ -4,10 +4,12 @@
  */
 
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, writeFile, stat } from "fs/promises";
 import { join } from "path";
 import { setupTestContext, teardownTestContext, waitForPlanReady, waitForLoopStatus, testModelFields } from "../setup";
 import type { TestContext } from "../setup";
+import { MockOpenCodeBackend, defaultTestModel } from "../mocks/mock-backend";
+import { backendManager } from "../../src/core/backend-manager";
 
 // Helper to check if a file exists
 async function exists(path: string): Promise<boolean> {
@@ -31,11 +33,14 @@ describe("Plan Mode - Clear Planning Folder", () => {
   });
 
   test("clears .planning folder before plan creation when clearPlanningFolder is true", async () => {
-    // Setup: Create existing plan files in the work directory
+    // Setup: Create existing plan files and commit them to git
+    // (files must be committed so they appear in the worktree checkout)
     const planningDir = join(ctx.workDir, ".planning");
     await mkdir(planningDir, { recursive: true });
     await writeFile(join(planningDir, "old-plan.md"), "Old plan content");
     await writeFile(join(planningDir, "status.md"), "Old status");
+    await Bun.$`git -C ${ctx.workDir} add .`.quiet();
+    await Bun.$`git -C ${ctx.workDir} commit -m "Add planning files"`.quiet();
 
     // Verify files exist before loop creation
     expect(await exists(join(planningDir, "old-plan.md"))).toBe(true);
@@ -53,7 +58,7 @@ describe("Plan Mode - Clear Planning Folder", () => {
     });
     const loopId = loop.config.id;
 
-    // Start plan mode (this is when clearing happens)
+    // Start plan mode (this is when clearing happens — in the worktree)
     await ctx.manager.startPlanMode(loopId);
 
     // Wait for plan to be ready (polling instead of fixed delay)
@@ -63,19 +68,26 @@ describe("Plan Mode - Clear Planning Folder", () => {
     const loopData = await ctx.manager.getLoop(loopId);
     expect(loopData).toBeDefined();
 
-    // Verify the folder was cleared (old files gone)
-    expect(await exists(join(planningDir, "old-plan.md"))).toBe(false);
-    expect(await exists(join(planningDir, "status.md"))).toBe(false);
+    // Verify worktree was created
+    const worktreePath = loopData!.state.git?.worktreePath;
+    expect(worktreePath).toBeDefined();
+
+    // Verify the folder was cleared in the worktree (old files gone)
+    const wtPlanningDir = join(worktreePath!, ".planning");
+    expect(await exists(join(wtPlanningDir, "old-plan.md"))).toBe(false);
+    expect(await exists(join(wtPlanningDir, "status.md"))).toBe(false);
 
     // Verify state tracks that clearing happened
     expect(loopData!.state.planMode?.planningFolderCleared).toBe(true);
   });
 
   test("does not clear .planning folder if clearPlanningFolder is false", async () => {
-    // Setup existing files
+    // Setup existing files and commit them so they appear in the worktree
     const planningDir = join(ctx.workDir, ".planning");
     await mkdir(planningDir, { recursive: true });
     await writeFile(join(planningDir, "existing-plan.md"), "Existing content");
+    await Bun.$`git -C ${ctx.workDir} add .`.quiet();
+    await Bun.$`git -C ${ctx.workDir} commit -m "Add existing plan"`.quiet();
 
     // Verify file exists
     expect(await exists(join(planningDir, "existing-plan.md"))).toBe(true);
@@ -96,11 +108,13 @@ describe("Plan Mode - Clear Planning Folder", () => {
     await ctx.manager.startPlanMode(loopId);
     await waitForPlanReady(ctx.manager, loopId);
 
-    // Verify folder was NOT cleared
-    expect(await exists(join(planningDir, "existing-plan.md"))).toBe(true);
+    // Verify folder was NOT cleared in the worktree
+    const loopData = await ctx.manager.getLoop(loopId);
+    const worktreePath = loopData!.state.git?.worktreePath;
+    expect(worktreePath).toBeDefined();
+    expect(await exists(join(worktreePath!, ".planning", "existing-plan.md"))).toBe(true);
 
     // Verify state shows clearing did not happen
-    const loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.planMode?.planningFolderCleared).toBe(false);
   });
 
@@ -109,6 +123,8 @@ describe("Plan Mode - Clear Planning Folder", () => {
     const planningDir = join(ctx.workDir, ".planning");
     await mkdir(planningDir, { recursive: true });
     await writeFile(join(planningDir, "old-file.md"), "Old content");
+    await Bun.$`git -C ${ctx.workDir} add .`.quiet();
+    await Bun.$`git -C ${ctx.workDir} commit -m "Add old file"`.quiet();
 
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
@@ -125,11 +141,17 @@ describe("Plan Mode - Clear Planning Folder", () => {
     await ctx.manager.startPlanMode(loopId);
     await waitForPlanReady(ctx.manager, loopId);
 
-    // Create a plan file (simulating AI creating it)
-    await writeFile(join(planningDir, "plan.md"), "# My Plan\n\nTask 1: Do something");
+    // Get worktree path
+    let loopData = await ctx.manager.getLoop(loopId);
+    const worktreePath = loopData!.state.git!.worktreePath!;
 
-    // Verify plan file exists
-    expect(await exists(join(planningDir, "plan.md"))).toBe(true);
+    // Create a plan file in the worktree (simulating AI creating it)
+    const wtPlanningDir = join(worktreePath, ".planning");
+    await mkdir(wtPlanningDir, { recursive: true });
+    await writeFile(join(wtPlanningDir, "plan.md"), "# My Plan\n\nTask 1: Do something");
+
+    // Verify plan file exists in worktree
+    expect(await exists(join(wtPlanningDir, "plan.md"))).toBe(true);
 
     // Accept the plan (should transition to running without clearing folder)
     await ctx.manager.acceptPlan(loopId);
@@ -137,11 +159,11 @@ describe("Plan Mode - Clear Planning Folder", () => {
     // Wait for transition from planning
     await waitForLoopStatus(ctx.manager, loopId, ["running", "completed", "max_iterations", "stopped"]);
 
-    // Verify plan file still exists (was NOT cleared on start)
-    expect(await exists(join(planningDir, "plan.md"))).toBe(true);
+    // Verify plan file still exists in worktree (was NOT cleared on accept)
+    expect(await exists(join(wtPlanningDir, "plan.md"))).toBe(true);
 
     // Verify the loop transitioned from planning
-    const loopData = await ctx.manager.getLoop(loopId);
+    loopData = await ctx.manager.getLoop(loopId);
     expect(["running", "completed", "max_iterations", "stopped"]).toContain(loopData!.state.status);
   });
 
@@ -162,10 +184,14 @@ describe("Plan Mode - Clear Planning Folder", () => {
     await ctx.manager.startPlanMode(loopId);
     await waitForPlanReady(ctx.manager, loopId);
 
-    // Simulate plan creation
-    const planningDir = join(ctx.workDir, ".planning");
-    await mkdir(planningDir, { recursive: true });
-    await writeFile(join(planningDir, "plan.md"), "# Plan\n\nTask: Test");
+    // Get worktree path
+    let loopData = await ctx.manager.getLoop(loopId);
+    const worktreePath = loopData!.state.git!.worktreePath!;
+
+    // Simulate plan creation in the worktree
+    const wtPlanningDir = join(worktreePath, ".planning");
+    await mkdir(wtPlanningDir, { recursive: true });
+    await writeFile(join(wtPlanningDir, "plan.md"), "# Plan\n\nTask: Test");
 
     // Accept and wait for it to start running
     await ctx.manager.acceptPlan(loopId);
@@ -175,8 +201,8 @@ describe("Plan Mode - Clear Planning Folder", () => {
     await ctx.manager.stopLoop(loopId);
     await waitForLoopStatus(ctx.manager, loopId, ["stopped", "completed", "max_iterations"]);
 
-    // Verify plan still exists
-    expect(await exists(join(planningDir, "plan.md"))).toBe(true);
+    // Verify plan still exists in worktree
+    expect(await exists(join(wtPlanningDir, "plan.md"))).toBe(true);
 
     // Restart the loop
     await ctx.manager.startLoop(loopId);
@@ -184,11 +210,11 @@ describe("Plan Mode - Clear Planning Folder", () => {
     // Brief wait for restart to process
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // Verify plan still exists (folder not cleared again)
-    expect(await exists(join(planningDir, "plan.md"))).toBe(true);
+    // Verify plan still exists in worktree (folder not cleared again)
+    expect(await exists(join(wtPlanningDir, "plan.md"))).toBe(true);
 
     // Verify flag is still set
-    const loopData = await ctx.manager.getLoop(loopId);
+    loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.planMode?.planningFolderCleared).toBe(true);
   });
 });
@@ -208,10 +234,12 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
   });
 
   test("clears plan.md when starting plan mode even with clearPlanningFolder: false", async () => {
-    // Setup: Create existing plan.md in the work directory
+    // Setup: Create existing plan.md and commit to git
     const planningDir = join(ctx.workDir, ".planning");
     await mkdir(planningDir, { recursive: true });
     await writeFile(join(planningDir, "plan.md"), "Old stale plan content");
+    await Bun.$`git -C ${ctx.workDir} add .`.quiet();
+    await Bun.$`git -C ${ctx.workDir} commit -m "Add stale plan"`.quiet();
 
     // Verify file exists before loop creation
     expect(await exists(join(planningDir, "plan.md"))).toBe(true);
@@ -230,22 +258,25 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
 
     // Start plan mode - this should clear plan.md regardless of clearPlanningFolder
     await ctx.manager.startPlanMode(loopId);
-
-    // Verify plan.md was cleared immediately (before the AI creates a new one)
-    // We check quickly after startPlanMode returns since file deletion is synchronous
-    // The AI mock will create a new file, but the old content should be gone
     await waitForPlanReady(ctx.manager, loopId);
 
-    // The plan file might exist now (created by mock), but should not have old content
-    const planContent = await Bun.file(join(planningDir, "plan.md")).text().catch(() => "");
+    // Get the worktree path and check there
+    const loopData = await ctx.manager.getLoop(loopId);
+    const worktreePath = loopData!.state.git?.worktreePath;
+    expect(worktreePath).toBeDefined();
+
+    // The plan file in the worktree should not have old content
+    const planContent = await Bun.file(join(worktreePath!, ".planning", "plan.md")).text().catch(() => "");
     expect(planContent).not.toContain("Old stale plan content");
   });
 
   test("clears plan.md when starting plan mode with clearPlanningFolder: true", async () => {
-    // Setup: Create existing plan.md in the work directory
+    // Setup: Create existing plan.md and commit to git
     const planningDir = join(ctx.workDir, ".planning");
     await mkdir(planningDir, { recursive: true });
     await writeFile(join(planningDir, "plan.md"), "Old stale plan content from previous session");
+    await Bun.$`git -C ${ctx.workDir} add .`.quiet();
+    await Bun.$`git -C ${ctx.workDir} commit -m "Add stale plan"`.quiet();
 
     // Verify file exists before loop creation
     expect(await exists(join(planningDir, "plan.md"))).toBe(true);
@@ -266,17 +297,24 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
     await ctx.manager.startPlanMode(loopId);
     await waitForPlanReady(ctx.manager, loopId);
 
-    // Verify old content is gone
-    const planContent = await Bun.file(join(planningDir, "plan.md")).text().catch(() => "");
+    // Get worktree path and check there
+    const loopData = await ctx.manager.getLoop(loopId);
+    const worktreePath = loopData!.state.git?.worktreePath;
+    expect(worktreePath).toBeDefined();
+
+    // Verify old content is gone from the worktree
+    const planContent = await Bun.file(join(worktreePath!, ".planning", "plan.md")).text().catch(() => "");
     expect(planContent).not.toContain("Old stale plan content from previous session");
   });
 
   test("does NOT clear status.md when clearPlanningFolder is false", async () => {
-    // Setup: Create both plan.md and status.md
+    // Setup: Create both plan.md and status.md and commit to git
     const planningDir = join(ctx.workDir, ".planning");
     await mkdir(planningDir, { recursive: true });
     await writeFile(join(planningDir, "plan.md"), "Old plan");
     await writeFile(join(planningDir, "status.md"), "Important status tracking info");
+    await Bun.$`git -C ${ctx.workDir} add .`.quiet();
+    await Bun.$`git -C ${ctx.workDir} commit -m "Add planning files"`.quiet();
 
     // Verify both files exist
     expect(await exists(join(planningDir, "plan.md"))).toBe(true);
@@ -298,9 +336,15 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
     await ctx.manager.startPlanMode(loopId);
     await waitForPlanReady(ctx.manager, loopId);
 
-    // Verify status.md still exists with original content
-    expect(await exists(join(planningDir, "status.md"))).toBe(true);
-    const statusContent = await Bun.file(join(planningDir, "status.md")).text();
+    // Get worktree path and check there
+    const loopData = await ctx.manager.getLoop(loopId);
+    const worktreePath = loopData!.state.git?.worktreePath;
+    expect(worktreePath).toBeDefined();
+
+    // Verify status.md still exists with original content in the worktree
+    const wtStatusPath = join(worktreePath!, ".planning", "status.md");
+    expect(await exists(wtStatusPath)).toBe(true);
+    const statusContent = await Bun.file(wtStatusPath).text();
     expect(statusContent).toBe("Important status tracking info");
   });
 });
@@ -626,5 +670,169 @@ describe("Plan Mode - Rejection Paths", () => {
     await expect(ctx.manager.acceptPlan(loopId)).rejects.toThrow(
       "Plan is not ready yet"
     );
+  });
+});
+
+describe("Plan Mode - Worktree Isolation", () => {
+  let ctx: TestContext;
+
+  beforeEach(async () => {
+    ctx = await setupTestContext({
+      initGit: true,
+      mockResponses: [
+        "worktree-test-loop",               // Name generation for single loop tests
+        "<promise>PLAN_READY</promise>",     // Plan iteration response
+      ],
+    });
+  });
+
+  afterEach(async () => {
+    await teardownTestContext(ctx);
+  });
+
+  test("plan mode changes happen in worktree, not original repo dir", async () => {
+    // Create a file in the main repo and commit it so we have a baseline
+    await writeFile(join(ctx.workDir, "original-file.txt"), "Original content");
+    await Bun.$`git -C ${ctx.workDir} add .`.quiet();
+    await Bun.$`git -C ${ctx.workDir} commit -m "Add original file"`.quiet();
+
+    // Create a plan mode loop and start it
+    const loop = await ctx.manager.createLoop({
+      ...testModelFields,
+      prompt: "Create a plan",
+      directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
+      maxIterations: 1,
+      planMode: true,
+    });
+    const loopId = loop.config.id;
+
+    await ctx.manager.startPlanMode(loopId);
+    await waitForPlanReady(ctx.manager, loopId);
+
+    // Verify the worktree was created
+    const loopData = await ctx.manager.getLoop(loopId);
+    const worktreePath = loopData!.state.git?.worktreePath;
+    expect(worktreePath).toBeDefined();
+    expect(worktreePath).not.toBe(ctx.workDir);
+
+    // Write a new file in the worktree (simulating what the AI agent would do)
+    await writeFile(join(worktreePath!, "new-file-from-agent.txt"), "Changes from the agent");
+
+    // Verify the new file exists in the worktree
+    expect(await exists(join(worktreePath!, "new-file-from-agent.txt"))).toBe(true);
+
+    // Verify the new file does NOT exist in the original repo dir
+    expect(await exists(join(ctx.workDir, "new-file-from-agent.txt"))).toBe(false);
+
+    // Verify the original repo dir is clean (no uncommitted changes)
+    const gitStatus = await Bun.$`git -C ${ctx.workDir} status --porcelain`.text();
+    expect(gitStatus.trim()).toBe("");
+
+    // Verify the original file still exists unchanged in the main repo
+    const originalContent = await Bun.file(join(ctx.workDir, "original-file.txt")).text();
+    expect(originalContent).toBe("Original content");
+  });
+
+  test("multiple plan mode loops have separate worktrees", async () => {
+    // Override mock backend with responses for two loops:
+    // name1, name2 (for createLoop), PLAN_READY, PLAN_READY (for startPlanMode)
+    const multiLoopMock = new MockOpenCodeBackend({
+      responses: [
+        "multi-loop-a",                     // Name generation for loop 1
+        "multi-loop-b",                     // Name generation for loop 2
+        "<promise>PLAN_READY</promise>",    // Plan iteration for loop 1
+        "<promise>PLAN_READY</promise>",    // Plan iteration for loop 2
+      ],
+      models: [defaultTestModel],
+    });
+    backendManager.setBackendForTesting(multiLoopMock);
+
+    // Create a baseline commit
+    await writeFile(join(ctx.workDir, "shared-file.txt"), "Shared content");
+    await Bun.$`git -C ${ctx.workDir} add .`.quiet();
+    await Bun.$`git -C ${ctx.workDir} commit -m "Add shared file"`.quiet();
+
+    // Create and start two plan mode loops
+    const loop1 = await ctx.manager.createLoop({
+      ...testModelFields,
+      prompt: "Plan A",
+      directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
+      maxIterations: 1,
+      planMode: true,
+    });
+    const loop2 = await ctx.manager.createLoop({
+      ...testModelFields,
+      prompt: "Plan B",
+      directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
+      maxIterations: 1,
+      planMode: true,
+    });
+
+    await ctx.manager.startPlanMode(loop1.config.id);
+    await ctx.manager.startPlanMode(loop2.config.id);
+
+    await waitForPlanReady(ctx.manager, loop1.config.id);
+    await waitForPlanReady(ctx.manager, loop2.config.id);
+
+    // Verify each has its own worktree
+    const loopData1 = await ctx.manager.getLoop(loop1.config.id);
+    const loopData2 = await ctx.manager.getLoop(loop2.config.id);
+    const wt1 = loopData1!.state.git?.worktreePath;
+    const wt2 = loopData2!.state.git?.worktreePath;
+
+    expect(wt1).toBeDefined();
+    expect(wt2).toBeDefined();
+    expect(wt1).not.toBe(wt2);
+
+    // Write different files to each worktree
+    await writeFile(join(wt1!, "loop1-file.txt"), "Loop 1 content");
+    await writeFile(join(wt2!, "loop2-file.txt"), "Loop 2 content");
+
+    // Verify files are isolated between worktrees
+    expect(await exists(join(wt1!, "loop1-file.txt"))).toBe(true);
+    expect(await exists(join(wt1!, "loop2-file.txt"))).toBe(false);
+    expect(await exists(join(wt2!, "loop2-file.txt"))).toBe(true);
+    expect(await exists(join(wt2!, "loop1-file.txt"))).toBe(false);
+
+    // Verify original repo dir is still clean
+    expect(await exists(join(ctx.workDir, "loop1-file.txt"))).toBe(false);
+    expect(await exists(join(ctx.workDir, "loop2-file.txt"))).toBe(false);
+    const gitStatus = await Bun.$`git -C ${ctx.workDir} status --porcelain`.text();
+    expect(gitStatus.trim()).toBe("");
+  });
+
+  test("worktree exists from plan mode start, not just after acceptance", async () => {
+    // Create a plan mode loop
+    const loop = await ctx.manager.createLoop({
+      ...testModelFields,
+      prompt: "Create a plan",
+      directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
+      maxIterations: 1,
+      planMode: true,
+    });
+    const loopId = loop.config.id;
+
+    // Before startPlanMode: no git state
+    let loopData = await ctx.manager.getLoop(loopId);
+    expect(loopData!.state.git).toBeUndefined();
+
+    // Start plan mode
+    await ctx.manager.startPlanMode(loopId);
+    await waitForPlanReady(ctx.manager, loopId);
+
+    // After startPlanMode: git state with worktree should exist
+    loopData = await ctx.manager.getLoop(loopId);
+    expect(loopData!.state.git).toBeDefined();
+    expect(loopData!.state.git?.worktreePath).toBeDefined();
+    expect(loopData!.state.git?.workingBranch).toBeDefined();
+
+    // The worktree directory should actually exist on disk
+    const worktreePath = loopData!.state.git!.worktreePath!;
+    const dirStat = await stat(worktreePath);
+    expect(dirStat.isDirectory()).toBe(true);
   });
 });

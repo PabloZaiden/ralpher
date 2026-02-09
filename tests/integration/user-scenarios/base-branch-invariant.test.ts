@@ -76,7 +76,12 @@ describe("Base Branch Invariant - Plan Mode", () => {
       const loop = body as Loop;
 
       const planningLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
-      expect(planningLoop.state.git).toBeUndefined();
+      // Git state is now set during startPlanMode (worktree+branch created early)
+      expect(planningLoop.state.git).toBeDefined();
+      expect(planningLoop.state.git?.originalBranch).toBe(originalBranch);
+      expect(planningLoop.state.git?.workingBranch).toBeDefined();
+      expect(planningLoop.state.git?.worktreePath).toBeDefined();
+      // Main checkout should still be on the original branch (worktree is separate)
       expect(await getCurrentBranch(ctx.workDir)).toBe(originalBranch);
 
       await waitForPlanReady(ctx.baseUrl, loop.config.id);

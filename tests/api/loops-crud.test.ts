@@ -716,34 +716,50 @@ describe("Loops CRUD API Integration", () => {
     });
 
     test("can start draft as plan mode", async () => {
-      // Create draft
-      const createResponse = await fetch(`${baseUrl}/api/loops`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workspaceId: testWorkspaceId,
-          prompt: "Task",
-          draft: true,
-          planMode: false,
-          model: testModel,
-        }),
-      });
-      const createBody = await createResponse.json();
-      const loopId = createBody.config.id;
+      // Use a unique directory to avoid branch collision with previous test
+      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-draft-plan-test-"));
+      await Bun.$`git init ${uniqueWorkDir}`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${uniqueWorkDir}/README.md`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} add .`.quiet();
+      await Bun.$`git -C ${uniqueWorkDir} commit -m "Initial commit"`.quiet();
 
-      // Start draft in plan mode
-      const startResponse = await fetch(`${baseUrl}/api/loops/${loopId}/draft/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          planMode: true,
-          model: testModel,
-        }),
-      });
+      try {
+        // Create workspace for this directory
+        const uniqueWorkspaceId = await getOrCreateWorkspace(uniqueWorkDir);
 
-      expect(startResponse.status).toBe(200);
-      const startBody = await startResponse.json();
-      expect(startBody.state.status).toBe("planning");
+        // Create draft
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            workspaceId: uniqueWorkspaceId,
+            prompt: "Plan mode draft task",
+            draft: true,
+            planMode: false,
+            model: testModel,
+          }),
+        });
+        const createBody = await createResponse.json();
+        const loopId = createBody.config.id;
+
+        // Start draft in plan mode
+        const startResponse = await fetch(`${baseUrl}/api/loops/${loopId}/draft/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            planMode: true,
+            model: testModel,
+          }),
+        });
+
+        expect(startResponse.status).toBe(200);
+        const startBody = await startResponse.json();
+        expect(startBody.state.status).toBe("planning");
+      } finally {
+        await rm(uniqueWorkDir, { recursive: true, force: true });
+      }
     });
 
     test("cannot start non-draft loop via draft/start", async () => {

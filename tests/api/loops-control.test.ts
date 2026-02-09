@@ -186,8 +186,8 @@ describe("Loops Control API Integration", () => {
   });
 
   describe("POST /api/loops/:id/discard", () => {
-    test("returns error for loop without git branch (plan mode)", async () => {
-      // Create a loop in plan mode - no git branch created until plan acceptance
+    test("succeeds for plan mode loop (git branch created at plan start)", async () => {
+      // Create a loop in plan mode - git branch+worktree is now created at plan mode start
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -201,14 +201,14 @@ describe("Loops Control API Integration", () => {
       const createBody = await createResponse.json();
       const loopId = createBody.config.id;
 
+      // Plan mode loops now have git branches from the start, so discard should succeed
       const response = await fetch(`${baseUrl}/api/loops/${loopId}/discard`, {
         method: "POST",
       });
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(200);
       const body = await response.json();
-      expect(body.error).toBe("discard_failed");
-      expect(body.message).toContain("No git branch");
+      expect(body.success).toBe(true);
     });
 
     test("returns 404 for non-existent loop", async () => {
