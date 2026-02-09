@@ -81,13 +81,13 @@ interface WorkspaceConnectionState {
 
 /**
  * Connection state for a loop.
- * Each loop gets its own dedicated backend connection tied to its worktree directory.
+ * Each loop gets its own dedicated backend connection.
+ * The actual directory binding happens later when LoopEngine calls backend.connect()
+ * in setupSession() with the worktree directory.
  */
 interface LoopConnectionState {
   backend: Backend;
   workspaceId: string;
-  /** The worktree directory this connection is bound to */
-  directory: string;
 }
 
 /**
@@ -541,14 +541,16 @@ class BackendManager {
    * Each loop gets its own OpenCodeBackend so that concurrent loops
    * in the same workspace don't interfere with each other.
    * 
+   * The actual directory binding happens later when LoopEngine calls
+   * backend.connect() in setupSession() with the worktree directory.
+   * 
    * In test mode, returns the shared test backend (tests manage their own isolation).
    * 
    * @param loopId - The loop ID
    * @param workspaceId - The workspace ID (for settings lookup)
-   * @param directory - The worktree directory this loop operates in
    * @returns A Backend instance dedicated to this loop
    */
-  getLoopBackend(loopId: string, workspaceId: string, directory: string): Backend {
+  getLoopBackend(loopId: string, workspaceId: string): Backend {
     // Use test backend if set (tests share a single mock backend)
     if (this.isTestBackend && this.testBackend) {
       return this.testBackend;
@@ -564,9 +566,8 @@ class BackendManager {
     this.loopConnections.set(loopId, {
       backend,
       workspaceId,
-      directory,
     });
-    log.debug(`[BackendManager] Created dedicated backend for loop ${loopId} (directory: ${directory})`);
+    log.debug(`[BackendManager] Created dedicated backend for loop ${loopId}`);
     return backend;
   }
 

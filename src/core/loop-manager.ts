@@ -283,7 +283,7 @@ export class LoopManager {
     // The worktree doesn't exist yet - it's created below by setupGitBranchForPlanAcceptance().
     // The backend won't connect until engine.start() -> setupSession(), by which time
     // the worktree will exist and engine.workingDirectory will return the worktree path.
-    const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId, loop.config.directory);
+    const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
     // Create engine first, then set up git branch before starting the engine.
     // This ensures the worktree exists before the AI session runs, so the AI
@@ -389,7 +389,7 @@ export class LoopManager {
       }
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
       const git = GitService.withExecutor(executor);
-      const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId, worktreeDir);
+      const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
       
       engine = new LoopEngine({
         loop,
@@ -739,7 +739,7 @@ Follow the standard loop execution flow:
     // Get a dedicated backend for this loop (each loop gets its own connection).
     // The worktree doesn't exist yet - it's created by engine.start() -> setupGitBranch().
     // The backend connects after the worktree is set up, using engine.workingDirectory.
-    const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId, loop.config.directory);
+    const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
     // Create engine with persistence callback
     // Pass the git service with the appropriate executor
@@ -1538,7 +1538,7 @@ Follow the standard loop execution flow:
       }
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
       const git = GitService.withExecutor(executor);
-      const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId, worktreeDir);
+      const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
       const workingBranch = loop.state.git!.workingBranch;
       const loopType = isPlanning ? "planning loop" : "loop";
@@ -1619,8 +1619,7 @@ Follow the standard loop execution flow:
       // Get a dedicated backend for this loop's review cycle.
       // For pushed loops, the worktree already exists.
       // For merged loops, a new worktree is created below before the engine starts.
-      const worktreeDir = loop.state.git?.worktreePath ?? `${loop.config.directory}/.ralph-worktrees/${loop.config.id}`;
-      const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId, worktreeDir);
+      const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
       // Calculate the next review cycle number
       const nextReviewCycle = loop.state.reviewMode.reviewCycles + 1;
