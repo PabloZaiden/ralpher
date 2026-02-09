@@ -894,7 +894,9 @@ export class LoopEngine {
             // Ignore errors reading plan file
           }
 
-          // Update plan mode state with the plan content
+           // Update plan mode state with the plan content, and clear consecutive
+          // error tracker since this iteration succeeded (prevents stale error
+          // context from leaking into subsequent plan feedback prompts).
           if (this.loop.state.planMode) {
             log.trace(`[LoopEngine] runLoop: Before updateState, isPlanReady:`, this.loop.state.planMode.isPlanReady);
             this.updateState({
@@ -902,8 +904,12 @@ export class LoopEngine {
                 ...this.loop.state.planMode,
                 planContent,
               },
+              consecutiveErrors: undefined,
             });
             log.trace(`[LoopEngine] runLoop: After updateState, isPlanReady:`, this.loop.state.planMode?.isPlanReady);
+          } else {
+            // Even without planMode state, clear the error tracker on success
+            this.updateState({ consecutiveErrors: undefined });
           }
 
           // Emit plan ready event

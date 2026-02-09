@@ -1647,6 +1647,101 @@ describe("StopPatternDetector", () => {
         expect(secondPromptText.text).toContain("Model rate limited");
       }
     });
+
+    test("error context is cleared after plan_ready outcome so feedback prompts don't include stale errors", async () => {
+      const loop = createTestLoop({ maxIterations: 5, maxConsecutiveErrors: 5, planMode: true });
+      // Set up plan mode state
+      loop.state.status = "planning";
+      loop.state.planMode = {
+        active: true,
+        feedbackRounds: 0,
+        planningFolderCleared: false,
+        isPlanReady: false,
+      };
+
+      const capturedPrompts: PromptInput[] = [];
+      let callCount = 0;
+
+      const baseMock = createMockBackend([]);
+      let promptSent = false;
+      mockBackend = {
+        ...baseMock,
+        async sendPromptAsync(_sessionId: string, prompt: PromptInput): Promise<void> {
+          capturedPrompts.push(prompt);
+          callCount++;
+          promptSent = true;
+        },
+        async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+          const { stream, push, end } = createEventStream<AgentEvent>();
+
+          (async () => {
+            let attempts = 0;
+            while (!promptSent && attempts < 100) {
+              await new Promise((resolve) => setTimeout(resolve, 10));
+              attempts++;
+            }
+            promptSent = false;
+
+            if (callCount === 1) {
+              // First iteration: error
+              push({ type: "error", message: "Rate limit exceeded" });
+              end();
+            } else {
+              // Second and subsequent iterations: succeed with PLAN_READY
+              push({ type: "message.start", messageId: `msg-${Date.now()}` });
+              push({ type: "message.delta", content: "Plan created\n<promise>PLAN_READY</promise>" });
+              push({ type: "message.complete", content: "Plan created\n<promise>PLAN_READY</promise>" });
+              end();
+            }
+          })();
+
+          return stream;
+        },
+      };
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      // Start the loop - first iteration errors, second returns plan_ready
+      await engine.start();
+
+      // Should have captured 2 prompts (error + retry that returned plan_ready)
+      expect(capturedPrompts.length).toBe(2);
+
+      // Second prompt should have had error context (retry after error)
+      const secondPromptText = capturedPrompts[1]!.parts[0]!;
+      if (secondPromptText.type === "text") {
+        expect(secondPromptText.text).toContain("Previous Iteration Error");
+        expect(secondPromptText.text).toContain("Rate limit exceeded");
+      }
+
+      // Verify consecutiveErrors was cleared by plan_ready outcome
+      expect(loop.state.consecutiveErrors).toBeUndefined();
+
+      // Now simulate a plan feedback round: set pending prompt and resume
+      loop.state.planMode!.isPlanReady = false;
+      loop.state.planMode!.feedbackRounds += 1;
+      engine.setPendingPrompt("Please add more details to the plan");
+
+      await engine.runPlanIteration();
+
+      // Should have captured a 3rd prompt (feedback round)
+      expect(capturedPrompts.length).toBe(3);
+
+      // Third prompt (feedback round) should NOT contain stale error context
+      const thirdPromptText = capturedPrompts[2]!.parts[0]!;
+      expect(thirdPromptText.type).toBe("text");
+      if (thirdPromptText.type === "text") {
+        expect(thirdPromptText.text).not.toContain("Previous Iteration Error");
+        expect(thirdPromptText.text).not.toContain("Rate limit exceeded");
+        // It should contain the feedback
+        expect(thirdPromptText.text).toContain("Please add more details to the plan");
+      }
+    });
   });
 
   describe("abortSessionOnly", () => {
