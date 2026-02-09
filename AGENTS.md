@@ -89,6 +89,7 @@ const content = await executor.readFile(path);
 - `fileExists(path)` - Check if a file exists
 - `directoryExists(path)` - Check if a directory exists
 - `readFile(path)` - Read a file's contents
+- `writeFile(path, content)` - Write content to a file (uses base64 encoding for safe transfer)
 - `listDirectory(path)` - List files in a directory
 
 ### TypeScript

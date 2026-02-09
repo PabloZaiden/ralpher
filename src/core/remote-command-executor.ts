@@ -461,4 +461,33 @@ export class CommandExecutorImpl implements CommandExecutor {
     }
     return [];
   }
+
+  /**
+   * Write content to a file on the server.
+   * Uses base64 encoding to safely transfer content with special characters
+   * (backticks, quotes, newlines, etc.) through the PTY.
+   *
+   * The directory and file path are passed as positional args to sh -c
+   * to prevent shell injection. Uses `base64 -d` with a fallback to
+   * `base64 -D` (macOS) for cross-platform compatibility.
+   */
+  async writeFile(path: string, content: string): Promise<boolean> {
+    // Encode content as base64 to avoid shell escaping issues
+    const base64Content = Buffer.from(content).toString("base64");
+
+    // Ensure parent directory exists, then decode base64 and write to file.
+    // $0 = parent dir, $1 = file path, $2 = base64 content
+    // Use positional args to avoid shell injection from path values.
+    // Try `base64 -d` (GNU/Linux) first, fall back to `base64 -D` (macOS).
+    const script = 'mkdir -p "$0" && echo "$2" | (base64 -d 2>/dev/null || base64 -D) > "$1"';
+    const dir = path.substring(0, path.lastIndexOf("/"));
+    const result = await this.exec("sh", [
+      "-c",
+      script,
+      dir,
+      path,
+      base64Content,
+    ]);
+    return result.success;
+  }
 }

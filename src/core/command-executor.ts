@@ -66,4 +66,14 @@ export interface CommandExecutor {
    * @returns Array of file/directory names in the directory
    */
   listDirectory(path: string): Promise<string[]>;
+
+  /**
+   * Write content to a file on the server.
+   * Creates the file if it doesn't exist, overwrites if it does.
+   * Uses base64 encoding to safely transfer content with special characters.
+   * @param path - Absolute path to the file
+   * @param content - The content to write
+   * @returns true if the write was successful
+   */
+  writeFile(path: string, content: string): Promise<boolean>;
 }

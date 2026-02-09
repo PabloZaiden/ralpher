@@ -36,6 +36,7 @@ class CRLFCommandExecutor implements CommandExecutor {
       directoryExists: async () => false,
       readFile: async () => null,
       listDirectory: async () => [],
+      writeFile: async () => false,
     };
   }
 
@@ -68,6 +69,10 @@ class CRLFCommandExecutor implements CommandExecutor {
 
   async listDirectory(_path: string): Promise<string[]> {
     return [];
+  }
+
+  async writeFile(_path: string, _content: string): Promise<boolean> {
+    return false;
   }
 }
 

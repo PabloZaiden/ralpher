@@ -9,6 +9,7 @@ export { useWorkspaceServerSettings, type UseWorkspaceServerSettingsResult } fro
 export { useMarkdownPreference, type UseMarkdownPreferenceResult } from "./useMarkdownPreference";
 export { useLogLevelPreference, type UseLogLevelPreferenceResult } from "./useLogLevelPreference";
 export { useWorkspaces, type UseWorkspacesResult } from "./useWorkspaces";
+export { useAgentsMdOptimizer, type UseAgentsMdOptimizerResult, type AgentsMdStatus, type OptimizeResult } from "./useAgentsMdOptimizer";
 
 // Shared loop action API functions
 export {

@@ -4,7 +4,7 @@
  * This is only used in tests - production code uses CommandExecutorImpl via PTY.
  */
 
-import { readdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import type { CommandExecutor, CommandResult, CommandOptions } from "../../src/core/command-executor";
 
 /**
@@ -89,6 +89,23 @@ export class TestCommandExecutor implements CommandExecutor {
       return await readdir(path);
     } catch {
       return [];
+    }
+  }
+
+  /**
+   * Write content to a file locally.
+   */
+  async writeFile(path: string, content: string): Promise<boolean> {
+    try {
+      // Ensure parent directory exists
+      const dir = path.substring(0, path.lastIndexOf("/"));
+      if (dir) {
+        await mkdir(dir, { recursive: true });
+      }
+      await Bun.write(path, content);
+      return true;
+    } catch {
+      return false;
     }
   }
 }
