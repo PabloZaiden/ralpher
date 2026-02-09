@@ -1498,6 +1498,20 @@ export class LoopEngine {
   }
 
   /**
+   * Build error context string for retry iterations.
+   * Returns a prompt section describing the previous error, or empty string if no errors.
+   * Used by buildPrompt() to inform the AI about what went wrong in the previous iteration.
+   */
+  private buildErrorContext(): string {
+    const errors = this.loop.state.consecutiveErrors;
+    if (!errors) {
+      return "";
+    }
+
+    return `\n- **Previous Iteration Error**: The previous iteration failed with the following error (occurred ${errors.count} time(s) consecutively). Please try a different approach to avoid this error:\n\n  Error: ${errors.lastErrorMessage}\n`;
+  }
+
+  /**
    * Build the prompt for an iteration.
    * Uses a consistent template that instructs the AI to follow the planning docs pattern.
    * If a pendingPrompt is set, it overrides the config.prompt for this iteration only.
@@ -1527,8 +1541,9 @@ export class LoopEngine {
       
       if (feedbackRounds === 0) {
         // Initial plan creation
+        const errorContext = this.buildErrorContext();
         const text = `- Goal: ${this.config.prompt}
-
+${errorContext}
 - Create a detailed plan to achieve this goal. Write the plan to \`./.planning/plan.md\`.
 
 - The plan should include:
@@ -1558,12 +1573,13 @@ export class LoopEngine {
           this.emitLog("user", this.loop.state.pendingPrompt);
         }
         
+        const errorContext = this.buildErrorContext();
         const text = `The user has provided feedback on your plan:
 
 ---
 ${feedback}
 ---
-
+${errorContext}
 **FIRST**: Immediately add this feedback as a pending item in \`./.planning/status.md\` so it is tracked and preserved even if the conversation context is compacted.
 
 Then, update the plan in \`./.planning/plan.md\` based on this feedback.
@@ -1604,8 +1620,11 @@ When the updated plan is ready, end your response with:
       ? `\n- **User Message**: The user has added the following message. This should be your primary focus for this iteration. Address it while keeping the original goal in mind. **Before starting work on this message, immediately add it as a pending task in \`./.planning/status.md\`** so it is tracked and preserved even if the conversation context is compacted:\n\n${userMessage}\n`
       : "";
 
+    // Build error context for retry iterations (shows previous error info)
+    const errorContext = this.buildErrorContext();
+
     const text = `- Original Goal: ${this.config.prompt}
-${userMessageSection}
+${userMessageSection}${errorContext}
 - Read AGENTS.md, read the document in the \`./.planning\` folder, pick up the most important task to continue with, and make sure you make a plan with coding tasks that includes updating the docs with your progress and what the next steps to work on are, at the end. Don't ask for confirmation and start working on it right away.
 
 - If the \`./.planning\` folder does not exist or is empty, create it and add a file called \`plan.md\` where you outline your plan to achieve the goal, and a \`status.md\` file to track progress.

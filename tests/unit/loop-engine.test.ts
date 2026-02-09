@@ -1302,6 +1302,353 @@ describe("StopPatternDetector", () => {
     }, 10000);
   });
 
+  describe("error context in prompts", () => {
+    test("prompt includes error context after a failed iteration", async () => {
+      const loop = createTestLoop({ maxIterations: 3, maxConsecutiveErrors: 3 });
+      const capturedPrompts: PromptInput[] = [];
+      let callCount = 0;
+
+      // Create a backend that errors on first iteration, succeeds on second
+      const baseMock = createMockBackend([]);
+      let promptSent = false;
+      mockBackend = {
+        ...baseMock,
+        async sendPromptAsync(_sessionId: string, prompt: PromptInput): Promise<void> {
+          capturedPrompts.push(prompt);
+          callCount++;
+          promptSent = true;
+        },
+        async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+          const { stream, push, end } = createEventStream<AgentEvent>();
+
+          (async () => {
+            let attempts = 0;
+            while (!promptSent && attempts < 100) {
+              await new Promise((resolve) => setTimeout(resolve, 10));
+              attempts++;
+            }
+            promptSent = false;
+
+            if (callCount === 1) {
+              // First iteration: emit an error
+              push({ type: "error", message: "Connection timed out" });
+              end();
+            } else {
+              // Second iteration: succeed with completion
+              push({ type: "message.start", messageId: `msg-${Date.now()}` });
+              push({ type: "message.delta", content: "Done! <promise>COMPLETE</promise>" });
+              push({ type: "message.complete", content: "Done! <promise>COMPLETE</promise>" });
+              end();
+            }
+          })();
+
+          return stream;
+        },
+      };
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      // Should have captured 2 prompts (error iteration + successful retry)
+      expect(capturedPrompts.length).toBe(2);
+
+      // First prompt should NOT contain error context
+      const firstPromptText = capturedPrompts[0]!.parts[0]!;
+      expect(firstPromptText.type).toBe("text");
+      if (firstPromptText.type === "text") {
+        expect(firstPromptText.text).not.toContain("Previous Iteration Error");
+      }
+
+      // Second prompt SHOULD contain error context
+      const secondPromptText = capturedPrompts[1]!.parts[0]!;
+      expect(secondPromptText.type).toBe("text");
+      if (secondPromptText.type === "text") {
+        expect(secondPromptText.text).toContain("Previous Iteration Error");
+        expect(secondPromptText.text).toContain("Connection timed out");
+        expect(secondPromptText.text).toContain("1 time(s) consecutively");
+      }
+    });
+
+    test("prompt does NOT include error context on first iteration", async () => {
+      const loop = createTestLoop({ maxIterations: 1 });
+      const capturedPrompts: PromptInput[] = [];
+
+      const baseMock = createMockBackend([]);
+      let promptSent = false;
+      mockBackend = {
+        ...baseMock,
+        async sendPromptAsync(_sessionId: string, prompt: PromptInput): Promise<void> {
+          capturedPrompts.push(prompt);
+          promptSent = true;
+        },
+        async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+          const { stream, push, end } = createEventStream<AgentEvent>();
+
+          (async () => {
+            let attempts = 0;
+            while (!promptSent && attempts < 100) {
+              await new Promise((resolve) => setTimeout(resolve, 10));
+              attempts++;
+            }
+            promptSent = false;
+
+            push({ type: "message.start", messageId: `msg-${Date.now()}` });
+            push({ type: "message.delta", content: "Done! <promise>COMPLETE</promise>" });
+            push({ type: "message.complete", content: "Done! <promise>COMPLETE</promise>" });
+            end();
+          })();
+
+          return stream;
+        },
+      };
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      expect(capturedPrompts.length).toBe(1);
+      const promptText = capturedPrompts[0]!.parts[0]!;
+      expect(promptText.type).toBe("text");
+      if (promptText.type === "text") {
+        expect(promptText.text).not.toContain("Previous Iteration Error");
+      }
+    });
+
+    test("error context includes consecutive count", async () => {
+      const loop = createTestLoop({ maxIterations: 3, maxConsecutiveErrors: 5 });
+      const capturedPrompts: PromptInput[] = [];
+      let callCount = 0;
+
+      const baseMock = createMockBackend([]);
+      let promptSent = false;
+      mockBackend = {
+        ...baseMock,
+        async sendPromptAsync(_sessionId: string, prompt: PromptInput): Promise<void> {
+          capturedPrompts.push(prompt);
+          callCount++;
+          promptSent = true;
+        },
+        async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+          const { stream, push, end } = createEventStream<AgentEvent>();
+
+          (async () => {
+            let attempts = 0;
+            while (!promptSent && attempts < 100) {
+              await new Promise((resolve) => setTimeout(resolve, 10));
+              attempts++;
+            }
+            promptSent = false;
+
+            if (callCount <= 2) {
+              // First two iterations: emit the same error
+              push({ type: "error", message: "Backend unavailable" });
+              end();
+            } else {
+              // Third iteration: succeed
+              push({ type: "message.start", messageId: `msg-${Date.now()}` });
+              push({ type: "message.delta", content: "Done! <promise>COMPLETE</promise>" });
+              push({ type: "message.complete", content: "Done! <promise>COMPLETE</promise>" });
+              end();
+            }
+          })();
+
+          return stream;
+        },
+      };
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      // Should have 3 prompts: initial + 2 retries
+      expect(capturedPrompts.length).toBe(3);
+
+      // Second prompt should show count of 1
+      const secondPromptText = capturedPrompts[1]!.parts[0]!;
+      if (secondPromptText.type === "text") {
+        expect(secondPromptText.text).toContain("1 time(s) consecutively");
+        expect(secondPromptText.text).toContain("Backend unavailable");
+      }
+
+      // Third prompt should show count of 2
+      const thirdPromptText = capturedPrompts[2]!.parts[0]!;
+      if (thirdPromptText.type === "text") {
+        expect(thirdPromptText.text).toContain("2 time(s) consecutively");
+        expect(thirdPromptText.text).toContain("Backend unavailable");
+      }
+    });
+
+    test("error context is cleared after successful iteration", async () => {
+      const loop = createTestLoop({ maxIterations: 5, maxConsecutiveErrors: 5 });
+      const capturedPrompts: PromptInput[] = [];
+      let callCount = 0;
+
+      const baseMock = createMockBackend([]);
+      let promptSent = false;
+      mockBackend = {
+        ...baseMock,
+        async sendPromptAsync(_sessionId: string, prompt: PromptInput): Promise<void> {
+          capturedPrompts.push(prompt);
+          callCount++;
+          promptSent = true;
+        },
+        async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+          const { stream, push, end } = createEventStream<AgentEvent>();
+
+          (async () => {
+            let attempts = 0;
+            while (!promptSent && attempts < 100) {
+              await new Promise((resolve) => setTimeout(resolve, 10));
+              attempts++;
+            }
+            promptSent = false;
+
+            if (callCount === 1) {
+              // First iteration: error
+              push({ type: "error", message: "Temporary failure" });
+              end();
+            } else if (callCount === 2) {
+              // Second iteration: success (continue, not complete)
+              push({ type: "message.start", messageId: `msg-${Date.now()}` });
+              push({ type: "message.delta", content: "Working on it..." });
+              push({ type: "message.complete", content: "Working on it..." });
+              end();
+            } else {
+              // Third iteration: complete
+              push({ type: "message.start", messageId: `msg-${Date.now()}` });
+              push({ type: "message.delta", content: "Done! <promise>COMPLETE</promise>" });
+              push({ type: "message.complete", content: "Done! <promise>COMPLETE</promise>" });
+              end();
+            }
+          })();
+
+          return stream;
+        },
+      };
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      // Should have 3 prompts: initial (error) + retry (success) + next (success)
+      expect(capturedPrompts.length).toBe(3);
+
+      // Second prompt should contain error context (retry after error)
+      const secondPromptText = capturedPrompts[1]!.parts[0]!;
+      if (secondPromptText.type === "text") {
+        expect(secondPromptText.text).toContain("Previous Iteration Error");
+        expect(secondPromptText.text).toContain("Temporary failure");
+      }
+
+      // Third prompt should NOT contain error context (after successful iteration)
+      const thirdPromptText = capturedPrompts[2]!.parts[0]!;
+      if (thirdPromptText.type === "text") {
+        expect(thirdPromptText.text).not.toContain("Previous Iteration Error");
+        expect(thirdPromptText.text).not.toContain("Temporary failure");
+      }
+    });
+
+    test("plan mode prompt includes error context when retrying", async () => {
+      const loop = createTestLoop({ maxIterations: 3, maxConsecutiveErrors: 3, planMode: true });
+      // Set up plan mode state
+      loop.state.status = "planning";
+      loop.state.planMode = {
+        active: true,
+        feedbackRounds: 0,
+        planningFolderCleared: false,
+        isPlanReady: false,
+      };
+
+      const capturedPrompts: PromptInput[] = [];
+      let callCount = 0;
+
+      const baseMock = createMockBackend([]);
+      let promptSent = false;
+      mockBackend = {
+        ...baseMock,
+        async sendPromptAsync(_sessionId: string, prompt: PromptInput): Promise<void> {
+          capturedPrompts.push(prompt);
+          callCount++;
+          promptSent = true;
+        },
+        async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+          const { stream, push, end } = createEventStream<AgentEvent>();
+
+          (async () => {
+            let attempts = 0;
+            while (!promptSent && attempts < 100) {
+              await new Promise((resolve) => setTimeout(resolve, 10));
+              attempts++;
+            }
+            promptSent = false;
+
+            if (callCount === 1) {
+              // First iteration: error
+              push({ type: "error", message: "Model rate limited" });
+              end();
+            } else {
+              // Second iteration: succeed with PLAN_READY
+              push({ type: "message.start", messageId: `msg-${Date.now()}` });
+              push({ type: "message.delta", content: "Plan created\n<promise>PLAN_READY</promise>" });
+              push({ type: "message.complete", content: "Plan created\n<promise>PLAN_READY</promise>" });
+              end();
+            }
+          })();
+
+          return stream;
+        },
+      };
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      // Should have 2 prompts: error + retry
+      expect(capturedPrompts.length).toBe(2);
+
+      // First prompt (plan mode) should NOT contain error context
+      const firstPromptText = capturedPrompts[0]!.parts[0]!;
+      if (firstPromptText.type === "text") {
+        expect(firstPromptText.text).toContain("Goal:");
+        expect(firstPromptText.text).not.toContain("Previous Iteration Error");
+      }
+
+      // Second prompt (plan mode retry) SHOULD contain error context
+      const secondPromptText = capturedPrompts[1]!.parts[0]!;
+      if (secondPromptText.type === "text") {
+        expect(secondPromptText.text).toContain("Goal:");
+        expect(secondPromptText.text).toContain("Previous Iteration Error");
+        expect(secondPromptText.text).toContain("Model rate limited");
+      }
+    });
+  });
+
   describe("abortSessionOnly", () => {
     test("emits loop.session_aborted event", async () => {
       const loop = createTestLoop();
