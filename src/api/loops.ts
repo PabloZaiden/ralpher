@@ -1074,9 +1074,11 @@ export const loopsDataRoutes = {
       }
 
       try {
-        // Get mode-appropriate git service
-        // Use worktree path if available (loop runs in its own worktree)
-        const workDir = loop.state.git.worktreePath ?? loop.config.directory;
+        // Every loop must operate in its own worktree -- no fallback to config.directory
+        const workDir = loop.state.git.worktreePath;
+        if (!workDir) {
+          return errorResponse("no_worktree", "Loop has no worktree path. Every loop must operate in its own worktree.", 400);
+        }
         const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workDir);
         const git = GitService.withExecutor(executor);
 
@@ -1106,9 +1108,11 @@ export const loopsDataRoutes = {
         return errorResponse("not_found", "Loop not found", 404);
       }
 
-      // Get mode-appropriate command executor
-      // Use worktree path if available (loop runs in its own worktree)
-      const workDir = loop.state.git?.worktreePath ?? loop.config.directory;
+      const workDir = loop.state.git?.worktreePath;
+      if (!workDir) {
+        return errorResponse("no_worktree", "Loop has no worktree path. Every loop must operate in its own worktree.", 400);
+      }
+
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workDir);
       const planPath = `${workDir}/.planning/plan.md`;
 
@@ -1142,9 +1146,11 @@ export const loopsDataRoutes = {
         return errorResponse("not_found", "Loop not found", 404);
       }
 
-      // Get mode-appropriate command executor
-      // Use worktree path if available (loop runs in its own worktree)
-      const workDir = loop.state.git?.worktreePath ?? loop.config.directory;
+      const workDir = loop.state.git?.worktreePath;
+      if (!workDir) {
+        return errorResponse("no_worktree", "Loop has no worktree path. Every loop must operate in its own worktree.", 400);
+      }
+
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workDir);
       const statusPath = `${workDir}/.planning/status.md`;
 

@@ -1579,6 +1579,14 @@ describe("StopPatternDetector", () => {
         planningFolderCleared: false,
         isPlanReady: false,
       };
+      // Plan mode skips git setup in start(), so we need to set the worktree path
+      // manually (normally done by startPlanMode() before engine.start()).
+      loop.state.git = {
+        originalBranch: "main",
+        workingBranch: "ralph/test",
+        worktreePath: testDir,
+        commits: [],
+      };
 
       const capturedPrompts: PromptInput[] = [];
       let callCount = 0;
@@ -1657,6 +1665,14 @@ describe("StopPatternDetector", () => {
         feedbackRounds: 0,
         planningFolderCleared: false,
         isPlanReady: false,
+      };
+      // Plan mode skips git setup in start(), so we need to set the worktree path
+      // manually (normally done by startPlanMode() before engine.start()).
+      loop.state.git = {
+        originalBranch: "main",
+        workingBranch: "ralph/test",
+        worktreePath: testDir,
+        commits: [],
       };
 
       const capturedPrompts: PromptInput[] = [];

@@ -71,11 +71,23 @@ export type AppEvent = LoopEvent | ServerEvent;
 
 /**
  * Connection state for a workspace.
+ * Used for workspace-level operations (directory validation, model listing, name generation).
  */
 interface WorkspaceConnectionState {
   backend: Backend;
   settings: ServerSettings;
   connectionError: string | null;
+}
+
+/**
+ * Connection state for a loop.
+ * Each loop gets its own dedicated backend connection.
+ * The actual directory binding happens later when LoopEngine calls backend.connect()
+ * in setupSession() with the worktree directory.
+ */
+interface LoopConnectionState {
+  backend: Backend;
+  workspaceId: string;
 }
 
 /**
@@ -104,8 +116,10 @@ export function buildConnectionConfig(settings: ServerSettings, directory: strin
  * Each workspace can have its own server settings and connection.
  */
 class BackendManager {
-  /** Map of workspace ID to connection state */
+  /** Map of workspace ID to connection state (for workspace-level operations) */
   private connections = new Map<string, WorkspaceConnectionState>();
+  /** Map of loop ID to its own dedicated backend connection */
+  private loopConnections = new Map<string, LoopConnectionState>();
   private initialized = false;
   /** Custom executor factory for testing */
   private testExecutorFactory: CommandExecutorFactory | null = null;
@@ -296,6 +310,7 @@ class BackendManager {
    * Disconnects all backends and clears all cached instances.
    */
   async resetAllConnections(): Promise<void> {
+    // Reset all workspace-level connections
     for (const [workspaceId, state] of this.connections) {
       try {
         state.backend.abortAllSubscriptions();
@@ -307,9 +322,22 @@ class BackendManager {
       }
     }
     
+    // Reset all loop-level connections
+    for (const [loopId, state] of this.loopConnections) {
+      try {
+        state.backend.abortAllSubscriptions();
+        if (state.backend.isConnected()) {
+          await state.backend.disconnect();
+        }
+      } catch (error) {
+        log.error(`Error resetting loop connection for ${loopId}: ${String(error)}`);
+      }
+    }
+    
     // If not using test backend, clear all connections
     if (!this.isTestBackend) {
       this.connections.clear();
+      this.loopConnections.clear();
     }
     
     this.emitEvent({
@@ -480,8 +508,12 @@ class BackendManager {
   }
 
   /**
-   * Get the backend instance for a workspace.
+   * Get the backend instance for a workspace (workspace-level operations only).
+   * Used for operations that don't belong to a specific loop (name generation,
+   * model listing, directory validation).
    * Creates a new backend if one doesn't exist.
+   * 
+   * IMPORTANT: Do NOT use this for loop execution. Use getLoopBackend() instead.
    */
   getBackend(workspaceId: string): Backend {
     // Use test backend if set
@@ -502,6 +534,71 @@ class BackendManager {
       connectionError: null,
     });
     return backend;
+  }
+
+  /**
+   * Get a dedicated backend instance for a loop.
+   * Each loop gets its own OpenCodeBackend so that concurrent loops
+   * in the same workspace don't interfere with each other.
+   * 
+   * The actual directory binding happens later when LoopEngine calls
+   * backend.connect() in setupSession() with the worktree directory.
+   * 
+   * In test mode, returns the shared test backend (tests manage their own isolation).
+   * 
+   * @param loopId - The loop ID
+   * @param workspaceId - The workspace ID (for settings lookup)
+   * @returns A Backend instance dedicated to this loop
+   */
+  getLoopBackend(loopId: string, workspaceId: string): Backend {
+    // Use test backend if set (tests share a single mock backend)
+    if (this.isTestBackend && this.testBackend) {
+      return this.testBackend;
+    }
+
+    const existing = this.loopConnections.get(loopId);
+    if (existing) {
+      return existing.backend;
+    }
+
+    // Create a new dedicated backend for this loop
+    const backend = new OpenCodeBackend();
+    this.loopConnections.set(loopId, {
+      backend,
+      workspaceId,
+    });
+    log.debug(`[BackendManager] Created dedicated backend for loop ${loopId}`);
+    return backend;
+  }
+
+  /**
+   * Disconnect and clean up the backend for a specific loop.
+   * Called when a loop is stopped, completed, or failed.
+   * 
+   * @param loopId - The loop ID to clean up
+   */
+  async disconnectLoop(loopId: string): Promise<void> {
+    // In test mode, don't disconnect the shared test backend
+    if (this.isTestBackend) {
+      return;
+    }
+
+    const state = this.loopConnections.get(loopId);
+    if (!state) {
+      return;
+    }
+
+    try {
+      state.backend.abortAllSubscriptions();
+      if (state.backend.isConnected()) {
+        await state.backend.disconnect();
+      }
+    } catch (error) {
+      log.error(`[BackendManager] Error disconnecting loop ${loopId}: ${String(error)}`);
+    }
+
+    this.loopConnections.delete(loopId);
+    log.debug(`[BackendManager] Cleaned up backend for loop ${loopId}`);
   }
 
   /**
@@ -644,6 +741,7 @@ class BackendManager {
    */
   resetForTesting(): void {
     this.connections.clear();
+    this.loopConnections.clear();
     this.initialized = false;
     this.testExecutorFactory = null;
     this.isTestBackend = false;

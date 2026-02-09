@@ -279,8 +279,11 @@ export class LoopManager {
     }
     await updateLoopState(loopId, loop.state);
 
-    // Get backend from global manager for this workspace
-    const backend = backendManager.getBackend(loop.config.workspaceId);
+    // Get a dedicated backend for this loop (each loop gets its own connection).
+    // The worktree doesn't exist yet - it's created below by setupGitBranchForPlanAcceptance().
+    // The backend won't connect until engine.start() -> setupSession(), by which time
+    // the worktree will exist and engine.workingDirectory will return the worktree path.
+    const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
     // Create engine first, then set up git branch before starting the engine.
     // This ensures the worktree exists before the AI session runs, so the AI
@@ -380,9 +383,13 @@ export class LoopManager {
       }
       
       // Recreate the engine for this planning loop
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+      const worktreeDir = loop.state.git?.worktreePath;
+      if (!worktreeDir) {
+        throw new Error("Loop has no worktree path - cannot recreate engine for plan feedback");
+      }
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
       const git = GitService.withExecutor(executor);
-      const backend = backendManager.getBackend(loop.config.workspaceId);
+      const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
       
       engine = new LoopEngine({
         loop,
@@ -729,8 +736,10 @@ Follow the standard loop execution flow:
 
     // No uncommitted-changes check needed — worktrees are isolated from the main checkout
 
-    // Get backend from global manager for this workspace
-    const backend = backendManager.getBackend(loop.config.workspaceId);
+    // Get a dedicated backend for this loop (each loop gets its own connection).
+    // The worktree doesn't exist yet - it's created by engine.start() -> setupGitBranch().
+    // The backend connects after the worktree is set up, using engine.workingDirectory.
+    const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
     // Create engine with persistence callback
     // Pass the git service with the appropriate executor
@@ -768,6 +777,9 @@ Follow the standard loop execution flow:
 
     await engine.stop(reason);
     this.engines.delete(loopId);
+
+    // Clean up the dedicated backend connection for this loop
+    await backendManager.disconnectLoop(loopId);
 
     // Persist final state
     await updateLoopState(loopId, engine.state);
@@ -852,6 +864,9 @@ Follow the standard loop execution flow:
         reviewMode,
       };
       await updateLoopState(loopId, updatedState);
+
+      // Clean up the dedicated backend connection for this loop
+      await backendManager.disconnectLoop(loopId);
 
       // Remove engine from in-memory map so getLoop returns persisted state
       this.engines.delete(loopId);
@@ -953,6 +968,9 @@ Follow the standard loop execution flow:
       };
       await updateLoopState(loopId, updatedState);
 
+      // Clean up the dedicated backend connection for this loop
+      await backendManager.disconnectLoop(loopId);
+
       // Remove engine from in-memory map so getLoop returns persisted state
       this.engines.delete(loopId);
 
@@ -1001,6 +1019,9 @@ Follow the standard loop execution flow:
         status: "deleted" as const,
       };
       await updateLoopState(loopId, updatedState);
+
+      // Clean up the dedicated backend connection for this loop
+      await backendManager.disconnectLoop(loopId);
 
       // Remove engine from in-memory map so getLoop returns persisted state
       this.engines.delete(loopId);
@@ -1154,6 +1175,9 @@ Follow the standard loop execution flow:
           : undefined,
       };
       await updateLoopState(loopId, updatedState);
+
+      // Clean up the dedicated backend connection for this loop
+      await backendManager.disconnectLoop(loopId);
 
       // Remove engine from in-memory map if present
       this.engines.delete(loopId);
@@ -1508,9 +1532,13 @@ Follow the standard loop execution flow:
   private async jumpstartOnExistingBranch(loopId: string, loop: Loop, isPlanning = false): Promise<{ success: boolean; error?: string }> {
     try {
       // Get the appropriate command executor for the current mode
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+      const worktreeDir = loop.state.git?.worktreePath;
+      if (!worktreeDir) {
+        return { success: false, error: "Loop has no worktree path - cannot jumpstart" };
+      }
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
       const git = GitService.withExecutor(executor);
-      const backend = backendManager.getBackend(loop.config.workspaceId);
+      const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
       const workingBranch = loop.state.git!.workingBranch;
       const loopType = isPlanning ? "planning loop" : "loop";
@@ -1588,8 +1616,10 @@ Follow the standard loop execution flow:
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const git = GitService.withExecutor(executor);
 
-      // Get backend instance
-      const backend = backendManager.getBackend(loop.config.workspaceId);
+      // Get a dedicated backend for this loop's review cycle.
+      // For pushed loops, the worktree already exists.
+      // For merged loops, a new worktree is created below before the engine starts.
+      const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
       // Calculate the next review cycle number
       const nextReviewCycle = loop.state.reviewMode.reviewCycles + 1;
@@ -1855,6 +1885,10 @@ Instructions:
         engine.state.status === "max_iterations"
       ) {
         clearInterval(interval);
+        // Clean up the dedicated backend connection for this loop
+        backendManager.disconnectLoop(loopId).catch((error) => {
+          log.error(`Failed to disconnect loop backend during cleanup: ${String(error)}`);
+        });
         this.engines.delete(loopId);
       }
     }, 5000); // Persist every 5 seconds
