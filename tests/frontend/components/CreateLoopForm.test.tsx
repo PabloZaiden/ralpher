@@ -17,6 +17,7 @@ import {
 import type { ModelInfo, CreateLoopRequest } from "@/types";
 import type { WorkspaceWithLoopCount } from "@/types/workspace";
 import { DEFAULT_LOOP_CONFIG } from "@/types/loop";
+import { PROMPT_TEMPLATES, getTemplateById } from "@/lib/prompt-templates";
 
 /**
  * Helper to set a textarea/input value for form testing.
@@ -783,6 +784,105 @@ describe("CreateLoopForm", () => {
         <CreateLoopForm {...defaultProps({ loading: true })} />
       );
       expect(getByRole("button", { name: "Create Plan" })).toBeDisabled();
+    });
+  });
+
+  describe("template selection", () => {
+    test("renders template dropdown with all templates", () => {
+      const { getByLabelText } = renderWithUser(
+        <CreateLoopForm {...defaultProps()} />
+      );
+      const select = getByLabelText("Template") as HTMLSelectElement;
+      const optionTexts = Array.from(select.options).map(o => o.text);
+      // Should have "No template" + all templates
+      expect(optionTexts).toContain("No template (custom prompt)");
+      for (const template of PROMPT_TEMPLATES) {
+        expect(optionTexts).toContain(template.name);
+      }
+    });
+
+    test("selecting a template updates the textarea value", async () => {
+      const { getByLabelText, user } = renderWithUser(
+        <CreateLoopForm {...defaultProps()} />
+      );
+
+      const templateSelect = getByLabelText("Template") as HTMLSelectElement;
+      const textarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
+
+      // Select the "Fix Failing Tests" template
+      await user.selectOptions(templateSelect, "fix-failing-tests");
+
+      const template = getTemplateById("fix-failing-tests")!;
+      await waitFor(() => {
+        expect(textarea.value).toBe(template.prompt);
+      });
+    });
+
+    test("selecting a template sets planMode from template defaults", async () => {
+      const { getByLabelText, getByRole, user } = renderWithUser(
+        <CreateLoopForm {...defaultProps()} />
+      );
+
+      const templateSelect = getByLabelText("Template") as HTMLSelectElement;
+      const planModeCheckbox = getByRole("checkbox", { name: /Plan Mode/ }) as HTMLInputElement;
+
+      // Default plan mode is true
+      expect(planModeCheckbox.checked).toBe(true);
+
+      // Select "Fix Failing Tests" — its defaults.planMode is false
+      await user.selectOptions(templateSelect, "fix-failing-tests");
+
+      await waitFor(() => {
+        expect(planModeCheckbox.checked).toBe(false);
+      });
+
+      // Now select "Thorough Code Review" — its defaults.planMode is true
+      await user.selectOptions(templateSelect, "thorough-code-review");
+
+      await waitFor(() => {
+        expect(planModeCheckbox.checked).toBe(true);
+      });
+    });
+
+    test("modifying the textarea clears the selected template", async () => {
+      const { getByLabelText, user } = renderWithUser(
+        <CreateLoopForm {...defaultProps()} />
+      );
+
+      const templateSelect = getByLabelText("Template") as HTMLSelectElement;
+      const textarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
+
+      // Select a template first
+      await user.selectOptions(templateSelect, "continue-planned-tasks");
+
+      await waitFor(() => {
+        expect(templateSelect.value).toBe("continue-planned-tasks");
+      });
+
+      // Type a character in the textarea to modify the prompt
+      // This uses user.type() with a single char to trigger React's onChange
+      await user.type(textarea, "X");
+
+      // Template selection should be cleared since prompt diverged from template text
+      await waitFor(() => {
+        expect(templateSelect.value).toBe("");
+      });
+    });
+
+    test("shows template description when a template is selected", async () => {
+      const { getByLabelText, getByText, user } = renderWithUser(
+        <CreateLoopForm {...defaultProps()} />
+      );
+
+      const templateSelect = getByLabelText("Template") as HTMLSelectElement;
+
+      // Select a template
+      await user.selectOptions(templateSelect, "thorough-code-review");
+
+      const template = getTemplateById("thorough-code-review")!;
+      await waitFor(() => {
+        expect(getByText(template.description)).toBeInTheDocument();
+      });
     });
   });
 });
