@@ -2,8 +2,11 @@
  * Modal component for overlays and dialogs.
  */
 
-import { useCallback, useEffect, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { Button } from "./Button";
+
+/** Selector for all focusable elements within a container. */
+const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export interface ModalProps {
   /** Whether the modal is open */
@@ -44,29 +47,74 @@ export function Modal({
   showCloseButton = true,
   closeOnOverlayClick = true,
 }: ModalProps) {
-  // Handle escape key
-  const handleEscape = useCallback(
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<Element | null>(null);
+
+  // Handle keyboard events (escape + focus trap).
+  // Uses a ref to always read the latest onClose, avoiding effect re-runs
+  // when the onClose reference changes on re-render.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        onCloseRef.current();
+        return;
+      }
+
+      // Focus trap: cycle Tab/Shift+Tab within modal
+      if (e.key === "Tab" && modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+        if (focusable.length === 0) return;
+
+        const first = focusable[0]!;
+        const last = focusable[focusable.length - 1]!;
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
       }
     },
-    [onClose]
+    [] // Stable reference — reads onClose from ref
   );
 
-  // Add/remove escape listener
+  // Add/remove keyboard listener, manage focus
   useEffect(() => {
     if (isOpen) {
-      document.addEventListener("keydown", handleEscape);
+      // Save the currently focused element to restore later
+      previousFocusRef.current = document.activeElement;
+
+      document.addEventListener("keydown", handleKeyDown);
       // Prevent body scroll
       document.body.style.overflow = "hidden";
+
+      // Auto-focus the modal container so keyboard navigation works
+      // immediately. Individual modal consumers can override focus
+      // (e.g., RenameLoopModal focuses its input via its own useEffect).
+      if (modalRef.current) {
+        modalRef.current.focus();
+      }
     }
 
     return () => {
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", handleKeyDown);
       document.body.style.overflow = "";
+
+      // Restore focus to the previously focused element
+      if (previousFocusRef.current instanceof HTMLElement) {
+        previousFocusRef.current.focus();
+      }
     };
-  }, [isOpen, handleEscape]);
+  }, [isOpen, handleKeyDown]);
 
   if (!isOpen) {
     return null;
@@ -83,6 +131,8 @@ export function Modal({
 
       {/* Modal */}
       <div
+        ref={modalRef}
+        tabIndex={-1}
         className={`relative w-full ${sizeClasses[size]} rounded-lg bg-white shadow-xl dark:bg-gray-800 max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] flex flex-col`}
         role="dialog"
         aria-modal="true"

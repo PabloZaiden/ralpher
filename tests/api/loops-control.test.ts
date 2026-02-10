@@ -9,7 +9,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { serve, type Server } from "bun";
 import { apiRoutes } from "../../src/api";
-import { ensureDataDirectories } from "../../src/persistence/paths";
+import { ensureDataDirectories } from "../../src/persistence/database";
 import { backendManager } from "../../src/core/backend-manager";
 import { loopManager } from "../../src/core/loop-manager";
 import { closeDatabase } from "../../src/persistence/database";

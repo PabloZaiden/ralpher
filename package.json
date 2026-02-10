@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "bun --hot src/index.ts",
     "start": "NODE_ENV=production bun src/index.ts",
-    "build": "bun run tsc; export workspace_dir=$(pwd); (cd /tmp; bun $workspace_dir/src/build.ts)",
+    "build": "bun run tsc && export workspace_dir=$(pwd) && (cd /tmp; bun $workspace_dir/src/build.ts)",
     "test": "RALPHER_LOG_LEVEL=fatal bun test --timeout 15000 tests/unit tests/api tests/e2e tests/integration && bun test --timeout 15000 --preload ./tests/frontend/setup.ts tests/frontend",
     "test:backend": "RALPHER_LOG_LEVEL=fatal bun test --timeout 15000 tests/unit tests/api tests/e2e tests/integration",
     "test:frontend": "bun test --timeout 15000 --preload ./tests/frontend/setup.ts tests/frontend",
@@ -22,7 +22,7 @@
     "remark-gfm": "4.0.1",
     "tailwindcss": "4.1.18",
     "tslog": "4.10.2",
-    "zod": "^4.3.6"
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.5.0",

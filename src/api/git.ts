@@ -16,6 +16,7 @@ import { GitService } from "../core/git-service";
 import { getWorkspaceByDirectory } from "../persistence/workspaces";
 import type { BranchInfo } from "../types";
 import { createLogger } from "../core/logger";
+import { errorResponse } from "./helpers";
 
 const log = createLogger("api:git");
 
@@ -59,6 +60,34 @@ async function getGitService(directory: string): Promise<GitService> {
 }
 
 /**
+ * Validate git request: extract directory, get GitService, and verify it's a git repo.
+ * Shared boilerplate for all git endpoints.
+ *
+ * @returns Object with git service and directory on success, or an error Response
+ */
+async function validateGitRequest(req: Request): Promise<
+  { git: GitService; directory: string } | Response
+> {
+  const url = new URL(req.url);
+  const directory = url.searchParams.get("directory");
+
+  if (!directory) {
+    log.warn("Missing directory parameter");
+    return errorResponse("missing_parameter", "directory query parameter is required");
+  }
+
+  const git = await getGitService(directory);
+
+  const isGitRepo = await git.isGitRepo(directory);
+  if (!isGitRepo) {
+    log.debug("Directory is not a git repository", { directory });
+    return errorResponse("not_git_repo", "Directory is not a git repository");
+  }
+
+  return { git, directory };
+}
+
+/**
  * Git API routes.
  * 
  * Provides endpoints for git repository information:
@@ -82,32 +111,12 @@ export const gitRoutes = {
    */
   "/api/git/branches": {
     async GET(req: Request): Promise<Response> {
-      const url = new URL(req.url);
-      const directory = url.searchParams.get("directory");
-
-      log.debug("GET /api/git/branches", { directory });
-
-      if (!directory) {
-        log.warn("Missing directory parameter");
-        return Response.json(
-          { error: "missing_parameter", message: "directory query parameter is required" },
-          { status: 400 }
-        );
-      }
+      log.debug("GET /api/git/branches");
 
       try {
-        // Get mode-appropriate git service
-        const git = await getGitService(directory);
-
-        // Check if it's a git repo
-        const isGitRepo = await git.isGitRepo(directory);
-        if (!isGitRepo) {
-          log.debug("Directory is not a git repository", { directory });
-          return Response.json(
-            { error: "not_git_repo", message: "Directory is not a git repository" },
-            { status: 400 }
-          );
-        }
+        const result = await validateGitRequest(req);
+        if (result instanceof Response) return result;
+        const { git, directory } = result;
 
         const branches = await git.getLocalBranches(directory);
         const currentBranch = branches.find((b) => b.current)?.name ?? "";
@@ -120,11 +129,8 @@ export const gitRoutes = {
         log.trace("Branches retrieved", { directory, currentBranch, branchCount: branches.length });
         return Response.json(response);
       } catch (error) {
-        log.error("Git branches error", { directory, error: String(error) });
-        return Response.json(
-          { error: "git_error", message: String(error) },
-          { status: 500 }
-        );
+        log.error("Git branches error", { error: String(error) });
+        return errorResponse("git_error", String(error), 500);
       }
     },
   },
@@ -146,32 +152,12 @@ export const gitRoutes = {
    */
   "/api/git/default-branch": {
     async GET(req: Request): Promise<Response> {
-      const url = new URL(req.url);
-      const directory = url.searchParams.get("directory");
-
-      log.debug("GET /api/git/default-branch", { directory });
-
-      if (!directory) {
-        log.warn("Missing directory parameter");
-        return Response.json(
-          { error: "missing_parameter", message: "directory query parameter is required" },
-          { status: 400 }
-        );
-      }
+      log.debug("GET /api/git/default-branch");
 
       try {
-        // Get mode-appropriate git service
-        const git = await getGitService(directory);
-
-        // Check if it's a git repo
-        const isGitRepo = await git.isGitRepo(directory);
-        if (!isGitRepo) {
-          log.debug("Directory is not a git repository", { directory });
-          return Response.json(
-            { error: "not_git_repo", message: "Directory is not a git repository" },
-            { status: 400 }
-          );
-        }
+        const result = await validateGitRequest(req);
+        if (result instanceof Response) return result;
+        const { git, directory } = result;
 
         const defaultBranch = await git.getDefaultBranch(directory);
 
@@ -182,11 +168,8 @@ export const gitRoutes = {
         log.trace("Default branch retrieved", { directory, defaultBranch });
         return Response.json(response);
       } catch (error) {
-        log.error("Git default-branch error", { directory, error: String(error) });
-        return Response.json(
-          { error: "git_error", message: String(error) },
-          { status: 500 }
-        );
+        log.error("Git default-branch error", { error: String(error) });
+        return errorResponse("git_error", String(error), 500);
       }
     },
   },

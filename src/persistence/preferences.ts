@@ -4,6 +4,11 @@
  * 
  * Note: Server settings are now stored per-workspace, not globally.
  * See src/persistence/workspaces.ts for workspace-specific server settings.
+ * 
+ * Note: Exported functions are marked `async` despite using synchronous
+ * bun:sqlite APIs. This is intentional for interface consistency — callers
+ * already `await` these functions, and the persistence layer may switch to
+ * async storage in the future.
  */
 
 import { getDatabase } from "./database";

@@ -25,6 +25,25 @@ export class BranchMismatchError extends Error {
 }
 
 /**
+ * Error thrown when a git command fails.
+ * Preserves the command, exit code, and stderr for debugging.
+ */
+export class GitCommandError extends Error {
+  readonly code = "GIT_COMMAND_FAILED";
+  readonly command: string;
+  readonly exitCode: number;
+  readonly gitStderr: string;
+
+  constructor(message: string, command: string, exitCode: number, stderr: string) {
+    super(message);
+    this.name = "GitCommandError";
+    this.command = command;
+    this.exitCode = exitCode;
+    this.gitStderr = stderr;
+  }
+}
+
+/**
  * Result of a git command execution.
  */
 export interface GitCommandResult {
@@ -249,9 +268,10 @@ export class GitService {
    * Get the current branch name.
    */
   async getCurrentBranch(directory: string): Promise<string> {
-    const result = await this.runGitCommand(directory, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    const args = ["rev-parse", "--abbrev-ref", "HEAD"];
+    const result = await this.runGitCommand(directory, args);
     if (!result.success) {
-      throw new Error(`Failed to get current branch: ${result.stderr}`);
+      throw this.gitError("Failed to get current branch", result, args);
     }
     return result.stdout.trim();
   }
@@ -264,9 +284,10 @@ export class GitService {
    * where `git branch` returns nothing but the repo still has a current branch.
    */
   async getLocalBranches(directory: string): Promise<{ name: string; current: boolean }[]> {
-    const result = await this.runGitCommand(directory, ["branch", "--format=%(refname:short)|%(HEAD)"]);
+    const args = ["branch", "--format=%(refname:short)|%(HEAD)"];
+    const result = await this.runGitCommand(directory, args);
     if (!result.success) {
-      throw new Error(`Failed to get local branches: ${result.stderr}`);
+      throw this.gitError("Failed to get local branches", result, args);
     }
 
     const lines = result.stdout.replace(/\r\n?/g, "\n").trim().split("\n").filter(Boolean);
@@ -440,7 +461,7 @@ export class GitService {
   async hasUncommittedChanges(directory: string): Promise<boolean> {
     const result = await this.runGitCommand(directory, ["status", "--porcelain"]);
     if (!result.success) {
-      throw new Error(`Failed to check git status: ${result.stderr}`);
+      throw this.gitError("Failed to check git status", result, ["status", "--porcelain"]);
     }
     const hasChanges = result.stdout.trim().length > 0;
     // Debug logging for troubleshooting PTY output parsing
@@ -458,9 +479,10 @@ export class GitService {
    * Get list of changed files (staged and unstaged).
    */
   async getChangedFiles(directory: string): Promise<string[]> {
-    const result = await this.runGitCommand(directory, ["status", "--porcelain"]);
+    const args = ["status", "--porcelain"];
+    const result = await this.runGitCommand(directory, args);
     if (!result.success) {
-      throw new Error(`Failed to get changed files: ${result.stderr}`);
+      throw this.gitError("Failed to get changed files", result, args);
     }
 
     // Use trimEnd() instead of trim() to preserve leading spaces (important for git status format)
@@ -480,9 +502,10 @@ export class GitService {
    * Create a new branch from the current HEAD.
    */
   async createBranch(directory: string, branchName: string): Promise<void> {
-    const result = await this.runGitCommand(directory, ["checkout", "-b", branchName]);
+    const args = ["checkout", "-b", branchName];
+    const result = await this.runGitCommand(directory, args);
     if (!result.success) {
-      throw new Error(`Failed to create branch ${branchName}: ${result.stderr}`);
+      throw this.gitError(`Failed to create branch ${branchName}`, result, args);
     }
   }
 
@@ -490,9 +513,10 @@ export class GitService {
    * Checkout an existing branch.
    */
   async checkoutBranch(directory: string, branchName: string): Promise<void> {
-    const result = await this.runGitCommand(directory, ["checkout", branchName]);
+    const args = ["checkout", branchName];
+    const result = await this.runGitCommand(directory, args);
     if (!result.success) {
-      throw new Error(`Failed to checkout branch ${branchName}: ${result.stderr}`);
+      throw this.gitError(`Failed to checkout branch ${branchName}`, result, args);
     }
   }
 
@@ -500,9 +524,10 @@ export class GitService {
    * Delete a branch.
    */
   async deleteBranch(directory: string, branchName: string): Promise<void> {
-    const result = await this.runGitCommand(directory, ["branch", "-D", branchName]);
+    const args = ["branch", "-D", branchName];
+    const result = await this.runGitCommand(directory, args);
     if (!result.success) {
-      throw new Error(`Failed to delete branch ${branchName}: ${result.stderr}`);
+      throw this.gitError(`Failed to delete branch ${branchName}`, result, args);
     }
   }
 
@@ -529,9 +554,10 @@ export class GitService {
    * Stage all changes (new, modified, deleted files).
    */
   async stageAll(directory: string): Promise<void> {
-    const result = await this.runGitCommand(directory, ["add", "-A"]);
+    const args = ["add", "-A"];
+    const result = await this.runGitCommand(directory, args);
     if (!result.success) {
-      throw new Error(`Failed to stage changes: ${result.stderr}`);
+      throw this.gitError("Failed to stage changes", result, args);
     }
   }
 
@@ -562,15 +588,17 @@ export class GitService {
     }
 
     // Commit
-    const result = await this.runGitCommand(directory, ["commit", "-m", message]);
+    const commitArgs = ["commit", "-m", message];
+    const result = await this.runGitCommand(directory, commitArgs);
     if (!result.success) {
-      throw new Error(`Failed to commit: ${result.stderr}`);
+      throw this.gitError("Failed to commit", result, commitArgs);
     }
 
     // Get the commit SHA
-    const shaResult = await this.runGitCommand(directory, ["rev-parse", "HEAD"]);
+    const shaArgs = ["rev-parse", "HEAD"];
+    const shaResult = await this.runGitCommand(directory, shaArgs);
     if (!shaResult.success) {
-      throw new Error(`Failed to get commit SHA: ${shaResult.stderr}`);
+      throw this.gitError("Failed to get commit SHA", shaResult, shaArgs);
     }
     const sha = shaResult.stdout.trim();
 
@@ -615,9 +643,10 @@ export class GitService {
       }
     }
 
-    const result = await this.runGitCommand(directory, ["stash", "push", "-u"]);
+    const args = ["stash", "push", "-u"];
+    const result = await this.runGitCommand(directory, args);
     if (!result.success) {
-      throw new Error(`Failed to stash changes: ${result.stderr}`);
+      throw this.gitError("Failed to stash changes", result, args);
     }
   }
 
@@ -636,9 +665,10 @@ export class GitService {
       }
     }
 
-    const result = await this.runGitCommand(directory, ["stash", "pop"]);
+    const args = ["stash", "pop"];
+    const result = await this.runGitCommand(directory, args);
     if (!result.success) {
-      throw new Error(`Failed to pop stash: ${result.stderr}`);
+      throw this.gitError("Failed to pop stash", result, args);
     }
   }
 
@@ -658,23 +688,26 @@ export class GitService {
       const verification = await this.verifyBranch(directory, options.expectedBranch);
       if (!verification.matches) {
         log.info(`[GitService] resetHard: Force switching from '${verification.currentBranch}' to '${options.expectedBranch}' before reset`);
-        const checkoutResult = await this.runGitCommand(directory, ["checkout", "-f", options.expectedBranch]);
+        const checkoutArgs = ["checkout", "-f", options.expectedBranch];
+        const checkoutResult = await this.runGitCommand(directory, checkoutArgs);
         if (!checkoutResult.success) {
-          throw new Error(`Failed to force checkout branch ${options.expectedBranch}: ${checkoutResult.stderr}`);
+          throw this.gitError(`Failed to force checkout branch ${options.expectedBranch}`, checkoutResult, checkoutArgs);
         }
       }
     }
 
     // Reset tracked files
-    const resetResult = await this.runGitCommand(directory, ["reset", "--hard"]);
+    const resetArgs = ["reset", "--hard"];
+    const resetResult = await this.runGitCommand(directory, resetArgs);
     if (!resetResult.success) {
-      throw new Error(`Failed to reset: ${resetResult.stderr}`);
+      throw this.gitError("Failed to reset", resetResult, resetArgs);
     }
 
     // Clean untracked files and directories
-    const cleanResult = await this.runGitCommand(directory, ["clean", "-fd"]);
+    const cleanArgs = ["clean", "-fd"];
+    const cleanResult = await this.runGitCommand(directory, cleanArgs);
     if (!cleanResult.success) {
-      throw new Error(`Failed to clean untracked files: ${cleanResult.stderr}`);
+      throw this.gitError("Failed to clean untracked files", cleanResult, cleanArgs);
     }
   }
 
@@ -691,21 +724,23 @@ export class GitService {
     await this.checkoutBranch(directory, targetBranch);
 
     // Merge source branch
-    const result = await this.runGitCommand(directory, [
+    const mergeArgs = [
       "merge",
       sourceBranch,
       "--no-ff",
       "-m",
       `Merge branch '${sourceBranch}' into ${targetBranch}`,
-    ]);
+    ];
+    const result = await this.runGitCommand(directory, mergeArgs);
     if (!result.success) {
-      throw new Error(`Failed to merge ${sourceBranch} into ${targetBranch}: ${result.stderr}`);
+      throw this.gitError(`Failed to merge ${sourceBranch} into ${targetBranch}`, result, mergeArgs);
     }
 
     // Get the merge commit SHA
-    const shaResult = await this.runGitCommand(directory, ["rev-parse", "HEAD"]);
+    const shaArgs = ["rev-parse", "HEAD"];
+    const shaResult = await this.runGitCommand(directory, shaArgs);
     if (!shaResult.success) {
-      throw new Error(`Failed to get merge commit SHA: ${shaResult.stderr}`);
+      throw this.gitError("Failed to get merge commit SHA", shaResult, shaArgs);
     }
 
     return shaResult.stdout.trim();
@@ -726,14 +761,15 @@ export class GitService {
   ): Promise<string> {
     // Push to remote with -u flag to set upstream
     // No checkout needed - git push works on branch refs directly
-    const result = await this.runGitCommand(directory, [
+    const pushArgs = [
       "push",
       "-u",
       remote,
       branchName,
-    ]);
+    ];
+    const result = await this.runGitCommand(directory, pushArgs);
     if (!result.success) {
-      throw new Error(`Failed to push branch ${branchName} to ${remote}: ${result.stderr}`);
+      throw this.gitError(`Failed to push branch ${branchName} to ${remote}`, result, pushArgs);
     }
 
     return `${remote}/${branchName}`;
@@ -880,9 +916,10 @@ export class GitService {
    * @param directory - The git repository/worktree directory
    */
   async abortMerge(directory: string): Promise<void> {
-    const result = await this.runGitCommand(directory, ["merge", "--abort"]);
+    const args = ["merge", "--abort"];
+    const result = await this.runGitCommand(directory, args);
     if (!result.success) {
-      throw new Error(`Failed to abort merge: ${result.stderr}`);
+      throw this.gitError("Failed to abort merge", result, args);
     }
   }
 
@@ -1016,13 +1053,14 @@ export class GitService {
    */
   async getDiff(directory: string, baseBranch: string): Promise<FileDiff[]> {
     // Get numstat for additions/deletions counts
-    const result = await this.runGitCommand(directory, [
+    const numstatArgs = [
       "diff",
       "--numstat",
       baseBranch,
-    ]);
+    ];
+    const result = await this.runGitCommand(directory, numstatArgs);
     if (!result.success) {
-      throw new Error(`Failed to get diff: ${result.stderr}`);
+      throw this.gitError("Failed to get diff", result, numstatArgs);
     }
 
     // Get name-status for all files at once (more efficient than per-file calls)
@@ -1081,13 +1119,14 @@ export class GitService {
     directory: string,
     baseBranch: string
   ): Promise<{ files: number; insertions: number; deletions: number }> {
-    const result = await this.runGitCommand(directory, [
+    const shortstatArgs = [
       "diff",
       "--shortstat",
       baseBranch,
-    ]);
+    ];
+    const result = await this.runGitCommand(directory, shortstatArgs);
     if (!result.success) {
-      throw new Error(`Failed to get diff summary: ${result.stderr}`);
+      throw this.gitError("Failed to get diff summary", result, shortstatArgs);
     }
 
     const output = result.stdout.trim();
@@ -1115,14 +1154,15 @@ export class GitService {
     baseBranch: string,
     filePath: string
   ): Promise<string> {
-    const result = await this.runGitCommand(directory, [
+    const diffArgs = [
       "diff",
       baseBranch,
       "--",
       filePath,
-    ]);
+    ];
+    const result = await this.runGitCommand(directory, diffArgs);
     if (!result.success) {
-      throw new Error(`Failed to get file diff: ${result.stderr}`);
+      throw this.gitError("Failed to get file diff", result, diffArgs);
     }
     return result.stdout;
   }
@@ -1215,7 +1255,7 @@ export class GitService {
 
     const result = await this.runGitCommand(repoDirectory, args);
     if (!result.success) {
-      throw new Error(`Failed to create worktree at ${worktreePath}: ${result.stderr}`);
+      throw this.gitError(`Failed to create worktree at ${worktreePath}`, result, args);
     }
 
     log.info(`[GitService] Created worktree at ${worktreePath} with branch ${branchName}`);
@@ -1245,11 +1285,10 @@ export class GitService {
     // Remove the directory we just created — git worktree add requires the target not to exist
     await this.executor.exec("rmdir", [worktreePath]);
 
-    const result = await this.runGitCommand(repoDirectory, [
-      "worktree", "add", worktreePath, branchName,
-    ]);
+    const args = ["worktree", "add", worktreePath, branchName];
+    const result = await this.runGitCommand(repoDirectory, args);
     if (!result.success) {
-      throw new Error(`Failed to add worktree for branch ${branchName} at ${worktreePath}: ${result.stderr}`);
+      throw this.gitError(`Failed to add worktree for branch ${branchName} at ${worktreePath}`, result, args);
     }
 
     log.info(`[GitService] Added worktree at ${worktreePath} for existing branch ${branchName}`);
@@ -1274,7 +1313,7 @@ export class GitService {
 
     const result = await this.runGitCommand(repoDirectory, args);
     if (!result.success) {
-      throw new Error(`Failed to remove worktree at ${worktreePath}: ${result.stderr}`);
+      throw this.gitError(`Failed to remove worktree at ${worktreePath}`, result, args);
     }
 
     log.info(`[GitService] Removed worktree at ${worktreePath}`);
@@ -1289,11 +1328,10 @@ export class GitService {
   async listWorktrees(
     repoDirectory: string
   ): Promise<Array<{ path: string; head: string; branch: string }>> {
-    const result = await this.runGitCommand(repoDirectory, [
-      "worktree", "list", "--porcelain",
-    ]);
+    const listArgs = ["worktree", "list", "--porcelain"];
+    const result = await this.runGitCommand(repoDirectory, listArgs);
     if (!result.success) {
-      throw new Error(`Failed to list worktrees: ${result.stderr}`);
+      throw this.gitError("Failed to list worktrees", result, listArgs);
     }
 
     const output = result.stdout.replace(/\r\n/g, "\n").trim();
@@ -1336,9 +1374,10 @@ export class GitService {
    * @param repoDirectory - The main git repository directory
    */
   async pruneWorktrees(repoDirectory: string): Promise<void> {
-    const result = await this.runGitCommand(repoDirectory, ["worktree", "prune"]);
+    const pruneArgs = ["worktree", "prune"];
+    const result = await this.runGitCommand(repoDirectory, pruneArgs);
     if (!result.success) {
-      throw new Error(`Failed to prune worktrees: ${result.stderr}`);
+      throw this.gitError("Failed to prune worktrees", result, pruneArgs);
     }
 
     log.info(`[GitService] Pruned stale worktree entries in ${repoDirectory}`);
@@ -1485,6 +1524,21 @@ export class GitService {
       stderr: result.stderr,
       exitCode: result.exitCode,
     };
+  }
+
+  /**
+   * Create a GitCommandError from a failed git command result.
+   * Preserves the command string, exit code, and stderr for debugging,
+   * so callers catching this error have full context without losing stack info.
+   */
+  private gitError(message: string, result: GitCommandResult, args: string[]): GitCommandError {
+    const command = `git ${args.join(" ")}`;
+    return new GitCommandError(
+      `${message}: ${result.stderr || "(no stderr)"}`,
+      command,
+      result.exitCode,
+      result.stderr,
+    );
   }
 }
 

@@ -15,8 +15,7 @@
  * @module types/events
  */
 
-import type { GitCommit, LoopConfig, ModelConfig } from "./loop";
-import type { TodoItem } from "../backends/types";
+import type { GitCommit, LoopConfig, ModelConfig, TodoItem } from "./loop";
 
 /**
  * Message data from the AI agent.

@@ -254,20 +254,6 @@ export interface FileDiff {
 }
 
 /**
- * Log entry for loop execution, stored in state and emitted via WebSocket.
- */
-export interface LogEntry {
-  /** Log level indicating the type/severity of the message */
-  level: "agent" | "info" | "warn" | "error" | "debug";
-  /** The log message content */
-  message: string;
-  /** ISO 8601 timestamp when the log was created */
-  timestamp: string;
-  /** Additional structured data associated with the log */
-  data?: Record<string, unknown>;
-}
-
-/**
  * Response from GET /api/loops/:id/plan and /api/loops/:id/status-file endpoints.
  */
 export interface FileContentResponse {

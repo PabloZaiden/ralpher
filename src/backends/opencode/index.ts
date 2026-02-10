@@ -17,29 +17,7 @@ import type {
 } from "@opencode-ai/sdk/v2";
 import { isRemoteOnlyMode } from "../../core/config";
 import { log } from "../../core/logger";
-
-/**
- * Model information returned by getModels().
- */
-export interface ModelInfo {
-  /** Provider ID (e.g., "anthropic", "openai") */
-  providerID: string;
-  /** Provider display name */
-  providerName: string;
-  /** Model ID (e.g., "claude-sonnet-4-20250514") */
-  modelID: string;
-  /** Model display name */
-  modelName: string;
-  /** Whether the provider is connected (has valid API key) */
-  connected: boolean;
-  /**
-   * Available variants for this model.
-   * Each variant name is a key from the SDK's model.variants object.
-   * An empty string ("") represents the default/no-variant option.
-   * If undefined, the model has no variants.
-   */
-  variants?: string[];
-}
+import type { ModelInfo } from "../../types/api";
 
 import type {
   BackendConnectionConfig,
@@ -56,6 +34,26 @@ import { createEventStream, type EventStream } from "../../utils/event-stream";
 
 // Re-export ConnectionInfo for backward compatibility
 export type { ConnectionInfo } from "../types";
+
+/**
+ * Context object for translateEvent(), bundling per-subscription tracking state.
+ */
+interface TranslateEventContext {
+  /** The session ID to filter events for */
+  sessionId: string;
+  /** Subscription ID for logging */
+  subId: string;
+  /** Set of message IDs we've already emitted start events for */
+  emittedMessageStarts: Set<string>;
+  /** Map of tool part IDs to their last emitted status */
+  toolPartStatus: Map<string, string>;
+  /** Map of reasoning part IDs to their last known text length */
+  reasoningTextLength: Map<string, number>;
+  /** OpenCode client for API calls */
+  client: OpencodeClient;
+  /** Directory for session queries */
+  directory: string;
+}
 
 /**
  * OpenCode backend implementation.
@@ -296,7 +294,13 @@ export class OpenCodeBackend implements Backend {
     });
 
     if (result.error) {
-      // 404 means not found
+      // 404 means the session genuinely doesn't exist — return null
+      if (result.response?.status === 404) {
+        return null;
+      }
+      // Any other error (network, parse failure, server error) should be logged
+      // so unexpected issues are visible rather than silently treated as "not found"
+      log.warn(`[OpenCodeBackend] Unexpected error fetching session ${id}: ${JSON.stringify(result.error)} (status: ${result.response?.status ?? "unknown"})`);
       return null;
     }
 
@@ -536,13 +540,15 @@ export class OpenCodeBackend implements Backend {
           // Filter events for our session and translate them
           const translated = self.translateEvent(
             event as OpenCodeEvent,
-            sessionId,
-            subId,
-            emittedMessageStarts,
-            toolPartStatus,
-            reasoningTextLength,
-            client,
-            self.directory
+            {
+              sessionId,
+              subId,
+              emittedMessageStarts,
+              toolPartStatus,
+              reasoningTextLength,
+              client,
+              directory: self.directory,
+            }
           );
           
           if (translated) {
@@ -664,26 +670,12 @@ export class OpenCodeBackend implements Backend {
   /**
    * Translate an OpenCode SDK event to our AgentEvent type.
    * Returns null if the event is not relevant, for a different session, or a duplicate.
-   * 
-   * @param event - The raw SDK event
-   * @param sessionId - The session ID to filter for
-   * @param subId - Subscription ID for logging
-   * @param emittedMessageStarts - Set of message IDs we've already emitted start events for
-   * @param toolPartStatus - Map of tool part IDs to their last emitted status
-   * @param reasoningTextLength - Map of reasoning part IDs to their last known text length
-   * @param client - OpenCode client for API calls
-   * @param directory - Directory for session queries
    */
   private translateEvent(
     event: OpenCodeEvent,
-    sessionId: string,
-    subId: string,
-    emittedMessageStarts: Set<string>,
-    toolPartStatus: Map<string, string>,
-    reasoningTextLength: Map<string, number>,
-    client: any,
-    directory: string
+    ctx: TranslateEventContext
   ): AgentEvent | null {
+    const { sessionId, subId, emittedMessageStarts, toolPartStatus, reasoningTextLength, client, directory } = ctx;
     switch (event.type) {
       case "message.updated": {
         const msg = event.properties.info;
@@ -1003,13 +995,4 @@ export class OpenCodeBackend implements Backend {
 
     return models;
   }
-}
-
-/**
- * Get the server URL if in spawn mode.
- */
-export function getServerUrl(backend: OpenCodeBackend): string | undefined {
-  // Type assertion to access private field (for testing/debugging)
-  const b = backend as unknown as { server: { url: string } | null };
-  return b.server?.url;
 }

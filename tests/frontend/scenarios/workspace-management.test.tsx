@@ -165,10 +165,6 @@ describe("workspace management scenario", () => {
     api.get("/api/workspaces", () => [WORKSPACE]);
     api.delete("/api/workspaces/:id", () => ({ success: true }));
 
-    // Mock confirm to return true
-    const originalConfirm = window.confirm;
-    window.confirm = () => true;
-
     const { getByText, getByTitle, user } = renderWithUser(<App />);
 
     // Empty workspaces section should appear since workspace has no loops
@@ -183,14 +179,23 @@ describe("workspace management scenario", () => {
     const deleteBtn = getByTitle("Delete empty workspace");
     await user.click(deleteBtn);
 
+    // ConfirmModal should appear with "Delete Workspace" title
+    await waitFor(() => {
+      expect(getByText("Delete Workspace")).toBeTruthy();
+    });
+
+    // Click the "Delete" confirmation button in the modal
+    const confirmBtn = Array.from(document.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Delete" && b !== deleteBtn,
+    );
+    expect(confirmBtn).toBeTruthy();
+    await user.click(confirmBtn!);
+
     // API should have been called to delete the workspace
     await waitFor(() => {
       const deleteCalls = api.calls("/api/workspaces/:id", "DELETE");
       expect(deleteCalls.length).toBeGreaterThan(0);
     });
-
-    // Restore confirm
-    window.confirm = originalConfirm;
   });
 
   test("workspace settings modal opens from workspace header gear icon", async () => {

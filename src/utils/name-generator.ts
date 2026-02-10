@@ -109,16 +109,23 @@ Output ONLY the title, nothing else. No quotes, no formatting, no explanation.`
   };
 
   try {
-    // Create a promise that rejects after timeout
+    // Create a promise that rejects after timeout, storing the timer ID
+    // so we can clear it when the race completes (prevents timer leak).
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("Name generation timed out")), timeoutMs);
+      timeoutId = setTimeout(() => reject(new Error("Name generation timed out")), timeoutMs);
     });
 
     // Race between generation and timeout
-    const response = await Promise.race([
-      backend.sendPrompt(sessionId, nameGenerationPrompt),
-      timeoutPromise,
-    ]);
+    let response: AgentResponse;
+    try {
+      response = await Promise.race([
+        backend.sendPrompt(sessionId, nameGenerationPrompt),
+        timeoutPromise,
+      ]);
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     const generatedName = response.content.trim();
 

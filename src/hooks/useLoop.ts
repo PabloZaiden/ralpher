@@ -3,7 +3,7 @@
  * Provides detailed state and real-time updates for a specific loop.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   Loop,
   LoopEvent,
@@ -12,8 +12,8 @@ import type {
   FileContentResponse,
   MessageData,
   ToolCallData,
+  TodoItem,
 } from "../types";
-import type { TodoItem } from "../backends/types";
 import type { LogEntry } from "../components/LogViewer";
 import { useLoopEvents } from "./useWebSocket";
 import {
@@ -39,6 +39,13 @@ import {
 import { createLogger } from "../lib/logger";
 
 const log = createLogger("useLoop");
+
+/** Maximum number of log entries to keep in frontend state */
+const MAX_FRONTEND_LOGS = 2000;
+/** Maximum number of messages to keep in frontend state */
+const MAX_FRONTEND_MESSAGES = 1000;
+/** Maximum number of tool calls to keep in frontend state */
+const MAX_FRONTEND_TOOL_CALLS = 2000;
 
 export interface UseLoopResult {
   /** The loop data */
@@ -118,6 +125,11 @@ export function useLoop(loopId: string): UseLoopResult {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [gitChangeCounter, setGitChangeCounter] = useState(0);
 
+  // AbortController for cancelling in-flight fetch requests on unmount
+  const abortControllerRef = useRef<AbortController | null>(null);
+  // Track whether initial data has been loaded (used to decide whether to hydrate from API response)
+  const initialLoadDoneRef = useRef(false);
+
   // WebSocket connection for real-time updates
   const { events, status: connectionStatus } = useLoopEvents<LoopEvent>(loopId, {
     onEvent: handleEvent,
@@ -143,8 +155,8 @@ export function useLoop(loopId: string): UseLoopResult {
             };
             return updated;
           }
-          // Add new entry
-          return [
+          // Add new entry, evict oldest if over limit
+          const newLogs = [
             ...prev,
             {
               id: event.id,
@@ -154,6 +166,10 @@ export function useLoop(loopId: string): UseLoopResult {
               timestamp: event.timestamp,
             },
           ];
+          if (newLogs.length > MAX_FRONTEND_LOGS) {
+            return newLogs.slice(-MAX_FRONTEND_LOGS);
+          }
+          return newLogs;
         });
         break;
 
@@ -165,7 +181,13 @@ export function useLoop(loopId: string): UseLoopResult {
       case "loop.message":
         // Clear progress content when message is complete
         setProgressContent("");
-        setMessages((prev) => [...prev, event.message]);
+        setMessages((prev) => {
+          const newMessages = [...prev, event.message];
+          if (newMessages.length > MAX_FRONTEND_MESSAGES) {
+            return newMessages.slice(-MAX_FRONTEND_MESSAGES);
+          }
+          return newMessages;
+        });
         break;
 
       case "loop.tool_call":
@@ -177,7 +199,11 @@ export function useLoop(loopId: string): UseLoopResult {
             newToolCalls[index] = event.tool;
             return newToolCalls;
           }
-          return [...prev, event.tool];
+          const newToolCalls = [...prev, event.tool];
+          if (newToolCalls.length > MAX_FRONTEND_TOOL_CALLS) {
+            return newToolCalls.slice(-MAX_FRONTEND_TOOL_CALLS);
+          }
+          return newToolCalls;
         });
         break;
 
@@ -224,10 +250,25 @@ export function useLoop(loopId: string): UseLoopResult {
   // Fetch loop data
   const refresh = useCallback(async () => {
     log.debug("Refreshing loop data", { loopId });
+    
+    // Cancel any in-flight request
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    
+    // Only show loading spinner on initial load to prevent flicker on event-driven refreshes
+    const isInitialLoad = !initialLoadDoneRef.current;
+    
     try {
-      setLoading(true);
+      if (isInitialLoad) {
+        setLoading(true);
+      }
       setError(null);
-      const response = await fetch(`/api/loops/${loopId}`);
+      const response = await fetch(`/api/loops/${loopId}`, { signal: controller.signal });
+      
+      // Check if request was aborted during fetch
+      if (controller.signal.aborted) return;
+      
       if (!response.ok) {
         if (response.status === 404) {
           log.debug("Loop not found", { loopId });
@@ -241,60 +282,65 @@ export function useLoop(loopId: string): UseLoopResult {
       setLoop(data);
       log.trace("Loop data refreshed", { loopId, status: data.state.status });
       
-      // Load persisted logs from loop state on initial load
-      // Only load if we have no logs yet (fresh page load)
-      // Load only the latest 1000 to keep UI responsive
-      if (data.state.logs && data.state.logs.length > 0 && logs.length === 0) {
-        const latestLogs = data.state.logs.slice(-1000);
-        setLogs(latestLogs.map((log) => ({
-          id: log.id,
-          level: log.level,
-          message: log.message,
-          details: log.details,
-          timestamp: log.timestamp,
-        })));
-      }
-      
-      // Load persisted messages from loop state on initial load
-      // Only load if we have no messages yet (fresh page load)
-      // Load only the latest 1000 to keep UI responsive
-      if (data.state.messages && data.state.messages.length > 0 && messages.length === 0) {
-        const latestMessages = data.state.messages.slice(-1000);
-        setMessages(latestMessages.map((msg) => ({
-          id: msg.id,
-          role: msg.role,
-          content: msg.content,
-          timestamp: msg.timestamp,
-        })));
-      }
-      
-      // Load persisted tool calls from loop state on initial load
-      // Only load if we have no tool calls yet (fresh page load)
-      // Load only the latest 1000 to keep UI responsive
-      if (data.state.toolCalls && data.state.toolCalls.length > 0 && toolCalls.length === 0) {
-        const latestToolCalls = data.state.toolCalls.slice(-1000);
-        setToolCalls(latestToolCalls.map((tc) => ({
-          id: tc.id,
-          name: tc.name,
-          input: tc.input,
-          output: tc.output,
-          status: tc.status,
-          timestamp: tc.timestamp,
-        })));
-      }
-      
-      // Load persisted TODOs from loop state on initial load
-      // Only load if we have no todos yet (fresh page load)
-      if (data.state.todos && data.state.todos.length > 0 && todos.length === 0) {
-        setTodos(data.state.todos);
+      // Hydrate persisted data only on the first successful load.
+      // Using a ref avoids adding state array lengths to the dependency array,
+      // which would cause a refresh cascade: event adds item → length changes →
+      // refresh recreated → useEffect fires → full API refetch.
+      if (!initialLoadDoneRef.current) {
+        initialLoadDoneRef.current = true;
+
+        // Load persisted logs from loop state (latest 1000 to keep UI responsive)
+        if (data.state.logs && data.state.logs.length > 0) {
+          const latestLogs = data.state.logs.slice(-1000);
+          setLogs(latestLogs.map((logEntry) => ({
+            id: logEntry.id,
+            level: logEntry.level,
+            message: logEntry.message,
+            details: logEntry.details,
+            timestamp: logEntry.timestamp,
+          })));
+        }
+
+        // Load persisted messages from loop state (latest 1000)
+        if (data.state.messages && data.state.messages.length > 0) {
+          const latestMessages = data.state.messages.slice(-1000);
+          setMessages(latestMessages.map((msg) => ({
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+          })));
+        }
+
+        // Load persisted tool calls from loop state (latest 1000)
+        if (data.state.toolCalls && data.state.toolCalls.length > 0) {
+          const latestToolCalls = data.state.toolCalls.slice(-1000);
+          setToolCalls(latestToolCalls.map((tc) => ({
+            id: tc.id,
+            name: tc.name,
+            input: tc.input,
+            output: tc.output,
+            status: tc.status,
+            timestamp: tc.timestamp,
+          })));
+        }
+
+        // Load persisted TODOs from loop state
+        if (data.state.todos && data.state.todos.length > 0) {
+          setTodos(data.state.todos);
+        }
       }
     } catch (err) {
+      // Ignore abort errors — they are expected during cleanup
+      if (err instanceof DOMException && err.name === "AbortError") return;
       log.error("Failed to refresh loop", { loopId, error: String(err) });
       setError(String(err));
     } finally {
-      setLoading(false);
+      if (isInitialLoad) {
+        setLoading(false);
+      }
     }
-  }, [loopId, logs.length, messages.length, toolCalls.length, todos.length]);
+  }, [loopId]);
 
   // Update the loop
   const update = useCallback(
@@ -614,16 +660,22 @@ export function useLoop(loopId: string): UseLoopResult {
     setLogs([]);
     setTodos([]);
     setGitChangeCounter(0);
+    // Reset initial load tracking so the new loop hydrates from API
+    initialLoadDoneRef.current = false;
   }, [loopId]);
 
-  // Cleanup: Release memory when component unmounts
+  // Cleanup: Release memory and cancel in-flight requests when component unmounts
   // Critical for preventing memory leaks when closing LoopDetails
   // This handles the case where the component unmounts entirely (not just switching loops)
-  // React state updates in cleanup are safe - warnings about unmounted components are
+  // React state updates in cleanup are safe — warnings about unmounted components are
   // development-only and don't affect production behavior
   // Empty dependency array means this only runs on unmount, not on every render
   useEffect(() => {
     return () => {
+      // Cancel any in-flight fetch request
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+      
       setLoop(null);
       setMessages([]);
       setToolCalls([]);

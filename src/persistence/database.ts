@@ -6,6 +6,7 @@
 
 import { Database } from "bun:sqlite";
 import { join } from "path";
+import { mkdir, unlink } from "fs/promises";
 import { runMigrations } from "./migrations";
 import { createLogger } from "../core/logger";
 
@@ -64,7 +65,6 @@ export async function initializeDatabase(): Promise<void> {
   }
   
   // Ensure data directory exists
-  const { mkdir } = await import("fs/promises");
   await mkdir(getDataDir(), { recursive: true });
 
   db = new Database(dbPath);
@@ -98,6 +98,23 @@ export async function initializeDatabase(): Promise<void> {
 /**
  * Create all database tables if they don't exist.
  * Uses a transaction to ensure atomicity of schema creation.
+ * 
+ * **Schema Duplication Note:**
+ * The base schema below includes columns that were originally added by migrations
+ * (v1-v9: clear_planning_folder, plan_mode, plan_mode_active, plan_session_id,
+ * plan_server_url, plan_feedback_rounds, plan_content, planning_folder_cleared,
+ * review_mode, todos, plan_is_ready, pending_model_provider_id, pending_model_model_id).
+ * The `review_comments` table and its indexes also appear in both the base schema and
+ * migration v6.
+ * 
+ * This is intentional: fresh databases get the full schema from CREATE TABLE,
+ * while existing databases get the same columns via idempotent migrations. Columns
+ * from migrations v10+ (workspaces table, workspace_id, server_settings,
+ * model_variant, pending_model_variant, git_worktree_path) exist only in migrations
+ * and are NOT duplicated in the base schema.
+ * 
+ * When adding new columns, add them ONLY as migrations (see migrations/index.ts).
+ * Do NOT add them to the base schema here to avoid further duplication.
  */
 function createTables(database: Database): void {
   // Wrap all schema creation in a transaction
@@ -281,7 +298,6 @@ export async function deleteAndReinitializeDatabase(): Promise<void> {
   closeDatabase();
   
   // Delete the database file and related WAL files
-  const { unlink } = await import("fs/promises");
   try {
     await unlink(dbPath);
     log.trace("Deleted database file");
@@ -307,80 +323,7 @@ export async function deleteAndReinitializeDatabase(): Promise<void> {
   log.info("Database deleted and reinitialized");
 }
 
-/**
- * Insert a review comment into the database.
- */
-export function insertReviewComment(comment: {
-  id: string;
-  loopId: string;
-  reviewCycle: number;
-  commentText: string;
-  createdAt: string;
-  status?: string;
-}): void {
-  log.debug("Inserting review comment", { id: comment.id, loopId: comment.loopId, reviewCycle: comment.reviewCycle });
-  const db = getDatabase();
-  db.run(
-    `INSERT INTO review_comments (id, loop_id, review_cycle, comment_text, created_at, status)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [
-      comment.id,
-      comment.loopId,
-      comment.reviewCycle,
-      comment.commentText,
-      comment.createdAt,
-      comment.status ?? "pending",
-    ]
-  );
-  log.trace("Review comment inserted", { id: comment.id });
-}
-
-/**
- * Get all review comments for a loop.
- * Returns comments ordered by review_cycle DESC, created_at ASC.
- */
-export function getReviewComments(loopId: string): Array<{
-  id: string;
-  loop_id: string;
-  review_cycle: number;
-  comment_text: string;
-  created_at: string;
-  status: string;
-  addressed_at: string | null;
-}> {
-  log.debug("Getting review comments", { loopId });
-  const db = getDatabase();
-  const comments = db.query(
-    `SELECT * FROM review_comments 
-     WHERE loop_id = ? 
-     ORDER BY review_cycle DESC, created_at ASC`
-  ).all(loopId) as Array<{
-    id: string;
-    loop_id: string;
-    review_cycle: number;
-    comment_text: string;
-    created_at: string;
-    status: string;
-    addressed_at: string | null;
-  }>;
-  
-  log.trace("Review comments retrieved", { loopId, count: comments.length });
-  return comments;
-}
-
-/**
- * Update the status of all pending comments for a specific loop and review cycle.
- * Used to mark comments as "addressed" when a loop completes.
- */
-export function markCommentsAsAddressed(loopId: string, reviewCycle: number, addressedAt: string): void {
-  log.debug("Marking comments as addressed", { loopId, reviewCycle });
-  const db = getDatabase();
-  db.run(
-    `UPDATE review_comments 
-     SET status = 'addressed', addressed_at = ?
-     WHERE loop_id = ? AND review_cycle = ? AND status = 'pending'`,
-    [addressedAt, loopId, reviewCycle]
-  );
-  log.trace("Comments marked as addressed", { loopId, reviewCycle, addressedAt });
-}
+// Aliases for backward compatibility (previously in paths.ts)
+export { initializeDatabase as ensureDataDirectories };
+export { isDatabaseReady as isDataDirectoryReady };
 

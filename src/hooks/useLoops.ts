@@ -3,7 +3,7 @@
  * Provides CRUD operations and real-time state updates for loops.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest, UncommittedChangesError } from "../types";
 import { useGlobalEvents } from "./useWebSocket";
 import { log } from "../lib/logger";
@@ -65,6 +65,9 @@ export function useLoops(): UseLoopsResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // AbortController for cancelling in-flight fetch requests on unmount
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   // WebSocket connection for real-time updates
   const { status: connectionStatus } = useGlobalEvents<LoopEvent>({
     onEvent: handleEvent,
@@ -99,16 +102,23 @@ export function useLoops(): UseLoopsResult {
 
   // Fetch all loops
   const refresh = useCallback(async () => {
+    // Cancel any in-flight request
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("/api/loops");
+      const response = await fetch("/api/loops", { signal: controller.signal });
+      if (controller.signal.aborted) return;
       if (!response.ok) {
         throw new Error(`Failed to fetch loops: ${response.statusText}`);
       }
       const data = (await response.json()) as Loop[];
       setLoops(data);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       setError(String(err));
     } finally {
       setLoading(false);
@@ -283,9 +293,13 @@ export function useLoops(): UseLoopsResult {
     [loops]
   );
 
-  // Initial fetch
+  // Initial fetch and cleanup
   useEffect(() => {
     refresh();
+    return () => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    };
   }, [refresh]);
 
   return {

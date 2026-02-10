@@ -110,11 +110,4 @@ export const StartDraftRequestSchema = z.object({
   planMode: z.boolean({ error: "planMode is required" }),
 });
 
-// Export inferred types
-export type CreateLoopRequestInput = z.infer<typeof CreateLoopRequestSchema>;
-export type UpdateLoopRequestInput = z.infer<typeof UpdateLoopRequestSchema>;
-export type AddressCommentsRequestInput = z.infer<typeof AddressCommentsRequestSchema>;
-export type PlanFeedbackRequestInput = z.infer<typeof PlanFeedbackRequestSchema>;
-export type PendingPromptRequestInput = z.infer<typeof PendingPromptRequestSchema>;
-export type SetPendingRequestInput = z.infer<typeof SetPendingRequestSchema>;
-export type StartDraftRequestInput = z.infer<typeof StartDraftRequestSchema>;
+

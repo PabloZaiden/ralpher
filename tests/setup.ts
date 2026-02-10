@@ -9,7 +9,7 @@ import { SimpleEventEmitter } from "../src/core/event-emitter";
 import { GitService } from "../src/core/git-service";
 import { LoopManager } from "../src/core/loop-manager";
 import { backendManager } from "../src/core/backend-manager";
-import { ensureDataDirectories } from "../src/persistence/paths";
+import { ensureDataDirectories } from "../src/persistence/database";
 import { closeDatabase } from "../src/persistence/database";
 import { createWorkspace } from "../src/persistence/workspaces";
 import { TestCommandExecutor } from "./mocks/mock-executor";

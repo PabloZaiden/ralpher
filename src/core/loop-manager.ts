@@ -21,14 +21,17 @@ import {
   updateLoopState,
   resetStaleLoops,
 } from "../persistence/loops";
-import { insertReviewComment } from "../persistence/database";
+import { insertReviewComment, getReviewComments as getReviewCommentsFromDb } from "../persistence/review-comments";
+import { setLastModel } from "../persistence/preferences";
 import { backendManager } from "./backend-manager";
+import type { CommandExecutor } from "./command-executor";
 import { GitService } from "./git-service";
 import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
 import { log } from "./logger";
 import { sanitizeBranchName } from "../utils";
 import { generateLoopName } from "../utils/name-generator";
+import { assertValidTransition } from "./loop-state-machine";
 
 /**
  * Options for creating a new loop.
@@ -114,6 +117,65 @@ export class LoopManager {
 
 
   /**
+   * Generate a name for a new loop.
+   * For drafts: uses prompt-based fallback (no AI call).
+   * For non-drafts: calls AI-based title generation with fallback on failure.
+   */
+  private async generateName(
+    options: Pick<CreateLoopOptions, "draft" | "prompt" | "directory" | "workspaceId">,
+    timestamp: string
+  ): Promise<string> {
+    // For drafts, skip AI title generation and use prompt-based fallback
+    // This avoids backend interference issues and makes draft creation faster
+    if (options.draft) {
+      const fallbackName = options.prompt.slice(0, 50).trim();
+      const name = fallbackName || `Draft ${timestamp.slice(0, 10)}`;
+      log.debug("createLoop - Using prompt-based name for draft", { generatedName: name });
+      return name;
+    }
+
+    // For non-drafts, use AI-based title generation
+    try {
+      const backend = backendManager.getBackend(options.workspaceId);
+      const tempSession = await backend.createSession({
+        title: "Loop Name Generation",
+        directory: options.directory,
+      });
+
+      try {
+        const name = await generateLoopName({
+          prompt: options.prompt,
+          backend,
+          sessionId: tempSession.id,
+          timeoutMs: 10000,
+        });
+        log.info(`Generated loop name: ${name}`);
+        return name;
+      } finally {
+        try {
+          await backend.abortSession(tempSession.id);
+        } catch (cleanupError) {
+          log.warn(`Failed to clean up temporary session: ${String(cleanupError)}`);
+        }
+      }
+    } catch (error) {
+      // If name generation fails, use prompt-based fallback
+      log.warn(`Failed to generate loop name: ${String(error)}, using fallback`);
+      const fallbackName = options.prompt.slice(0, 50).trim();
+      if (fallbackName) {
+        return fallbackName;
+      }
+      // Ultimate fallback if prompt is empty
+      const ts = new Date().toISOString()
+        .replace(/[T:.]/g, "-")
+        .replace(/Z$/, "")
+        .slice(0, 19);
+      return `loop-${ts}`;
+    }
+  }
+
+
+  /**
    * Create a new loop.
    * The loop name is automatically generated from the prompt using opencode.
    */
@@ -131,60 +193,7 @@ export class LoopManager {
     });
 
     // Generate loop name
-    let generatedName: string;
-    
-    // For drafts, skip AI title generation and use prompt-based fallback
-    // This avoids backend interference issues and makes draft creation faster
-    if (options.draft) {
-      const fallbackName = options.prompt.slice(0, 50).trim();
-      generatedName = fallbackName || `Draft ${now.slice(0, 10)}`;
-      log.debug("createLoop - Using prompt-based name for draft", { generatedName });
-    } else {
-      // For non-drafts, use AI-based title generation
-      try {
-        // Get backend from global manager for this workspace
-        const backend = backendManager.getBackend(options.workspaceId);
-        
-        // Create a temporary session for name generation
-        const tempSession = await backend.createSession({
-          title: "Loop Name Generation",
-          directory: options.directory,
-        });
-        
-        try {
-          // Generate the name
-          generatedName = await generateLoopName({
-            prompt: options.prompt,
-            backend,
-            sessionId: tempSession.id,
-            timeoutMs: 10000,
-          });
-          
-          log.info(`Generated loop name: ${generatedName}`);
-        } finally {
-          // Clean up temporary session
-          try {
-            await backend.abortSession(tempSession.id);
-          } catch (cleanupError) {
-            log.warn(`Failed to clean up temporary session: ${String(cleanupError)}`);
-          }
-        }
-      } catch (error) {
-        // If name generation fails, use prompt-based fallback
-        log.warn(`Failed to generate loop name: ${String(error)}, using fallback`);
-        const fallbackName = options.prompt.slice(0, 50).trim();
-        if (fallbackName) {
-          generatedName = fallbackName;
-        } else {
-          // Ultimate fallback if prompt is empty
-          const timestamp = new Date().toISOString()
-            .replace(/[T:.]/g, "-")
-            .replace(/Z$/, "")
-            .slice(0, 19);
-          generatedName = `loop-${timestamp}`;
-        }
-      }
-    }
+    const generatedName = await this.generateName(options, now);
 
     const config: LoopConfig = {
       id,
@@ -216,10 +225,12 @@ export class LoopManager {
     
     // If draft mode is enabled, set status to draft (no session or git setup)
     if (options.draft) {
+      assertValidTransition(state.status, "draft", "createLoop");
       state.status = "draft";
     }
     // Else if plan mode is enabled, initialize plan mode state
     else if (options.planMode) {
+      assertValidTransition(state.status, "planning", "createLoop");
       state.status = "planning";
       state.planMode = {
         active: true,
@@ -306,53 +317,14 @@ export class LoopManager {
     try {
       await engine.setupGitBranchForPlanAcceptance();
     } catch (error) {
-      throw new Error(`Failed to set up git branch for plan mode: ${String(error)}`);
+      throw new Error(`Failed to set up git branch for plan mode: ${String(error)}`, { cause: error });
     }
 
     // Now that the worktree exists, use the worktree path for .planning operations
     const worktreePath = engine.workingDirectory;
 
-    // Clear .planning folder in the worktree (if requested)
-    if (loop.config.clearPlanningFolder && !loop.state.planMode?.planningFolderCleared) {
-      const planningDir = `${worktreePath}/.planning`;
-      
-      try {
-        const exists = await executor.directoryExists(planningDir);
-        if (exists) {
-          const files = await executor.listDirectory(planningDir);
-          const filesToDelete = files.filter((file: string) => file !== ".gitkeep");
-          
-          if (filesToDelete.length > 0) {
-            const fileArgs = filesToDelete.map((file: string) => `${planningDir}/${file}`);
-            await executor.exec("rm", ["-rf", ...fileArgs], {
-              cwd: worktreePath,
-            });
-          }
-        }
-        
-        // Mark as cleared
-        if (loop.state.planMode) {
-          loop.state.planMode.planningFolderCleared = true;
-          await updateLoopState(loopId, loop.state);
-        }
-      } catch (error) {
-        log.warn(`Failed to clear .planning folder: ${String(error)}`);
-      }
-    }
-
-    // Always clear plan.md when starting plan mode, regardless of clearPlanningFolder setting.
-    // This ensures the UI doesn't display stale plan content from a previous session while
-    // the AI is generating a new plan. The old plan is always irrelevant in a fresh plan session.
-    const planFilePath = `${worktreePath}/.planning/plan.md`;
-    try {
-      const planFileExists = await executor.fileExists(planFilePath);
-      if (planFileExists) {
-        await executor.exec("rm", ["-f", planFilePath], { cwd: worktreePath });
-        log.debug("Cleared stale plan.md file before starting plan mode");
-      }
-    } catch (error) {
-      log.warn(`Failed to clear plan.md: ${String(error)}`);
-    }
+    // Clear planning files in the worktree before starting
+    await this.clearPlanningFiles(loopId, loop, executor, worktreePath);
 
     this.engines.set(loopId, engine);
 
@@ -364,6 +336,57 @@ export class LoopManager {
     engine.start().catch((error) => {
       log.error(`Loop ${loopId} plan mode failed:`, String(error));
     });
+  }
+
+  /**
+   * Start a draft loop — transitions from draft to either plan mode or immediate execution.
+   *
+   * Handles the draft → planning and draft → idle → starting transitions internally,
+   * including state mutation and persistence, so the API layer doesn't need to
+   * interact with the persistence layer directly.
+   *
+   * @param loopId - The ID of the draft loop to start
+   * @param options - Start options
+   * @param options.planMode - If true, start in plan mode; if false, start immediately
+   * @returns The updated loop
+   */
+  async startDraft(loopId: string, options: { planMode: boolean }): Promise<Loop> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      throw new Error(`Loop not found: ${loopId}`);
+    }
+
+    if (loop.state.status !== "draft") {
+      throw new Error(`Loop is not in draft status: ${loop.state.status}`);
+    }
+
+    if (options.planMode) {
+      // draft → planning
+      assertValidTransition(loop.state.status, "planning", "startDraft");
+      loop.state.status = "planning";
+      loop.state.planMode = {
+        active: true,
+        feedbackRounds: 0,
+        planningFolderCleared: false,
+        isPlanReady: false,
+      };
+      await updateLoopState(loopId, loop.state);
+
+      // Start plan mode — handles git setup and further state updates
+      await this.startPlanMode(loopId);
+    } else {
+      // draft → idle (engine will then transition idle → starting → running)
+      assertValidTransition(loop.state.status, "idle", "startDraft");
+      loop.state.status = "idle";
+      await updateLoopState(loopId, loop.state);
+
+      // Start the loop immediately
+      await this.startLoop(loopId);
+    }
+
+    // Return updated loop
+    const updatedLoop = await this.getLoop(loopId);
+    return updatedLoop ?? loop;
   }
 
   /**
@@ -490,6 +513,7 @@ export class LoopManager {
     // Update state to transition from planning to running
     // Mark plan mode as no longer active but preserve all existing planMode fields
     // (especially isPlanReady and planContent which may have been set by the planning iteration)
+    assertValidTransition(engine.state.status, "running", "acceptPlan");
     const updatedState: Partial<LoopState> = {
       status: "running",
       planMode: {
@@ -694,6 +718,7 @@ Follow the standard loop execution flow:
     // Update status to 'deleted' (soft delete - final state)
     // Also clear reviewMode.addressable so the loop cannot be addressed again
     log.debug(`[LoopManager] deleteLoop: Updating status to deleted for loop ${loopId}`);
+    assertValidTransition(loop.state.status, "deleted", "deleteLoop");
     const updatedState = {
       ...loop.state,
       status: "deleted" as const,
@@ -865,6 +890,7 @@ Follow the standard loop execution flow:
           };
 
       // Update status to 'merged' with review mode enabled
+      assertValidTransition(loop.state.status, "merged", "acceptLoop");
       const updatedState = {
         ...loop.state,
         status: "merged" as const,
@@ -955,73 +981,12 @@ Follow the standard loop execution flow:
       await git.ensureMergeStrategy(worktreePath);
 
       // --- Working branch sync ---
-      // Before syncing with the base branch, pull any remote changes on the
-      // working branch itself. This handles scenarios where the working branch
-      // was previously pushed and someone (or another process) added commits to it.
-      log.debug(`[LoopManager] pushLoop: Fetching origin/${workingBranch} for loop ${loopId}`);
-      const workingBranchFetchSuccess = await git.fetchBranch(loop.config.directory, workingBranch);
-
-      if (workingBranchFetchSuccess) {
-        // Check if the working branch on remote has new commits
-        const workingBranchUpToDate = await git.isAncestor(
-          worktreePath,
-          `origin/${workingBranch}`,
-          "HEAD"
-        );
-
-        if (!workingBranchUpToDate) {
-          // Remote working branch has diverged — attempt to merge
-          log.debug(`[LoopManager] pushLoop: Merging origin/${workingBranch} into local working branch for loop ${loopId}`);
-          const workingMergeResult = await git.mergeWithConflictDetection(
-            worktreePath,
-            `origin/${workingBranch}`,
-            `Merge origin/${workingBranch} into ${workingBranch}`
-          );
-
-          if (workingMergeResult.success) {
-            log.debug(`[LoopManager] pushLoop: Clean merge with origin/${workingBranch}`);
-          } else if (workingMergeResult.hasConflicts) {
-            // Conflicts on working branch — start conflict resolution
-            const conflictedFiles = workingMergeResult.conflictedFiles ?? [];
-            log.debug(`[LoopManager] pushLoop: Working branch merge conflicts detected: ${conflictedFiles.join(", ")}`);
-
-            await git.abortMerge(worktreePath);
-
-            this.emitter.emit({
-              type: "loop.sync.conflicts",
-              loopId,
-              baseBranch,
-              conflictedFiles,
-              timestamp: createTimestamp(),
-            });
-
-            // Set sync state with syncPhase "working_branch" so that after resolution,
-            // we continue with base branch sync before pushing
-            loop.state.syncState = {
-              status: "conflicts",
-              baseBranch,
-              autoPushOnComplete: true,
-              syncPhase: "working_branch",
-            };
-            loop.state.status = "resolving_conflicts";
-            loop.state.completedAt = undefined;
-            await updateLoopState(loopId, loop.state);
-
-            return this.startConflictResolutionEngine(
-              loopId, loop, git, `origin/${workingBranch}`, conflictedFiles
-            );
-          } else {
-            // Non-conflict merge failure
-            const errorMsg = workingMergeResult.stderr || "Unknown merge error";
-            log.error(`[LoopManager] pushLoop: Working branch merge failed for loop ${loopId}: ${errorMsg}`);
-            return {
-              success: false,
-              error: `Failed to merge origin/${workingBranch}: ${errorMsg}`,
-            };
-          }
-        }
+      const workingBranchConflictResult = await this.syncWorkingBranch(
+        loopId, loop, git, baseBranch, worktreePath, workingBranch
+      );
+      if (workingBranchConflictResult) {
+        return workingBranchConflictResult;
       }
-      // If fetch failed (branch doesn't exist on remote yet), skip — this is a first push
 
       // --- Base branch sync + push ---
       return await this.syncBaseBranchAndPush(loopId, loop, git);
@@ -1032,6 +997,97 @@ Follow the standard loop execution flow:
       this.loopsBeingAccepted.delete(loopId);
       log.debug(`[LoopManager] pushLoop: Finished push for loop ${loopId}`);
     }
+  }
+
+  /**
+   * Sync the working branch with its remote counterpart.
+   * Before syncing with the base branch, pulls any remote changes on the
+   * working branch itself. This handles scenarios where the working branch
+   * was previously pushed and someone (or another process) added commits to it.
+   *
+   * @returns PushLoopResult if conflicts/error occurred (caller should return it),
+   *          or null if sync succeeded and caller should proceed to base branch sync.
+   */
+  private async syncWorkingBranch(
+    loopId: string,
+    loop: { config: LoopConfig; state: LoopState },
+    git: GitService,
+    baseBranch: string,
+    worktreePath: string,
+    workingBranch: string
+  ): Promise<PushLoopResult | null> {
+    log.debug(`[LoopManager] pushLoop: Fetching origin/${workingBranch} for loop ${loopId}`);
+    const fetchSuccess = await git.fetchBranch(loop.config.directory, workingBranch);
+
+    if (!fetchSuccess) {
+      // Fetch failed (branch doesn't exist on remote yet) — skip, this is a first push
+      return null;
+    }
+
+    // Check if the working branch on remote has new commits
+    const upToDate = await git.isAncestor(
+      worktreePath,
+      `origin/${workingBranch}`,
+      "HEAD"
+    );
+
+    if (upToDate) {
+      return null;
+    }
+
+    // Remote working branch has diverged — attempt to merge
+    log.debug(`[LoopManager] pushLoop: Merging origin/${workingBranch} into local working branch for loop ${loopId}`);
+    const mergeResult = await git.mergeWithConflictDetection(
+      worktreePath,
+      `origin/${workingBranch}`,
+      `Merge origin/${workingBranch} into ${workingBranch}`
+    );
+
+    if (mergeResult.success) {
+      log.debug(`[LoopManager] pushLoop: Clean merge with origin/${workingBranch}`);
+      return null;
+    }
+
+    if (mergeResult.hasConflicts) {
+      // Conflicts on working branch — start conflict resolution
+      const conflictedFiles = mergeResult.conflictedFiles ?? [];
+      log.debug(`[LoopManager] pushLoop: Working branch merge conflicts detected: ${conflictedFiles.join(", ")}`);
+
+      await git.abortMerge(worktreePath);
+
+      this.emitter.emit({
+        type: "loop.sync.conflicts",
+        loopId,
+        baseBranch,
+        conflictedFiles,
+        timestamp: createTimestamp(),
+      });
+
+      // Set sync state with syncPhase "working_branch" so that after resolution,
+      // we continue with base branch sync before pushing
+      loop.state.syncState = {
+        status: "conflicts",
+        baseBranch,
+        autoPushOnComplete: true,
+        syncPhase: "working_branch",
+      };
+      assertValidTransition(loop.state.status, "resolving_conflicts", "pushLoop");
+      loop.state.status = "resolving_conflicts";
+      loop.state.completedAt = undefined;
+      await updateLoopState(loopId, loop.state);
+
+      return this.startConflictResolutionEngine(
+        loopId, loop, git, `origin/${workingBranch}`, conflictedFiles
+      );
+    }
+
+    // Non-conflict merge failure
+    const errorMsg = mergeResult.stderr || "Unknown merge error";
+    log.error(`[LoopManager] pushLoop: Working branch merge failed for loop ${loopId}: ${errorMsg}`);
+    return {
+      success: false,
+      error: `Failed to merge origin/${workingBranch}: ${errorMsg}`,
+    };
   }
 
   /**
@@ -1132,6 +1188,7 @@ Follow the standard loop execution flow:
           autoPushOnComplete: true,
           syncPhase: "base_branch",
         };
+        assertValidTransition(loop.state.status, "resolving_conflicts", "syncBaseBranchAndPush");
         loop.state.status = "resolving_conflicts";
         loop.state.completedAt = undefined;
         await updateLoopState(loopId, loop.state);
@@ -1152,32 +1209,52 @@ Follow the standard loop execution flow:
     }
 
     // --- Push (clean merge or already up to date) ---
+    const remoteBranch = await this.pushAndFinalize(
+      loopId, loop, git, "syncBaseBranchAndPush"
+    );
+
+    return { success: true, remoteBranch, syncStatus };
+  }
+
+  /**
+   * Push the working branch to remote and finalize the loop as "pushed".
+   * Shared by syncBaseBranchAndPush (after clean merge) and
+   * handleConflictResolutionComplete (after conflict resolution).
+   *
+   * @param loopId - The loop ID
+   * @param loop - The loop config and state
+   * @param git - The GitService instance
+   * @param caller - Name of the calling method (for assertValidTransition context)
+   * @returns The remote branch name
+   */
+  private async pushAndFinalize(
+    loopId: string,
+    loop: { config: LoopConfig; state: LoopState },
+    git: GitService,
+    caller: string
+  ): Promise<string> {
     // Push the working branch to remote
     const remoteBranch = await git.pushBranch(
       loop.config.directory,
       loop.state.git!.workingBranch
     );
 
-    // DON'T switch back to the original branch - stay on working branch for potential review cycles
-
     // Initialize or preserve review mode state
     const reviewMode = loop.state.reviewMode
       ? {
-          // Preserve existing review mode, just update addressable and completionAction
           ...loop.state.reviewMode,
           addressable: true,
           completionAction: "push" as const,
         }
       : {
-          // First time pushing - initialize review mode
           addressable: true,
           completionAction: "push" as const,
           reviewCycles: 0,
           reviewBranches: [loop.state.git!.workingBranch],
         };
 
-    // Update status to 'pushed' with review mode enabled
-    // Clear syncState since sync completed successfully
+    // Update status to 'pushed', clear syncState
+    assertValidTransition(loop.state.status, "pushed", caller);
     const updatedState = {
       ...loop.state,
       status: "pushed" as const,
@@ -1200,7 +1277,7 @@ Follow the standard loop execution flow:
       timestamp: createTimestamp(),
     });
 
-    return { success: true, remoteBranch, syncStatus };
+    return remoteBranch;
   }
 
   /**
@@ -1332,45 +1409,9 @@ Follow the standard loop execution flow:
       // Base branch conflicts resolved (or no syncPhase set) — push directly
       log.debug(`[LoopManager] handleConflictResolutionComplete: Auto-pushing loop ${loopId}`);
 
-      // Push the working branch to remote
-      const remoteBranch = await git.pushBranch(
-        loop.config.directory,
-        loop.state.git.workingBranch
+      const remoteBranch = await this.pushAndFinalize(
+        loopId, loop, git, "handleConflictResolutionComplete"
       );
-
-      // Initialize or preserve review mode state
-      const reviewMode = loop.state.reviewMode
-        ? {
-            ...loop.state.reviewMode,
-            addressable: true,
-            completionAction: "push" as const,
-          }
-        : {
-            addressable: true,
-            completionAction: "push" as const,
-            reviewCycles: 0,
-            reviewBranches: [loop.state.git.workingBranch],
-          };
-
-      // Update status to 'pushed', clear syncState
-      const updatedState = {
-        ...loop.state,
-        status: "pushed" as const,
-        reviewMode,
-        syncState: undefined,
-      };
-      await updateLoopState(loopId, updatedState);
-
-      // Clean up the dedicated backend connection for this loop
-      await backendManager.disconnectLoop(loopId);
-
-      // Emit event
-      this.emitter.emit({
-        type: "loop.pushed",
-        loopId,
-        remoteBranch,
-        timestamp: createTimestamp(),
-      });
 
       log.info(`[LoopManager] handleConflictResolutionComplete: Successfully auto-pushed loop ${loopId} to ${remoteBranch}`);
     } catch (error) {
@@ -1405,6 +1446,7 @@ Follow the standard loop execution flow:
       // No need to reset or checkout - the main working directory is not affected.
 
       // Update status to 'deleted' (final state)
+      assertValidTransition(loop.state.status, "deleted", "discardLoop");
       const updatedState = {
         ...loop.state,
         status: "deleted" as const,
@@ -1558,6 +1600,7 @@ Follow the standard loop execution flow:
 
       // Update status to 'deleted' (final cleanup state)
       // Also clear reviewMode.addressable so the loop cannot be addressed again
+      assertValidTransition(loop.state.status, "deleted", "markMerged");
       const updatedState = {
         ...loop.state,
         status: "deleted" as const,
@@ -1852,12 +1895,14 @@ Follow the standard loop execution flow:
     // Reset the loop to a restartable state
     // If it was in planning mode, keep it in planning mode; otherwise reset to stopped
     if (wasInPlanningMode) {
+      assertValidTransition(loop.state.status, "planning", "jumpstartLoop");
       loop.state.status = "planning";
       // Reset isPlanReady to false so it will generate a plan again
       if (loop.state.planMode) {
         loop.state.planMode.isPlanReady = false;
       }
     } else {
+      assertValidTransition(loop.state.status, "stopped", "jumpstartLoop");
       loop.state.status = "stopped"; // LoopEngine.start() accepts 'idle', 'stopped', or 'planning'
     }
     loop.state.completedAt = undefined;
@@ -2018,7 +2063,6 @@ Follow the standard loop execution flow:
       
       // Prepare comment data for later insertion (after validation and state updates)
       const commentId = crypto.randomUUID();
-      const createdAt = new Date().toISOString();
 
       // Handle based on completion action
       if (loop.state.reviewMode.completionAction === "push") {
@@ -2032,58 +2076,11 @@ Follow the standard loop execution flow:
 
         // Increment review cycles
         loop.state.reviewMode.reviewCycles += 1;
-        
-        // Set status to idle so engine.start() can run (it will set to running)
-        loop.state.status = "idle";
-        loop.state.completedAt = undefined;
 
-        await updateLoopState(loopId, loop.state);
-        
-        // Store the comment in the database AFTER state is successfully updated
-        insertReviewComment({
-          id: commentId,
-          loopId,
-          reviewCycle: nextReviewCycle,
-          commentText: comments,
-          createdAt,
-          status: "pending",
-        });
-
-        // Construct specialized prompt for addressing comments
-        const reviewPrompt = this.constructReviewPrompt(comments);
-
-        // Create and start a new loop engine with the review prompt
-        // skipGitSetup: true because we've already checked out the branch for review
-        const engine = new LoopEngine({
-          loop: { config: loop.config, state: loop.state },
-          backend,
-          gitService: git,
-          eventEmitter: this.emitter,
-          onPersistState: async (state) => {
-            await updateLoopState(loopId, state);
-          },
-          skipGitSetup: true,
-        });
-        this.engines.set(loopId, engine);
-
-        // Set the review prompt as pending
-        engine.setPendingPrompt(reviewPrompt);
-
-        // Start state persistence
-        this.startStatePersistence(loopId);
-
-        // Start execution (fire and forget - don't block the caller)
-        // The loop runs asynchronously and updates state via events/persistence
-        engine.start().catch((error) => {
-          log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
-        });
-
-        return {
-          success: true,
-          reviewCycle: loop.state.reviewMode.reviewCycles,
-          branch: loop.state.git.workingBranch,
-          commentIds: [commentId],
-        };
+        return this.transitionToReviewAndStart(
+          loopId, loop, backend, git, comments, "pushed",
+          commentId, nextReviewCycle, loop.state.git.workingBranch
+        );
 
       } else {
         // MERGED LOOP: Create a new review branch with its own worktree
@@ -2094,86 +2091,157 @@ Follow the standard loop execution flow:
         // Increment review cycles
         loop.state.reviewMode.reviewCycles += 1;
 
-        // Generate new review branch name
-        const safeName = sanitizeBranchName(loop.config.name);
-        const reviewBranchName = `${loop.config.git.branchPrefix}${safeName}-review-${loop.state.reviewMode.reviewCycles}`;
+        // Create the review branch and worktree
+        const reviewBranchName = await this.setupMergedReviewWorktree(loop, git);
 
-        // Create a new worktree for the review branch (branched from original)
-        const worktreePath = `${loop.config.directory}/.ralph-worktrees/${loop.config.id}`;
-        
-        // Remove old worktree first if it exists (from previous iteration)
-        const oldWorktreeExists = await git.worktreeExists(loop.config.directory, worktreePath);
-        if (oldWorktreeExists) {
-          await git.removeWorktree(loop.config.directory, worktreePath, { force: true });
-        }
-        
-        await git.createWorktree(
-          loop.config.directory,
-          worktreePath,
-          reviewBranchName,
-          loop.state.git.originalBranch
+        return this.transitionToReviewAndStart(
+          loopId, loop, backend, git, comments, "merged",
+          commentId, nextReviewCycle, reviewBranchName
         );
-
-        // Update git state
-        loop.state.git.workingBranch = reviewBranchName;
-        loop.state.git.worktreePath = worktreePath;
-        loop.state.reviewMode.reviewBranches.push(reviewBranchName);
-
-        // Set status to idle so engine.start() can run (it will set to running)
-        loop.state.status = "idle";
-        loop.state.completedAt = undefined;
-
-        await updateLoopState(loopId, loop.state);
-        
-        // Store the comment in the database AFTER state is successfully updated
-        insertReviewComment({
-          id: commentId,
-          loopId,
-          reviewCycle: nextReviewCycle,
-          commentText: comments,
-          createdAt,
-          status: "pending",
-        });
-
-        // Construct specialized prompt for addressing comments
-        const reviewPrompt = this.constructReviewPrompt(comments);
-
-        // Create and start a new loop engine with the review prompt
-        // skipGitSetup: true because we've already created the review branch
-        const engine = new LoopEngine({
-          loop: { config: loop.config, state: loop.state },
-          backend,
-          gitService: git,
-          eventEmitter: this.emitter,
-          onPersistState: async (state) => {
-            await updateLoopState(loopId, state);
-          },
-          skipGitSetup: true,
-        });
-        this.engines.set(loopId, engine);
-
-        // Set the review prompt as pending
-        engine.setPendingPrompt(reviewPrompt);
-
-        // Start state persistence
-        this.startStatePersistence(loopId);
-
-        // Start execution (fire and forget - don't block the caller)
-        // The loop runs asynchronously and updates state via events/persistence
-        engine.start().catch((error) => {
-          log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
-        });
-
-        return {
-          success: true,
-          reviewCycle: loop.state.reviewMode.reviewCycles,
-          branch: reviewBranchName,
-          commentIds: [commentId],
-        };
       }
     } catch (error) {
       return { success: false, error: String(error) };
     }
+  }
+
+  /**
+   * Set up a new worktree for a merged loop's review cycle.
+   * Creates a new review branch from the original branch, replacing any existing worktree.
+   *
+   * @param loop - The loop config and state
+   * @param git - The GitService instance
+   * @returns The new review branch name
+   */
+  private async setupMergedReviewWorktree(
+    loop: Loop,
+    git: GitService
+  ): Promise<string> {
+    // Generate new review branch name
+    const safeName = sanitizeBranchName(loop.config.name);
+    const reviewBranchName = `${loop.config.git.branchPrefix}${safeName}-review-${loop.state.reviewMode!.reviewCycles}`;
+
+    // Create a new worktree for the review branch (branched from original)
+    const worktreePath = `${loop.config.directory}/.ralph-worktrees/${loop.config.id}`;
+
+    // Remove old worktree first if it exists (from previous iteration)
+    const oldWorktreeExists = await git.worktreeExists(loop.config.directory, worktreePath);
+    if (oldWorktreeExists) {
+      await git.removeWorktree(loop.config.directory, worktreePath, { force: true });
+    }
+
+    await git.createWorktree(
+      loop.config.directory,
+      worktreePath,
+      reviewBranchName,
+      loop.state.git!.originalBranch
+    );
+
+    // Update git state
+    loop.state.git!.workingBranch = reviewBranchName;
+    loop.state.git!.worktreePath = worktreePath;
+    loop.state.reviewMode!.reviewBranches.push(reviewBranchName);
+
+    return reviewBranchName;
+  }
+
+  /**
+   * Transition a loop to idle for review, persist state, insert the review comment,
+   * and start the review engine. Shared tail logic for both pushed and merged paths
+   * of addressReviewComments().
+   *
+   * @param loopId - The loop ID
+   * @param loop - The loop config and state
+   * @param backend - The backend connection for this loop
+   * @param git - The GitService instance
+   * @param comments - The reviewer comments to address
+   * @param transitionLabel - Label for assertValidTransition (e.g., "pushed" or "merged")
+   * @param commentId - Pre-generated UUID for the comment
+   * @param nextReviewCycle - The review cycle number for this comment
+   * @param resultBranch - The branch name to include in the return value
+   */
+  private async transitionToReviewAndStart(
+    loopId: string,
+    loop: Loop,
+    backend: ReturnType<typeof backendManager.getLoopBackend>,
+    git: GitService,
+    comments: string,
+    transitionLabel: string,
+    commentId: string,
+    nextReviewCycle: number,
+    resultBranch: string
+  ): Promise<{ success: boolean; reviewCycle: number; branch: string; commentIds: string[] }> {
+    // Set status to idle so engine.start() can run (it will set to running)
+    assertValidTransition(loop.state.status, "idle", `addressReviewComments:${transitionLabel}`);
+    loop.state.status = "idle";
+    loop.state.completedAt = undefined;
+
+    await updateLoopState(loopId, loop.state);
+
+    // Store the comment in the database AFTER state is successfully updated
+    insertReviewComment({
+      id: commentId,
+      loopId,
+      reviewCycle: nextReviewCycle,
+      commentText: comments,
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    });
+
+    // Create and start the review engine (shared helper)
+    this.startReviewEngine(loopId, loop, backend, git, comments);
+
+    return {
+      success: true,
+      reviewCycle: loop.state.reviewMode!.reviewCycles,
+      branch: resultBranch,
+      commentIds: [commentId],
+    };
+  }
+
+  /**
+   * Create, configure, and start a review engine for addressing reviewer comments.
+   * Shared by both the pushed and merged paths of addressReviewComments().
+   *
+   * @param loopId - The loop ID
+   * @param loop - The loop config and state
+   * @param backend - The backend connection for this loop
+   * @param git - The GitService instance
+   * @param comments - The reviewer comments to address
+   */
+  private startReviewEngine(
+    loopId: string,
+    loop: Loop,
+    backend: ReturnType<typeof backendManager.getLoopBackend>,
+    git: GitService,
+    comments: string
+  ): void {
+    // Construct specialized prompt for addressing comments
+    const reviewPrompt = this.constructReviewPrompt(comments);
+
+    // Create a new loop engine with skipGitSetup (branch/worktree already exists)
+    const engine = new LoopEngine({
+      loop: { config: loop.config, state: loop.state },
+      backend,
+      gitService: git,
+      eventEmitter: this.emitter,
+      onPersistState: async (state) => {
+        await updateLoopState(loopId, state);
+      },
+      skipGitSetup: true,
+    });
+    this.engines.set(loopId, engine);
+
+    // Set the review prompt as pending
+    engine.setPendingPrompt(reviewPrompt);
+
+    // Start state persistence
+    this.startStatePersistence(loopId);
+
+    // Start execution (fire and forget - don't block the caller)
+    // The loop runs asynchronously and updates state via events/persistence
+    engine.start().catch((error) => {
+      log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
+    });
   }
 
   /**
@@ -2269,6 +2337,47 @@ ${fileList}
   }
 
   /**
+   * Get review comments for a loop.
+   * Returns comments in API-friendly format (camelCase keys).
+   */
+  getReviewComments(loopId: string): Array<{
+    id: string;
+    loopId: string;
+    reviewCycle: number;
+    commentText: string;
+    createdAt: string;
+    status: "pending" | "addressed";
+    addressedAt?: string;
+  }> {
+    const dbComments = getReviewCommentsFromDb(loopId);
+    return dbComments.map((c) => ({
+      id: c.id,
+      loopId: c.loop_id,
+      reviewCycle: c.review_cycle,
+      commentText: c.comment_text,
+      createdAt: c.created_at,
+      status: c.status as "pending" | "addressed",
+      addressedAt: c.addressed_at ?? undefined,
+    }));
+  }
+
+  /**
+   * Save the last used model as a user preference.
+   * Called after loop creation to remember the user's model selection.
+   */
+  async saveLastUsedModel(model: {
+    providerID: string;
+    modelID: string;
+    variant?: string;
+  }): Promise<void> {
+    try {
+      await setLastModel(model);
+    } catch (error) {
+      log.warn(`Failed to save last model: ${String(error)}`);
+    }
+  }
+
+  /**
    * Check if a loop is currently running.
    */
   isRunning(loopId: string): boolean {
@@ -2281,6 +2390,61 @@ ${fileList}
   getRunningLoopState(loopId: string): LoopState | null {
     const engine = this.engines.get(loopId);
     return engine?.state ?? null;
+  }
+
+  /**
+   * Clear planning files in the worktree before starting plan mode.
+   * Handles two operations:
+   * 1. Clear .planning folder contents (if clearPlanningFolder config is set)
+   * 2. Always clear plan.md to prevent stale content display
+   */
+  private async clearPlanningFiles(
+    loopId: string,
+    loop: Loop,
+    executor: CommandExecutor,
+    worktreePath: string
+  ): Promise<void> {
+    // Clear .planning folder in the worktree (if requested)
+    if (loop.config.clearPlanningFolder && !loop.state.planMode?.planningFolderCleared) {
+      const planningDir = `${worktreePath}/.planning`;
+
+      try {
+        const exists = await executor.directoryExists(planningDir);
+        if (exists) {
+          const files = await executor.listDirectory(planningDir);
+          const filesToDelete = files.filter((file: string) => file !== ".gitkeep");
+
+          if (filesToDelete.length > 0) {
+            const fileArgs = filesToDelete.map((file: string) => `${planningDir}/${file}`);
+            await executor.exec("rm", ["-rf", ...fileArgs], {
+              cwd: worktreePath,
+            });
+          }
+        }
+
+        // Mark as cleared
+        if (loop.state.planMode) {
+          loop.state.planMode.planningFolderCleared = true;
+          await updateLoopState(loopId, loop.state);
+        }
+      } catch (error) {
+        log.warn(`Failed to clear .planning folder: ${String(error)}`);
+      }
+    }
+
+    // Always clear plan.md when starting plan mode, regardless of clearPlanningFolder setting.
+    // This ensures the UI doesn't display stale plan content from a previous session while
+    // the AI is generating a new plan. The old plan is always irrelevant in a fresh plan session.
+    const planFilePath = `${worktreePath}/.planning/plan.md`;
+    try {
+      const planFileExists = await executor.fileExists(planFilePath);
+      if (planFileExists) {
+        await executor.exec("rm", ["-f", planFilePath], { cwd: worktreePath });
+        log.debug("Cleared stale plan.md file before starting plan mode");
+      }
+    } catch (error) {
+      log.warn(`Failed to clear plan.md: ${String(error)}`);
+    }
   }
 
   /**

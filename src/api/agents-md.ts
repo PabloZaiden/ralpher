@@ -15,6 +15,7 @@
 import { getWorkspace } from "../persistence/workspaces";
 import { backendManager } from "../core/backend-manager";
 import { createLogger } from "../core/logger";
+import { errorResponse } from "./helpers";
 import {
   analyzeAgentsMd,
   previewOptimization,
@@ -44,10 +45,7 @@ export const agentsMdRoutes = {
     const { id } = req.params;
 
     if (req.method !== "GET") {
-      return Response.json(
-        { message: "Method not allowed" },
-        { status: 405 }
-      );
+      return errorResponse("method_not_allowed", "Method not allowed", 405);
     }
 
     log.debug("GET /api/workspaces/:id/agents-md", { workspaceId: id });
@@ -55,10 +53,7 @@ export const agentsMdRoutes = {
     try {
       const workspace = await getWorkspace(id);
       if (!workspace) {
-        return Response.json(
-          { message: "Workspace not found" },
-          { status: 404 }
-        );
+        return errorResponse("workspace_not_found", "Workspace not found", 404);
       }
 
       const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
@@ -69,10 +64,7 @@ export const agentsMdRoutes = {
       // If the file exists but we couldn't read it, treat as a server error
       if (fileExists && content === null) {
         log.error("AGENTS.md exists but could not be read", { workspaceId: id });
-        return Response.json(
-          { message: "AGENTS.md exists but could not be read (possible permissions or transient error)" },
-          { status: 500 }
-        );
+        return errorResponse("read_failed", "AGENTS.md exists but could not be read (possible permissions or transient error)", 500);
       }
 
       const analysis = analyzeAgentsMd(content);
@@ -84,10 +76,7 @@ export const agentsMdRoutes = {
       });
     } catch (error) {
       log.error("Failed to read AGENTS.md", { workspaceId: id, error: String(error) });
-      return Response.json(
-        { message: "Failed to read AGENTS.md", error: String(error) },
-        { status: 500 }
-      );
+      return errorResponse("read_failed", `Failed to read AGENTS.md: ${String(error)}`, 500);
     }
   },
 
@@ -100,10 +89,7 @@ export const agentsMdRoutes = {
     const { id } = req.params;
 
     if (req.method !== "POST") {
-      return Response.json(
-        { message: "Method not allowed" },
-        { status: 405 }
-      );
+      return errorResponse("method_not_allowed", "Method not allowed", 405);
     }
 
     log.debug("POST /api/workspaces/:id/agents-md/preview", { workspaceId: id });
@@ -111,10 +97,7 @@ export const agentsMdRoutes = {
     try {
       const workspace = await getWorkspace(id);
       if (!workspace) {
-        return Response.json(
-          { message: "Workspace not found" },
-          { status: 404 }
-        );
+        return errorResponse("workspace_not_found", "Workspace not found", 404);
       }
 
       const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
@@ -125,10 +108,7 @@ export const agentsMdRoutes = {
       // If the file exists but we couldn't read it, treat as a server error
       if (fileExists && content === null) {
         log.error("AGENTS.md exists but could not be read for preview", { workspaceId: id });
-        return Response.json(
-          { message: "AGENTS.md exists but could not be read (possible permissions or transient error)" },
-          { status: 500 }
-        );
+        return errorResponse("read_failed", "AGENTS.md exists but could not be read (possible permissions or transient error)", 500);
       }
 
       const preview = previewOptimization(content, fileExists);
@@ -136,10 +116,7 @@ export const agentsMdRoutes = {
       return Response.json(preview);
     } catch (error) {
       log.error("Failed to preview AGENTS.md optimization", { workspaceId: id, error: String(error) });
-      return Response.json(
-        { message: "Failed to preview optimization", error: String(error) },
-        { status: 500 }
-      );
+      return errorResponse("preview_failed", `Failed to preview optimization: ${String(error)}`, 500);
     }
   },
 
@@ -154,10 +131,7 @@ export const agentsMdRoutes = {
     const { id } = req.params;
 
     if (req.method !== "POST") {
-      return Response.json(
-        { message: "Method not allowed" },
-        { status: 405 }
-      );
+      return errorResponse("method_not_allowed", "Method not allowed", 405);
     }
 
     log.debug("POST /api/workspaces/:id/agents-md/optimize", { workspaceId: id });
@@ -165,10 +139,7 @@ export const agentsMdRoutes = {
     try {
       const workspace = await getWorkspace(id);
       if (!workspace) {
-        return Response.json(
-          { message: "Workspace not found" },
-          { status: 404 }
-        );
+        return errorResponse("workspace_not_found", "Workspace not found", 404);
       }
 
       const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
@@ -179,10 +150,7 @@ export const agentsMdRoutes = {
       // If the file exists but we couldn't read it, treat as a server error
       if (fileExists && currentContent === null) {
         log.error("AGENTS.md exists but could not be read for optimization", { workspaceId: id });
-        return Response.json(
-          { message: "AGENTS.md exists but could not be read (possible permissions or transient error)" },
-          { status: 500 }
-        );
+        return errorResponse("read_failed", "AGENTS.md exists but could not be read (possible permissions or transient error)", 500);
       }
 
       const analysis = analyzeAgentsMd(currentContent);
@@ -205,10 +173,7 @@ export const agentsMdRoutes = {
       const writeSuccess = await executor.writeFile(agentsMdPath, optimizedContent);
       if (!writeSuccess) {
         log.error("Failed to write optimized AGENTS.md", { workspaceId: id });
-        return Response.json(
-          { message: "Failed to write AGENTS.md to the workspace" },
-          { status: 500 }
-        );
+        return errorResponse("write_failed", "Failed to write AGENTS.md to the workspace", 500);
       }
 
       log.info("AGENTS.md optimized successfully", {
@@ -225,10 +190,7 @@ export const agentsMdRoutes = {
       });
     } catch (error) {
       log.error("Failed to optimize AGENTS.md", { workspaceId: id, error: String(error) });
-      return Response.json(
-        { message: "Failed to optimize AGENTS.md", error: String(error) },
-        { status: 500 }
-      );
+      return errorResponse("optimize_failed", `Failed to optimize AGENTS.md: ${String(error)}`, 500);
     }
   },
 };

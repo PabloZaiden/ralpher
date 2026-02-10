@@ -4,6 +4,11 @@
  */
 
 import type { EventStream } from "../utils/event-stream";
+import type { TodoItem } from "../types/loop";
+import type { ModelInfo } from "../types/api";
+
+// Re-export TodoItem for backward compatibility
+export type { TodoItem };
 
 /**
  * Connection info needed for WebSocket and other direct connections.
@@ -137,20 +142,6 @@ export interface QuestionInfo {
 }
 
 /**
- * A TODO item from an agent session.
- */
-export interface TodoItem {
-  /** Brief description of the task */
-  content: string;
-  /** Current status of the task */
-  status: "pending" | "in_progress" | "completed" | "cancelled";
-  /** Priority level of the task */
-  priority: "high" | "medium" | "low";
-  /** Unique identifier for the todo item */
-  id: string;
-}
-
-/**
  * Events emitted by the OpenCode backend.
  */
 export type AgentEvent =
@@ -219,7 +210,14 @@ export interface Backend {
   /** Abort all active event subscriptions */
   abortAllSubscriptions(): void;
 
-  /** Get the SDK client (may be null for mocks) */
+  /**
+   * Get the SDK client instance.
+   * Returns `unknown` intentionally — this interface is implemented by both
+   * the real OpenCodeBackend (which returns an OpencodeClient) and
+   * MockOpenCodeBackend (which returns a mock object). Typing it as
+   * OpencodeClient would couple the shared interface to a concrete SDK type
+   * that mocks cannot satisfy. Callers should cast as needed.
+   */
   getSdkClient(): unknown;
 
   /** Get the current working directory */
@@ -235,5 +233,5 @@ export interface Backend {
   deleteSession(id: string): Promise<void>;
 
   /** Get available models */
-  getModels(directory: string): Promise<unknown[]>;
+  getModels(directory: string): Promise<ModelInfo[]>;
 }

@@ -1,9 +1,14 @@
 /**
  * Loop persistence layer for Ralph Loops Management System.
  * Handles reading and writing loop data to SQLite database.
+ * 
+ * Note: Exported functions are marked `async` despite using synchronous
+ * bun:sqlite APIs. This is intentional for interface consistency — callers
+ * already `await` these functions, and the persistence layer may switch to
+ * async storage (e.g., remote database, async I/O) in the future.
  */
 
-import type { Loop, LoopConfig, LoopState } from "../types";
+import type { Loop, LoopConfig, LoopState, ConsecutiveErrorTracker } from "../types";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import { getDatabase } from "./database";
 import { createLogger } from "../core/logger";
@@ -144,6 +149,19 @@ function loopToRow(loop: Loop): Record<string, unknown> {
 }
 
 /**
+ * Safely parse a JSON string, returning the fallback value on parse failure.
+ * This prevents a single corrupt row from crashing the entire listLoops() call.
+ */
+function safeJsonParse<T>(json: string, fallback: T, fieldName: string, rowId: unknown): T {
+  try {
+    return JSON.parse(json);
+  } catch (error) {
+    log.warn(`Failed to parse JSON in field "${fieldName}" for loop ${String(rowId)}: ${String(error)}`);
+    return fallback;
+  }
+}
+
+/**
  * Convert a database row to a Loop object.
  */
 function rowToLoop(row: Record<string, unknown>): Loop {
@@ -192,18 +210,19 @@ function rowToLoop(row: Record<string, unknown>): Loop {
     config.baseBranch = row["base_branch"] as string;
   }
 
+  const rowId = row["id"];
   const state: LoopState = {
     id: row["id"] as string,
     status: row["status"] as LoopState["status"],
     currentIteration: row["current_iteration"] as number,
     recentIterations: row["recent_iterations"] 
-      ? JSON.parse(row["recent_iterations"] as string) 
+      ? safeJsonParse(row["recent_iterations"] as string, [], "recent_iterations", rowId)
       : [],
     // Mandatory array fields - always initialize as empty arrays if null
-    logs: row["logs"] ? JSON.parse(row["logs"] as string) : [],
-    messages: row["messages"] ? JSON.parse(row["messages"] as string) : [],
-    toolCalls: row["tool_calls"] ? JSON.parse(row["tool_calls"] as string) : [],
-    todos: row["todos"] ? JSON.parse(row["todos"] as string) : [],
+    logs: row["logs"] ? safeJsonParse(row["logs"] as string, [], "logs", rowId) : [],
+    messages: row["messages"] ? safeJsonParse(row["messages"] as string, [], "messages", rowId) : [],
+    toolCalls: row["tool_calls"] ? safeJsonParse(row["tool_calls"] as string, [], "tool_calls", rowId) : [],
+    todos: row["todos"] ? safeJsonParse(row["todos"] as string, [], "todos", rowId) : [],
   };
 
   // Optional state fields
@@ -233,14 +252,14 @@ function rowToLoop(row: Record<string, unknown>): Loop {
     state.git = {
       originalBranch: row["git_original_branch"] as string,
       workingBranch: row["git_working_branch"] as string,
-      commits: row["git_commits"] ? JSON.parse(row["git_commits"] as string) : [],
+      commits: row["git_commits"] ? safeJsonParse(row["git_commits"] as string, [], "git_commits", rowId) : [],
     };
     if (row["git_worktree_path"] !== null && row["git_worktree_path"] !== undefined) {
       state.git.worktreePath = row["git_worktree_path"] as string;
     }
   }
   if (row["consecutive_errors"] !== null) {
-    state.consecutiveErrors = JSON.parse(row["consecutive_errors"] as string);
+    state.consecutiveErrors = safeJsonParse<ConsecutiveErrorTracker | undefined>(row["consecutive_errors"] as string, undefined, "consecutive_errors", rowId);
   }
   if (row["pending_prompt"] !== null) {
     state.pendingPrompt = row["pending_prompt"] as string;
@@ -270,7 +289,7 @@ function rowToLoop(row: Record<string, unknown>): Loop {
   }
   // Reconstruct reviewMode from JSON
   if (row["review_mode"] !== null) {
-    state.reviewMode = JSON.parse(row["review_mode"] as string);
+    state.reviewMode = safeJsonParse(row["review_mode"] as string, undefined, "review_mode", rowId);
   }
 
   return { config, state };
@@ -278,7 +297,8 @@ function rowToLoop(row: Record<string, unknown>): Loop {
 
 /**
  * Save a loop to the database.
- * Uses INSERT OR REPLACE for upsert behavior.
+ * Uses INSERT ... ON CONFLICT DO UPDATE (upsert) to avoid triggering
+ * ON DELETE CASCADE which would destroy related records (e.g. review_comments).
  */
 export async function saveLoop(loop: Loop): Promise<void> {
   log.debug("Saving loop", { id: loop.config.id, name: loop.config.name, status: loop.state.status });
@@ -292,9 +312,14 @@ export async function saveLoop(loop: Loop): Promise<void> {
   const placeholders = columns.map(() => "?").join(", ");
   const values = Object.values(row) as (string | number | null | Uint8Array)[];
   
+  // Build the ON CONFLICT UPDATE clause for all columns except 'id'
+  const updateColumns = columns.filter(col => col !== "id");
+  const updateClause = updateColumns.map(col => `${col} = excluded.${col}`).join(", ");
+  
   const stmt = db.prepare(`
-    INSERT OR REPLACE INTO loops (${columns.join(", ")})
+    INSERT INTO loops (${columns.join(", ")})
     VALUES (${placeholders})
+    ON CONFLICT(id) DO UPDATE SET ${updateClause}
   `);
   
   stmt.run(...values);

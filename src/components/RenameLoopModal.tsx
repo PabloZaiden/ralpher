@@ -36,11 +36,10 @@ export function RenameLoopModal({
       setName(currentName);
       setError(null);
       setLoading(false);
-      // Focus input after a short delay to allow modal animation
-      setTimeout(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      }, 100);
+      // Focus and select input text. The ref is already assigned by
+      // the time the effect runs (React assigns refs during commit).
+      inputRef.current?.focus();
+      inputRef.current?.select();
     }
   }, [isOpen, currentName]);
 
