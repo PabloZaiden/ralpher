@@ -50,6 +50,7 @@ export function PlanReviewPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [activeTab, setActiveTab] = useState<PlanTab>("plan");
+  const [promptExpanded, setPromptExpanded] = useState(false);
 
   // Markdown rendering preference
   const { enabled: markdownEnabled } = useMarkdownPreference();
@@ -101,6 +102,26 @@ export function PlanReviewPanel({
 
   return (
     <div className="space-y-4 flex-1 min-h-0 overflow-auto dark-scrollbar">
+      {/* Original Prompt (collapsible) */}
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+        <button
+          type="button"
+          onClick={() => setPromptExpanded((v) => !v)}
+          className="w-full flex items-center gap-2 px-4 py-3 text-left cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors rounded-lg"
+          aria-expanded={promptExpanded}
+        >
+          <span className="text-xs text-gray-500 dark:text-gray-400">{promptExpanded ? "\u25BC" : "\u25B6"}</span>
+          <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Original Prompt</h3>
+        </button>
+        {promptExpanded && (
+          <div className="px-4 pb-4">
+            <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4">
+              {loop.config.prompt || "No prompt specified."}
+            </pre>
+          </div>
+        )}
+      </div>
+
       {/* Tab navigation */}
       <div className="flex border-b border-gray-200 dark:border-gray-700">
         {tabs.map((tab) => (
