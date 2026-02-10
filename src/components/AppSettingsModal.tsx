@@ -4,14 +4,11 @@
  * Server settings have moved to per-workspace WorkspaceSettingsModal.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Modal, Button } from "./common";
-import { useMarkdownPreference, useLogLevelPreference } from "../hooks";
+import { useMarkdownPreference, useLogLevelPreference, useCountdownReload } from "../hooks";
 import type { LogLevelName } from "../lib/logger";
 import type { WorkspaceExportData, WorkspaceImportResult } from "../types/workspace";
-
-/** Duration in seconds for the reload countdown after killing the server. */
-export const KILL_SERVER_COUNTDOWN_SECONDS = 15;
 
 export interface AppSettingsModalProps {
   /** Whether the modal is open */
@@ -52,7 +49,6 @@ export function AppSettingsModal({
   const [showKillConfirm, setShowKillConfirm] = useState(false);
   const [serverKilled, setServerKilled] = useState(false);
   const [killError, setKillError] = useState(false);
-  const [countdown, setCountdown] = useState(KILL_SERVER_COUNTDOWN_SECONDS);
   const [importResult, setImportResult] = useState<WorkspaceImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -63,27 +59,7 @@ export function AppSettingsModal({
     window.location.reload();
   }, []);
 
-  useEffect(() => {
-    if (!serverKilled) return;
-
-    setCountdown(KILL_SERVER_COUNTDOWN_SECONDS);
-
-    const interval = setInterval(() => {
-      setCountdown((prev) => {
-        const next = prev - 1;
-        if (next <= 0) {
-          clearInterval(interval);
-          reloadPage();
-          return 0;
-        }
-        return next;
-      });
-    }, 1000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [serverKilled, reloadPage]);
+  const { countdown, progressPercent } = useCountdownReload(serverKilled, reloadPage);
 
   // Markdown rendering preference
   const { enabled: markdownEnabled, toggle: toggleMarkdown, saving: savingMarkdown } = useMarkdownPreference();
@@ -393,7 +369,7 @@ export function AppSettingsModal({
                       <div className="w-full h-1.5 bg-red-200 dark:bg-red-900 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-red-500 dark:bg-red-400 rounded-full transition-all duration-1000 ease-linear"
-                          style={{ width: `${(countdown / KILL_SERVER_COUNTDOWN_SECONDS) * 100}%` }}
+                          style={{ width: `${progressPercent}%` }}
                         />
                       </div>
                     </div>
