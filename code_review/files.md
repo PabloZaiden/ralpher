@@ -35,7 +35,7 @@
 ### src/core/loop-manager.ts
 
 **Purpose:** Central orchestrator for loop lifecycle — creation, starting, stopping, accepting, and state management of Ralph Loops.
-**LOC:** ~2025
+**LOC:** ~2409
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -54,7 +54,7 @@
 ### src/core/loop-engine.ts
 
 **Purpose:** Executes loop iterations — builds prompts, sends to backend, processes responses, manages iteration lifecycle.
-**LOC:** ~2009
+**LOC:** ~2079
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -71,7 +71,7 @@
 ### src/core/backend-manager.ts
 
 **Purpose:** Manages backend connections and provides access to SDK clients and command executors for workspaces.
-**LOC:** ~667
+**LOC:** ~765
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -86,7 +86,7 @@
 ### src/core/git-service.ts
 
 **Purpose:** Provides git operations (branch management, commits, merges, push/pull) via CommandExecutor for remote execution.
-**LOC:** ~979
+**LOC:** ~1492
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -101,7 +101,7 @@
 ### src/core/command-executor.ts
 
 **Purpose:** Defines the `CommandExecutor` interface for executing commands on remote servers.
-**LOC:** ~50
+**LOC:** ~79
 
 No findings. Clean interface definition.
 
@@ -110,7 +110,7 @@ No findings. Clean interface definition.
 ### src/core/remote-command-executor.ts
 
 **Purpose:** Implements `CommandExecutor` for remote opencode servers, translating commands to API calls.
-**LOC:** ~464
+**LOC:** ~493
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -123,7 +123,7 @@ No findings. Clean interface definition.
 ### src/core/event-emitter.ts
 
 **Purpose:** Type-safe event emitter implementation for internal pub/sub.
-**LOC:** ~150
+**LOC:** ~72
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -134,7 +134,7 @@ No findings. Clean interface definition.
 ### src/core/config.ts
 
 **Purpose:** Application configuration management.
-**LOC:** ~100
+**LOC:** ~34
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -145,13 +145,22 @@ No findings. Clean interface definition.
 ### src/core/logger.ts
 
 **Purpose:** Backend logging infrastructure with log levels and sub-logger creation.
-**LOC:** ~100
+**LOC:** ~129
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
 | 1 | Major | Best practices | `createLogger()` | Does NOT cache sub-loggers, so `setLogLevel()` only updates the parent logger. Sub-loggers created via `createLogger("api:loops")` retain their original level after runtime level changes. |
 | 2 | Major | Code duplication | scattered | `LogLevelName` type, `LOG_LEVELS`, `LOG_LEVEL_NAMES`, `DEFAULT_LOG_LEVEL` are duplicated identically in `src/lib/logger.ts`. |
 | 3 | Minor | Performance & resource management | — | No max log buffer or rotation mechanism. |
+
+---
+
+### src/core/agents-md-optimizer.ts
+
+**Purpose:** Core logic for AGENTS.md optimization — analyzes and optimizes AGENTS.md files in workspaces.
+**LOC:** ~234
+
+*New file — not in original review. No findings identified.*
 
 ---
 
@@ -169,7 +178,7 @@ No findings. Clean barrel export.
 ### src/api/loops.ts
 
 **Purpose:** API route handlers for loop CRUD operations, loop control (start/stop/accept), plan management, and review comments.
-**LOC:** ~1432
+**LOC:** ~1351
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -192,7 +201,7 @@ No findings. Clean barrel export.
 ### src/api/workspaces.ts
 
 **Purpose:** API route handlers for workspace CRUD operations and connection testing.
-**LOC:** ~490
+**LOC:** ~695
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -208,7 +217,7 @@ No findings. Clean barrel export.
 ### src/api/models.ts
 
 **Purpose:** API route handlers for model discovery, enablement checking, and log level management.
-**LOC:** ~427
+**LOC:** ~426
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -225,7 +234,7 @@ No findings. Clean barrel export.
 ### src/api/settings.ts
 
 **Purpose:** API route handlers for server settings retrieval, database reset, and server kill.
-**LOC:** ~133
+**LOC:** ~132
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -239,7 +248,7 @@ No findings. Clean barrel export.
 ### src/api/git.ts
 
 **Purpose:** API route handlers for git status and branch listing.
-**LOC:** ~194
+**LOC:** ~193
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -252,7 +261,7 @@ No findings. Clean barrel export.
 ### src/api/health.ts
 
 **Purpose:** Health check endpoint.
-**LOC:** ~50
+**LOC:** ~49
 
 No findings. Clean implementation.
 
@@ -261,7 +270,7 @@ No findings. Clean implementation.
 ### src/api/validation.ts
 
 **Purpose:** Request validation utilities using Zod schemas.
-**LOC:** ~122
+**LOC:** ~121
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -272,7 +281,7 @@ No findings. Clean implementation.
 ### src/api/websocket.ts
 
 **Purpose:** WebSocket upgrade handler and message routing for real-time loop events.
-**LOC:** ~135
+**LOC:** ~134
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -284,10 +293,19 @@ No findings. Clean implementation.
 
 ---
 
+### src/api/agents-md.ts
+
+**Purpose:** API route handlers for AGENTS.md optimization operations.
+**LOC:** ~234
+
+*New file — not in original review. No findings identified.*
+
+---
+
 ### src/api/index.ts
 
 **Purpose:** Barrel export aggregating all API route handlers.
-**LOC:** ~59
+**LOC:** ~62
 
 No findings. Clean barrel export.
 
@@ -298,7 +316,7 @@ No findings. Clean barrel export.
 ### src/persistence/database.ts
 
 **Purpose:** SQLite database initialization, schema creation, and low-level database access (including review comment operations).
-**LOC:** ~387
+**LOC:** ~386
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -316,13 +334,13 @@ No findings. Clean barrel export.
 ### src/persistence/loops.ts
 
 **Purpose:** Loop persistence layer — CRUD operations, state/config updates, and row-to-object mapping for loops.
-**LOC:** ~561
+**LOC:** ~566
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
 | 1 | Critical | Security | 57 (migrations) | SQL injection risk in `getTableColumns` via string interpolation in PRAGMA query. (Note: shared with migrations/index.ts) |
 | 2 | Major | Best practices | scattered | `ALLOWED_LOOP_COLUMNS` manually maintained, must be kept in sync with schema AND migrations. |
-| 3 | Major | Code duplication | 422-506 | `updateLoopState` and `updateLoopConfig` are near-identical ~40-line functions that differ only in which field they update. |
+| 3 | Major | Code duplication | 422-506 | ~~`updateLoopState` and `updateLoopConfig` are near-identical ~40-line functions that differ only in which field they update.~~ **Partially Resolved:** `updateLoopState` and `updateLoopConfig` now use `UPDATE` statements (lines 457-459, 502-504) instead of the previous approach. However, `saveLoop` (line 295-296) still uses `INSERT OR REPLACE`. |
 | 4 | Major | Database & persistence | 289 | `INSERT OR REPLACE` in `saveLoop` triggers `ON DELETE CASCADE`, silently destroying review comments. |
 | 5 | Major | Error handling | 196-267 | Multiple `JSON.parse` calls in `rowToLoop` have no error handling — one corrupt row prevents listing ALL loops. |
 | 6 | Minor | Best practices | scattered | All exported functions are `async` but contain zero `await` expressions (synchronous SQLite operations). |
@@ -334,7 +352,7 @@ No findings. Clean barrel export.
 ### src/persistence/workspaces.ts
 
 **Purpose:** Workspace persistence layer — CRUD operations for workspace records.
-**LOC:** ~240
+**LOC:** ~327
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -348,7 +366,7 @@ No findings. Clean barrel export.
 ### src/persistence/preferences.ts
 
 **Purpose:** User preferences persistence — log level, last directory, and markdown rendering preferences.
-**LOC:** ~179
+**LOC:** ~178
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -362,7 +380,7 @@ No findings. Clean barrel export.
 ### src/persistence/paths.ts
 
 **Purpose:** Data directory and database readiness helpers.
-**LOC:** ~25
+**LOC:** ~24
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -373,7 +391,7 @@ No findings. Clean barrel export.
 ### src/persistence/migrations/index.ts
 
 **Purpose:** Database migration system — sequential schema upgrades with idempotency checks.
-**LOC:** ~553
+**LOC:** ~571
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -450,7 +468,7 @@ No findings. Clean barrel export.
 ### src/types/loop.ts
 
 **Purpose:** Loop domain types — status enums, state/config interfaces, default values, and factory functions.
-**LOC:** ~386
+**LOC:** ~400
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -463,7 +481,7 @@ No findings. Clean barrel export.
 ### src/types/workspace.ts
 
 **Purpose:** Workspace domain types.
-**LOC:** ~69
+**LOC:** ~95
 
 No findings. Clean type definitions.
 
@@ -486,7 +504,7 @@ No findings. Clean type definitions.
 ### src/types/events.ts
 
 **Purpose:** Event types for the loop event system — defines all event payloads, message data, and event creation helpers.
-**LOC:** ~489
+**LOC:** ~536
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -499,7 +517,7 @@ No findings. Clean type definitions.
 ### src/types/api.ts
 
 **Purpose:** API request/response types — loop, workspace, model, and settings DTOs.
-**LOC:** ~269
+**LOC:** ~278
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -511,7 +529,7 @@ No findings. Clean type definitions.
 ### src/types/schemas/workspace.ts
 
 **Purpose:** Zod validation schemas for workspace API requests.
-**LOC:** ~81
+**LOC:** ~108
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -522,7 +540,7 @@ No findings. Clean type definitions.
 ### src/types/schemas/loop.ts
 
 **Purpose:** Zod validation schemas for loop API requests.
-**LOC:** ~121
+**LOC:** ~120
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -533,7 +551,7 @@ No findings. Clean type definitions.
 ### src/types/schemas/model.ts
 
 **Purpose:** Zod validation schemas for model API requests.
-**LOC:** ~34
+**LOC:** ~33
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -544,7 +562,7 @@ No findings. Clean type definitions.
 ### src/types/schemas/preferences.ts
 
 **Purpose:** Zod validation schemas for preferences API requests.
-**LOC:** ~45
+**LOC:** ~44
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -556,7 +574,7 @@ No findings. Clean type definitions.
 ### src/types/schemas/index.ts
 
 **Purpose:** Barrel export for Zod schemas.
-**LOC:** ~60
+**LOC:** ~65
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -580,11 +598,11 @@ No findings. Clean type definitions.
 ### src/utils/loop-status.ts
 
 **Purpose:** Loop status utilities — status label formatting, running/terminal state checks, and color mapping.
-**LOC:** ~106
+**LOC:** ~135
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
-| 1 | Major | Best practices | `getStatusLabel` | Missing `"draft"` case in switch — falls through to default returning raw string. |
+| 1 | ~~Major~~ **Resolved** | ~~Best practices~~ | `getStatusLabel` | ~~Missing `"draft"` case in switch — falls through to default returning raw string.~~ **Resolved:** Draft case added at lines 26-27. |
 | 2 | Major | Test coverage gaps | — | No unit tests for this file despite containing critical UI logic. |
 | 3 | Major | Consistency of patterns | imports | Logger import inconsistency — imports from `../lib/logger` (frontend) while `event-stream.ts` imports from `../core/logger` (backend). |
 | 4 | Minor | Dead/legacy code | `isLoopRunning` | Exported but never imported outside `src/utils/` — dead code at public API level. |
@@ -596,7 +614,7 @@ No findings. Clean type definitions.
 ### src/utils/event-stream.ts
 
 **Purpose:** Async iterable event stream — buffered producer/consumer pattern for streaming events.
-**LOC:** ~149
+**LOC:** ~148
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -609,7 +627,7 @@ No findings. Clean type definitions.
 ### src/utils/name-generator.ts
 
 **Purpose:** Generates human-readable names for loops using alliterative adjective-animal pairs.
-**LOC:** ~143
+**LOC:** ~142
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -622,7 +640,7 @@ No findings. Clean type definitions.
 ### src/utils/index.ts
 
 **Purpose:** Barrel export for utils, including inline `sanitizeBranchName` definition.
-**LOC:** ~31
+**LOC:** ~32
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -638,11 +656,11 @@ No findings. Clean type definitions.
 ### src/components/Dashboard.tsx
 
 **Purpose:** Main application dashboard — displays loops grouped by status and workspace, handles loop creation, and manages top-level application state.
-**LOC:** ~1248
+**LOC:** ~1118
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
-| 1 | Critical | Simplicity | scattered | God Component — manages ~20+ state variables, contains raw `fetch()` calls for config/health/models/branches/preferences, and business logic for loop creation (IIFE at lines 890-1086). |
+| 1 | Critical | Simplicity | scattered | God Component — manages 26 state variables, contains raw `fetch()` calls for config/health/models/branches/preferences, and business logic for loop creation. |
 | 2 | Major | Code duplication | 570-842 | Massive JSX duplication between workspace-grouped and unassigned loop sections — near-identical repeated grid blocks for each status group. |
 | 3 | Major | Performance & resource management | scattered | `groupLoopsByStatus` and `workspaceGroups` computed on every render without memoization. |
 | 4 | Major | Code duplication | scattered | Inline icon components (GearIcon, WorkspaceGearIcon) are near-identical SVGs. |
@@ -655,7 +673,7 @@ No findings. Clean type definitions.
 ### src/components/LoopDetails.tsx
 
 **Purpose:** Loop detail view with tabbed interface — shows messages, logs, tool calls, todos, config, and plan/review panels.
-**LOC:** ~1220
+**LOC:** ~1225
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -667,7 +685,7 @@ No findings. Clean type definitions.
 ### src/components/CreateLoopForm.tsx
 
 **Purpose:** Form component for creating new loops — model selection, prompt input, configuration options.
-**LOC:** ~895
+**LOC:** ~949
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -679,7 +697,7 @@ No findings. Clean type definitions.
 ### src/components/LoopActionBar.tsx
 
 **Purpose:** Action toolbar for active loops — stop, accept, rename, and model switching controls.
-**LOC:** ~338
+**LOC:** ~337
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -691,7 +709,7 @@ No findings. Clean type definitions.
 ### src/components/LoopCard.tsx
 
 **Purpose:** Loop summary card for the dashboard grid — shows status, git info, iteration count, and action buttons.
-**LOC:** ~280
+**LOC:** ~306
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -703,7 +721,7 @@ No findings. Clean type definitions.
 ### src/components/LogViewer.tsx
 
 **Purpose:** Displays loop log entries with filtering and auto-scroll.
-**LOC:** ~310
+**LOC:** ~309
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -714,7 +732,7 @@ No findings. Clean type definitions.
 ### src/components/TodoViewer.tsx
 
 **Purpose:** Displays loop todo items with completion status.
-**LOC:** ~175
+**LOC:** ~174
 
 No findings. Generally clean, properly memoized.
 
@@ -723,7 +741,7 @@ No findings. Generally clean, properly memoized.
 ### src/components/MarkdownRenderer.tsx
 
 **Purpose:** Renders markdown content safely using react-markdown.
-**LOC:** ~87
+**LOC:** ~86
 
 No findings. Clean implementation, safe against XSS.
 
@@ -732,7 +750,7 @@ No findings. Clean implementation, safe against XSS.
 ### src/components/PlanReviewPanel.tsx
 
 **Purpose:** UI panel for reviewing and providing feedback on loop plans.
-**LOC:** ~255
+**LOC:** ~275
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -743,7 +761,7 @@ No findings. Clean implementation, safe against XSS.
 ### src/components/ServerSettingsForm.tsx
 
 **Purpose:** Form for editing server connection settings.
-**LOC:** ~401
+**LOC:** ~400
 
 No findings. Generally clean form component.
 
@@ -752,7 +770,7 @@ No findings. Generally clean form component.
 ### src/components/AppSettingsModal.tsx
 
 **Purpose:** Application-level settings modal.
-**LOC:** ~280
+**LOC:** ~428
 
 No findings. Generally clean.
 
@@ -761,7 +779,7 @@ No findings. Generally clean.
 ### src/components/WorkspaceSettingsModal.tsx
 
 **Purpose:** Workspace-specific settings modal.
-**LOC:** ~236
+**LOC:** ~388
 
 No findings. Generally clean.
 
@@ -770,7 +788,7 @@ No findings. Generally clean.
 ### src/components/CreateWorkspaceModal.tsx
 
 **Purpose:** Modal form for creating new workspaces.
-**LOC:** ~198
+**LOC:** ~197
 
 No findings. Generally clean.
 
@@ -779,7 +797,7 @@ No findings. Generally clean.
 ### src/components/WorkspaceSelector.tsx
 
 **Purpose:** Dropdown selector for switching between workspaces.
-**LOC:** ~98
+**LOC:** ~97
 
 No findings. Clean, simple component.
 
@@ -788,7 +806,7 @@ No findings. Clean, simple component.
 ### src/components/AcceptLoopModal.tsx
 
 **Purpose:** Confirmation modal for accepting a completed loop.
-**LOC:** ~145
+**LOC:** ~144
 
 No findings. Clean.
 
@@ -797,7 +815,7 @@ No findings. Clean.
 ### src/components/AddressCommentsModal.tsx
 
 **Purpose:** Modal for addressing review comments on a loop.
-**LOC:** ~131
+**LOC:** ~130
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -808,7 +826,7 @@ No findings. Clean.
 ### src/components/RenameLoopModal.tsx
 
 **Purpose:** Modal form for renaming a loop.
-**LOC:** ~153
+**LOC:** ~152
 
 No findings. Clean.
 
@@ -817,7 +835,7 @@ No findings. Clean.
 ### src/components/LoopModals.tsx
 
 **Purpose:** Aggregates all loop-related modals and manages their open/close state.
-**LOC:** ~224
+**LOC:** ~223
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -828,7 +846,7 @@ No findings. Clean.
 ### src/components/LogLevelInitializer.tsx
 
 **Purpose:** Initializes frontend log level from persisted preferences on mount.
-**LOC:** ~44
+**LOC:** ~43
 
 No findings. Clean.
 
@@ -837,19 +855,19 @@ No findings. Clean.
 ### src/components/common/Modal.tsx
 
 **Purpose:** Reusable modal dialog component with overlay, close button, and animation.
-**LOC:** ~196
+**LOC:** ~195
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
 | 1 | Major | Best practices | scattered | Lacks focus trapping — keyboard users can tab outside the modal to background content (accessibility issue). |
-| 2 | Minor | Best practices | scattered | No ARIA `role="dialog"` or `aria-modal` attribute. |
+| 2 | ~~Minor~~ **Resolved** | ~~Best practices~~ | ~~scattered~~ lines 87-88 | ~~No ARIA `role="dialog"` or `aria-modal` attribute.~~ **Resolved:** Now has `role="dialog"` and `aria-modal="true"` at lines 87-88. |
 
 ---
 
 ### src/components/common/Card.tsx
 
 **Purpose:** Reusable card container component.
-**LOC:** ~68
+**LOC:** ~67
 
 No findings. Clean.
 
@@ -858,7 +876,7 @@ No findings. Clean.
 ### src/components/common/Icons.tsx
 
 **Purpose:** Shared SVG icon components.
-**LOC:** ~32
+**LOC:** ~31
 
 No findings. Clean.
 
@@ -867,7 +885,7 @@ No findings. Clean.
 ### src/components/common/Badge.tsx
 
 **Purpose:** Status badge component with color variants.
-**LOC:** ~105
+**LOC:** ~108
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -878,7 +896,7 @@ No findings. Clean.
 ### src/components/common/Button.tsx
 
 **Purpose:** Reusable button component with variant styling.
-**LOC:** ~68
+**LOC:** ~67
 
 No findings. Clean.
 
@@ -890,6 +908,15 @@ No findings. Clean.
 **LOC:** ~10
 
 No findings. Clean.
+
+---
+
+### src/components/common/CollapsibleSection.tsx
+
+**Purpose:** Reusable collapsible section UI component with expand/collapse toggle.
+**LOC:** ~54
+
+*New file — not in original review. No findings identified.*
 
 ---
 
@@ -907,7 +934,7 @@ No findings. Not all components are re-exported (only main components), which is
 ### src/hooks/useLoop.ts
 
 **Purpose:** React hook for managing a single loop's data — fetches and synchronizes messages, tool calls, logs, todos, and state via polling and WebSocket events.
-**LOC:** ~672
+**LOC:** ~671
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -926,7 +953,7 @@ No findings. Not all components are re-exported (only main components), which is
 ### src/hooks/useLoops.ts
 
 **Purpose:** React hook for managing the loops list — fetches all loops and handles real-time updates via WebSocket events.
-**LOC:** ~308
+**LOC:** ~307
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -940,7 +967,7 @@ No findings. Not all components are re-exported (only main components), which is
 ### src/hooks/useWebSocket.ts
 
 **Purpose:** React hook managing WebSocket connection lifecycle, reconnection, and event dispatching.
-**LOC:** ~231
+**LOC:** ~230
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -954,7 +981,7 @@ No findings. Not all components are re-exported (only main components), which is
 ### src/hooks/useWorkspaces.ts
 
 **Purpose:** React hook for workspace CRUD operations and state management.
-**LOC:** ~178
+**LOC:** ~230
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -966,7 +993,7 @@ No findings. Not all components are re-exported (only main components), which is
 ### src/hooks/useWorkspaceServerSettings.ts
 
 **Purpose:** React hook for managing workspace-specific server settings with optimistic updates.
-**LOC:** ~306
+**LOC:** ~305
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -978,7 +1005,7 @@ No findings. Not all components are re-exported (only main components), which is
 ### src/hooks/useMarkdownPreference.ts
 
 **Purpose:** React hook for persisting markdown rendering preference.
-**LOC:** ~100
+**LOC:** ~99
 
 No findings. Clean. `enabledRef` pattern is correct.
 
@@ -987,20 +1014,29 @@ No findings. Clean. `enabledRef` pattern is correct.
 ### src/hooks/useLogLevelPreference.ts
 
 **Purpose:** React hook for persisting log level preference.
-**LOC:** ~104
+**LOC:** ~103
 
 No findings. Clean.
+
+---
+
+### src/hooks/useAgentsMdOptimizer.ts
+
+**Purpose:** React hook for AGENTS.md optimization — manages optimization state and API interactions.
+**LOC:** ~158
+
+*New file — not in original review. No findings identified.*
 
 ---
 
 ### src/hooks/loopActions.ts
 
 **Purpose:** Collection of standalone async functions for loop API operations (stop, accept, rename, delete, etc.).
-**LOC:** ~348
+**LOC:** ~349
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
-| 1 | Minor | Code duplication | scattered | 13 functions with near-identical boilerplate — massive duplication that could be reduced to ~80 lines with a shared helper. |
+| 1 | Minor | Code duplication | scattered | 14 functions with near-identical boilerplate — massive duplication that could be reduced to ~80 lines with a shared helper. |
 | 2 | Minor | Type safety | scattered | No type safety on error response parsing (`response.json()` returns `any`). |
 | 3 | Minor | Consistency of patterns | scattered | Inconsistent return types (boolean vs result objects). |
 
@@ -1023,7 +1059,7 @@ No findings. Clean.
 ### src/lib/logger.ts
 
 **Purpose:** Frontend logging library — mirrors backend logger API with browser-appropriate output and sub-logger caching.
-**LOC:** ~165
+**LOC:** ~163
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
@@ -1037,11 +1073,20 @@ No findings. Clean.
 ### src/lib/index.ts
 
 **Purpose:** Barrel export for lib modules.
-**LOC:** ~16
+**LOC:** ~15
 
 | # | Severity | Dimension | Lines | Finding |
 |---|----------|-----------|-------|---------|
 | 1 | Minor | Dead/legacy code | — | Covered above — no consumers use this barrel. |
+
+---
+
+### src/lib/prompt-templates.ts
+
+**Purpose:** Predefined prompt templates for loop creation — provides reusable prompt starters.
+**LOC:** ~205
+
+*New file — not in original review. No findings identified.*
 
 ---
 
@@ -1198,7 +1243,7 @@ No findings. Clean implementation.
 | # | Severity | Dimension | Area | Finding |
 |---|----------|-----------|------|---------|
 | 1 | Critical | Test coverage gaps | src/utils/ | No tests for `loop-status.ts`, `event-stream.ts`, or `sanitizeBranchName` — all contain critical logic. |
-| 2 | ~~Major~~ **Resolved** | Test coverage gaps | src/hooks/ | ~~No tests for any React hooks.~~ **Updated:** 121 hook tests now exist across 4 test files (`useLoop.test.ts`, `useLoops.test.ts`, `useWorkspaces.test.ts`, `loopActions.test.ts`). `useWebSocket` remains untested directly (tested indirectly via hook integration tests). |
+| 2 | ~~Major~~ **Resolved** | Test coverage gaps | src/hooks/ | ~~No tests for any React hooks.~~ **Updated:** 145 hook tests now exist across 4 test files (`useLoop.test.ts`, `useLoops.test.ts`, `useWorkspaces.test.ts`, `loopActions.test.ts`). `useWebSocket` remains untested directly (tested indirectly via hook integration tests). |
 | 3 | Major | Test coverage gaps | src/api/ | No API tests for `git.ts` endpoints or `websocket.ts`. |
 | 4 | Major | Test coverage gaps | src/backends/ | `opencode-backend.test.ts` mostly tests "not connected" error throwing — minimal positive-path coverage. |
 | 5 | Minor | Best practices | scattered | Some tests use `await new Promise(resolve => setTimeout(resolve, 100))` — flaky test risk. |
@@ -1208,7 +1253,7 @@ No findings. Clean implementation.
 
 ### Frontend Test Files (Added Post-Review)
 
-698 frontend tests were added across 31 test files in `tests/frontend/`. Key infrastructure files:
+548 frontend tests were added across 31 test files in `tests/frontend/`. Key infrastructure files:
 
 **`tests/frontend/setup.ts`** — Frontend test environment setup with happy-dom registration, ResizeObserver mock, matchMedia mock, scrollTo/IntersectionObserver polyfills.
 
@@ -1225,7 +1270,7 @@ No findings. Clean implementation.
 |----------|------:|------:|----------|
 | Common components (Button, Modal, Badge, Card) | 4 | 101 | Good |
 | Feature components (LoopCard, CreateLoopForm, etc.) | 11 | 308 | Good |
-| Hooks (useLoop, useLoops, useWorkspaces, loopActions) | 4 | 121 | Good |
+| Hooks (useLoop, useLoops, useWorkspaces, loopActions) | 4 | 145 | Good |
 | Container components (App, Dashboard, LoopDetails) | 3 | 99 | Good |
 | E2E scenarios (lifecycle, plan mode, errors, etc.) | 8 | 50 | Good |
 | Infrastructure validation | 1 | 19 | Good |
@@ -1246,4 +1291,4 @@ No structural findings. The test infrastructure is well-designed with proper abs
 - `loop-engine.test.ts` is the largest test file (~1375 lines) with good coverage of iteration logic.
 - E2E tests provide good scenario coverage: full loop lifecycle, plan mode, multi-workspace, git workflows, draft workflows.
 - Test infrastructure (`setup.ts`) follows best practices with proper cleanup and deterministic polling helpers.
-- **Frontend tests** (698 tests across 31 files) provide comprehensive coverage of components, hooks, and user workflows. Infrastructure uses proper mocking patterns (fetch interceptor, WebSocket mock, data factories).
+- **Frontend tests** (548 tests across 31 files) provide comprehensive coverage of components, hooks, and user workflows. Infrastructure uses proper mocking patterns (fetch interceptor, WebSocket mock, data factories).

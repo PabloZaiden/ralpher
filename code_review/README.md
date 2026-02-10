@@ -1,7 +1,7 @@
 # Ralpher Code Review — Summary & Guide
 
 **Date:** 2026-02-07
-**Codebase:** ~24,600 LOC across 87 files, 10 modules
+**Codebase:** ~27,328 LOC across 90 files, 10 modules
 **Stack:** Bun + React 19 + Tailwind CSS v4 + SQLite
 
 ---
@@ -47,13 +47,13 @@ The Ralpher codebase is **functional and well-organized at the directory level**
 - Bun idioms are used correctly throughout
 - GitService's `withExecutor()` dependency injection pattern is excellent
 - The migration system is well-designed with idempotency checks
-- Frontend test coverage is strong (698 tests) with well-designed infrastructure
+- Frontend test coverage is strong (548 tests) with well-designed infrastructure
 - Zod validation schemas provide good runtime type checking at the API boundary
 - Common UI components (Button, Card, Modal, Badge) are well-scoped
 
 **What needs attention:**
-- Two 2,000+ LOC files (`loop-manager.ts`, `loop-engine.ts`) carry all business logic with deeply nested control flow
-- `Dashboard.tsx` (1,247 LOC) is a god component with ~20+ state variables
+- Two 2,000+ LOC files (`loop-manager.ts` at 2,409, `loop-engine.ts` at 2,079) carry all business logic with deeply nested control flow
+- `Dashboard.tsx` (1,118 LOC) is a god component with 26 state variables
 - No centralized state machine for loop status transitions
 - Systematic code duplication across API handlers, hooks, and components (~530 LOC recoverable)
 - API layer bypasses Core to access Persistence directly in several places
@@ -80,7 +80,7 @@ The most prevalent issue categories, ordered by frequency:
 
 | Dimension | Occurrences | Impact |
 |-----------|:-----------:|--------|
-| **Code duplication** | 30+ | ~530 LOC recoverable across API helpers, hooks, components, and logger constants |
+| **Code duplication** | 30+ | ~540 LOC recoverable across API helpers, hooks, components, and logger constants |
 | **Error handling** | 25+ | Errors swallowed at boundaries, no user-facing feedback, crash-on-corrupt-data |
 | **Consistency** | 20+ | Mixed patterns for error responses, logger init, HTTP handlers, barrel exports |
 | **Dead/legacy code** | 15+ | 16 unused type aliases, dead functions, vestigial modules |
@@ -126,10 +126,10 @@ See `AGENTS.md` § Async Patterns for the documented exception policy.
 `getTableColumns()` interpolates `tableName` directly into a PRAGMA query. Currently called only with hardcoded strings, but the function signature accepts any string — a dangerous pattern.
 
 ### 4. God Component (Complexity)
-**Files:** `components/Dashboard.tsx` (1,247 LOC)
+**Files:** `components/Dashboard.tsx` (1,118 LOC)
 **Analysis:** `layers.md` § P1, `modules.md` § C7.1
 
-Dashboard manages ~20+ state variables, contains raw `fetch()` calls, business logic for loop grouping/sorting, and modal state for 5+ dialogs. Should be decomposed into 5-6 sub-components.
+Dashboard manages 26 state variables, contains raw `fetch()` calls, business logic for loop grouping/sorting, and modal state for 5+ dialogs. Should be decomposed into 5-6 sub-components.
 
 ### 5. Timer Leak (Resource Leak)
 **Files:** `utils/name-generator.ts:112-115`
@@ -146,20 +146,20 @@ Dashboard manages ~20+ state variables, contains raw `fetch()` calls, business l
 ```
                     +------------------+
                     |   Presentation   |
-                    |   (9,490 LOC)    |
+                    |  (10,495 LOC)    |
                     +--------+---------+
                              | fetch() -- no typed client
                              v
                     +------------------+
                     |       API        |
-                    |   (3,170 LOC)    |
+                    |   (3,545 LOC)    |
                     +---+----------+---+
                         |          |
              correct    |          | VIOLATION
                         v          v
               +--------------+  +--------------+
               | Core Business|  |  Data Access  |
-              |  (5,450 LOC) |  |  (1,948 LOC)  |
+              |  (7,794 LOC) |  |  (2,061 LOC)  |
               +------+-------+  +--------------+
                      |                 ^
                      |    correct      |
@@ -169,14 +169,14 @@ Dashboard manages ~20+ state variables, contains raw `fetch()` calls, business l
               +--------------+
               |   External   |
               | Integration  |
-              |  (2,475 LOC) |
+              |  (1,260 LOC) |
               +--------------+
                      |
                      v
               +--------------+
               |    Shared    |
               |Infrastructure|
-              |  (2,100 LOC) |
+              |  (2,187 LOC) |
               +--------------+
 ```
 
@@ -199,13 +199,13 @@ Two independent logger implementations (`core/logger.ts` and `lib/logger.ts`) sh
 | Duplication | LOC Savings | Where |
 |-------------|:-----------:|-------|
 | `errorResponse()` helper | ~30 | 3 API files (loops, models, settings) |
-| Loop action functions (13 identical boilerplate) | ~250 | `hooks/loopActions.ts` |
+| Loop action functions (14 identical boilerplate) | ~260 | `hooks/loopActions.ts` |
 | Preflight validation | ~50 | `api/loops.ts` (create + draft/start) |
 | Model selector UI | ~100 | `CreateLoopForm.tsx` + `LoopActionBar.tsx` |
 | Workspace lookup + 404 | ~40 | 5 places in `api/workspaces.ts` |
 | Logger constants | ~40 | `core/logger.ts` + `lib/logger.ts` |
 | Branch name generation | ~20 | `loop-manager.ts` + `loop-engine.ts` |
-| **Total estimated** | **~530** | — |
+| **Total estimated** | **~540** | — |
 
 ---
 
@@ -213,14 +213,14 @@ Two independent logger implementations (`core/logger.ts` and `lib/logger.ts`) sh
 
 | Area | LOC | Tests | Coverage Level |
 |------|----:|------:|----------------|
-| Core business logic | 5,450 | Many | Good (~70%) — unit + scenario tests |
-| React components | 7,163 | 508 | Good (~70%) — common + feature + container |
-| React hooks | 2,263 | 121 | Good (~65%) — useLoop, useLoops, useWorkspaces, loopActions |
-| Persistence/migrations | 1,948 | Good | Moderate (~50%) — migration tests + indirect |
-| API endpoints | 3,034 | Partial | Moderate (~40%) — main flows tested |
+| Core business logic | 7,794 | Many | Good (~70%) — unit + scenario tests |
+| React components | 7,527 | 334 | Good (~70%) — common + feature + container |
+| React hooks | 2,477 | 145 | Good (~65%) — useLoop, useLoops, useWorkspaces, loopActions |
+| Persistence/migrations | 2,061 | Good | Moderate (~50%) — migration tests + indirect |
+| API endpoints | 3,397 | Partial | Moderate (~40%) — main flows tested |
 | E2E scenarios (frontend) | — | 50 | Good workflow coverage |
-| External integration | 2,475 | Minimal | Poor (~15%) — mostly error-path tests |
-| Utilities | 425 | Partial | Poor — only name-generator tested |
+| External integration | 1,260 | Minimal | Poor (~15%) — mostly error-path tests |
+| Utilities | 457 | Partial | Poor — only name-generator tested |
 
 **Notable gaps:** `useWebSocket` (no direct tests), `loop-status.ts` (0% despite critical UI logic), `event-stream.ts` (0% despite being a concurrency primitive), `sanitizeBranchName` (0%), `remote-command-executor.ts` (0%).
 
@@ -236,8 +236,8 @@ These address the highest-impact systemic issues spanning multiple layers. They 
 | 2 | ~~**Add authentication to destructive endpoints** — `POST /api/server/kill` and `/api/settings/reset-all` need auth~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level | ~~Critical~~ N/A | ~~Low~~ N/A | `layers.md` § A1, A2 |
 | 3 | **Introduce a loop state machine** — Centralize all status transitions with a transition table | Major | Medium | `layers.md` § B2, `functionalities.md` § CF-5 |
 | 4 | **Enforce layered architecture** — Remove direct persistence imports from API. Add query methods to LoopManager | Major | Medium | `layers.md` § A3, A4, `functionalities.md` § CF-2 |
-| 5 | **Extract shared helpers** — `errorResponse()`, `apiCall<T>()`, `ModelSelector`, `requireWorkspace()` (~530 LOC savings) | Major | Low | `functionalities.md` § CF-3, `modules.md` § C2.2 |
-| 6 | **Decompose Dashboard.tsx** — Extract LoopList, DashboardHeader, DashboardModals sub-components | Major | Medium | `layers.md` § P1, `modules.md` § C7.1 |
+| 5 | **Extract shared helpers** — `errorResponse()`, `apiCall<T>()`, `ModelSelector`, `requireWorkspace()` (~540 LOC savings) | Major | Low | `functionalities.md` § CF-3, `modules.md` § C2.2 |
+| 6 | **Decompose Dashboard.tsx** — Extract LoopList, DashboardHeader, DashboardModals sub-components (currently 1,118 LOC with 26 state variables) | Major | Medium | `layers.md` § P1, `modules.md` § C7.1 |
 | 7 | **Add error boundaries + user-facing error feedback** — Root ErrorBoundary, toast notifications | Major | Low | `layers.md` § P2, P10, `functionalities.md` § CF-4 |
 | 8 | **Fix backend logger sub-logger sync** — Port caching pattern from `lib/logger.ts` to `core/logger.ts` | Major | Low | `layers.md` § S3, `functionalities.md` § 7.3 |
 | 9 | **Fix data integrity risks** — Replace INSERT OR REPLACE with upsert, add JSON.parse error handling, validate table names | Major | Low | `layers.md` § D1-D3, `functionalities.md` § 10.1-10.3 |
@@ -304,12 +304,12 @@ These address the highest-impact systemic issues spanning multiple layers. They 
 - File-to-layer mapping appendix
 
 **Layers analyzed:**
-1. Presentation (9,490 LOC) — Health: C
-2. API (3,170 LOC) — Health: C+
-3. Core Business Logic (5,450 LOC) — Health: C+
-4. Data Access (1,948 LOC) — Health: B-
-5. External Integration (2,475 LOC) — Health: C
-6. Shared Infrastructure (2,100 LOC) — Health: B
+1. Presentation (10,495 LOC) — Health: C
+2. API (3,545 LOC) — Health: C+
+3. Core Business Logic (7,794 LOC) — Health: C+
+4. Data Access (2,061 LOC) — Health: B-
+5. External Integration (1,260 LOC) — Health: C
+6. Shared Infrastructure (2,187 LOC) — Health: B
 
 **Unique value:** System-level perspective. The cross-layer analysis reveals layering violations, error propagation gaps, and type safety boundaries that no other document captures. The health scores provide a quick at-a-glance assessment of each layer's quality.
 
