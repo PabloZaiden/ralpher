@@ -145,14 +145,14 @@ Follow the standard workflow from AGENTS.md — update status after each complet
     name: "Review & Fix Documentation",
     description:
       "Reviews all README files, documentation, and code comments against actual code behavior and fixes any discrepancies.",
-    prompt: `Review and fix all documentation in this codebase so that it accurately reflects the current code behavior. This includes README files, markdown documentation, JSDoc/TSDoc blocks, and significant inline comments.
+    prompt: `Review and fix all documentation in this codebase so that it accurately reflects the current code behavior. This includes README files, markdown documentation, doc comments, and significant inline comments.
 
 **Phase 1: Discovery**
 Find all documentation artifacts in the codebase:
-- \`README.md\` and any other \`*.md\` files (excluding \`node_modules/\`, \`code_review/\`, and \`.planning/\`)
-- JSDoc/TSDoc comment blocks on exported functions, classes, interfaces, and types
+- \`README.md\` and any other \`*.md\` files (excluding dependency directories, \`code_review/\`, and \`.planning/\`)
+- Doc comment blocks (e.g., Javadoc, docstrings, GoDoc, Rustdoc, XML doc comments, or similar) on public functions, classes, and types
 - Significant inline comments that describe behavior, constraints, or architecture
-- Configuration file comments (e.g., \`tsconfig.json\`, \`package.json\` scripts)
+- Configuration file comments (e.g., build configs, project manifests, CI/CD pipelines)
 
 **Phase 2: Analysis**
 For each documentation artifact, compare its claims against the actual code:
@@ -188,8 +188,8 @@ After making fixes, re-read the updated documentation to confirm:
 - Preserve the existing documentation style and tone
 - Do not rewrite documentation that is already correct
 - Do not add excessive documentation — keep it concise and useful
-- Follow the project's AGENTS.md conventions
-- Run \`bun run build\` after all changes to verify nothing is broken`,
+- Follow the project's AGENTS.md conventions if present
+- Run the project's build command after all changes to verify nothing is broken`,
     defaults: {
       planMode: true,
     },
