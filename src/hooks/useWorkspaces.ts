@@ -4,12 +4,12 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { Workspace, WorkspaceWithLoopCount, CreateWorkspaceRequest, WorkspaceImportResult, WorkspaceExportData } from "../types/workspace";
+import type { Workspace, CreateWorkspaceRequest, WorkspaceImportResult, WorkspaceExportData } from "../types/workspace";
 import { log } from "../lib/logger";
 
 export interface UseWorkspacesResult {
-  /** List of workspaces with loop counts */
-  workspaces: WorkspaceWithLoopCount[];
+  /** List of workspaces */
+  workspaces: Workspace[];
   /** Whether workspaces are being loaded */
   loading: boolean;
   /** Error message if any */
@@ -37,7 +37,7 @@ export interface UseWorkspacesResult {
  * Provides CRUD operations for workspaces.
  */
 export function useWorkspaces(): UseWorkspacesResult {
-  const [workspaces, setWorkspaces] = useState<WorkspaceWithLoopCount[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -51,7 +51,7 @@ export function useWorkspaces(): UseWorkspacesResult {
       if (!response.ok) {
         throw new Error(`Failed to fetch workspaces: ${response.statusText}`);
       }
-      const data = (await response.json()) as WorkspaceWithLoopCount[];
+      const data = (await response.json()) as Workspace[];
       setWorkspaces(data);
     } catch (err) {
       setError(String(err));

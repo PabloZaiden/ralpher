@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
 import type { CreateLoopRequest, ModelInfo, BranchInfo } from "../types";
-import type { WorkspaceWithLoopCount } from "../types/workspace";
+import type { Workspace } from "../types/workspace";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import { Button } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
@@ -79,7 +79,7 @@ export interface CreateLoopFormProps {
   /** Whether editing a draft loop (to show Update Draft button) */
   isEditingDraft?: boolean;
   /** Available workspaces */
-  workspaces?: WorkspaceWithLoopCount[];
+  workspaces?: Workspace[];
   /** Whether workspaces are loading */
   workspacesLoading?: boolean;
   /** Workspace-related error */

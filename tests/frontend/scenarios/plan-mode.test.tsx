@@ -12,7 +12,7 @@ import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor } from "../helpers/render";
 import {
   createLoopWithStatus,
-  createWorkspaceWithLoopCount,
+  createWorkspace,
   createModelInfo,
 } from "../helpers/factories";
 import { App } from "@/App";
@@ -22,11 +22,10 @@ const ws = createMockWebSocket();
 
 const LOOP_ID = "plan-loop-1";
 
-const WORKSPACE = createWorkspaceWithLoopCount({
+const WORKSPACE = createWorkspace({
   id: "ws-1",
   name: "My Project",
   directory: "/workspaces/my-project",
-  loopCount: 1,
 });
 
 function planningLoop(isPlanReady: boolean, feedbackRounds = 0) {
