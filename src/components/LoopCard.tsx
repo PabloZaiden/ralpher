@@ -110,7 +110,7 @@ export function LoopCard({
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <Badge variant={getStatusBadgeVariant(state.status)}>
-              {getStatusLabel(state.status)}
+              {getStatusLabel(state.status, state.syncState)}
             </Badge>
             {isAddressable && (
               <Badge variant="info">
