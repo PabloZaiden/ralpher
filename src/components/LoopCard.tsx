@@ -8,6 +8,7 @@ import type { BadgeVariant } from "./common";
 import {
   getStatusLabel,
   getPlanningStatusLabel,
+  isLoopPlanReady,
   canAccept,
   isFinalState,
   isLoopActive,
@@ -62,7 +63,7 @@ export function LoopCard({
   const { config, state } = loop;
   const isActive = isLoopActive(state.status);
   const isPlanning = state.status === "planning";
-  const isPlanReady = isPlanning && state.planMode?.isPlanReady === true;
+  const isPlanReady = isLoopPlanReady(loop);
   const isDraft = state.status === "draft";
   const isAddressable = state.reviewMode?.addressable === true;
 

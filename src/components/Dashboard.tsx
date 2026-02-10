@@ -382,8 +382,15 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     }
   }
 
-  // Helper function to group loops by status
+  // Helper function to group loops by status.
+  // Pre-computes plan readiness once per loop to avoid duplicate calls to isLoopPlanReady
+  // (which performs structured logging) across multiple filter passes.
   const groupLoopsByStatus = (loopsToGroup: typeof loops) => {
+    // Compute plan readiness once per loop to avoid duplicate trace log entries
+    const planReadySet = new Set(
+      loopsToGroup.filter((loop) => isLoopPlanReady(loop)).map((loop) => loop.config.id)
+    );
+
     return {
       draft: loopsToGroup.filter((loop) => loop.state.status === "draft"),
       active: loopsToGroup.filter(
@@ -392,9 +399,9 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
           loop.state.status === "waiting" ||
           loop.state.status === "starting" ||
           // Planning loops where the AI is still generating go into Active
-          (loop.state.status === "planning" && !isLoopPlanReady(loop))
+          (loop.state.status === "planning" && !planReadySet.has(loop.config.id))
       ),
-      needsReview: loopsToGroup.filter((loop) => isLoopPlanReady(loop)),
+      needsReview: loopsToGroup.filter((loop) => planReadySet.has(loop.config.id)),
       completed: loopsToGroup.filter((loop) => loop.state.status === "completed"),
       awaitingFeedback: loopsToGroup.filter((loop) =>
         isAwaitingFeedback(loop.state.status, loop.state.reviewMode?.addressable)

@@ -4,14 +4,14 @@
 
 import { describe, test, expect } from "bun:test";
 import { getPlanningStatusLabel, isLoopPlanReady } from "../../src/utils/loop-status";
-import type { Loop } from "../../src/types/loop";
+import type { Loop, LoopStatus } from "../../src/types/loop";
 
 /**
  * Helper to create a minimal Loop object for testing.
  * Uses type assertion since we only need status and planMode for these tests.
  */
 function createTestLoop(overrides: {
-  status: string;
+  status: LoopStatus;
   planMode?: {
     active: boolean;
     feedbackRounds: number;
