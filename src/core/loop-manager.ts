@@ -1012,7 +1012,7 @@ Follow the standard loop execution flow:
             baseBranch,
             timestamp: createTimestamp(),
           });
-        } else {
+        } else if (mergeResult.hasConflicts) {
           // Conflicts detected — abort merge, restart engine to resolve
           const conflictedFiles = mergeResult.conflictedFiles ?? [];
           log.debug(`[LoopManager] pushLoop: Merge conflicts detected with origin/${baseBranch}: ${conflictedFiles.join(", ")}`);
@@ -1035,7 +1035,7 @@ Follow the standard loop execution flow:
             baseBranch,
             autoPushOnComplete: true,
           };
-          loop.state.status = "idle"; // Set to idle so engine.start() can run
+          loop.state.status = "resolving_conflicts";
           loop.state.completedAt = undefined;
           await updateLoopState(loopId, loop.state);
 
@@ -1089,8 +1089,16 @@ Follow the standard loop execution flow:
 
           return {
             success: true,
-            remoteBranch: loop.state.git.workingBranch,
             syncStatus: "conflicts_being_resolved",
+          };
+        } else {
+          // Non-conflict merge failure (e.g., missing ref, invalid branch)
+          // Don't try to abort merge or start conflict resolution
+          const errorMsg = mergeResult.stderr || "Unknown merge error";
+          log.error(`[LoopManager] pushLoop: Merge failed (not conflicts) for loop ${loopId}: ${errorMsg}`);
+          return {
+            success: false,
+            error: `Failed to merge origin/${baseBranch}: ${errorMsg}`,
           };
         }
       }
@@ -1162,6 +1170,11 @@ Follow the standard loop execution flow:
   private async handleConflictResolutionComplete(loopId: string): Promise<void> {
     log.debug(`[LoopManager] handleConflictResolutionComplete: Auto-pushing loop ${loopId}`);
 
+    // Remove engine from in-memory map FIRST to prevent the periodic
+    // startStatePersistence interval from overwriting our "pushed" state
+    // with the engine's "completed" state (race condition).
+    this.engines.delete(loopId);
+
     const loop = await this.getLoop(loopId);
     if (!loop) {
       log.error(`[LoopManager] handleConflictResolutionComplete: Loop ${loopId} not found`);
@@ -1208,9 +1221,6 @@ Follow the standard loop execution flow:
 
       // Clean up the dedicated backend connection for this loop
       await backendManager.disconnectLoop(loopId);
-
-      // Remove engine from in-memory map
-      this.engines.delete(loopId);
 
       // Emit event
       this.emitter.emit({
@@ -2062,7 +2072,7 @@ Merge the base branch and resolve all conflicts:
 2. The following files have conflicts:
 ${fileList}
 3. For each conflicted file:
-   - Open the file and examine the conflict markers (<<<<<<, ======, >>>>>>)
+   - Open the file and examine the conflict markers (<<<<<<<, =======, >>>>>>>)
    - Resolve each conflict by keeping the correct code (merge both sides appropriately)
    - Remove all conflict markers
    - Stage the resolved file with: git add <file>

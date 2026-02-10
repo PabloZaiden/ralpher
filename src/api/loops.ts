@@ -687,11 +687,13 @@ export const loopsControlRoutes = {
       }
 
       log.info("POST /api/loops/:id/push - Loop pushed", { loopId: req.params.id, remoteBranch: result.remoteBranch, syncStatus: result.syncStatus });
-      const response: PushResponse = {
-        success: true,
-        remoteBranch: result.remoteBranch!,
-        syncStatus: result.syncStatus ?? "already_up_to_date",
-      };
+      const syncStatus = result.syncStatus ?? "already_up_to_date";
+      let response: PushResponse;
+      if (syncStatus === "conflicts_being_resolved") {
+        response = { success: true, syncStatus };
+      } else {
+        response = { success: true, remoteBranch: result.remoteBranch!, syncStatus };
+      }
       return Response.json(response);
     },
   },

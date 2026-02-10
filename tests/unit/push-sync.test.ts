@@ -92,6 +92,8 @@ describe("Push with Base Branch Sync", () => {
         const pushResult = await ctx.manager.pushLoop(loop.config.id);
         expect(pushResult.success).toBe(true);
         expect(pushResult.syncStatus).toBe("already_up_to_date");
+        // remoteBranch should be set when push actually happened
+        expect(pushResult.remoteBranch).toBeDefined();
 
         // Verify loop is in pushed state
         const pushedLoop = await ctx.manager.getLoop(loop.config.id);
@@ -137,6 +139,8 @@ describe("Push with Base Branch Sync", () => {
         const pushResult = await ctx.manager.pushLoop(loop.config.id);
         expect(pushResult.success).toBe(true);
         expect(pushResult.syncStatus).toBe("clean");
+        // remoteBranch should be set when push actually happened
+        expect(pushResult.remoteBranch).toBeDefined();
 
         // Verify loop is in pushed state
         const pushedLoop = await ctx.manager.getLoop(loop.config.id);
@@ -207,6 +211,8 @@ describe("Push with Base Branch Sync", () => {
         const pushResult = await ctx.manager.pushLoop(loop.config.id);
         expect(pushResult.success).toBe(true);
         expect(pushResult.syncStatus).toBe("conflicts_being_resolved");
+        // remoteBranch should NOT be set when push is deferred
+        expect(pushResult.remoteBranch).toBeUndefined();
 
         // Verify sync events
         const syncConflicts = ctx.events.find((e) => e.type === "loop.sync.conflicts");
@@ -287,6 +293,8 @@ describe("Push with Base Branch Sync", () => {
         const pushResult = await ctx.manager.pushLoop(loop.config.id);
         expect(pushResult.success).toBe(true);
         expect(pushResult.syncStatus).toBe("conflicts_being_resolved");
+        // remoteBranch should NOT be set when push is deferred
+        expect(pushResult.remoteBranch).toBeUndefined();
 
         // Wait for the conflict resolution engine to fail
         const failedLoop = await waitForLoopStatus(

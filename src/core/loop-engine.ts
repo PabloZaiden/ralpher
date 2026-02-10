@@ -347,8 +347,8 @@ export class LoopEngine {
    * This sets up the git branch and backend session.
    */
   async start(): Promise<void> {
-    // Allow starting from idle, stopped, or planning (for plan mode)
-    if (this.loop.state.status !== "idle" && this.loop.state.status !== "stopped" && this.loop.state.status !== "planning") {
+    // Allow starting from idle, stopped, planning (for plan mode), or resolving_conflicts (for conflict resolution)
+    if (this.loop.state.status !== "idle" && this.loop.state.status !== "stopped" && this.loop.state.status !== "planning" && this.loop.state.status !== "resolving_conflicts") {
       throw new Error(`Cannot start loop in status: ${this.loop.state.status}`);
     }
 
