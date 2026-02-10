@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-07
 **Scope:** Full codebase analyzed through 6 architectural layers
-**Total Codebase:** ~24,600 LOC across 83 source files
+**Total Codebase:** ~27,328 LOC across 90 source files
 
 ---
 
@@ -14,13 +14,13 @@ This document analyzes the Ralpher codebase by **architectural layer** — evalu
 
 | # | Layer | Files | LOC | Health | Critical | Major | Minor | Suggestion |
 |---|-------|------:|----:|:------:|---------:|------:|------:|-----------:|
-| 1 | Presentation | 35 | 9,490 | C | 1 | 11 | 10 | 2 |
-| 2 | API | 10 | 3,170 | C+ | 0 | 8 | 6 | 1 |
-| 3 | Core Business Logic | 5 | 5,450 | C+ | 0 | 8 | 5 | 2 |
-| 4 | Data Access | 7 | 1,948 | B- | 1 | 6 | 5 | 1 |
-| 5 | External Integration | 6 | 2,475 | C | 0 | 7 | 3 | 1 |
-| 6 | Shared Infrastructure | 14 | 2,100 | B | 0 | 5 | 5 | 2 |
-| | **Totals** | **77** | **24,633** | **C+** | **2** | **45** | **34** | **9** |
+| 1 | Presentation | 41 | 10,495 | C | 1 | 11 | 10 | 2 |
+| 2 | API | 11 | 3,545 | C+ | 0 | 8 | 6 | 1 |
+| 3 | Core Business Logic | 6 | 6,285 | C+ | 0 | 8 | 5 | 2 |
+| 4 | Data Access | 7 | 2,061 | B- | 1 | 6 | 5 | 1 |
+| 5 | External Integration | 6 | 2,597 | C | 0 | 7 | 3 | 1 |
+| 6 | Shared Infrastructure | 14 | 2,345 | B | 0 | 5 | 5 | 2 |
+| | **Totals** | **85** | **~27,328** | **C+** | **2** | **45** | **34** | **9** |
 
 **Note:** 6 config/entry files (`src/index.ts`, `src/build.ts`, `src/frontend.tsx`, `src/index.html`, `src/index.css`, `src/App.tsx`) span multiple layers. They are discussed in the layer most relevant to their primary role and also referenced in the Cross-Layer Analysis.
 
@@ -36,7 +36,7 @@ This document analyzes the Ralpher codebase by **architectural layer** — evalu
 
 ---
 
-## Layer 1: Presentation (~9,490 LOC)
+## Layer 1: Presentation (~10,495 LOC)
 
 ### Purpose
 
@@ -46,16 +46,16 @@ Client-side React application: components, hooks, frontend library, and entry po
 
 | Sublayer | File | LOC | Role |
 |----------|------|----:|------|
-| Components | `components/Dashboard.tsx` | 1,247 | Main dashboard — loop listing, creation, workspace management |
-| Components | `components/LoopDetails.tsx` | 1,219 | Single loop detail view with 8 tabs |
-| Components | `components/CreateLoopForm.tsx` | 894 | Loop creation form with model selection |
+| Components | `components/Dashboard.tsx` | 1,118 | Main dashboard — loop listing, creation, workspace management |
+| Components | `components/LoopDetails.tsx` | 1,225 | Single loop detail view with 8 tabs |
+| Components | `components/CreateLoopForm.tsx` | 949 | Loop creation form with model selection |
 | Components | `components/ServerSettingsForm.tsx` | 400 | Server connection configuration |
+| Components | `components/WorkspaceSettingsModal.tsx` | 388 | Per-workspace settings |
+| Components | `components/AppSettingsModal.tsx` | 428 | Application-wide settings |
 | Components | `components/LoopActionBar.tsx` | 337 | Action toolbar for active loops |
 | Components | `components/LogViewer.tsx` | 309 | Real-time log display with filtering |
-| Components | `components/LoopCard.tsx` | 279 | Loop summary card |
-| Components | `components/AppSettingsModal.tsx` | 279 | Application-wide settings |
-| Components | `components/PlanReviewPanel.tsx` | 254 | Plan review with accept/feedback |
-| Components | `components/WorkspaceSettingsModal.tsx` | 235 | Per-workspace settings |
+| Components | `components/LoopCard.tsx` | 306 | Loop summary card |
+| Components | `components/PlanReviewPanel.tsx` | 275 | Plan review with accept/feedback |
 | Components | `components/LoopModals.tsx` | 223 | Modal containers for loop actions |
 | Components | `components/CreateWorkspaceModal.tsx` | 197 | Workspace creation form |
 | Components | `components/common/Modal.tsx` | 195 | Generic modal component |
@@ -63,34 +63,37 @@ Client-side React application: components, hooks, frontend library, and entry po
 | Components | `components/RenameLoopModal.tsx` | 152 | Loop rename modal |
 | Components | `components/AcceptLoopModal.tsx` | 144 | Accept/merge confirmation modal |
 | Components | `components/AddressCommentsModal.tsx` | 130 | Review comment submission modal |
-| Components | `components/common/Badge.tsx` | 104 | Status badge component |
+| Components | `components/common/Badge.tsx` | 108 | Status badge component |
 | Components | `components/WorkspaceSelector.tsx` | 97 | Workspace dropdown selector |
 | Components | `components/MarkdownRenderer.tsx` | 86 | Markdown rendering |
 | Components | `components/common/Card.tsx` | 67 | Card container component |
 | Components | `components/common/Button.tsx` | 67 | Button component with variants |
+| Components | `components/common/CollapsibleSection.tsx` | 54 | Collapsible content section *(new)* |
 | Components | `components/LogLevelInitializer.tsx` | 43 | Log level sync on mount |
 | Components | `components/common/Icons.tsx` | 31 | SVG icon components |
 | Components | `components/common/index.ts` | 10 | Barrel for common components |
-| Components | `components/index.ts` | 15 | Barrel for main components |
+| Components | `components/index.ts` | 14 | Barrel for main components |
 | Hooks | `hooks/useLoop.ts` | 671 | Single loop data + WebSocket updates |
-| Hooks | `hooks/loopActions.ts` | 347 | 13 API action functions |
+| Hooks | `hooks/loopActions.ts` | 349 | 14 API action functions |
 | Hooks | `hooks/useLoops.ts` | 307 | Loop list + WebSocket updates |
 | Hooks | `hooks/useWorkspaceServerSettings.ts` | 305 | Workspace server settings CRUD |
 | Hooks | `hooks/useWebSocket.ts` | 230 | WebSocket connection management |
-| Hooks | `hooks/useWorkspaces.ts` | 177 | Workspace list fetching |
+| Hooks | `hooks/useWorkspaces.ts` | 230 | Workspace list fetching |
+| Hooks | `hooks/useAgentsMdOptimizer.ts` | 158 | AGENTS.md optimization hook *(new)* |
 | Hooks | `hooks/useLogLevelPreference.ts` | 103 | Log level persistence |
 | Hooks | `hooks/useMarkdownPreference.ts` | 99 | Markdown preference |
-| Hooks | `hooks/index.ts` | 24 | Barrel for hooks |
+| Hooks | `hooks/index.ts` | 25 | Barrel for hooks |
+| Lib | `lib/prompt-templates.ts` | 205 | Prompt template utilities *(new)* |
 | Lib | `lib/logger.ts` | 163 | Frontend tslog instance with sub-logger caching |
 | Lib | `lib/index.ts` | 15 | Barrel for lib (dead) |
 | Entry | `frontend.tsx` | 21 | React DOM mount point |
 | Entry | `App.tsx` | 87 | Root React component with hash routing |
 
-**Total:** ~9,490 LOC across 39 files (including 2 barrels and entry points)
+**Total:** ~10,495 LOC across 42 files (including 3 barrels and entry points)
 
 ### Health Score: C
 
-The Presentation layer is functional but carries the most technical debt of any layer. The debt is concentrated in two areas: (1) `Dashboard.tsx` as a 1,247-line god component, and (2) the hooks sublayer containing complex async state management with no tests.
+The Presentation layer is functional but carries the most technical debt of any layer. The debt is concentrated in two areas: (1) `Dashboard.tsx` as a 1,118-line god component, and (2) the hooks sublayer containing complex async state management with significant but incomplete test coverage (126 tests across 4 files).
 
 ### Pattern Analysis
 
@@ -102,19 +105,19 @@ The Presentation layer is functional but carries the most technical debt of any 
 - `useMarkdownPreference` and `useLogLevelPreference` are clean, well-structured hooks
 
 **Anti-Patterns:**
-- **God Component**: `Dashboard.tsx` manages ~20+ state variables, contains raw `fetch()` calls, business logic for loop grouping/sorting, modal state for 5+ dialogs, and a 196-line loop creation IIFE
+- **God Component**: `Dashboard.tsx` manages 26 state variables, contains raw `fetch()` calls, business logic for loop grouping/sorting, modal state for 5+ dialogs, and a 196-line loop creation IIFE
 - **Mixed data-fetching**: Some components use hooks (`useLoop`, `useLoops`), others use inline `fetch()` calls (`Dashboard.tsx`). No consistent HTTP client abstraction
 - **No error boundaries**: The entire React tree renders without error boundaries — any uncaught error causes a white screen
 - **No error feedback**: `catch` blocks in components and hooks only `console.error()` — no toast, no error state, no visual feedback to users
-- **Massive duplication in hooks**: 13 action functions in `loopActions.ts` with identical boilerplate (~250 LOC recoverable)
+- **Massive duplication in hooks**: 14 action functions in `loopActions.ts` with identical boilerplate (~260 LOC recoverable)
 
 ### Findings
 
 | # | Severity | Dimension | Location | Finding |
 |---|----------|-----------|----------|---------|
-| P1 | **Critical** | Complexity | `Dashboard.tsx` (entire file) | God component with ~20+ `useState` calls, inline `fetch()`, loop grouping logic, modal state, and 196-line creation IIFE. Should be decomposed into `LoopList`, `DashboardHeader`, `DashboardModals`, `LoopGroupSection` sub-components. |
+| P1 | **Critical** | Complexity | `Dashboard.tsx` (entire file) | God component with 26 `useState` calls, inline `fetch()`, loop grouping logic, modal state, and 196-line creation IIFE. Should be decomposed into `LoopList`, `DashboardHeader`, `DashboardModals`, `LoopGroupSection` sub-components. |
 | P2 | **Major** | Error handling | `frontend.tsx` | No React Error Boundary at the root level. Unrecoverable white screen on any component error. |
-| P3 | **Major** | Code duplication | `hooks/loopActions.ts` scattered | 13 functions with identical boilerplate (log, fetch, check ok, parse error, throw, return). A generic `apiCall<T>()` wrapper would eliminate ~250 LOC. |
+| P3 | **Major** | Code duplication | `hooks/loopActions.ts` scattered | 14 functions with identical boilerplate (log, fetch, check ok, parse error, throw, return). A generic `apiCall<T>()` wrapper would eliminate ~260 LOC. |
 | P4 | **Major** | Code duplication | `CreateLoopForm.tsx` + `LoopActionBar.tsx` | Model grouping, sorting, and rendering logic duplicated between both components. Should be a shared `ModelSelector` component. |
 | P5 | **Major** | Concurrency | `hooks/useLoop.ts:607-617` | Race condition when switching loops. No `AbortController` cancels stale fetch requests. Loop A's response may arrive and overwrite loop B's state. |
 | P6 | **Major** | Performance | `hooks/useLoop.ts` scattered | Unbounded growth of `messages`, `toolCalls`, `logs` arrays for long-running loops. No pagination or maximum size limit. |
@@ -152,29 +155,29 @@ The Presentation layer is functional but carries the most technical debt of any 
 
 | Area | LOC | Tests | Coverage |
 |------|----:|:-----:|----------|
-| Components | 7,163 | **508 tests** (31 files) | ~70% (common: 101, feature: 308, container: 99) |
-| Hooks | 2,263 | **121 tests** (4 files) | ~65% (useLoop: 37, useLoops: 24, useWorkspaces: 15, loopActions: 45) |
-| Lib | 178 | None | 0% |
+| Components | 7,527 | **520 tests** (18 files) | ~70% (common: 101, feature: 406, container: 13) |
+| Hooks | 2,477 | **126 tests** (4 files) | ~65% (useLoop: 37, useLoops: 24, useWorkspaces: 20, loopActions: 45) |
+| Lib | 383 | None | 0% |
 | E2E scenarios | — | **50 tests** (8 files) | Good workflow coverage |
 
-**Assessment:** ~~Zero automated test coverage.~~ **Updated:** 698 frontend tests now exist. Components and hooks — the highest-risk code — have good coverage. `useWebSocket` remains untested directly (exercised indirectly). `lib/logger.ts` has no tests. Remaining untested components (`MarkdownRenderer`, `ServerSettingsForm`, `AppSettingsModal`, `WorkspaceSettingsModal`, `CreateWorkspaceModal`, `Icons`, `LogLevelInitializer`) are lower-risk configuration/utility components.
+**Assessment:** ~~Zero automated test coverage.~~ **Updated:** 715 frontend tests now exist. Components and hooks — the highest-risk code — have good coverage. `useWebSocket` remains untested directly (exercised indirectly). `lib/logger.ts` has no tests. Remaining untested components (`MarkdownRenderer`, `ServerSettingsForm`, `AppSettingsModal`, `WorkspaceSettingsModal`, `CreateWorkspaceModal`, `Icons`, `LogLevelInitializer`) are lower-risk configuration/utility components. New files `useAgentsMdOptimizer.ts` and `CollapsibleSection.tsx` have no dedicated tests.
 
 ### Recommendations (Prioritized)
 
 1. **Decompose `Dashboard.tsx`** into 5-6 smaller components (LoopList, DashboardHeader, DashboardModals, etc.)
 2. **Add React Error Boundary** wrapping `<App />` in `frontend.tsx`
-3. **Extract generic `apiCall<T>()`** wrapper to deduplicate 13 action functions
+3. **Extract generic `apiCall<T>()`** wrapper to deduplicate 14 action functions
 4. **Add `AbortController`** to `useLoop` for handling loop switches and unmounts
 5. **Extract shared `ModelSelector`** component from CreateLoopForm and LoopActionBar
 6. **Add focus trapping** to Modal component
 7. **Add user-facing error notifications** — toast component or error state display
 8. **Fix double-fetch** by removing array lengths from refresh dependency array
-9. ~~**Add hook tests**~~ **Resolved** — 121 hook tests added using `renderHook` covering `useLoop`, `useLoops`, `useWorkspaces`, and all `loopActions` API functions
+9. ~~**Add hook tests**~~ **Resolved** — 126 hook tests added using `renderHook` covering `useLoop`, `useLoops`, `useWorkspaces`, and all `loopActions` API functions
 10. **Memoize expensive computations** with `useMemo` (loop grouping, workspace filtering)
 
 ---
 
-## Layer 2: API (~3,170 LOC)
+## Layer 2: API (~3,545 LOC)
 
 ### Purpose
 
@@ -184,18 +187,19 @@ HTTP route handlers that expose REST endpoints for loops, workspaces, models, se
 
 | File | LOC | Role |
 |------|----:|------|
-| `api/loops.ts` | 1,432 | Loop CRUD, lifecycle control, plan/review operations |
-| `api/workspaces.ts` | 489 | Workspace CRUD with server settings |
+| `api/loops.ts` | 1,351 | Loop CRUD, lifecycle control, plan/review operations |
+| `api/workspaces.ts` | 695 | Workspace CRUD with server settings |
 | `api/models.ts` | 426 | Model listing, preferences, log level |
+| `api/agents-md.ts` | 234 | AGENTS.md optimization endpoints *(new)* |
 | `api/git.ts` | 193 | Branch listing, repo info |
 | `api/websocket.ts` | 134 | WebSocket upgrade and message routing |
 | `api/settings.ts` | 132 | App config, DB reset, server kill |
 | `api/validation.ts` | 121 | Zod schema parsing utilities |
-| `api/index.ts` | 58 | Barrel export combining all routes |
+| `api/index.ts` | 62 | Barrel export combining all routes |
 | `api/health.ts` | 49 | Health check endpoint |
 | `utils/event-stream.ts` | 148 | Async iterable event buffer for SSE |
 
-**Total:** ~3,170 LOC across 10 files
+**Total:** ~3,545 LOC across 11 files
 
 ### Health Score: C+
 
@@ -258,7 +262,7 @@ The API layer has good organizational structure (one file per resource) and a cl
 
 | Area | LOC | Tests | Coverage |
 |------|----:|:-----:|----------|
-| API route handlers | 3,034 | Partial | ~40% (integration tests cover main flows) |
+| API route handlers | 3,397 | Partial | ~40% (integration tests cover main flows) |
 | Event stream | 148 | None | 0% |
 
 **Assessment:** Core loop CRUD flows have integration test coverage. Git endpoints, WebSocket handler, and event stream have no tests. The `event-stream.ts` concurrency primitive is critical infrastructure with zero tests.
@@ -275,7 +279,7 @@ The API layer has good organizational structure (one file per resource) and a cl
 
 ---
 
-## Layer 3: Core Business Logic (~5,450 LOC)
+## Layer 3: Core Business Logic (~6,285 LOC)
 
 ### Purpose
 
@@ -285,15 +289,15 @@ Central orchestration of loop lifecycle, iteration execution, git operations, an
 
 | File | LOC | Role |
 |------|----:|------|
-| `core/loop-manager.ts` | 2,025 | Loop CRUD, start/stop/accept/discard/push lifecycle |
-| `core/loop-engine.ts` | 2,009 | Iteration execution, event processing, agent interaction |
-| `core/git-service.ts` | 979 | Git branch, commit, merge, diff, push operations |
-| `core/backend-manager.ts` | 667 | Backend connection pooling per workspace |
+| `core/loop-manager.ts` | 2,409 | Loop CRUD, start/stop/accept/discard/push lifecycle |
+| `core/loop-engine.ts` | 2,079 | Iteration execution, event processing, agent interaction |
+| `core/git-service.ts` | 1,492 | Git branch, commit, merge, diff, push operations |
+| `core/agents-md-optimizer.ts` | 234 | AGENTS.md optimization logic *(new)* |
 | `core/event-emitter.ts` | 72 | Simple typed pub/sub event system |
 
 **Note:** `config.ts`, `logger.ts`, `command-executor.ts`, and `remote-command-executor.ts` are placed in Layer 5 (External Integration) or Layer 6 (Shared Infrastructure) based on their primary role.
 
-**Total:** ~5,450 LOC across 5 files (excluding infrastructure files)
+**Total:** ~6,285 LOC across 5 files (excluding infrastructure files)
 
 ### Health Score: C+
 
@@ -355,10 +359,10 @@ The Core layer contains the most critical business logic but also the most conce
 
 | Area | LOC | Tests | Coverage |
 |------|----:|:-----:|----------|
-| `loop-manager.ts` | 2,025 | Good | ~70% (unit + scenario tests) |
-| `loop-engine.ts` | 2,009 | Good | ~75% (largest test file, 1,375 LOC) |
-| `git-service.ts` | 979 | Good | ~60% |
-| `backend-manager.ts` | 667 | Minimal | ~20% |
+| `loop-manager.ts` | 2,409 | Good | ~70% (unit + scenario tests) |
+| `loop-engine.ts` | 2,079 | Good | ~75% (largest test file, 1,375 LOC) |
+| `git-service.ts` | 1,492 | Good | ~60% |
+| `backend-manager.ts` | 765 | Minimal | ~20% |
 | `event-emitter.ts` | 72 | None | 0% |
 
 **Assessment:** The two most critical files have good test coverage. `backend-manager.ts` and `event-emitter.ts` are under-tested.
@@ -374,7 +378,7 @@ The Core layer contains the most critical business logic but also the most conce
 
 ---
 
-## Layer 4: Data Access (~1,948 LOC)
+## Layer 4: Data Access (~2,061 LOC)
 
 ### Purpose
 
@@ -384,15 +388,15 @@ SQLite database management, schema creation, migrations, and CRUD operations for
 
 | File | LOC | Role |
 |------|----:|------|
-| `persistence/loops.ts` | 560 | Loop CRUD, state updates, row mapping |
-| `persistence/migrations/index.ts` | 552 | Schema migration system (13 migrations) |
+| `persistence/loops.ts` | 566 | Loop CRUD, state updates, row mapping |
+| `persistence/migrations/index.ts` | 571 | Schema migration system (14 migrations) |
 | `persistence/database.ts` | 386 | DB init, schema, review comments |
-| `persistence/workspaces.ts` | 239 | Workspace CRUD |
+| `persistence/workspaces.ts` | 327 | Workspace CRUD |
 | `persistence/preferences.ts` | 178 | Key-value preference storage |
 | `persistence/paths.ts` | 24 | Data directory helpers (vestigial) |
 | `persistence/index.ts` | 9 | Barrel exports |
 
-**Total:** 1,948 LOC across 7 files
+**Total:** 2,061 LOC across 7 files
 
 ### Health Score: B-
 
@@ -420,7 +424,7 @@ The Data Access layer is the most internally consistent layer. CRUD operations f
 | D2 | **Major** | Data integrity | `persistence/loops.ts:289` | `INSERT OR REPLACE` triggers `ON DELETE CASCADE`, silently destroying review comments. Should use `INSERT ... ON CONFLICT DO UPDATE` (upsert). |
 | D3 | **Major** | Error handling | `persistence/loops.ts:196-267` | 6 `JSON.parse()` calls in `rowToLoop()` without error handling. One corrupt row prevents listing ALL loops. |
 | D4 | **Major** | Schema management | `database.ts:createTables` vs migrations | Dual sources of truth. Base schema includes columns from migrations 1-8. Fresh and upgraded databases may diverge if either source is modified independently. |
-| D5 | **Major** | Code duplication | `persistence/loops.ts:422-506` | `updateLoopState()` and `updateLoopConfig()` are near-identical ~40-line functions. Only differ in which field they serialize. Should be unified into `updateLoopFields()`. |
+| D5 | **Major** | Code duplication | `persistence/loops.ts:422-506` | `updateLoopState()` and `updateLoopConfig()` are near-identical ~40-line functions. Only differ in which field they serialize. Should be unified into `updateLoopFields()`. **Partially Resolved:** Both functions now use `UPDATE` instead of `INSERT OR REPLACE`, eliminating the cascade delete risk for these paths. `saveLoop()` at line 295 still uses `INSERT OR REPLACE`. |
 | D6 | **Major** | Separation of concerns | `database.ts:312-385` | Review comment functions belong in a dedicated `persistence/review-comments.ts`, not in database infrastructure. |
 | D7 | **Minor** | Barrel export | `persistence/index.ts` | Missing re-export of `workspaces.ts`. Consumers must import directly. |
 | D8 | **Minor** | Async overhead | All persistence files | All functions marked `async` despite containing zero `await` — Bun SQLite is synchronous. Every caller pays unnecessary Promise wrapping. |
@@ -465,7 +469,7 @@ The Data Access layer is the most internally consistent layer. CRUD operations f
 
 ---
 
-## Layer 5: External Integration (~2,475 LOC)
+## Layer 5: External Integration (~2,597 LOC)
 
 ### Purpose
 
@@ -476,15 +480,15 @@ Interfaces with external systems: the opencode SDK for AI agent communication, a
 | File | LOC | Role |
 |------|----:|------|
 | `backends/opencode/index.ts` | 1,015 | OpenCode SDK adapter: connection, prompts, events |
-| `core/remote-command-executor.ts` | 464 | Remote command execution via PTY/WebSocket |
-| `core/backend-manager.ts` | 667 | Backend lifecycle management (also in Layer 3) |
+| `core/remote-command-executor.ts` | 493 | Remote command execution via PTY/WebSocket |
+| `core/backend-manager.ts` | 765 | Backend lifecycle management (also in Layer 3) |
 | `backends/types.ts` | 239 | Backend interface, event types, data structures |
-| `core/command-executor.ts` | 69 | CommandExecutor interface + local Bun impl |
+| `core/command-executor.ts` | 79 | CommandExecutor interface + local Bun impl |
 | `backends/index.ts` | 6 | Barrel exports |
 
 **Note:** `backend-manager.ts` spans Layer 3 (business logic for workspace-backend mapping) and Layer 5 (external system integration). It is analyzed in both layers for the relevant concerns.
 
-**Total:** ~2,475 LOC across 6 files
+**Total:** ~2,597 LOC across 6 files
 
 ### Health Score: C
 
@@ -542,12 +546,12 @@ The External Integration layer has a well-designed abstraction (`Backend` interf
 | Area | LOC | Tests | Coverage |
 |------|----:|:-----:|----------|
 | `opencode/index.ts` | 1,015 | Minimal | ~15% (mostly "not connected" error tests) |
-| `remote-command-executor.ts` | 464 | None | 0% |
-| `backend-manager.ts` | 667 | Minimal | ~20% |
-| `command-executor.ts` | 69 | Indirect | ~50% (via git-service tests) |
+| `remote-command-executor.ts` | 493 | None | 0% |
+| `backend-manager.ts` | 765 | Minimal | ~20% |
+| `command-executor.ts` | 79 | Indirect | ~50% (via git-service tests) |
 | `backends/types.ts` | 239 | N/A | Type definitions |
 
-**Assessment:** Weakest test coverage of any layer. The OpenCode backend adapter (1,015 LOC) and remote command executor (464 LOC) are essentially untested. The mock backend system (`tests/mocks/mock-backend.ts`) provides good test infrastructure but only mocks the happy path.
+**Assessment:** Weakest test coverage of any layer. The OpenCode backend adapter (1,015 LOC) and remote command executor (493 LOC) are essentially untested. The mock backend system (`tests/mocks/mock-backend.ts`) provides good test infrastructure but only mocks the happy path.
 
 ### Recommendations (Prioritized)
 
@@ -561,7 +565,7 @@ The External Integration layer has a well-designed abstraction (`Backend` interf
 
 ---
 
-## Layer 6: Shared Infrastructure (~2,100 LOC)
+## Layer 6: Shared Infrastructure (~2,345 LOC)
 
 ### Purpose
 
@@ -571,20 +575,20 @@ Types, schemas, utilities, configuration, and logging that are consumed by multi
 
 | Sublayer | File | LOC | Role |
 |----------|------|----:|------|
-| Types | `types/events.ts` | 488 | Loop event types, event data unions |
-| Types | `types/loop.ts` | 385 | Loop, LoopConfig, LoopState types, defaults |
-| Types | `types/api.ts` | 268 | API request/response DTOs |
+| Types | `types/events.ts` | 536 | Loop event types, event data unions |
+| Types | `types/loop.ts` | 400 | Loop, LoopConfig, LoopState types, defaults |
+| Types | `types/api.ts` | 278 | API request/response DTOs |
 | Types | `types/schemas/loop.ts` | 120 | Zod schemas for loop validation |
-| Types | `types/schemas/workspace.ts` | 80 | Zod schemas for workspace validation |
-| Types | `types/schemas/index.ts` | 59 | Barrel for schemas |
-| Types | `types/workspace.ts` | 68 | Workspace type definitions |
+| Types | `types/schemas/workspace.ts` | 108 | Zod schemas for workspace validation |
+| Types | `types/schemas/index.ts` | 65 | Barrel for schemas |
+| Types | `types/workspace.ts` | 95 | Workspace type definitions |
 | Types | `types/schemas/preferences.ts` | 44 | Zod schemas for preferences |
 | Types | `types/settings.ts` | 43 | ServerMode, ConnectionStatus types |
 | Types | `types/schemas/model.ts` | 33 | Zod schemas for models |
 | Types | `types/index.ts` | 8 | Barrel for types |
-| Utils | `utils/loop-status.ts` | 105 | Status label, running/terminal checks, colors |
+| Utils | `utils/loop-status.ts` | 135 | Status label, running/terminal checks, colors |
 | Utils | `utils/name-generator.ts` | 142 | AI-powered loop name generation |
-| Utils | `utils/index.ts` | 30 | Barrel + inline `sanitizeBranchName` |
+| Utils | `utils/index.ts` | 32 | Barrel + inline `sanitizeBranchName` |
 | Infra | `core/logger.ts` | 129 | Backend tslog wrapper |
 | Infra | `core/config.ts` | 34 | Application config from environment |
 | Config | `src/index.html` | 14 | HTML shell |
@@ -592,7 +596,7 @@ Types, schemas, utilities, configuration, and logging that are consumed by multi
 | Config | `tsconfig.json` | 36 | TypeScript configuration |
 | Config | `package.json` | 32 | Package manifest |
 
-**Total:** ~2,100 LOC across ~20 files
+**Total:** ~2,345 LOC across ~20 files
 
 ### Health Score: B
 
@@ -625,7 +629,7 @@ The Shared Infrastructure layer has the least severe issues of any layer. Types 
 | S7 | **Minor** | Barrel completeness | `types/index.ts` | Missing re-export of `settings.ts`. |
 | S8 | **Minor** | Code organization | `utils/index.ts:23-30` | `sanitizeBranchName` defined inline in barrel file instead of its own module. |
 | S9 | **Minor** | Edge case | `utils/index.ts:sanitizeBranchName` | Returns empty string for all-special-character input — invalid git branch name. |
-| S10 | **Minor** | Missing case | `utils/loop-status.ts:getStatusLabel` | Missing `"draft"` case in switch. Falls through to default returning raw string. |
+| S10 | ~~**Minor**~~ **Resolved** | ~~Missing case~~ | `utils/loop-status.ts:getStatusLabel` | ~~Missing `"draft"` case in switch. Falls through to default returning raw string.~~ **Resolved:** Draft case now present at line 26-27. |
 | S11 | **Suggestion** | Type safety | `types/schemas/preferences.ts` | `SetLogLevelRequestSchema` uses `z.string()` but should use `z.enum()` for valid log levels. |
 | S12 | **Suggestion** | Architecture | `types/events.ts` | `MessageData`/`PersistedMessage` and `ToolCallData`/`PersistedToolCall` are near-identical mirror types. Unifying or deriving one from the other would reduce surface area. |
 
@@ -651,9 +655,9 @@ The Shared Infrastructure layer has the least severe issues of any layer. Types 
 
 | Area | LOC | Tests | Coverage |
 |------|----:|:-----:|----------|
-| Types | 1,596 | N/A | Type definitions (no runtime code to test) |
+| Types | 1,730 | N/A | Type definitions (no runtime code to test) |
 | Zod schemas | ~277 | None | 0% (validated indirectly through API tests) |
-| `loop-status.ts` | 105 | None | 0% |
+| `loop-status.ts` | 135 | None | 0% |
 | `name-generator.ts` | 142 | Good | ~70% |
 | `sanitizeBranchName` | ~10 | None | 0% |
 | `core/logger.ts` | 129 | None | 0% |
@@ -668,7 +672,7 @@ The Shared Infrastructure layer has the least severe issues of any layer. Types 
 3. **Remove dead `*Input` type aliases** from schema files
 4. **Rename one `ConnectionStatus`** to avoid ambiguity (e.g., `ServerConnectionStatus` vs `WebSocketConnectionStatus`)
 5. **Move `TodoItem`** definition to `types/loop.ts`, import from there in `backends/types.ts`
-6. **Add `"draft"` case** to `getStatusLabel()` switch
+6. ~~**Add `"draft"` case** to `getStatusLabel()` switch~~ **Resolved** — draft case now present
 7. **Add unit tests** for `loop-status.ts` and `sanitizeBranchName`
 
 ---
@@ -680,20 +684,20 @@ The Shared Infrastructure layer has the least severe issues of any layer. Types 
 ```
                     ┌─────────────────┐
                     │   Presentation   │
-                    │   (9,490 LOC)    │
+                    │  (10,495 LOC)    │
                     └────────┬────────┘
                              │ fetch() — no typed client
                              ▼
                     ┌─────────────────┐
                     │      API         │
-                    │   (3,170 LOC)    │
+                    │   (3,545 LOC)    │
                     └───┬─────────┬───┘
                         │         │
              correct    │         │ VIOLATION
                         ▼         ▼
               ┌──────────────┐  ┌──────────────┐
               │ Core Business│  │  Data Access  │
-              │  (5,450 LOC) │  │  (1,948 LOC)  │
+              │  (6,285 LOC) │  │  (2,061 LOC)  │
               └──────┬───────┘  └──────────────┘
                      │                 ▲
                      │    correct      │
@@ -703,14 +707,14 @@ The Shared Infrastructure layer has the least severe issues of any layer. Types 
               ┌──────────────┐
               │   External   │
               │ Integration  │
-              │  (2,475 LOC) │
+              │  (2,597 LOC) │
               └──────────────┘
                      │
                      ▼
               ┌──────────────┐
               │    Shared    │
               │Infrastructure│
-              │  (2,100 LOC) │
+              │  (2,345 LOC) │
               └──────────────┘
 ```
 
@@ -797,13 +801,13 @@ These recommendations address systemic issues that span multiple layers and repr
 | 1 | ~~**Fix fire-and-forget async** — Await `engine.start()` in LoopManager and the async IIFE in `translateEvent()`.~~ **By Design** — Intentional for long-running processes. The engine has comprehensive self-contained error handling (`handleError()`, error events, `trackConsecutiveError()`). See `AGENTS.md` § Async Patterns. | Core, External | ~~Critical~~ N/A — engine handles errors via events and persistence | ~~Low~~ N/A |
 | 2 | **Introduce a loop state machine** — Centralize all status transitions into a `LoopStateMachine` with a transition table. Eliminate scattered ad-hoc status checks. | Core, API | Major — single source of truth for loop lifecycle | Medium |
 | 3 | **Enforce layered architecture** — Remove all direct persistence imports from API handlers. Add query methods to `LoopManager` (`getActiveLoopByDirectory`, `getReviewComments`) so the API layer never bypasses Core. | API, Core, Data Access | Major — prevents business rule bypass | Medium |
-| 4 | **Extract shared helpers to eliminate duplication** — `errorResponse()` (3 copies), `apiCall<T>()` wrapper (13 action functions), `ModelSelector` component (2 copies), `requireWorkspace()` (5 copies). Estimated ~530 LOC savings. | API, Presentation | Major — reduces maintenance burden | Low |
+| 4 | **Extract shared helpers to eliminate duplication** — `errorResponse()` (3 copies), `apiCall<T>()` wrapper (14 action functions), `ModelSelector` component (2 copies), `requireWorkspace()` (5 copies). Estimated ~540 LOC savings. | API, Presentation | Major — reduces maintenance burden | Low |
 | 5 | **Add error boundaries and user-facing error feedback** — Root `<ErrorBoundary>` in `frontend.tsx`, toast/notification system for transient errors, error states in Dashboard and LoopDetails. | Presentation | Major — users can see and recover from errors | Low |
 | 6 | **Fix backend logger sub-logger sync** — Port the sub-logger caching pattern from `lib/logger.ts` to `core/logger.ts`. Extract shared constants to a shared module. | Shared Infra | Major — runtime log level changes work for all modules | Low |
 | 7 | ~~**Add authentication to destructive endpoints** — `POST /api/server/kill` and `POST /api/settings/reset-all` need at minimum a token-based check.~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level. See `AGENTS.md` § Authentication & Authorization. | API | ~~Critical~~ N/A — ~~prevents unauthorized server termination~~ | ~~Low~~ N/A |
 | 8 | **Decompose Dashboard.tsx** — Extract `LoopList`, `DashboardHeader`, `DashboardModals`, `LoopGroupSection` sub-components. Move inline fetch calls to hooks. | Presentation | Major — improves testability and maintainability | Medium |
 | 9 | **Fix data integrity risks in Data Access** — Replace `INSERT OR REPLACE` with upsert to prevent cascade deletes. Add try/catch to `JSON.parse` calls in `rowToLoop()`. Validate table names in `getTableColumns()`. | Data Access | Major — prevents data loss and crash-on-corruption | Low |
-| 10 | ~~**Add test coverage for hooks and utilities**~~ **Largely Resolved** — 698 frontend tests added (121 hook tests, 508 component tests, 50 E2E scenario tests, 19 infra tests). Remaining gaps: `useWebSocket`, `loop-status.ts`, `sanitizeBranchName`, `event-stream.ts`. | Presentation, Shared Infra | ~~Major~~ Minor — highest-risk code now covered | ~~Medium~~ N/A |
+| 10 | ~~**Add test coverage for hooks and utilities**~~ **Largely Resolved** — 715 frontend tests added (126 hook tests, 520 component tests, 50 E2E scenario tests, 19 infra tests). Remaining gaps: `useWebSocket`, `useAgentsMdOptimizer`, `loop-status.ts`, `sanitizeBranchName`, `event-stream.ts`. | Presentation, Shared Infra | ~~Major~~ Minor — highest-risk code now covered | ~~Medium~~ N/A |
 
 ---
 
@@ -844,9 +848,9 @@ Every source file in the codebase mapped to its primary layer:
 
 | Layer | File |
 |-------|------|
-| Presentation | `src/components/Dashboard.tsx`, `src/components/LoopDetails.tsx`, `src/components/CreateLoopForm.tsx`, `src/components/ServerSettingsForm.tsx`, `src/components/LoopActionBar.tsx`, `src/components/LogViewer.tsx`, `src/components/LoopCard.tsx`, `src/components/AppSettingsModal.tsx`, `src/components/PlanReviewPanel.tsx`, `src/components/WorkspaceSettingsModal.tsx`, `src/components/LoopModals.tsx`, `src/components/CreateWorkspaceModal.tsx`, `src/components/common/Modal.tsx`, `src/components/TodoViewer.tsx`, `src/components/RenameLoopModal.tsx`, `src/components/AcceptLoopModal.tsx`, `src/components/AddressCommentsModal.tsx`, `src/components/common/Badge.tsx`, `src/components/WorkspaceSelector.tsx`, `src/components/MarkdownRenderer.tsx`, `src/components/common/Card.tsx`, `src/components/common/Button.tsx`, `src/components/LogLevelInitializer.tsx`, `src/components/common/Icons.tsx`, `src/components/common/index.ts`, `src/components/index.ts`, `src/hooks/useLoop.ts`, `src/hooks/loopActions.ts`, `src/hooks/useLoops.ts`, `src/hooks/useWorkspaceServerSettings.ts`, `src/hooks/useWebSocket.ts`, `src/hooks/useWorkspaces.ts`, `src/hooks/useLogLevelPreference.ts`, `src/hooks/useMarkdownPreference.ts`, `src/hooks/index.ts`, `src/lib/logger.ts`, `src/lib/index.ts`, `src/frontend.tsx`, `src/App.tsx` |
-| API | `src/api/loops.ts`, `src/api/workspaces.ts`, `src/api/models.ts`, `src/api/git.ts`, `src/api/websocket.ts`, `src/api/settings.ts`, `src/api/validation.ts`, `src/api/index.ts`, `src/api/health.ts`, `src/utils/event-stream.ts` |
-| Core Business Logic | `src/core/loop-manager.ts`, `src/core/loop-engine.ts`, `src/core/git-service.ts`, `src/core/event-emitter.ts`, `src/core/index.ts` |
+| Presentation | `src/components/Dashboard.tsx`, `src/components/LoopDetails.tsx`, `src/components/CreateLoopForm.tsx`, `src/components/ServerSettingsForm.tsx`, `src/components/LoopActionBar.tsx`, `src/components/LogViewer.tsx`, `src/components/LoopCard.tsx`, `src/components/AppSettingsModal.tsx`, `src/components/PlanReviewPanel.tsx`, `src/components/WorkspaceSettingsModal.tsx`, `src/components/LoopModals.tsx`, `src/components/CreateWorkspaceModal.tsx`, `src/components/common/Modal.tsx`, `src/components/TodoViewer.tsx`, `src/components/RenameLoopModal.tsx`, `src/components/AcceptLoopModal.tsx`, `src/components/AddressCommentsModal.tsx`, `src/components/common/Badge.tsx`, `src/components/WorkspaceSelector.tsx`, `src/components/MarkdownRenderer.tsx`, `src/components/common/Card.tsx`, `src/components/common/Button.tsx`, `src/components/common/CollapsibleSection.tsx`, `src/components/LogLevelInitializer.tsx`, `src/components/common/Icons.tsx`, `src/components/common/index.ts`, `src/components/index.ts`, `src/hooks/useLoop.ts`, `src/hooks/loopActions.ts`, `src/hooks/useLoops.ts`, `src/hooks/useWorkspaceServerSettings.ts`, `src/hooks/useWebSocket.ts`, `src/hooks/useWorkspaces.ts`, `src/hooks/useAgentsMdOptimizer.ts`, `src/hooks/useLogLevelPreference.ts`, `src/hooks/useMarkdownPreference.ts`, `src/hooks/index.ts`, `src/lib/prompt-templates.ts`, `src/lib/logger.ts`, `src/lib/index.ts`, `src/frontend.tsx`, `src/App.tsx` |
+| API | `src/api/loops.ts`, `src/api/workspaces.ts`, `src/api/models.ts`, `src/api/agents-md.ts`, `src/api/git.ts`, `src/api/websocket.ts`, `src/api/settings.ts`, `src/api/validation.ts`, `src/api/index.ts`, `src/api/health.ts`, `src/utils/event-stream.ts` |
+| Core Business Logic | `src/core/loop-manager.ts`, `src/core/loop-engine.ts`, `src/core/git-service.ts`, `src/core/agents-md-optimizer.ts`, `src/core/event-emitter.ts`, `src/core/index.ts` |
 | Data Access | `src/persistence/database.ts`, `src/persistence/loops.ts`, `src/persistence/migrations/index.ts`, `src/persistence/workspaces.ts`, `src/persistence/preferences.ts`, `src/persistence/paths.ts`, `src/persistence/index.ts` |
 | External Integration | `src/backends/opencode/index.ts`, `src/backends/types.ts`, `src/backends/index.ts`, `src/core/backend-manager.ts`, `src/core/command-executor.ts`, `src/core/remote-command-executor.ts` |
 | Shared Infrastructure | `src/types/events.ts`, `src/types/loop.ts`, `src/types/api.ts`, `src/types/schemas/loop.ts`, `src/types/schemas/workspace.ts`, `src/types/schemas/index.ts`, `src/types/workspace.ts`, `src/types/schemas/preferences.ts`, `src/types/settings.ts`, `src/types/schemas/model.ts`, `src/types/index.ts`, `src/utils/loop-status.ts`, `src/utils/name-generator.ts`, `src/utils/index.ts`, `src/core/logger.ts`, `src/core/config.ts` |
