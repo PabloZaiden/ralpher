@@ -90,6 +90,8 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     createWorkspace,
     deleteWorkspace,
     refresh: refreshWorkspaces,
+    exportConfig,
+    importConfig,
   } = useWorkspaces();
   const [showServerSettingsModal, setShowServerSettingsModal] = useState(false);
   // Create workspace modal state
@@ -987,6 +989,9 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         resetting={appSettingsResetting}
         onKillServer={killServer}
         killingServer={appSettingsKilling}
+        onExportConfig={exportConfig}
+        onImportConfig={importConfig}
+        configSaving={workspaceCreating}
       />
 
       {/* Rename Loop modal */}

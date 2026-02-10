@@ -65,6 +65,31 @@ export const TestConnectionRequestSchema = z.object({
   directory: z.string().min(1, "directory is required"),
 });
 
+/**
+ * Schema for a single workspace config in an export file.
+ * Contains only the portable configuration fields (no id/timestamps).
+ */
+export const WorkspaceConfigSchema = z.object({
+  name: z.string().min(1, "name is required"),
+  directory: z.string().min(1, "directory is required"),
+  serverSettings: ServerSettingsSchema,
+});
+
+/**
+ * Schema for the workspace export envelope.
+ * Contains version info and an array of workspace configs.
+ */
+export const WorkspaceExportSchema = z.object({
+  version: z.literal(1),
+  exportedAt: z.string(),
+  workspaces: z.array(WorkspaceConfigSchema),
+});
+
+/**
+ * Schema for the import request body - same as the export envelope.
+ */
+export const WorkspaceImportRequestSchema = WorkspaceExportSchema;
+
 // Export inferred types
 /**
  * ServerSettings type - inferred from ServerSettingsSchema.
@@ -78,3 +103,6 @@ export type ServerSettingsInput = ServerSettings;
 export type CreateWorkspaceRequestInput = z.infer<typeof CreateWorkspaceRequestSchema>;
 export type UpdateWorkspaceRequestInput = z.infer<typeof UpdateWorkspaceRequestSchema>;
 export type TestConnectionRequestInput = z.infer<typeof TestConnectionRequestSchema>;
+export type WorkspaceConfig = z.infer<typeof WorkspaceConfigSchema>;
+export type WorkspaceExportData = z.infer<typeof WorkspaceExportSchema>;
+export type WorkspaceImportRequest = z.infer<typeof WorkspaceImportRequestSchema>;

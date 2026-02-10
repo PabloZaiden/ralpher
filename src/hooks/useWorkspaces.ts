@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import type { Workspace, WorkspaceWithLoopCount, CreateWorkspaceRequest } from "../types/workspace";
+import type { Workspace, WorkspaceWithLoopCount, CreateWorkspaceRequest, WorkspaceImportResult, WorkspaceExportData } from "../types/workspace";
 import { log } from "../lib/logger";
 
 export interface UseWorkspacesResult {
@@ -26,6 +26,10 @@ export interface UseWorkspacesResult {
   deleteWorkspace: (id: string) => Promise<{ success: boolean; error?: string }>;
   /** Get workspace by directory */
   getWorkspaceByDirectory: (directory: string) => Promise<Workspace | null>;
+  /** Fetch all workspace configs as JSON from the export API */
+  exportConfig: () => Promise<WorkspaceExportData | null>;
+  /** Import workspace configs from a JSON object */
+  importConfig: (data: WorkspaceExportData) => Promise<WorkspaceImportResult | null>;
 }
 
 /**
@@ -158,6 +162,53 @@ export function useWorkspaces(): UseWorkspacesResult {
     }
   }, []);
 
+  // Export all workspace configs
+  const exportConfig = useCallback(async (): Promise<WorkspaceExportData | null> => {
+    try {
+      setSaving(true);
+      setError(null);
+      const response = await fetch("/api/workspaces/export");
+      if (!response.ok) {
+        const errorData = await response.json() as { message?: string };
+        throw new Error(errorData.message || "Failed to export workspaces");
+      }
+      return (await response.json()) as WorkspaceExportData;
+    } catch (err) {
+      setError(String(err));
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
+  // Import workspace configs
+  const importConfig = useCallback(async (data: WorkspaceExportData): Promise<WorkspaceImportResult | null> => {
+    try {
+      setSaving(true);
+      setError(null);
+      const response = await fetch("/api/workspaces/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json() as { message?: string };
+        throw new Error(errorData.message || "Failed to import workspaces");
+      }
+
+      const result = (await response.json()) as WorkspaceImportResult;
+      // Refresh the list to include newly imported workspaces
+      await fetchWorkspaces();
+      return result;
+    } catch (err) {
+      setError(String(err));
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  }, [fetchWorkspaces]);
+
   // Initial fetch
   useEffect(() => {
     fetchWorkspaces();
@@ -173,5 +224,7 @@ export function useWorkspaces(): UseWorkspacesResult {
     updateWorkspace,
     deleteWorkspace,
     getWorkspaceByDirectory,
+    exportConfig,
+    importConfig,
   };
 }

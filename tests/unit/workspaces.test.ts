@@ -517,4 +517,368 @@ describe("Workspace Persistence", () => {
       expect(found!.serverSettings).toEqual(customSettings);
     });
   });
+
+  describe("Export/Import operations", () => {
+    test("export with zero workspaces returns empty array with version 1 and exportedAt", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { exportWorkspaces } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const result = await exportWorkspaces();
+      expect(result.version).toBe(1);
+      expect(result.exportedAt).toBeDefined();
+      expect(result.workspaces).toEqual([]);
+      // Verify exportedAt is a valid, normalized ISO timestamp
+      expect(Number.isNaN(Date.parse(result.exportedAt))).toBe(false);
+      expect(new Date(result.exportedAt).toISOString()).toBe(result.exportedAt);
+    });
+
+    test("export with multiple workspaces returns all configs without id/timestamps", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { createWorkspace, exportWorkspaces } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const ws1 = createTestWorkspace({ name: "Alpha", directory: "/tmp/alpha" });
+      const ws2 = createTestWorkspace({ name: "Beta", directory: "/tmp/beta" });
+      await createWorkspace(ws1);
+      await createWorkspace(ws2);
+
+      const result = await exportWorkspaces();
+      expect(result.version).toBe(1);
+      expect(result.workspaces).toHaveLength(2);
+
+      // Should be sorted alphabetically
+      expect(result.workspaces[0]!.name).toBe("Alpha");
+      expect(result.workspaces[1]!.name).toBe("Beta");
+
+      // Each config should have name, directory, serverSettings but NOT id/timestamps
+      for (const config of result.workspaces) {
+        expect(config.name).toBeDefined();
+        expect(config.directory).toBeDefined();
+        expect(config.serverSettings).toBeDefined();
+        // Should NOT have internal fields
+        expect((config as Record<string, unknown>)["id"]).toBeUndefined();
+        expect((config as Record<string, unknown>)["createdAt"]).toBeUndefined();
+        expect((config as Record<string, unknown>)["updatedAt"]).toBeUndefined();
+      }
+    });
+
+    test("export includes password in serverSettings", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { createWorkspace, exportWorkspaces } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const ws = createTestWorkspace({ name: "With Password", directory: "/tmp/password-test" });
+      ws.serverSettings = {
+        mode: "connect",
+        hostname: "secure.server.com",
+        port: 443,
+        password: "my-secret-password",
+        useHttps: true,
+        allowInsecure: false,
+      };
+      await createWorkspace(ws);
+
+      const result = await exportWorkspaces();
+      expect(result.workspaces).toHaveLength(1);
+      expect(result.workspaces[0]!.serverSettings.password).toBe("my-secret-password");
+    });
+
+    test("import with valid data creates workspaces and returns correct result", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const importData = {
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        workspaces: [
+          {
+            name: "Imported WS 1",
+            directory: "/tmp/imported-1",
+            serverSettings: getDefaultServerSettings(),
+          },
+          {
+            name: "Imported WS 2",
+            directory: "/tmp/imported-2",
+            serverSettings: {
+              mode: "connect" as const,
+              hostname: "remote.server.com",
+              port: 8080,
+              useHttps: true,
+              allowInsecure: false,
+            },
+          },
+        ],
+      };
+
+      const result = await importWorkspaces(importData);
+      expect(result.created).toBe(2);
+      expect(result.skipped).toBe(0);
+      expect(result.failed).toBe(0);
+      expect(result.details).toHaveLength(2);
+      expect(result.details[0]!.status).toBe("created");
+      expect(result.details[1]!.status).toBe("created");
+
+      // Verify workspaces were actually persisted
+      const workspaces = await listWorkspaces();
+      expect(workspaces).toHaveLength(2);
+    });
+
+    test("import skips workspaces with duplicate directories", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { createWorkspace, importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      // Pre-create a workspace
+      const existing = createTestWorkspace({ name: "Existing", directory: "/tmp/existing-dir" });
+      await createWorkspace(existing);
+
+      const importData = {
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        workspaces: [
+          {
+            name: "New Workspace",
+            directory: "/tmp/new-dir",
+            serverSettings: getDefaultServerSettings(),
+          },
+          {
+            name: "Duplicate Workspace",
+            directory: "/tmp/existing-dir",
+            serverSettings: getDefaultServerSettings(),
+          },
+        ],
+      };
+
+      const result = await importWorkspaces(importData);
+      expect(result.created).toBe(1);
+      expect(result.skipped).toBe(1);
+      expect(result.failed).toBe(0);
+      expect(result.details).toHaveLength(2);
+
+      const createdDetail = result.details.find((d) => d.status === "created");
+      const skippedDetail = result.details.find((d) => d.status === "skipped");
+      expect(createdDetail!.name).toBe("New Workspace");
+      expect(skippedDetail!.name).toBe("Duplicate Workspace");
+      expect(skippedDetail!.reason).toContain("/tmp/existing-dir");
+
+      // Verify only 2 total workspaces exist (1 pre-existing + 1 new)
+      const workspaces = await listWorkspaces();
+      expect(workspaces).toHaveLength(2);
+    });
+
+    test("import with empty workspaces array succeeds (no-op)", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { importWorkspaces } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const importData = {
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        workspaces: [],
+      };
+
+      const result = await importWorkspaces(importData);
+      expect(result.created).toBe(0);
+      expect(result.skipped).toBe(0);
+      expect(result.failed).toBe(0);
+      expect(result.details).toEqual([]);
+    });
+
+    test("import is idempotent (re-importing same file is safe — all skipped)", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const importData = {
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        workspaces: [
+          {
+            name: "Idempotent WS",
+            directory: "/tmp/idempotent",
+            serverSettings: getDefaultServerSettings(),
+          },
+        ],
+      };
+
+      // First import
+      const result1 = await importWorkspaces(importData);
+      expect(result1.created).toBe(1);
+      expect(result1.skipped).toBe(0);
+      expect(result1.failed).toBe(0);
+
+      // Second import — should skip
+      const result2 = await importWorkspaces(importData);
+      expect(result2.created).toBe(0);
+      expect(result2.skipped).toBe(1);
+      expect(result2.failed).toBe(0);
+
+      // Should still only have 1 workspace
+      const workspaces = await listWorkspaces();
+      expect(workspaces).toHaveLength(1);
+    });
+
+    test("import preserves serverSettings including password", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { importWorkspaces, getWorkspaceByDirectory } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const settings = {
+        mode: "connect" as const,
+        hostname: "secure.host.com",
+        port: 9443,
+        password: "super-secret",
+        useHttps: true,
+        allowInsecure: true,
+      };
+
+      const importData = {
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        workspaces: [
+          {
+            name: "Secure Workspace",
+            directory: "/tmp/secure-ws",
+            serverSettings: settings,
+          },
+        ],
+      };
+
+      await importWorkspaces(importData);
+
+      const workspace = await getWorkspaceByDirectory("/tmp/secure-ws");
+      expect(workspace).not.toBeNull();
+      expect(workspace!.name).toBe("Secure Workspace");
+      expect(workspace!.serverSettings).toEqual(settings);
+      expect(workspace!.serverSettings.password).toBe("super-secret");
+    });
+
+    test("import trims whitespace from name and directory", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { importWorkspaces, getWorkspaceByDirectory } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const importData = {
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        workspaces: [
+          {
+            name: "  Padded Name  ",
+            directory: "  /tmp/padded-dir  ",
+            serverSettings: getDefaultServerSettings(),
+          },
+        ],
+      };
+
+      const result = await importWorkspaces(importData);
+      expect(result.created).toBe(1);
+      expect(result.failed).toBe(0);
+
+      // Detail should have trimmed values
+      expect(result.details[0]!.name).toBe("Padded Name");
+      expect(result.details[0]!.directory).toBe("/tmp/padded-dir");
+
+      // Workspace should be findable by trimmed directory
+      const ws = await getWorkspaceByDirectory("/tmp/padded-dir");
+      expect(ws).not.toBeNull();
+      expect(ws!.name).toBe("Padded Name");
+      expect(ws!.directory).toBe("/tmp/padded-dir");
+    });
+
+    test("import deduplicates directories that differ only by whitespace", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { createWorkspace, importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      // Pre-create a workspace with a trimmed directory
+      const existing = createTestWorkspace({ name: "Existing", directory: "/tmp/trim-dup" });
+      await createWorkspace(existing);
+
+      const importData = {
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        workspaces: [
+          {
+            name: "Duplicate With Spaces",
+            directory: "  /tmp/trim-dup  ",
+            serverSettings: getDefaultServerSettings(),
+          },
+        ],
+      };
+
+      const result = await importWorkspaces(importData);
+      expect(result.created).toBe(0);
+      expect(result.skipped).toBe(1);
+      expect(result.failed).toBe(0);
+
+      // Should still only have 1 workspace
+      const workspaces = await listWorkspaces();
+      expect(workspaces).toHaveLength(1);
+    });
+
+    test("export then import round-trip reproduces same configs", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { createWorkspace, exportWorkspaces, importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
+      const { closeDatabase } = await import("../../src/persistence/database");
+
+      await ensureDataDirectories();
+
+      // Create workspaces
+      const ws1 = createTestWorkspace({ name: "Round Trip A", directory: "/tmp/rt-a" });
+      ws1.serverSettings = {
+        mode: "connect",
+        hostname: "rt-server.com",
+        port: 7777,
+        password: "rt-pass",
+        useHttps: true,
+        allowInsecure: false,
+      };
+      const ws2 = createTestWorkspace({ name: "Round Trip B", directory: "/tmp/rt-b" });
+      await createWorkspace(ws1);
+      await createWorkspace(ws2);
+
+      // Export
+      const exported = await exportWorkspaces();
+      expect(exported.workspaces).toHaveLength(2);
+
+      // Clear database and re-import
+      closeDatabase();
+      // Need fresh DB
+      testDataDir = await mkdtemp(join(tmpdir(), "ralpher-workspace-test-"));
+      process.env["RALPHER_DATA_DIR"] = testDataDir;
+
+      // Re-import persistence modules with fresh DB
+      // Dynamic re-import won't give us a fresh module, so we use the functions we already have
+      const { ensureDataDirectories: ensureDataDirs2 } = await import("../../src/persistence/paths");
+      await ensureDataDirs2();
+
+      const result = await importWorkspaces(exported);
+      expect(result.created).toBe(2);
+      expect(result.skipped).toBe(0);
+      expect(result.failed).toBe(0);
+
+      // Verify the imported workspaces match the exported configs
+      const workspaces = await listWorkspaces();
+      expect(workspaces).toHaveLength(2);
+
+      for (const exportedConfig of exported.workspaces) {
+        const found = workspaces.find((w) => w.directory === exportedConfig.directory);
+        expect(found).not.toBeNull();
+        expect(found!.name).toBe(exportedConfig.name);
+        expect(found!.serverSettings).toEqual(exportedConfig.serverSettings);
+      }
+    });
+  });
 });
