@@ -6,8 +6,19 @@ import { describe, test, expect } from "bun:test";
 import { PROMPT_TEMPLATES, getTemplateById } from "../../src/lib/prompt-templates";
 
 describe("PROMPT_TEMPLATES", () => {
-  test("contains at least 5 templates", () => {
-    expect(PROMPT_TEMPLATES.length).toBeGreaterThanOrEqual(5);
+  test("contains all required templates", () => {
+    const requiredIds = [
+      "thorough-code-review",
+      "fix-code-review-issues",
+      "fix-failing-tests",
+      "continue-planned-tasks",
+      "review-fix-documentation",
+    ];
+    const ids = PROMPT_TEMPLATES.map((t) => t.id);
+    for (const requiredId of requiredIds) {
+      expect(ids).toContain(requiredId);
+    }
+    expect(PROMPT_TEMPLATES.length).toBeGreaterThanOrEqual(requiredIds.length);
   });
 
   test("all templates have unique IDs", () => {
