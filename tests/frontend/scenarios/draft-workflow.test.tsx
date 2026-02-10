@@ -97,8 +97,8 @@ describe("draft workflow scenario", () => {
     // Should be in Drafts section
     expect(getByText(/Drafts \(1\)/)).toBeTruthy();
 
-    // Should show Draft badge (getStatusLabel returns lowercase "draft")
-    expect(getByText("draft")).toBeTruthy();
+    // Should show Draft badge (getStatusLabel returns "Draft")
+    expect(getByText("Draft")).toBeTruthy();
 
     // Should show Edit button (not "Accept")
     expect(getByText("Edit")).toBeTruthy();

@@ -895,4 +895,256 @@ describe("GitService", () => {
       expect(cleaned).toBe(false);
     });
   });
+
+  describe("fetchBranch", () => {
+    test("returns false when no remote is configured", async () => {
+      const result = await git.fetchBranch(testDir, "main");
+      expect(result).toBe(false);
+    });
+
+    test("returns false when remote branch does not exist", async () => {
+      const remoteDir = await mkdtemp(join(tmpdir(), "ralpher-remote-"));
+      try {
+        await Bun.$`git init --bare ${remoteDir}`.quiet();
+        await Bun.$`git -C ${testDir} remote add origin ${remoteDir}`.quiet();
+
+        const currentBranch = await git.getCurrentBranch(testDir);
+        await Bun.$`git -C ${testDir} push -u origin ${currentBranch}`.quiet();
+
+        const result = await git.fetchBranch(testDir, "non-existent-branch");
+        expect(result).toBe(false);
+      } finally {
+        await rm(remoteDir, { recursive: true });
+      }
+    });
+
+    test("successfully fetches an existing remote branch", async () => {
+      const remoteDir = await mkdtemp(join(tmpdir(), "ralpher-remote-"));
+      try {
+        await Bun.$`git init --bare ${remoteDir}`.quiet();
+        await Bun.$`git -C ${testDir} remote add origin ${remoteDir}`.quiet();
+
+        const currentBranch = await git.getCurrentBranch(testDir);
+        await Bun.$`git -C ${testDir} push -u origin ${currentBranch}`.quiet();
+
+        // Create a second clone, add a commit, push
+        const otherClone = await mkdtemp(join(tmpdir(), "ralpher-clone-"));
+        try {
+          await Bun.$`git clone ${remoteDir} ${otherClone}`.quiet();
+          await Bun.$`git -C ${otherClone} config user.email "other@test.com"`.quiet();
+          await Bun.$`git -C ${otherClone} config user.name "Other User"`.quiet();
+          await writeFile(join(otherClone, "remote-file.txt"), "remote content\n");
+          await Bun.$`git -C ${otherClone} add -A`.quiet();
+          await Bun.$`git -C ${otherClone} commit -m "Remote commit"`.quiet();
+          await Bun.$`git -C ${otherClone} push`.quiet();
+        } finally {
+          await rm(otherClone, { recursive: true });
+        }
+
+        // Fetch should succeed and update the remote tracking ref
+        const result = await git.fetchBranch(testDir, currentBranch);
+        expect(result).toBe(true);
+
+        // Verify the remote tracking ref was updated (origin/<branch> has the new commit)
+        const logResult = await Bun.$`git -C ${testDir} log --oneline origin/${currentBranch} -1`.text();
+        expect(logResult).toContain("Remote commit");
+      } finally {
+        await rm(remoteDir, { recursive: true });
+      }
+    });
+  });
+
+  describe("isAncestor", () => {
+    test("returns true when ref is an ancestor", async () => {
+      // The initial commit is an ancestor of any subsequent commit
+      const initialSha = (await Bun.$`git -C ${testDir} rev-parse HEAD`.text()).trim();
+
+      await writeFile(join(testDir, "new-file.txt"), "content\n");
+      await git.commit(testDir, "Second commit");
+      const secondSha = (await Bun.$`git -C ${testDir} rev-parse HEAD`.text()).trim();
+
+      const result = await git.isAncestor(testDir, initialSha, secondSha);
+      expect(result).toBe(true);
+    });
+
+    test("returns false when ref is not an ancestor (diverged)", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+
+      // Create two divergent branches
+      await git.createBranch(testDir, "branch-a");
+      await writeFile(join(testDir, "a-file.txt"), "a content\n");
+      await git.commit(testDir, "Commit on branch A");
+      const shaA = (await Bun.$`git -C ${testDir} rev-parse HEAD`.text()).trim();
+
+      await git.checkoutBranch(testDir, currentBranch);
+      await git.createBranch(testDir, "branch-b");
+      await writeFile(join(testDir, "b-file.txt"), "b content\n");
+      await git.commit(testDir, "Commit on branch B");
+      const shaB = (await Bun.$`git -C ${testDir} rev-parse HEAD`.text()).trim();
+
+      // Neither is an ancestor of the other
+      expect(await git.isAncestor(testDir, shaA, shaB)).toBe(false);
+      expect(await git.isAncestor(testDir, shaB, shaA)).toBe(false);
+    });
+
+    test("returns true when both refs point to the same commit", async () => {
+      const sha = (await Bun.$`git -C ${testDir} rev-parse HEAD`.text()).trim();
+      const result = await git.isAncestor(testDir, sha, sha);
+      expect(result).toBe(true);
+    });
+  });
+
+  describe("mergeWithConflictDetection", () => {
+    test("returns success for a clean merge", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+
+      // Create a feature branch with a new file
+      await git.createBranch(testDir, "feature-clean");
+      await writeFile(join(testDir, "feature.txt"), "feature content\n");
+      await git.commit(testDir, "Add feature");
+
+      // Go back to the original branch
+      await git.checkoutBranch(testDir, currentBranch);
+
+      // Merge the feature branch
+      const result = await git.mergeWithConflictDetection(testDir, "feature-clean");
+      expect(result.success).toBe(true);
+      expect(result.alreadyUpToDate).toBe(false);
+      expect(result.hasConflicts).toBe(false);
+      expect(result.mergeCommitSha).toBeDefined();
+      expect(result.mergeCommitSha).toHaveLength(40);
+    });
+
+    test("returns alreadyUpToDate when branches have not diverged", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+
+      // Create a branch at the same point (no new commits)
+      await git.createBranch(testDir, "same-point");
+      await git.checkoutBranch(testDir, currentBranch);
+
+      const result = await git.mergeWithConflictDetection(testDir, "same-point");
+      expect(result.success).toBe(true);
+      expect(result.alreadyUpToDate).toBe(true);
+      expect(result.hasConflicts).toBe(false);
+    });
+
+    test("detects conflicts and returns conflict info", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+
+      // Create a feature branch that modifies README.md
+      await git.createBranch(testDir, "feature-conflict");
+      await writeFile(join(testDir, "README.md"), "# Feature Version\n");
+      await git.commit(testDir, "Modify README on feature");
+
+      // Go back and modify README.md on the original branch too
+      await git.checkoutBranch(testDir, currentBranch);
+      await writeFile(join(testDir, "README.md"), "# Main Version\n");
+      await git.commit(testDir, "Modify README on main");
+
+      // Attempt merge — should conflict
+      const result = await git.mergeWithConflictDetection(testDir, "feature-conflict");
+      expect(result.success).toBe(false);
+      expect(result.alreadyUpToDate).toBe(false);
+      expect(result.hasConflicts).toBe(true);
+      expect(result.conflictedFiles).toBeDefined();
+      expect(result.conflictedFiles).toContain("README.md");
+    });
+
+    test("uses custom merge commit message when provided", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+
+      await git.createBranch(testDir, "feature-msg");
+      await writeFile(join(testDir, "msg-file.txt"), "content\n");
+      await git.commit(testDir, "Add file on feature");
+
+      await git.checkoutBranch(testDir, currentBranch);
+
+      const result = await git.mergeWithConflictDetection(
+        testDir,
+        "feature-msg",
+        "Custom merge message"
+      );
+      expect(result.success).toBe(true);
+
+      // Verify the merge commit message
+      const logMsg = (await Bun.$`git -C ${testDir} log -1 --format=%s`.text()).trim();
+      expect(logMsg).toBe("Custom merge message");
+    });
+  });
+
+  describe("abortMerge", () => {
+    test("aborts a conflicted merge and restores clean state", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+
+      // Set up a conflict
+      await git.createBranch(testDir, "conflict-abort");
+      await writeFile(join(testDir, "README.md"), "# Conflict Branch\n");
+      await git.commit(testDir, "Change README on conflict branch");
+
+      await git.checkoutBranch(testDir, currentBranch);
+      await writeFile(join(testDir, "README.md"), "# Original Branch\n");
+      await git.commit(testDir, "Change README on original");
+
+      // Merge to create conflict
+      const mergeResult = await git.mergeWithConflictDetection(testDir, "conflict-abort");
+      expect(mergeResult.hasConflicts).toBe(true);
+
+      // Abort the merge
+      await git.abortMerge(testDir);
+
+      // Verify working tree is clean
+      const hasChanges = await git.hasUncommittedChanges(testDir);
+      expect(hasChanges).toBe(false);
+
+      // Verify we're still on the original branch
+      const branch = await git.getCurrentBranch(testDir);
+      expect(branch).toBe(currentBranch);
+
+      // Verify README has the original branch content
+      const content = await Bun.file(join(testDir, "README.md")).text();
+      expect(content).toBe("# Original Branch\n");
+    });
+
+    test("throws when no merge is in progress", async () => {
+      await expect(git.abortMerge(testDir)).rejects.toThrow();
+    });
+  });
+
+  describe("getConflictedFiles", () => {
+    test("returns empty array when no conflicts", async () => {
+      const files = await git.getConflictedFiles(testDir);
+      expect(files).toEqual([]);
+    });
+
+    test("lists conflicted files during a merge conflict", async () => {
+      const currentBranch = await git.getCurrentBranch(testDir);
+
+      // Create conflicts in multiple files
+      await writeFile(join(testDir, "file-a.txt"), "original a\n");
+      await writeFile(join(testDir, "file-b.txt"), "original b\n");
+      await git.commit(testDir, "Add original files");
+
+      await git.createBranch(testDir, "conflict-files");
+      await writeFile(join(testDir, "file-a.txt"), "conflict branch a\n");
+      await writeFile(join(testDir, "file-b.txt"), "conflict branch b\n");
+      await git.commit(testDir, "Modify files on conflict branch");
+
+      await git.checkoutBranch(testDir, currentBranch);
+      await writeFile(join(testDir, "file-a.txt"), "main branch a\n");
+      await writeFile(join(testDir, "file-b.txt"), "main branch b\n");
+      await git.commit(testDir, "Modify files on main");
+
+      // Trigger merge conflict
+      await git.mergeWithConflictDetection(testDir, "conflict-files");
+
+      // Get conflicted files
+      const conflictedFiles = await git.getConflictedFiles(testDir);
+      expect(conflictedFiles).toContain("file-a.txt");
+      expect(conflictedFiles).toContain("file-b.txt");
+      expect(conflictedFiles.length).toBe(2);
+
+      // Clean up: abort the merge
+      await git.abortMerge(testDir);
+    });
+  });
 });

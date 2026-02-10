@@ -97,6 +97,24 @@ export interface StashOptions {
 }
 
 /**
+ * Result of a merge attempt with conflict detection.
+ */
+export interface MergeAttemptResult {
+  /** Whether the merge was successful (no conflicts) */
+  success: boolean;
+  /** Whether the branches were already up to date (no merge needed) */
+  alreadyUpToDate: boolean;
+  /** Whether there were merge conflicts */
+  hasConflicts: boolean;
+  /** The merge commit SHA (if successful) */
+  mergeCommitSha?: string;
+  /** List of files with conflicts (if any) */
+  conflictedFiles?: string[];
+  /** Raw stderr output from the merge command */
+  stderr?: string;
+}
+
+/**
  * File diff information.
  */
 export interface FileDiff {
@@ -719,6 +737,174 @@ export class GitService {
     }
 
     return `${remote}/${branchName}`;
+  }
+
+  /**
+   * Fetch a specific branch from the remote without merging.
+   * Unlike `pull()` which also merges, this only updates the remote tracking ref.
+   * Useful when you need to merge manually (e.g., in a worktree).
+   * 
+   * @param directory - The git repository directory (fetch from main repo, shared object store)
+   * @param branchName - The branch to fetch
+   * @param remote - The remote name (default: "origin")
+   * @returns true if fetch succeeded, false if skipped (no remote, branch doesn't exist)
+   */
+  async fetchBranch(
+    directory: string,
+    branchName: string,
+    remote = "origin"
+  ): Promise<boolean> {
+    // Check if the remote exists
+    const remoteResult = await this.runGitCommand(directory, ["remote", "get-url", remote]);
+    if (!remoteResult.success) {
+      log.trace(`[GitService] No remote '${remote}' configured, skipping fetch`);
+      return false;
+    }
+
+    // Fetch the specific branch
+    const fetchResult = await this.runGitCommand(directory, ["fetch", remote, branchName]);
+    if (!fetchResult.success) {
+      if (fetchResult.stderr.includes("couldn't find remote ref") ||
+          fetchResult.stderr.includes("fatal: couldn't find remote ref")) {
+        log.trace(`[GitService] Remote branch '${branchName}' does not exist, skipping fetch`);
+        return false;
+      }
+      log.trace(`[GitService] Fetch failed: ${fetchResult.stderr}`);
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Check if a branch's commits are already an ancestor of another branch.
+   * Used to determine if a merge is needed (i.e., the base branch has new commits).
+   * 
+   * @param directory - The git repository directory
+   * @param ancestorRef - The ref to check as potential ancestor (e.g., "origin/main")
+   * @param descendantRef - The ref to check as potential descendant (e.g., "working-branch")
+   * @returns true if ancestorRef is already an ancestor of descendantRef (no merge needed)
+   */
+  async isAncestor(
+    directory: string,
+    ancestorRef: string,
+    descendantRef: string
+  ): Promise<boolean> {
+    const result = await this.runGitCommand(directory, [
+      "merge-base",
+      "--is-ancestor",
+      ancestorRef,
+      descendantRef,
+    ], { allowFailure: true });
+    return result.success;
+  }
+
+  /**
+   * Attempt to merge a branch into the current HEAD with conflict detection.
+   * Unlike `mergeBranch()`, this method does NOT throw on conflicts — it returns
+   * a result object indicating success or failure. On conflict, the merge is left
+   * in a conflicted state (caller must abort or resolve).
+   * 
+   * @param directory - The git repository/worktree directory
+   * @param sourceBranch - The branch or ref to merge (e.g., "origin/main")
+   * @param message - Optional merge commit message
+   * @returns MergeAttemptResult with conflict info
+   */
+  async mergeWithConflictDetection(
+    directory: string,
+    sourceBranch: string,
+    message?: string
+  ): Promise<MergeAttemptResult> {
+    const args = ["merge", "--no-ff", sourceBranch];
+    if (message) {
+      args.push("-m", message);
+    }
+
+    const result = await this.runGitCommand(directory, args, { allowFailure: true });
+
+    // Check for "already up to date"
+    if (result.success && (
+      result.stdout.toLowerCase().includes("already up to date") ||
+      result.stdout.toLowerCase().includes("already up-to-date")
+    )) {
+      return {
+        success: true,
+        alreadyUpToDate: true,
+        hasConflicts: false,
+      };
+    }
+
+    // Clean merge succeeded
+    if (result.success) {
+      // Get the merge commit SHA
+      const shaResult = await this.runGitCommand(directory, ["rev-parse", "HEAD"]);
+      return {
+        success: true,
+        alreadyUpToDate: false,
+        hasConflicts: false,
+        mergeCommitSha: shaResult.success ? shaResult.stdout.trim() : undefined,
+      };
+    }
+
+    // Merge failed — check if it's due to conflicts
+    const hasConflicts = result.stderr.includes("CONFLICT") ||
+      result.stderr.includes("Automatic merge failed") ||
+      result.stdout.includes("CONFLICT") ||
+      result.stdout.includes("Automatic merge failed");
+
+    if (hasConflicts) {
+      // Get list of conflicted files
+      const conflictedFiles = await this.getConflictedFiles(directory);
+      return {
+        success: false,
+        alreadyUpToDate: false,
+        hasConflicts: true,
+        conflictedFiles,
+        stderr: result.stderr,
+      };
+    }
+
+    // Some other merge failure (not conflicts)
+    return {
+      success: false,
+      alreadyUpToDate: false,
+      hasConflicts: false,
+      stderr: result.stderr,
+    };
+  }
+
+  /**
+   * Abort a merge in progress.
+   * Restores the working tree to the state before the merge attempt.
+   * 
+   * @param directory - The git repository/worktree directory
+   */
+  async abortMerge(directory: string): Promise<void> {
+    const result = await this.runGitCommand(directory, ["merge", "--abort"]);
+    if (!result.success) {
+      throw new Error(`Failed to abort merge: ${result.stderr}`);
+    }
+  }
+
+  /**
+   * Get the list of files with unresolved merge conflicts.
+   * 
+   * @param directory - The git repository/worktree directory
+   * @returns Array of file paths with conflicts, empty if none
+   */
+  async getConflictedFiles(directory: string): Promise<string[]> {
+    // Use git diff --name-only --diff-filter=U to get unmerged files
+    const result = await this.runGitCommand(directory, [
+      "diff",
+      "--name-only",
+      "--diff-filter=U",
+    ], { allowFailure: true });
+
+    if (!result.success || !result.stdout.trim()) {
+      return [];
+    }
+
+    return result.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
   }
 
   /**

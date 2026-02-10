@@ -21,11 +21,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Get latest release version
+        id: latest-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST_TAG=$(gh release view --json tagName -q '.tagName' 2>/dev/null || echo "v0.0.0")
+          LATEST_VERSION="${LATEST_TAG#v}"
+          echo "version=${LATEST_VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Update package.json version
         run: |
           TIMESTAMP=$(date -u +"%Y-%m-%d-%H-%M")
           SHORT_SHA="${GITHUB_SHA::7}"
-          VERSION="0.0.0-main-${TIMESTAMP}-${SHORT_SHA}"
+          VERSION="${{ steps.latest-release.outputs.version }}-main-${TIMESTAMP}-${SHORT_SHA}"
           jq --arg v "$VERSION" '.version = $v' package.json > package.json.tmp && mv package.json.tmp package.json
 
       - name: Set up Docker Buildx
