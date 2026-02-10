@@ -949,210 +949,82 @@ Follow the standard loop execution flow:
       // Determine the base branch to sync with
       const baseBranch = loop.config.baseBranch ?? loop.state.git.originalBranch;
       const worktreePath = loop.state.git.worktreePath ?? loop.config.directory;
+      const workingBranch = loop.state.git.workingBranch;
 
-      // --- Base branch sync ---
-      // Emit sync started event
-      this.emitter.emit({
-        type: "loop.sync.started",
-        loopId,
-        baseBranch,
-        timestamp: createTimestamp(),
-      });
+      // --- Ensure merge strategy is configured ---
+      await git.ensureMergeStrategy(worktreePath);
 
-      // Fetch the latest base branch from origin (fetch from main repo dir,
-      // since worktrees share the same .git object store)
-      log.debug(`[LoopManager] pushLoop: Fetching origin/${baseBranch} for loop ${loopId}`);
-      const fetchSuccess = await git.fetchBranch(loop.config.directory, baseBranch);
+      // --- Working branch sync ---
+      // Before syncing with the base branch, pull any remote changes on the
+      // working branch itself. This handles scenarios where the working branch
+      // was previously pushed and someone (or another process) added commits to it.
+      log.debug(`[LoopManager] pushLoop: Fetching origin/${workingBranch} for loop ${loopId}`);
+      const workingBranchFetchSuccess = await git.fetchBranch(loop.config.directory, workingBranch);
 
-      // If fetch failed (no remote, or branch doesn't exist on remote),
-      // skip sync — there's nothing to merge with. Treat as "already up to date".
-      let alreadyUpToDate: boolean;
-      if (!fetchSuccess) {
-        log.debug(`[LoopManager] pushLoop: Could not fetch origin/${baseBranch}, skipping sync`);
-        alreadyUpToDate = true;
-      } else {
-        // Check if sync is needed: is origin/<baseBranch> already an ancestor of HEAD?
-        alreadyUpToDate = await git.isAncestor(
+      if (workingBranchFetchSuccess) {
+        // Check if the working branch on remote has new commits
+        const workingBranchUpToDate = await git.isAncestor(
           worktreePath,
-          `origin/${baseBranch}`,
+          `origin/${workingBranch}`,
           "HEAD"
         );
-      }
 
-      let syncStatus: "already_up_to_date" | "clean" | "conflicts_being_resolved";
-
-      if (alreadyUpToDate) {
-        // No merge needed — base branch hasn't diverged
-        log.debug(`[LoopManager] pushLoop: Already up to date with origin/${baseBranch}`);
-        syncStatus = "already_up_to_date";
-
-        this.emitter.emit({
-          type: "loop.sync.clean",
-          loopId,
-          baseBranch,
-          timestamp: createTimestamp(),
-        });
-      } else {
-        // Attempt to merge origin/<baseBranch> into the working branch (in worktree)
-        log.debug(`[LoopManager] pushLoop: Merging origin/${baseBranch} into working branch for loop ${loopId}`);
-        const mergeResult = await git.mergeWithConflictDetection(
-          worktreePath,
-          `origin/${baseBranch}`,
-          `Merge origin/${baseBranch} into ${loop.state.git.workingBranch}`
-        );
-
-        if (mergeResult.success) {
-          // Clean merge — proceed to push
-          log.debug(`[LoopManager] pushLoop: Clean merge with origin/${baseBranch}`);
-          syncStatus = "clean";
-
-          this.emitter.emit({
-            type: "loop.sync.clean",
-            loopId,
-            baseBranch,
-            timestamp: createTimestamp(),
-          });
-        } else if (mergeResult.hasConflicts) {
-          // Conflicts detected — abort merge, restart engine to resolve
-          const conflictedFiles = mergeResult.conflictedFiles ?? [];
-          log.debug(`[LoopManager] pushLoop: Merge conflicts detected with origin/${baseBranch}: ${conflictedFiles.join(", ")}`);
-
-          // Abort the failed merge attempt
-          await git.abortMerge(worktreePath);
-
-          // Emit conflicts event
-          this.emitter.emit({
-            type: "loop.sync.conflicts",
-            loopId,
-            baseBranch,
-            conflictedFiles,
-            timestamp: createTimestamp(),
-          });
-
-          // Set sync state and update loop status to "resolving_conflicts"
-          loop.state.syncState = {
-            status: "conflicts",
-            baseBranch,
-            autoPushOnComplete: true,
-          };
-          loop.state.status = "resolving_conflicts";
-          loop.state.completedAt = undefined;
-          await updateLoopState(loopId, loop.state);
-
-          // Get a dedicated backend for this loop's conflict resolution
-          const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
-
-          // Construct the conflict resolution prompt
-          const conflictPrompt = this.constructConflictResolutionPrompt(
-            baseBranch,
-            conflictedFiles
+        if (!workingBranchUpToDate) {
+          // Remote working branch has diverged — attempt to merge
+          log.debug(`[LoopManager] pushLoop: Merging origin/${workingBranch} into local working branch for loop ${loopId}`);
+          const workingMergeResult = await git.mergeWithConflictDetection(
+            worktreePath,
+            `origin/${workingBranch}`,
+            `Merge origin/${workingBranch} into ${workingBranch}`
           );
 
-          // Create and start a new loop engine with the conflict resolution prompt
-          // skipGitSetup: true because the worktree already exists
-          const engine = new LoopEngine({
-            loop: { config: loop.config, state: loop.state },
-            backend,
-            gitService: git,
-            eventEmitter: this.emitter,
-            onPersistState: async (state) => {
-              await updateLoopState(loopId, state);
-              // Auto-push when conflict resolution completes successfully
-              if (state.status === "completed" && state.syncState?.autoPushOnComplete) {
-                this.handleConflictResolutionComplete(loopId).catch((error) => {
-                  log.error(`[LoopManager] Auto-push after conflict resolution failed for loop ${loopId}:`, String(error));
-                });
-              }
-              // Clear autoPushOnComplete on failure so we don't retry
-              if ((state.status === "failed" || state.status === "max_iterations") && state.syncState?.autoPushOnComplete) {
-                state.syncState.autoPushOnComplete = false;
-                await updateLoopState(loopId, state);
-              }
-            },
-            skipGitSetup: true,
-          });
-          this.engines.set(loopId, engine);
+          if (workingMergeResult.success) {
+            log.debug(`[LoopManager] pushLoop: Clean merge with origin/${workingBranch}`);
+          } else if (workingMergeResult.hasConflicts) {
+            // Conflicts on working branch — start conflict resolution
+            const conflictedFiles = workingMergeResult.conflictedFiles ?? [];
+            log.debug(`[LoopManager] pushLoop: Working branch merge conflicts detected: ${conflictedFiles.join(", ")}`);
 
-          // Set the conflict resolution prompt as pending
-          engine.setPendingPrompt(conflictPrompt);
+            await git.abortMerge(worktreePath);
 
-          // Start state persistence
-          this.startStatePersistence(loopId);
+            this.emitter.emit({
+              type: "loop.sync.conflicts",
+              loopId,
+              baseBranch,
+              conflictedFiles,
+              timestamp: createTimestamp(),
+            });
 
-          // Start execution (fire and forget — the loop runs asynchronously)
-          // This is acceptable as a fire-and-forget because the conflict resolution engine
-          // is a long-running process that reports progress through events and state persistence.
-          // Error handling is self-contained via onPersistState callbacks.
-          engine.start().catch((error) => {
-            log.error(`Loop ${loopId} failed to start for conflict resolution:`, String(error));
-          });
+            // Set sync state with syncPhase "working_branch" so that after resolution,
+            // we continue with base branch sync before pushing
+            loop.state.syncState = {
+              status: "conflicts",
+              baseBranch,
+              autoPushOnComplete: true,
+              syncPhase: "working_branch",
+            };
+            loop.state.status = "resolving_conflicts";
+            loop.state.completedAt = undefined;
+            await updateLoopState(loopId, loop.state);
 
-          return {
-            success: true,
-            syncStatus: "conflicts_being_resolved",
-          };
-        } else {
-          // Non-conflict merge failure (e.g., missing ref, invalid branch)
-          // Don't try to abort merge or start conflict resolution
-          const errorMsg = mergeResult.stderr || "Unknown merge error";
-          log.error(`[LoopManager] pushLoop: Merge failed (not conflicts) for loop ${loopId}: ${errorMsg}`);
-          return {
-            success: false,
-            error: `Failed to merge origin/${baseBranch}: ${errorMsg}`,
-          };
+            return this.startConflictResolutionEngine(
+              loopId, loop, git, `origin/${workingBranch}`, conflictedFiles
+            );
+          } else {
+            // Non-conflict merge failure
+            const errorMsg = workingMergeResult.stderr || "Unknown merge error";
+            log.error(`[LoopManager] pushLoop: Working branch merge failed for loop ${loopId}: ${errorMsg}`);
+            return {
+              success: false,
+              error: `Failed to merge origin/${workingBranch}: ${errorMsg}`,
+            };
+          }
         }
       }
+      // If fetch failed (branch doesn't exist on remote yet), skip — this is a first push
 
-      // --- Push (clean merge or already up to date) ---
-      // Push the working branch to remote
-      const remoteBranch = await git.pushBranch(
-        loop.config.directory,
-        loop.state.git.workingBranch
-      );
-
-      // DON'T switch back to the original branch - stay on working branch for potential review cycles
-
-      // Initialize or preserve review mode state
-      const reviewMode = loop.state.reviewMode
-        ? {
-            // Preserve existing review mode, just update addressable and completionAction
-            ...loop.state.reviewMode,
-            addressable: true,
-            completionAction: "push" as const,
-          }
-        : {
-            // First time pushing - initialize review mode
-            addressable: true,
-            completionAction: "push" as const,
-            reviewCycles: 0,
-            reviewBranches: [loop.state.git.workingBranch],
-          };
-
-      // Update status to 'pushed' with review mode enabled
-      // Clear syncState since sync completed successfully
-      const updatedState = {
-        ...loop.state,
-        status: "pushed" as const,
-        reviewMode,
-        syncState: undefined,
-      };
-      await updateLoopState(loopId, updatedState);
-
-      // Clean up the dedicated backend connection for this loop
-      await backendManager.disconnectLoop(loopId);
-
-      // Remove engine from in-memory map so getLoop returns persisted state
-      this.engines.delete(loopId);
-
-      // Emit event
-      this.emitter.emit({
-        type: "loop.pushed",
-        loopId,
-        remoteBranch,
-        timestamp: createTimestamp(),
-      });
-
-      return { success: true, remoteBranch, syncStatus };
+      // --- Base branch sync + push ---
+      return await this.syncBaseBranchAndPush(loopId, loop, git);
     } catch (error) {
       return { success: false, error: String(error) };
     } finally {
@@ -1163,12 +1035,256 @@ Follow the standard loop execution flow:
   }
 
   /**
+   * Sync with the base branch and push the working branch.
+   * Extracted as a separate method so it can be called both from pushLoop()
+   * and from handleConflictResolutionComplete() after working branch conflicts are resolved.
+   */
+  private async syncBaseBranchAndPush(
+    loopId: string,
+    loop: { config: LoopConfig; state: LoopState },
+    git: GitService
+  ): Promise<PushLoopResult> {
+    const baseBranch = loop.config.baseBranch ?? loop.state.git!.originalBranch;
+    const worktreePath = loop.state.git!.worktreePath ?? loop.config.directory;
+
+    // Emit sync started event
+    this.emitter.emit({
+      type: "loop.sync.started",
+      loopId,
+      baseBranch,
+      timestamp: createTimestamp(),
+    });
+
+    // Fetch the latest base branch from origin (fetch from main repo dir,
+    // since worktrees share the same .git object store)
+    log.debug(`[LoopManager] syncBaseBranchAndPush: Fetching origin/${baseBranch} for loop ${loopId}`);
+    const fetchSuccess = await git.fetchBranch(loop.config.directory, baseBranch);
+
+    // If fetch failed (no remote, or branch doesn't exist on remote),
+    // skip sync — there's nothing to merge with. Treat as "already up to date".
+    let alreadyUpToDate: boolean;
+    if (!fetchSuccess) {
+      log.debug(`[LoopManager] syncBaseBranchAndPush: Could not fetch origin/${baseBranch}, skipping sync`);
+      alreadyUpToDate = true;
+    } else {
+      // Check if sync is needed: is origin/<baseBranch> already an ancestor of HEAD?
+      alreadyUpToDate = await git.isAncestor(
+        worktreePath,
+        `origin/${baseBranch}`,
+        "HEAD"
+      );
+    }
+
+    let syncStatus: "already_up_to_date" | "clean" | "conflicts_being_resolved";
+
+    if (alreadyUpToDate) {
+      // No merge needed — base branch hasn't diverged
+      log.debug(`[LoopManager] syncBaseBranchAndPush: Already up to date with origin/${baseBranch}`);
+      syncStatus = "already_up_to_date";
+
+      this.emitter.emit({
+        type: "loop.sync.clean",
+        loopId,
+        baseBranch,
+        timestamp: createTimestamp(),
+      });
+    } else {
+      // Attempt to merge origin/<baseBranch> into the working branch (in worktree)
+      log.debug(`[LoopManager] syncBaseBranchAndPush: Merging origin/${baseBranch} into working branch for loop ${loopId}`);
+      const mergeResult = await git.mergeWithConflictDetection(
+        worktreePath,
+        `origin/${baseBranch}`,
+        `Merge origin/${baseBranch} into ${loop.state.git!.workingBranch}`
+      );
+
+      if (mergeResult.success) {
+        // Clean merge — proceed to push
+        log.debug(`[LoopManager] syncBaseBranchAndPush: Clean merge with origin/${baseBranch}`);
+        syncStatus = "clean";
+
+        this.emitter.emit({
+          type: "loop.sync.clean",
+          loopId,
+          baseBranch,
+          timestamp: createTimestamp(),
+        });
+      } else if (mergeResult.hasConflicts) {
+        // Conflicts detected — abort merge, restart engine to resolve
+        const conflictedFiles = mergeResult.conflictedFiles ?? [];
+        log.debug(`[LoopManager] syncBaseBranchAndPush: Merge conflicts detected with origin/${baseBranch}: ${conflictedFiles.join(", ")}`);
+
+        // Abort the failed merge attempt
+        await git.abortMerge(worktreePath);
+
+        // Emit conflicts event
+        this.emitter.emit({
+          type: "loop.sync.conflicts",
+          loopId,
+          baseBranch,
+          conflictedFiles,
+          timestamp: createTimestamp(),
+        });
+
+        // Set sync state and update loop status to "resolving_conflicts"
+        loop.state.syncState = {
+          status: "conflicts",
+          baseBranch,
+          autoPushOnComplete: true,
+          syncPhase: "base_branch",
+        };
+        loop.state.status = "resolving_conflicts";
+        loop.state.completedAt = undefined;
+        await updateLoopState(loopId, loop.state);
+
+        return this.startConflictResolutionEngine(
+          loopId, loop, git, `origin/${baseBranch}`, conflictedFiles
+        );
+      } else {
+        // Non-conflict merge failure (e.g., missing ref, invalid branch)
+        // Don't try to abort merge or start conflict resolution
+        const errorMsg = mergeResult.stderr || "Unknown merge error";
+        log.error(`[LoopManager] syncBaseBranchAndPush: Merge failed (not conflicts) for loop ${loopId}: ${errorMsg}`);
+        return {
+          success: false,
+          error: `Failed to merge origin/${baseBranch}: ${errorMsg}`,
+        };
+      }
+    }
+
+    // --- Push (clean merge or already up to date) ---
+    // Push the working branch to remote
+    const remoteBranch = await git.pushBranch(
+      loop.config.directory,
+      loop.state.git!.workingBranch
+    );
+
+    // DON'T switch back to the original branch - stay on working branch for potential review cycles
+
+    // Initialize or preserve review mode state
+    const reviewMode = loop.state.reviewMode
+      ? {
+          // Preserve existing review mode, just update addressable and completionAction
+          ...loop.state.reviewMode,
+          addressable: true,
+          completionAction: "push" as const,
+        }
+      : {
+          // First time pushing - initialize review mode
+          addressable: true,
+          completionAction: "push" as const,
+          reviewCycles: 0,
+          reviewBranches: [loop.state.git!.workingBranch],
+        };
+
+    // Update status to 'pushed' with review mode enabled
+    // Clear syncState since sync completed successfully
+    const updatedState = {
+      ...loop.state,
+      status: "pushed" as const,
+      reviewMode,
+      syncState: undefined,
+    };
+    await updateLoopState(loopId, updatedState);
+
+    // Clean up the dedicated backend connection for this loop
+    await backendManager.disconnectLoop(loopId);
+
+    // Remove engine from in-memory map so getLoop returns persisted state
+    this.engines.delete(loopId);
+
+    // Emit event
+    this.emitter.emit({
+      type: "loop.pushed",
+      loopId,
+      remoteBranch,
+      timestamp: createTimestamp(),
+    });
+
+    return { success: true, remoteBranch, syncStatus };
+  }
+
+  /**
+   * Start a conflict resolution engine for resolving merge conflicts.
+   * Used by both working branch sync and base branch sync.
+   * 
+   * @param loopId - The loop ID
+   * @param loop - The loop config and state
+   * @param git - The GitService instance
+   * @param sourceBranch - The full ref being merged (e.g., "origin/main" or "origin/ralph/loop-id")
+   * @param conflictedFiles - List of files with conflicts
+   * @returns PushLoopResult indicating conflicts are being resolved
+   */
+  private startConflictResolutionEngine(
+    loopId: string,
+    loop: { config: LoopConfig; state: LoopState },
+    git: GitService,
+    sourceBranch: string,
+    conflictedFiles: string[]
+  ): PushLoopResult {
+    // Get a dedicated backend for this loop's conflict resolution
+    const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
+
+    // Construct the conflict resolution prompt
+    const conflictPrompt = this.constructConflictResolutionPrompt(
+      sourceBranch,
+      conflictedFiles
+    );
+
+    // Create and start a new loop engine with the conflict resolution prompt
+    // skipGitSetup: true because the worktree already exists
+    const engine = new LoopEngine({
+      loop: { config: loop.config, state: loop.state },
+      backend,
+      gitService: git,
+      eventEmitter: this.emitter,
+      onPersistState: async (state) => {
+        await updateLoopState(loopId, state);
+        // Auto-push when conflict resolution completes successfully
+        if (state.status === "completed" && state.syncState?.autoPushOnComplete) {
+          this.handleConflictResolutionComplete(loopId).catch((error) => {
+            log.error(`[LoopManager] Auto-push after conflict resolution failed for loop ${loopId}:`, String(error));
+          });
+        }
+        // Clear autoPushOnComplete on failure so we don't retry
+        if ((state.status === "failed" || state.status === "max_iterations") && state.syncState?.autoPushOnComplete) {
+          state.syncState.autoPushOnComplete = false;
+          await updateLoopState(loopId, state);
+        }
+      },
+      skipGitSetup: true,
+    });
+    this.engines.set(loopId, engine);
+
+    // Set the conflict resolution prompt as pending
+    engine.setPendingPrompt(conflictPrompt);
+
+    // Start state persistence
+    this.startStatePersistence(loopId);
+
+    // Start execution (fire and forget — the loop runs asynchronously)
+    // This is acceptable as a fire-and-forget because the conflict resolution engine
+    // is a long-running process that reports progress through events and state persistence.
+    // Error handling is self-contained via onPersistState callbacks.
+    engine.start().catch((error) => {
+      log.error(`Loop ${loopId} failed to start for conflict resolution:`, String(error));
+    });
+
+    return {
+      success: true,
+      syncStatus: "conflicts_being_resolved",
+    };
+  }
+
+  /**
    * Handle auto-push after conflict resolution completes successfully.
    * Called from the onPersistState callback when the conflict resolution engine
    * reaches "completed" status with autoPushOnComplete set.
+   * 
+   * If the resolved conflicts were from the working branch (syncPhase === "working_branch"),
+   * continues with base branch sync before pushing. If from the base branch, pushes directly.
    */
   private async handleConflictResolutionComplete(loopId: string): Promise<void> {
-    log.debug(`[LoopManager] handleConflictResolutionComplete: Auto-pushing loop ${loopId}`);
+    log.debug(`[LoopManager] handleConflictResolutionComplete: Processing loop ${loopId}`);
 
     // Remove engine from in-memory map FIRST to prevent the periodic
     // startStatePersistence interval from overwriting our "pushed" state
@@ -1189,6 +1305,32 @@ Follow the standard loop execution flow:
     try {
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const git = GitService.withExecutor(executor);
+
+      // Check if we just resolved working branch conflicts — if so, continue with base branch sync
+      if (loop.state.syncState?.syncPhase === "working_branch") {
+        log.debug(`[LoopManager] handleConflictResolutionComplete: Working branch conflicts resolved, continuing with base branch sync for loop ${loopId}`);
+
+        // Transition syncPhase to "base_branch" instead of clearing syncState.
+        // This ensures the catch block can still access syncState if syncBaseBranchAndPush() throws
+        // (e.g., pushBranch() failure). syncState is cleared on success paths below.
+        loop.state.syncState.syncPhase = "base_branch";
+        await updateLoopState(loopId, loop.state);
+
+        // Continue with base branch sync + push
+        const result = await this.syncBaseBranchAndPush(loopId, loop, git);
+        if (!result.success && result.error) {
+          log.error(`[LoopManager] handleConflictResolutionComplete: Base branch sync failed for loop ${loopId}: ${result.error}`);
+        } else if (result.syncStatus === "conflicts_being_resolved") {
+          // Base branch also has conflicts — a new conflict resolution engine has been started
+          log.debug(`[LoopManager] handleConflictResolutionComplete: Base branch also has conflicts for loop ${loopId}, new resolution started`);
+        } else {
+          log.info(`[LoopManager] handleConflictResolutionComplete: Successfully synced and pushed loop ${loopId} to ${result.remoteBranch}`);
+        }
+        return;
+      }
+
+      // Base branch conflicts resolved (or no syncPhase set) — push directly
+      log.debug(`[LoopManager] handleConflictResolutionComplete: Auto-pushing loop ${loopId}`);
 
       // Push the working branch to remote
       const remoteBranch = await git.pushBranch(
@@ -2056,19 +2198,22 @@ Instructions:
   }
 
   /**
-   * Construct a specialized prompt for resolving merge conflicts with the base branch.
-   * Used when pushing a loop and the base branch has diverged with conflicting changes.
+   * Construct a specialized prompt for resolving merge conflicts.
+   * Used when pushing a loop and there are conflicting changes that need resolution.
+   * 
+   * @param sourceBranch - The branch or ref being merged (e.g., "origin/main" or "origin/ralph/loop-id")
+   * @param conflictedFiles - List of files with conflicts
    */
   private constructConflictResolutionPrompt(
-    baseBranch: string,
+    sourceBranch: string,
     conflictedFiles: string[]
   ): string {
     const fileList = conflictedFiles.map(f => `- ${f}`).join("\n");
-    return `The base branch (origin/${baseBranch}) has diverged from your working branch and there are merge conflicts that need to be resolved before pushing.
+    return `The branch (${sourceBranch}) has diverged from your working branch and there are merge conflicts that need to be resolved before pushing.
 
-Merge the base branch and resolve all conflicts:
+Merge the branch and resolve all conflicts:
 
-1. Run: git merge origin/${baseBranch}
+1. Run: git merge ${sourceBranch}
 2. The following files have conflicts:
 ${fileList}
 3. For each conflicted file:
