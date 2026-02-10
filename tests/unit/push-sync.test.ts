@@ -157,12 +157,15 @@ describe("Push with Base Branch Sync", () => {
 
   describe("conflict resolution", () => {
     test("starts conflict resolution engine when merge conflicts exist", async () => {
+      // Mock responses consumed in order:
+      // Index 0: sendPrompt (name generation) → COMPLETE name
+      // Index 1: subscribeToEvents (initial loop iteration) → COMPLETE
+      // Index 2: subscribeToEvents (conflict resolution iteration) → COMPLETE
       const ctx = await setupTestContext({
         initGit: true,
         initialFiles: { "test.txt": "Initial content" },
-        // The mock backend needs to respond twice: once for the initial loop,
-        // once for the conflict resolution engine
         mockResponses: [
+          "<promise>COMPLETE</promise>",
           "<promise>COMPLETE</promise>",
           "<promise>COMPLETE</promise>",
         ],
@@ -231,12 +234,16 @@ describe("Push with Base Branch Sync", () => {
     });
 
     test("does not auto-push when conflict resolution fails", async () => {
+      // Mock responses consumed in order:
+      // Index 0: sendPrompt (name generation) → COMPLETE name
+      // Index 1: subscribeToEvents (initial loop iteration) → COMPLETE
+      // Index 2: subscribeToEvents (conflict resolution iteration) → ERROR
+      // With maxConsecutiveErrors: 1, a single error triggers failsafe → "failed" status
       const ctx = await setupTestContext({
         initGit: true,
         initialFiles: { "test.txt": "Initial content" },
-        // First response: complete the initial loop
-        // Second response: ERROR to fail the conflict resolution
         mockResponses: [
+          "<promise>COMPLETE</promise>",
           "<promise>COMPLETE</promise>",
           "ERROR:Failed to resolve conflicts",
         ],
@@ -251,6 +258,7 @@ describe("Push with Base Branch Sync", () => {
           prompt: "Modify test.txt",
           planMode: false,
           workspaceId: testWorkspaceId,
+          maxConsecutiveErrors: 1,
         });
 
         await ctx.manager.startLoop(loop.config.id);
@@ -340,13 +348,16 @@ describe("Push with Base Branch Sync", () => {
     });
 
     test("syncState is cleared when jumpstarting a loop", async () => {
+      // Mock responses consumed in order:
+      // Index 0: sendPrompt (name generation) → COMPLETE name
+      // Index 1: subscribeToEvents (initial loop iteration) → COMPLETE
+      // Index 2: subscribeToEvents (conflict resolution iteration) → ERROR (fails with maxConsecutiveErrors: 1)
+      // Index 3: subscribeToEvents (jumpstarted loop iteration) → COMPLETE
       const ctx = await setupTestContext({
         initGit: true,
         initialFiles: { "test.txt": "Initial content" },
-        // First response: complete the initial loop
-        // Second response: ERROR to fail the conflict resolution
-        // Third response: complete the jumpstarted loop
         mockResponses: [
+          "<promise>COMPLETE</promise>",
           "<promise>COMPLETE</promise>",
           "ERROR:Failed to resolve conflicts",
           "<promise>COMPLETE</promise>",
@@ -362,6 +373,7 @@ describe("Push with Base Branch Sync", () => {
           prompt: "Modify test.txt",
           planMode: false,
           workspaceId: testWorkspaceId,
+          maxConsecutiveErrors: 1,
         });
 
         await ctx.manager.startLoop(loop.config.id);

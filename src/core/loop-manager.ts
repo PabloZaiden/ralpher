@@ -962,14 +962,22 @@ Follow the standard loop execution flow:
       // Fetch the latest base branch from origin (fetch from main repo dir,
       // since worktrees share the same .git object store)
       log.debug(`[LoopManager] pushLoop: Fetching origin/${baseBranch} for loop ${loopId}`);
-      await git.fetchBranch(loop.config.directory, baseBranch);
+      const fetchSuccess = await git.fetchBranch(loop.config.directory, baseBranch);
 
-      // Check if sync is needed: is origin/<baseBranch> already an ancestor of HEAD?
-      const alreadyUpToDate = await git.isAncestor(
-        worktreePath,
-        `origin/${baseBranch}`,
-        "HEAD"
-      );
+      // If fetch failed (no remote, or branch doesn't exist on remote),
+      // skip sync — there's nothing to merge with. Treat as "already up to date".
+      let alreadyUpToDate: boolean;
+      if (!fetchSuccess) {
+        log.debug(`[LoopManager] pushLoop: Could not fetch origin/${baseBranch}, skipping sync`);
+        alreadyUpToDate = true;
+      } else {
+        // Check if sync is needed: is origin/<baseBranch> already an ancestor of HEAD?
+        alreadyUpToDate = await git.isAncestor(
+          worktreePath,
+          `origin/${baseBranch}`,
+          "HEAD"
+        );
+      }
 
       let syncStatus: "already_up_to_date" | "clean" | "conflicts_being_resolved";
 

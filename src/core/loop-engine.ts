@@ -880,6 +880,10 @@ export class LoopEngine {
             consecutiveErrors: undefined,
           });
 
+          // Persist immediately so callbacks (e.g., auto-push after conflict resolution)
+          // can act on the completed status without waiting for the periodic persistence interval.
+          await this.triggerPersistence();
+
           // Auto-mark any pending comments as addressed if this is a review cycle
           if (this.loop.state.reviewMode && this.loop.state.reviewMode.reviewCycles > 0) {
             try {
@@ -981,6 +985,9 @@ export class LoopEngine {
               },
             });
 
+            // Persist immediately so callbacks can act on the failed status
+            await this.triggerPersistence();
+
             this.emit({
               type: "loop.error",
               loopId: this.config.id,
@@ -1023,6 +1030,9 @@ export class LoopEngine {
             status: "max_iterations",
             completedAt: createTimestamp(),
           });
+
+          // Persist immediately so callbacks can act on the max_iterations status
+          await this.triggerPersistence();
 
           this.emit({
             type: "loop.stopped",
