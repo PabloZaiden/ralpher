@@ -593,23 +593,53 @@ describe("Push with Working Branch Sync", () => {
 });
 
 describe("Merge Strategy Configuration", () => {
+  // Isolate tests from global/system git config to ensure hermeticity.
+  // Without this, machines with pull.rebase set globally would cause the
+  // "not configured" assertion to fail since `git config pull.rebase`
+  // reads global/system config too. We set these on process.env so that
+  // child processes spawned by TestCommandExecutor (which inherits env)
+  // are also isolated.
+  let savedGlobal: string | undefined;
+  let savedSystem: string | undefined;
+
+  function isolateGitConfig() {
+    savedGlobal = process.env["GIT_CONFIG_GLOBAL"];
+    savedSystem = process.env["GIT_CONFIG_SYSTEM"];
+    process.env["GIT_CONFIG_GLOBAL"] = "/dev/null";
+    process.env["GIT_CONFIG_SYSTEM"] = "/dev/null";
+  }
+
+  function restoreGitConfig() {
+    if (savedGlobal === undefined) {
+      delete process.env["GIT_CONFIG_GLOBAL"];
+    } else {
+      process.env["GIT_CONFIG_GLOBAL"] = savedGlobal;
+    }
+    if (savedSystem === undefined) {
+      delete process.env["GIT_CONFIG_SYSTEM"];
+    } else {
+      process.env["GIT_CONFIG_SYSTEM"] = savedSystem;
+    }
+  }
+
   test("ensureMergeStrategy sets pull.rebase false when not configured", async () => {
     const ctx = await setupTestContext({
       initGit: true,
       initialFiles: { "test.txt": "Initial content" },
     });
 
+    isolateGitConfig();
     try {
       const { GitService } = await import("../../src/core/git-service");
       const { TestCommandExecutor } = await import("../mocks/mock-executor");
       const executor = new TestCommandExecutor();
       const git = GitService.withExecutor(executor);
 
-      // Ensure pull.rebase is NOT configured initially
-      // (unset it explicitly in case the test environment has it set)
-      await Bun.$`git -C ${ctx.workDir} config --unset pull.rebase`.quiet().nothrow();
+      // Ensure pull.rebase is NOT configured locally
+      // (unset it explicitly in case the test environment has it set locally)
+      await Bun.$`git -C ${ctx.workDir} config --local --unset pull.rebase`.quiet().nothrow();
 
-      // Verify it's not set
+      // Verify it's not set (with global/system isolated, only local matters)
       const checkBefore = await Bun.$`git -C ${ctx.workDir} config pull.rebase`.quiet().nothrow();
       expect(checkBefore.exitCode).not.toBe(0);
 
@@ -618,7 +648,7 @@ describe("Merge Strategy Configuration", () => {
       expect(result).toBe(true);
 
       // Verify pull.rebase is now set to false
-      const checkAfter = (await Bun.$`git -C ${ctx.workDir} config pull.rebase`.text()).trim();
+      const checkAfter = (await Bun.$`git -C ${ctx.workDir} config --local pull.rebase`.text()).trim();
       expect(checkAfter).toBe("false");
 
       // Call again — should be a no-op and still return true
@@ -626,9 +656,10 @@ describe("Merge Strategy Configuration", () => {
       expect(result2).toBe(true);
 
       // Verify it's still false (wasn't changed)
-      const checkFinal = (await Bun.$`git -C ${ctx.workDir} config pull.rebase`.text()).trim();
+      const checkFinal = (await Bun.$`git -C ${ctx.workDir} config --local pull.rebase`.text()).trim();
       expect(checkFinal).toBe("false");
     } finally {
+      restoreGitConfig();
       await teardownTestContext(ctx);
     }
   });
@@ -639,23 +670,25 @@ describe("Merge Strategy Configuration", () => {
       initialFiles: { "test.txt": "Initial content" },
     });
 
+    isolateGitConfig();
     try {
       const { GitService } = await import("../../src/core/git-service");
       const { TestCommandExecutor } = await import("../mocks/mock-executor");
       const executor = new TestCommandExecutor();
       const git = GitService.withExecutor(executor);
 
-      // Set pull.rebase to true explicitly
-      await Bun.$`git -C ${ctx.workDir} config pull.rebase true`.quiet();
+      // Set pull.rebase to true explicitly (local config)
+      await Bun.$`git -C ${ctx.workDir} config --local pull.rebase true`.quiet();
 
       // Call ensureMergeStrategy — should not overwrite the existing value
       const result = await git.ensureMergeStrategy(ctx.workDir);
       expect(result).toBe(true);
 
       // Verify it's still true (not changed to false)
-      const checkAfter = (await Bun.$`git -C ${ctx.workDir} config pull.rebase`.text()).trim();
+      const checkAfter = (await Bun.$`git -C ${ctx.workDir} config --local pull.rebase`.text()).trim();
       expect(checkAfter).toBe("true");
     } finally {
+      restoreGitConfig();
       await teardownTestContext(ctx);
     }
   });

@@ -1310,8 +1310,10 @@ Follow the standard loop execution flow:
       if (loop.state.syncState?.syncPhase === "working_branch") {
         log.debug(`[LoopManager] handleConflictResolutionComplete: Working branch conflicts resolved, continuing with base branch sync for loop ${loopId}`);
 
-        // Clear syncState before continuing — syncBaseBranchAndPush will set its own if needed
-        loop.state.syncState = undefined;
+        // Transition syncPhase to "base_branch" instead of clearing syncState.
+        // This ensures the catch block can still access syncState if syncBaseBranchAndPush() throws
+        // (e.g., pushBranch() failure). syncState is cleared on success paths below.
+        loop.state.syncState.syncPhase = "base_branch";
         await updateLoopState(loopId, loop.state);
 
         // Continue with base branch sync + push
