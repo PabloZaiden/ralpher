@@ -19,48 +19,16 @@
  */
 
 import { Logger, type ILogObj } from "tslog";
+import {
+  type LogLevelName,
+  LOG_LEVELS,
+  VALID_LOG_LEVELS,
+  LOG_LEVEL_NAMES,
+  DEFAULT_LOG_LEVEL,
+} from "../utils/log-levels";
 
-/**
- * Valid log level name type.
- */
-export type LogLevelName = "silly" | "trace" | "debug" | "info" | "warn" | "error" | "fatal";
-
-/**
- * Map of log level names to their numeric values.
- */
-export const LOG_LEVELS: Record<LogLevelName, number> = {
-  silly: 0,
-  trace: 1,
-  debug: 2,
-  info: 3,
-  warn: 4,
-  error: 5,
-  fatal: 6,
-};
-
-/**
- * Array of valid log level names.
- * Single source of truth for log level validation.
- */
-export const VALID_LOG_LEVELS: LogLevelName[] = Object.keys(LOG_LEVELS) as LogLevelName[];
-
-/**
- * Map of numeric values to log level names.
- */
-export const LOG_LEVEL_NAMES: Record<number, LogLevelName> = {
-  0: "silly",
-  1: "trace",
-  2: "debug",
-  3: "info",
-  4: "warn",
-  5: "error",
-  6: "fatal",
-};
-
-/**
- * Default log level when no preference or environment variable is set.
- */
-export const DEFAULT_LOG_LEVEL: LogLevelName = "info";
+// Re-export shared constants so existing consumers don't need to change their imports
+export { type LogLevelName, LOG_LEVELS, VALID_LOG_LEVELS, LOG_LEVEL_NAMES, DEFAULT_LOG_LEVEL };
 
 /**
  * Get the initial log level from environment variable.
@@ -87,16 +55,41 @@ export const log: Logger<ILogObj> = new Logger({
 });
 
 /**
+ * Registry of all sub-loggers for level synchronization.
+ * Using a Map keyed by name ensures:
+ * 1. No duplicate loggers for the same name (prevents memory leaks from repeated calls)
+ * 2. Efficient lookup when the same logger is requested multiple times
+ * 3. All registered sub-loggers can be updated when setLogLevel() is called
+ */
+const subLoggers: Map<string, Logger<ILogObj>> = new Map();
+
+/**
  * Create a child logger with a specific name.
  * Useful for module-specific logging.
+ *
+ * Sub-loggers are cached by name - calling createLogger with the same name
+ * returns the same instance. The sub-logger is registered so that its log
+ * level can be synchronized when setLogLevel() is called (tslog sub-loggers
+ * don't automatically inherit level changes from the parent).
+ *
+ * @param name - The name for the sub-logger (e.g., "api:loops", "core:engine")
+ * @returns A Logger instance for the given name (cached)
  */
 export function createLogger(name: string): Logger<ILogObj> {
-  return log.getSubLogger({ name });
+  const existing = subLoggers.get(name);
+  if (existing) {
+    return existing;
+  }
+
+  const subLogger = log.getSubLogger({ name });
+  subLoggers.set(name, subLogger);
+  return subLogger;
 }
 
 /**
  * Set the log level at runtime.
  * Updates the logger's minLevel setting dynamically.
+ * Also updates all registered sub-loggers to keep them in sync.
  * 
  * @param level - The log level name (silly, trace, debug, info, warn, error, fatal)
  */
@@ -104,7 +97,17 @@ export function setLogLevel(level: LogLevelName): void {
   if (!(level in LOG_LEVELS)) {
     throw new Error(`Invalid log level: ${level}. Valid levels are: ${Object.keys(LOG_LEVELS).join(", ")}`);
   }
-  log.settings.minLevel = LOG_LEVELS[level];
+  const numericLevel = LOG_LEVELS[level];
+
+  // Update parent logger
+  log.settings.minLevel = numericLevel;
+
+  // Update all registered sub-loggers
+  // (tslog sub-loggers copy the parent's minLevel at creation time
+  // and don't automatically sync when the parent's level changes)
+  for (const subLogger of subLoggers.values()) {
+    subLogger.settings.minLevel = numericLevel;
+  }
 }
 
 /**

@@ -31,7 +31,27 @@ import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 import { log } from "./logger";
 import { sanitizeBranchName } from "../utils";
-import { markCommentsAsAddressed } from "../persistence/database";
+import { markCommentsAsAddressed } from "../persistence/review-comments";
+import { assertValidTransition } from "./loop-state-machine";
+
+/**
+ * Maximum number of log entries to persist in loop state.
+ * When exceeded, the oldest entries are evicted to keep memory bounded.
+ * The frontend loads the last 1000 on page refresh, so 5000 provides
+ * ample history while preventing unbounded growth.
+ */
+const MAX_PERSISTED_LOGS = 5000;
+
+/**
+ * Maximum number of messages to persist in loop state.
+ * Messages are larger than logs due to AI response content.
+ */
+const MAX_PERSISTED_MESSAGES = 2000;
+
+/**
+ * Maximum number of tool calls to persist in loop state.
+ */
+const MAX_PERSISTED_TOOL_CALLS = 5000;
 
 /**
  * Generate a git-safe branch name from a loop name and timestamp.
@@ -111,20 +131,54 @@ export interface IterationResult {
 }
 
 /**
+ * Mutable context passed through a single iteration.
+ * Groups the per-iteration tracking state that processAgentEvent() and
+ * evaluateOutcome() need to read and write.
+ */
+interface IterationContext {
+  iteration: number;
+  responseContent: string;
+  reasoningContent: string;
+  messageCount: number;
+  toolCallCount: number;
+  outcome: IterationResult["outcome"];
+  error: string | undefined;
+  currentMessageId: string | null;
+  toolCalls: Map<string, { id: string; name: string; input: unknown }>;
+  /** ID of the current streaming response log entry (for delta combining) */
+  currentResponseLogId: string | null;
+  currentResponseLogContent: string;
+  /** ID of the current streaming reasoning log entry (for delta combining) */
+  currentReasoningLogId: string | null;
+  currentReasoningLogContent: string;
+}
+
+/**
  * Stop pattern detector.
  * Checks if the AI response indicates completion.
  */
 export class StopPatternDetector {
-  private pattern: RegExp;
+  private pattern: RegExp | null;
 
   constructor(patternString: string) {
-    this.pattern = new RegExp(patternString);
+    try {
+      this.pattern = new RegExp(patternString);
+    } catch (error) {
+      // Invalid regex pattern — log a warning and disable matching
+      // to prevent ReDoS or runtime crashes from user-supplied patterns.
+      this.pattern = null;
+      console.warn(`Invalid stop pattern regex "${patternString}": ${String(error)}`);
+    }
   }
 
   /**
    * Check if the content matches the stop pattern.
+   * Returns false if the pattern was invalid.
    */
   matches(content: string): boolean {
+    if (!this.pattern) {
+      return false;
+    }
     return this.pattern.test(content);
   }
 }
@@ -620,28 +674,7 @@ export class LoopEngine {
   private async setupGitBranch(_allowPlanningFolderChanges = false): Promise<void> {
     const directory = this.config.directory;
     
-    // Determine branch name: reuse existing workingBranch if present (idempotent),
-    // otherwise generate from the loop name + startedAt timestamp.
-    let branchName: string;
-    if (this.loop.state.git?.workingBranch) {
-      // Branch was already created (e.g., retry, jumpstart, or plan mode setup).
-      // Reuse the authoritative name rather than regenerating from timestamp.
-      branchName = this.loop.state.git.workingBranch;
-    } else {
-      // First-time setup: generate branch name from startedAt.
-      // startedAt must already be set by the caller (engine.start() or startPlanMode()).
-      // If missing, this is a programming error — fail loudly rather than silently
-      // generating a one-off timestamp that can't be reproduced.
-      const startTimestamp = this.loop.state.startedAt;
-      if (!startTimestamp) {
-        throw new Error("Cannot set up git branch: loop.state.startedAt is not set. Ensure startedAt is set before calling setupGitBranch.");
-      }
-      branchName = generateBranchName(
-        this.config.git.branchPrefix,
-        this.config.name,
-        startTimestamp
-      );
-    }
+    const branchName = this.resolveBranchName();
 
     // Check if we're in a git repo
     this.emitLog("debug", "Checking if directory is a git repository", { directory });
@@ -652,20 +685,7 @@ export class LoopEngine {
 
     // No uncommitted-changes check needed — worktrees are isolated from the main checkout
 
-    // Get the original (base) branch
-    // If we already have git state with originalBranch, preserve it
-    // (This handles plan mode where branch setup happens after plan acceptance)
-    let originalBranch: string;
-    if (this.loop.state.git?.originalBranch) {
-      originalBranch = this.loop.state.git.originalBranch;
-      this.emitLog("info", `Preserving existing original branch: ${originalBranch}`);
-    } else if (this.config.baseBranch) {
-      originalBranch = this.config.baseBranch;
-      this.emitLog("info", `Using configured base branch: ${originalBranch}`);
-    } else {
-      originalBranch = await this.git.getCurrentBranch(directory);
-      this.emitLog("info", `Current branch: ${originalBranch}`);
-    }
+    const originalBranch = await this.resolveOriginalBranch(directory);
 
     if (originalBranch.startsWith(this.config.git.branchPrefix) && !this.loop.state.git?.originalBranch) {
       this.emitLog("warn", `Base branch is a working branch (${originalBranch}); preserving base branch but continuing`, {
@@ -683,7 +703,82 @@ export class LoopEngine {
       this.emitLog("debug", `Skipped pull for ${originalBranch} (no remote or upstream configured)`);
     }
 
-    // Compute the worktree path
+    // Set up the worktree (create new, recreate, or reuse existing)
+    const worktreePath = await this.setupWorktree(directory, branchName, originalBranch);
+
+    // Update state with git info including the worktree path
+    this.updateState({
+      git: {
+        originalBranch,
+        workingBranch: branchName,
+        worktreePath,
+        commits: this.loop.state.git?.commits ?? [],
+      },
+    });
+
+    log.trace("[LoopEngine] About to emit 'Git branch setup complete' log");
+    this.emitLog("info", `Git branch setup complete`, { 
+      originalBranch, 
+      workingBranch: branchName,
+      worktreePath,
+    });
+    log.trace("[LoopEngine] Exiting setupGitBranch");
+  }
+
+  /**
+   * Determine the branch name for this loop.
+   * Reuses an existing workingBranch if present (idempotent), otherwise generates
+   * a new name from the loop name + startedAt timestamp.
+   */
+  private resolveBranchName(): string {
+    if (this.loop.state.git?.workingBranch) {
+      // Branch was already created (e.g., retry, jumpstart, or plan mode setup).
+      // Reuse the authoritative name rather than regenerating from timestamp.
+      return this.loop.state.git.workingBranch;
+    }
+
+    // First-time setup: generate branch name from startedAt.
+    // startedAt must already be set by the caller (engine.start() or startPlanMode()).
+    // If missing, this is a programming error — fail loudly rather than silently
+    // generating a one-off timestamp that can't be reproduced.
+    const startTimestamp = this.loop.state.startedAt;
+    if (!startTimestamp) {
+      throw new Error("Cannot set up git branch: loop.state.startedAt is not set. Ensure startedAt is set before calling setupGitBranch.");
+    }
+    return generateBranchName(
+      this.config.git.branchPrefix,
+      this.config.name,
+      startTimestamp
+    );
+  }
+
+  /**
+   * Determine the original (base) branch for this loop.
+   * Preserves an existing originalBranch from state, uses the configured baseBranch,
+   * or falls back to the current branch of the directory.
+   */
+  private async resolveOriginalBranch(directory: string): Promise<string> {
+    if (this.loop.state.git?.originalBranch) {
+      const branch = this.loop.state.git.originalBranch;
+      this.emitLog("info", `Preserving existing original branch: ${branch}`);
+      return branch;
+    }
+    if (this.config.baseBranch) {
+      const branch = this.config.baseBranch;
+      this.emitLog("info", `Using configured base branch: ${branch}`);
+      return branch;
+    }
+    const branch = await this.git.getCurrentBranch(directory);
+    this.emitLog("info", `Current branch: ${branch}`);
+    return branch;
+  }
+
+  /**
+   * Set up the git worktree for this loop.
+   * Creates a new worktree, recreates one for an existing branch, or reuses an existing one.
+   * Returns the worktree path.
+   */
+  private async setupWorktree(directory: string, branchName: string, originalBranch: string): Promise<string> {
     const worktreePath = `${directory}/.ralph-worktrees/${this.config.id}`;
 
     // Check if the working branch already exists
@@ -705,23 +800,7 @@ export class LoopEngine {
       await this.git.createWorktree(directory, worktreePath, branchName, originalBranch);
     }
 
-    // Update state with git info including the worktree path
-    this.updateState({
-      git: {
-        originalBranch,
-        workingBranch: branchName,
-        worktreePath,
-        commits: this.loop.state.git?.commits ?? [],
-      },
-    });
-
-    log.trace("[LoopEngine] About to emit 'Git branch setup complete' log");
-    this.emitLog("info", `Git branch setup complete`, { 
-      originalBranch, 
-      workingBranch: branchName,
-      worktreePath,
-    });
-    log.trace("[LoopEngine] Exiting setupGitBranch");
+    return worktreePath;
   }
 
   /**
@@ -869,177 +948,14 @@ export class LoopEngine {
         const iterationResult = await this.runIteration();
         log.trace("[LoopEngine] runLoop: runIteration completed", { outcome: iterationResult.outcome });
 
-        if (iterationResult.outcome === "complete") {
-          this.emitLog("info", "Stop pattern detected - loop completed successfully", {
-            totalIterations: this.loop.state.currentIteration,
-          });
-          // Clear consecutive error tracker on success
-          this.updateState({
-            status: "completed",
-            completedAt: createTimestamp(),
-            consecutiveErrors: undefined,
-          });
-
-          // Persist immediately so callbacks (e.g., auto-push after conflict resolution)
-          // can act on the completed status without waiting for the periodic persistence interval.
-          await this.triggerPersistence();
-
-          // Auto-mark any pending comments as addressed if this is a review cycle
-          if (this.loop.state.reviewMode && this.loop.state.reviewMode.reviewCycles > 0) {
-            try {
-              const addressedAt = new Date().toISOString();
-              markCommentsAsAddressed(
-                this.config.id,
-                this.loop.state.reviewMode.reviewCycles,
-                addressedAt
-              );
-              log.debug(`Marked comments as addressed for loop ${this.config.id}, cycle ${this.loop.state.reviewMode.reviewCycles}`);
-            } catch (error) {
-              log.error(`Failed to mark comments as addressed: ${String(error)}`);
-            }
-          }
-
-          this.emit({
-            type: "loop.completed",
-            loopId: this.config.id,
-            totalIterations: this.loop.state.currentIteration,
-            timestamp: createTimestamp(),
-          });
+        // Delegate outcome handling — returns true if the loop should exit
+        const shouldExit = await this.handleIterationOutcome(iterationResult);
+        if (shouldExit) {
           return;
-        }
-
-        if (iterationResult.outcome === "plan_ready") {
-          this.emitLog("info", "Plan ready - waiting for user feedback or acceptance", {
-            iteration: this.loop.state.currentIteration,
-          });
-          
-          // Read plan content from .planning/plan.md if possible
-          let planContent: string | undefined;
-          try {
-            const planExecutor = await backendManager.getCommandExecutorAsync(this.config.workspaceId, this.workingDirectory);
-            const planFilePath = `${this.workingDirectory}/.planning/plan.md`;
-            const planFileExists = await planExecutor.fileExists(planFilePath);
-            if (planFileExists) {
-              planContent = await planExecutor.readFile(planFilePath) ?? undefined;
-            }
-          } catch {
-            // Ignore errors reading plan file
-          }
-
-           // Update plan mode state with the plan content, and clear consecutive
-          // error tracker since this iteration succeeded (prevents stale error
-          // context from leaking into subsequent plan feedback prompts).
-          if (this.loop.state.planMode) {
-            log.trace(`[LoopEngine] runLoop: Before updateState, isPlanReady:`, this.loop.state.planMode.isPlanReady);
-            this.updateState({
-              planMode: {
-                ...this.loop.state.planMode,
-                planContent,
-              },
-              consecutiveErrors: undefined,
-            });
-            log.trace(`[LoopEngine] runLoop: After updateState, isPlanReady:`, this.loop.state.planMode?.isPlanReady);
-          } else {
-            // Even without planMode state, clear the error tracker on success
-            this.updateState({ consecutiveErrors: undefined });
-          }
-
-          // Emit plan ready event
-          this.emit({
-            type: "loop.plan.ready",
-            loopId: this.config.id,
-            planContent: planContent ?? iterationResult.responseContent,
-            timestamp: createTimestamp(),
-          });
-          
-          // Exit the loop but stay in "planning" status
-          // The loop will be resumed when user sends feedback or accepts the plan
-          return;
-        }
-
-        if (iterationResult.outcome === "error") {
-          const errorMessage = iterationResult.error ?? "Unknown error";
-          this.emitLog("error", `Iteration failed with error: ${errorMessage}`);
-
-          // Error iterations don't count towards maxIterations - roll back the counter
-          // This treats the error as a retry, not a completed iteration
-          this.updateState({
-            currentIteration: this.loop.state.currentIteration - 1,
-          });
-
-          // Track consecutive identical errors
-          const shouldFailsafe = this.trackConsecutiveError(errorMessage);
-
-          if (shouldFailsafe) {
-            const maxErrors = this.config.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors;
-            this.emitLog("error", `Failsafe exit: ${maxErrors} consecutive identical errors`, {
-              errorMessage,
-            });
-            this.updateState({
-              status: "failed",
-              completedAt: createTimestamp(),
-              error: {
-                message: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
-                iteration: this.loop.state.currentIteration,
-                timestamp: createTimestamp(),
-              },
-            });
-
-            // Persist immediately so callbacks can act on the failed status
-            await this.triggerPersistence();
-
-            this.emit({
-              type: "loop.error",
-              loopId: this.config.id,
-              error: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
-              iteration: this.loop.state.currentIteration,
-              timestamp: createTimestamp(),
-            });
-            return;
-          }
-
-          // Log that we're continuing despite the error (as a retry)
-          this.emitLog("warn", "Error occurred, retrying iteration", {
-            errorMessage,
-            consecutiveErrors: this.loop.state.consecutiveErrors?.count ?? 1,
-            maxConsecutiveErrors: this.config.maxConsecutiveErrors ?? "unlimited",
-          });
-
-          // Emit error event but don't stop
-          this.emit({
-            type: "loop.error",
-            loopId: this.config.id,
-            error: errorMessage,
-            iteration: this.loop.state.currentIteration,
-            timestamp: createTimestamp(),
-          });
-
-          // Continue to retry (next iteration will use same iteration number)
-        } else {
-          // Successful iteration (outcome === "continue") - clear error tracker
-          this.updateState({ consecutiveErrors: undefined });
         }
 
         // Check max iterations
-        if (
-          this.config.maxIterations &&
-          this.loop.state.currentIteration >= this.config.maxIterations
-        ) {
-          this.emitLog("warn", `Reached maximum iterations limit: ${this.config.maxIterations}`);
-          this.updateState({
-            status: "max_iterations",
-            completedAt: createTimestamp(),
-          });
-
-          // Persist immediately so callbacks can act on the max_iterations status
-          await this.triggerPersistence();
-
-          this.emit({
-            type: "loop.stopped",
-            loopId: this.config.id,
-            reason: `Reached maximum iterations: ${this.config.maxIterations}`,
-            timestamp: createTimestamp(),
-          });
+        if (await this.hasReachedMaxIterations()) {
           return;
         }
 
@@ -1068,6 +984,222 @@ export class LoopEngine {
       this.isLoopRunning = false;
       log.trace("[LoopEngine] runLoop: Set isLoopRunning = false");
     }
+  }
+
+  /**
+   * Handle the outcome of a single iteration.
+   * Returns true if the loop should exit, false to continue iterating.
+   */
+  private async handleIterationOutcome(result: IterationResult): Promise<boolean> {
+    if (result.outcome === "complete") {
+      return this.handleCompletedOutcome();
+    }
+
+    if (result.outcome === "plan_ready") {
+      return this.handlePlanReadyOutcome(result);
+    }
+
+    if (result.outcome === "error") {
+      return this.handleErrorOutcome(result);
+    }
+
+    // Successful iteration (outcome === "continue") - clear error tracker
+    this.updateState({ consecutiveErrors: undefined });
+    return false;
+  }
+
+  /**
+   * Handle a "complete" iteration outcome.
+   * Updates state, marks review comments as addressed, emits completion event.
+   * Always returns true (loop should exit).
+   */
+  private async handleCompletedOutcome(): Promise<boolean> {
+    this.emitLog("info", "Stop pattern detected - loop completed successfully", {
+      totalIterations: this.loop.state.currentIteration,
+    });
+    // Clear consecutive error tracker on success
+    this.updateState({
+      status: "completed",
+      completedAt: createTimestamp(),
+      consecutiveErrors: undefined,
+    });
+
+    // Persist immediately so callbacks (e.g., auto-push after conflict resolution)
+    // can act on the completed status without waiting for the periodic persistence interval.
+    await this.triggerPersistence();
+
+    // Auto-mark any pending comments as addressed if this is a review cycle
+    if (this.loop.state.reviewMode && this.loop.state.reviewMode.reviewCycles > 0) {
+      try {
+        const addressedAt = new Date().toISOString();
+        markCommentsAsAddressed(
+          this.config.id,
+          this.loop.state.reviewMode.reviewCycles,
+          addressedAt
+        );
+        log.debug(`Marked comments as addressed for loop ${this.config.id}, cycle ${this.loop.state.reviewMode.reviewCycles}`);
+      } catch (error) {
+        log.error(`Failed to mark comments as addressed: ${String(error)}`);
+      }
+    }
+
+    this.emit({
+      type: "loop.completed",
+      loopId: this.config.id,
+      totalIterations: this.loop.state.currentIteration,
+      timestamp: createTimestamp(),
+    });
+    return true;
+  }
+
+  /**
+   * Handle a "plan_ready" iteration outcome.
+   * Reads plan content from the .planning folder, updates plan mode state,
+   * emits the plan ready event, and exits the loop (waits for user feedback).
+   * Always returns true (loop should exit).
+   */
+  private async handlePlanReadyOutcome(result: IterationResult): Promise<boolean> {
+    this.emitLog("info", "Plan ready - waiting for user feedback or acceptance", {
+      iteration: this.loop.state.currentIteration,
+    });
+    
+    // Read plan content from .planning/plan.md if possible
+    let planContent: string | undefined;
+    try {
+      const planExecutor = await backendManager.getCommandExecutorAsync(this.config.workspaceId, this.workingDirectory);
+      const planFilePath = `${this.workingDirectory}/.planning/plan.md`;
+      const planFileExists = await planExecutor.fileExists(planFilePath);
+      if (planFileExists) {
+        planContent = await planExecutor.readFile(planFilePath) ?? undefined;
+      }
+    } catch {
+      // Ignore errors reading plan file
+    }
+
+    // Update plan mode state with the plan content, and clear consecutive
+    // error tracker since this iteration succeeded (prevents stale error
+    // context from leaking into subsequent plan feedback prompts).
+    if (this.loop.state.planMode) {
+      log.trace(`[LoopEngine] runLoop: Before updateState, isPlanReady:`, this.loop.state.planMode.isPlanReady);
+      this.updateState({
+        planMode: {
+          ...this.loop.state.planMode,
+          planContent,
+        },
+        consecutiveErrors: undefined,
+      });
+      log.trace(`[LoopEngine] runLoop: After updateState, isPlanReady:`, this.loop.state.planMode?.isPlanReady);
+    } else {
+      // Even without planMode state, clear the error tracker on success
+      this.updateState({ consecutiveErrors: undefined });
+    }
+
+    // Emit plan ready event
+    this.emit({
+      type: "loop.plan.ready",
+      loopId: this.config.id,
+      planContent: planContent ?? result.responseContent,
+      timestamp: createTimestamp(),
+    });
+    
+    // Exit the loop but stay in "planning" status
+    // The loop will be resumed when user sends feedback or accepts the plan
+    return true;
+  }
+
+  /**
+   * Handle an "error" iteration outcome.
+   * Tracks consecutive errors and triggers failsafe exit if the limit is reached.
+   * Returns true if the loop should exit (failsafe), false to retry.
+   */
+  private async handleErrorOutcome(result: IterationResult): Promise<boolean> {
+    const errorMessage = result.error ?? "Unknown error";
+    this.emitLog("error", `Iteration failed with error: ${errorMessage}`);
+
+    // Error iterations don't count towards maxIterations - roll back the counter
+    // This treats the error as a retry, not a completed iteration
+    this.updateState({
+      currentIteration: this.loop.state.currentIteration - 1,
+    });
+
+    // Track consecutive identical errors
+    const shouldFailsafe = this.trackConsecutiveError(errorMessage);
+
+    if (shouldFailsafe) {
+      const maxErrors = this.config.maxConsecutiveErrors ?? DEFAULT_LOOP_CONFIG.maxConsecutiveErrors;
+      this.emitLog("error", `Failsafe exit: ${maxErrors} consecutive identical errors`, {
+        errorMessage,
+      });
+      this.updateState({
+        status: "failed",
+        completedAt: createTimestamp(),
+        error: {
+          message: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
+          iteration: this.loop.state.currentIteration,
+          timestamp: createTimestamp(),
+        },
+      });
+
+      // Persist immediately so callbacks can act on the failed status
+      await this.triggerPersistence();
+
+      this.emit({
+        type: "loop.error",
+        loopId: this.config.id,
+        error: `Failsafe: ${maxErrors} consecutive identical errors - ${errorMessage}`,
+        iteration: this.loop.state.currentIteration,
+        timestamp: createTimestamp(),
+      });
+      return true;
+    }
+
+    // Log that we're continuing despite the error (as a retry)
+    this.emitLog("warn", "Error occurred, retrying iteration", {
+      errorMessage,
+      consecutiveErrors: this.loop.state.consecutiveErrors?.count ?? 1,
+      maxConsecutiveErrors: this.config.maxConsecutiveErrors ?? "unlimited",
+    });
+
+    // Emit error event but don't stop
+    this.emit({
+      type: "loop.error",
+      loopId: this.config.id,
+      error: errorMessage,
+      iteration: this.loop.state.currentIteration,
+      timestamp: createTimestamp(),
+    });
+
+    // Continue to retry (next iteration will use same iteration number)
+    return false;
+  }
+
+  /**
+   * Check if the loop has reached the maximum iteration limit.
+   * If so, updates state to "max_iterations", persists, emits event, and returns true.
+   */
+  private async hasReachedMaxIterations(): Promise<boolean> {
+    if (
+      this.config.maxIterations &&
+      this.loop.state.currentIteration >= this.config.maxIterations
+    ) {
+      this.emitLog("warn", `Reached maximum iterations limit: ${this.config.maxIterations}`);
+      this.updateState({
+        status: "max_iterations",
+        completedAt: createTimestamp(),
+      });
+
+      // Persist immediately so callbacks can act on the max_iterations status
+      await this.triggerPersistence();
+
+      this.emit({
+        type: "loop.stopped",
+        loopId: this.config.id,
+        reason: `Reached maximum iterations: ${this.config.maxIterations}`,
+        timestamp: createTimestamp(),
+      });
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -1152,360 +1284,406 @@ export class LoopEngine {
       timestamp: startedAt,
     });
 
-    let responseContent = "";
-    let reasoningContent = "";
-    let messageCount = 0;
-    let toolCallCount = 0;
-    let outcome: IterationResult["outcome"] = "continue";
-    let error: string | undefined;
-    let currentMessageId: string | null = null;
-    const toolCalls = new Map<string, { id: string; name: string; input: unknown }>();
-    
-    // Track current log entries for combining consecutive deltas
-    let currentResponseLogId: string | null = null;
-    let currentResponseLogContent = "";
-    let currentReasoningLogId: string | null = null;
-    let currentReasoningLogContent = "";
+    const ctx: IterationContext = {
+      iteration,
+      responseContent: "",
+      reasoningContent: "",
+      messageCount: 0,
+      toolCallCount: 0,
+      outcome: "continue",
+      error: undefined,
+      currentMessageId: null,
+      toolCalls: new Map(),
+      currentResponseLogId: null,
+      currentResponseLogContent: "",
+      currentReasoningLogId: null,
+      currentReasoningLogContent: "",
+    };
 
     try {
-      // Build the prompt
-      log.trace("[LoopEngine] runIteration: Building prompt");
-      this.emitLog("debug", "Building prompt for AI agent");
-      const prompt = this.buildPrompt(iteration);
+      // Build and send prompt, then process the event stream
+      await this.executeIterationPrompt(ctx);
 
-      // Log the prompt for debugging
-      log.debug("[LoopEngine] runIteration: Prompt details", {
-        partsCount: prompt.parts.length,
-        model: prompt.model ? `${prompt.model.providerID}/${prompt.model.modelID}` : "default",
-        textLength: prompt.parts[0]?.text?.length ?? 0,
-        textPreview: prompt.parts[0]?.text?.slice(0, 200) ?? "",
-      });
-
-      // Send prompt and collect response
-      if (!this.sessionId) {
-        throw new Error("No session ID");
-      }
-
-      // Subscribe to events BEFORE sending the prompt.
-      // IMPORTANT: We must await the subscription to ensure the SSE connection is established
-      // before sending the prompt. This prevents a race condition where events are emitted
-      // by the server before we're ready to receive them.
-      log.trace("[LoopEngine] runIteration: About to subscribe to events");
-      this.emitLog("debug", "Subscribing to AI response stream");
-      const eventStream = await this.backend.subscribeToEvents(this.sessionId);
-      log.trace("[LoopEngine] runIteration: Subscription established, got event stream");
-
-      // Now send prompt asynchronously (subscription is definitely active)
-      log.trace("[LoopEngine] runIteration: About to send prompt async");
-      this.emitLog("info", "Sending prompt to AI agent...");
-      await this.backend.sendPromptAsync(this.sessionId, prompt);
-      log.trace("[LoopEngine] runIteration: sendPromptAsync completed");
-
-      try {
-        log.trace("[LoopEngine] runIteration: About to start event iteration loop");
-        
-        // Calculate activity timeout
-        const activityTimeoutMs = (this.config.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds) * 1000;
-        
-        let event: AgentEvent | null = await nextWithTimeout(eventStream, activityTimeoutMs);
-        while (event !== null) {
-          log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
-          // Check if aborted
-          if (this.aborted) {
-            if (this.injectionPending) {
-              this.emitLog("info", "Iteration interrupted for pending message injection");
-            } else {
-              this.emitLog("info", "Iteration aborted by user");
-            }
-            break;
-          }
-
-          // Update last activity timestamp
-          this.updateState({ lastActivityAt: createTimestamp() });
-
-          switch (event.type) {
-            case "message.start":
-              currentMessageId = event.messageId;
-              messageCount++;
-              // Reset response log tracking
-              currentResponseLogId = null;
-              currentResponseLogContent = "";
-              // Log that AI started generating (agent level - visible to user)
-              this.emitLog("agent", "AI started generating response");
-              break;
-
-            case "message.delta":
-              responseContent += event.content;
-              // Combine consecutive deltas into the same log entry (agent level - visible to user)
-              if (event.content.trim()) {
-                currentResponseLogContent += event.content;
-                if (currentResponseLogId) {
-                  // Update existing log entry
-                  this.emitLog("agent", "AI generating response...", {
-                    responseContent: currentResponseLogContent,
-                  }, currentResponseLogId, "trace");
-                } else {
-                  // Create new log entry
-                  currentResponseLogId = this.emitLog("agent", "AI generating response...", {
-                    responseContent: currentResponseLogContent,
-                  }, undefined, "trace");
-                }
-              }
-              // Emit progress event for streaming text
-              this.emit({
-                type: "loop.progress",
-                loopId: this.config.id,
-                iteration,
-                content: event.content,
-                timestamp: createTimestamp(),
-              });
-              break;
-
-            case "reasoning.delta":
-              // AI reasoning/thinking content (chain of thought)
-              reasoningContent += event.content;
-              // Combine consecutive reasoning deltas into the same log entry (agent level - visible to user)
-              if (event.content.trim()) {
-                currentReasoningLogContent += event.content;
-                if (currentReasoningLogId) {
-                  // Update existing log entry
-                  // Use trace level for console to reduce verbosity
-                  this.emitLog("agent", "AI reasoning...", {
-                    responseContent: currentReasoningLogContent,
-                  }, currentReasoningLogId, "trace");
-                } else {
-                  // Create new log entry
-                  // Use trace level for console to reduce verbosity
-                  currentReasoningLogId = this.emitLog("agent", "AI reasoning...", {
-                    responseContent: currentReasoningLogContent,
-                  }, undefined, "trace");
-                }
-              }
-              break;
-
-            case "message.complete":
-              // Reset log tracking
-              currentResponseLogId = null;
-              currentResponseLogContent = "";
-              currentReasoningLogId = null;
-              currentReasoningLogContent = "";
-              // Log that AI finished (no need to include full content here,
-              // the final ASSISTANT message will show it)
-              this.emitLog("agent", "AI finished generating response", {
-                responseLength: responseContent.length,
-              });
-              // Create the message data
-              const messageData: MessageData = {
-                id: currentMessageId || `msg-${Date.now()}`,
-                role: "assistant",
-                content: responseContent,
-                timestamp: createTimestamp(),
-              };
-              // Persist message for page refresh recovery
-              this.persistMessage(messageData);
-              // Emit the complete message
-              this.emit({
-                type: "loop.message",
-                loopId: this.config.id,
-                iteration,
-                message: messageData,
-                timestamp: createTimestamp(),
-              });
-              // Message complete means iteration is done
-              break;
-
-            case "tool.start": {
-              // Reset response/reasoning log tracking when a tool starts
-              currentResponseLogId = null;
-              currentResponseLogContent = "";
-              currentReasoningLogId = null;
-              currentReasoningLogContent = "";
-              // Use tool name as the base ID so we can match start/complete events
-              const toolId = `tool-${iteration}-${event.toolName}-${toolCallCount}`;
-              toolCalls.set(event.toolName, { id: toolId, name: event.toolName, input: event.input });
-              toolCallCount++;
-              this.emitLog("agent", `AI calling tool: ${event.toolName}`);
-              const timestamp = createTimestamp();
-              // Create tool call data
-              const toolCallData: ToolCallData = {
-                id: toolId,
-                name: event.toolName,
-                input: event.input,
-                status: "running",
-                timestamp,
-              };
-              // Persist tool call for page refresh recovery
-              this.persistToolCall(toolCallData);
-              // Emit tool call event
-              this.emit({
-                type: "loop.tool_call",
-                loopId: this.config.id,
-                iteration,
-                tool: toolCallData,
-                timestamp,
-              });
-              break;
-            }
-
-            case "tool.complete": {
-              const toolInfo = toolCalls.get(event.toolName);
-              const timestamp = createTimestamp();
-              // Create tool complete data - use the same ID from tool.start
-              const toolCompleteData: ToolCallData = {
-                id: toolInfo?.id ?? `tool-${iteration}-${event.toolName}`,
-                name: event.toolName,
-                input: toolInfo?.input,
-                output: event.output,
-                status: "completed",
-                timestamp,
-              };
-              // Persist tool call update for page refresh recovery
-              this.persistToolCall(toolCompleteData);
-              // Emit tool complete event
-              this.emit({
-                type: "loop.tool_call",
-                loopId: this.config.id,
-                iteration,
-                tool: toolCompleteData,
-                timestamp,
-              });
-              // Persist to disk after each tool completion (tool calls can take a while)
-              await this.triggerPersistence();
-              break;
-            }
-
-            case "error":
-              outcome = "error";
-              error = event.message;
-              this.emitLog("error", `AI backend error: ${event.message}`);
-              break;
-
-            case "permission.asked": {
-              // Auto-approve permission requests to keep the loop running unattended
-              this.emitLog("info", `Auto-approving permission request: ${event.permission}`, {
-                requestId: event.requestId,
-                patterns: event.patterns,
-              });
-              try {
-                await this.backend.replyToPermission(event.requestId, "always");
-                this.emitLog("info", "Permission approved successfully");
-              } catch (permErr) {
-                this.emitLog("warn", `Failed to approve permission: ${String(permErr)}`);
-              }
-              break;
-            }
-
-            case "question.asked": {
-              // Auto-respond to questions with a helpful default answer
-              this.emitLog("info", "Auto-responding to question from AI", {
-                requestId: event.requestId,
-                questionCount: event.questions.length,
-              });
-              try {
-                // Reply with a custom answer for each question telling the AI to proceed autonomously
-                const answers = event.questions.map(() => 
-                  ["take the best course of action you recommend"]
-                );
-                await this.backend.replyToQuestion(event.requestId, answers);
-                this.emitLog("info", "Question answered successfully");
-              } catch (questionErr) {
-                this.emitLog("warn", `Failed to answer question: ${String(questionErr)}`);
-              }
-              break;
-            }
-
-            case "todo.updated": {
-              // Store TODOs in loop state for persistence
-              this.loop.state.todos = event.todos;
-              
-              // Emit TODO updated event with the list of todos
-              this.emitLog("debug", "TODOs updated", {
-                sessionId: event.sessionId,
-                todoCount: event.todos.length,
-              });
-              this.emit({
-                type: "loop.todo.updated",
-                loopId: this.config.id,
-                todos: event.todos,
-                timestamp: createTimestamp(),
-              });
-              
-              // Persist state to survive screen refresh/server reboot
-              await this.triggerPersistence();
-              break;
-            }
-
-            case "session.status":
-              // Log session status changes for debugging
-              this.emitLog("debug", `Session status: ${event.status}`, {
-                sessionId: event.sessionId,
-                attempt: event.attempt,
-                message: event.message,
-              });
-              break;
-          }
-
-          // If message is complete or error occurred, stop listening
-          if (event.type === "message.complete" || event.type === "error") {
-            this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
-            break;
-          }
-
-          // Get next event with timeout
-          event = await nextWithTimeout(eventStream, activityTimeoutMs);
-        }
-      } finally {
-        // Close the stream to abort the subscription
-        eventStream.close();
-      }
-
-      this.emitLog("debug", "Exited event stream loop", { outcome, error });
-
-      // Check for stop pattern
-      this.emitLog("info", "Evaluating stop pattern...");
-      
-      // In plan mode, check for PLAN_READY marker instead of the normal stop pattern
-      const isInPlanMode = this.loop.state.status === "planning" && this.loop.state.planMode?.active;
-      const planReadyPattern = /<promise>PLAN_READY<\/promise>/;
-      
-      if (outcome !== "error") {
-        if (isInPlanMode && planReadyPattern.test(responseContent)) {
-          this.emitLog("info", "PLAN_READY marker detected - plan is ready for review");
-          outcome = "plan_ready";
-          // Set isPlanReady flag in state
-          if (this.state.planMode) {
-            this.state.planMode.isPlanReady = true;
-            log.trace(`[LoopEngine] runIteration: Set isPlanReady = true, planMode:`, JSON.stringify(this.state.planMode));
-          }
-        } else if (this.stopDetector.matches(responseContent)) {
-          this.emitLog("info", "Stop pattern matched - task is complete");
-          outcome = "complete";
-        } else {
-          this.emitLog("info", "Stop pattern not matched - will continue to next iteration");
-        }
-      }
+      // Evaluate whether the response matches a stop/completion pattern
+      this.evaluateOutcome(ctx);
 
       // Commit changes after iteration
-      if (outcome !== "error") {
+      if (ctx.outcome !== "error") {
         this.emitLog("info", "Checking for changes to commit...");
-        await this.commitIteration(iteration, responseContent);
+        await this.commitIteration(iteration, ctx.responseContent);
       }
     } catch (err) {
-      outcome = "error";
-      error = String(err);
-      this.emitLog("error", `Iteration error: ${error}`);
+      ctx.outcome = "error";
+      ctx.error = String(err);
+      this.emitLog("error", `Iteration error: ${ctx.error}`);
     }
 
+    return this.buildIterationResult(ctx, startedAt);
+  }
+
+  /**
+   * Send the prompt to the AI backend and process all events from the response stream.
+   * Handles subscribing to the event stream, sending the prompt, and iterating
+   * through all agent events until the message completes or an error occurs.
+   */
+  private async executeIterationPrompt(ctx: IterationContext): Promise<void> {
+    // Build the prompt
+    log.trace("[LoopEngine] runIteration: Building prompt");
+    this.emitLog("debug", "Building prompt for AI agent");
+    const prompt = this.buildPrompt(ctx.iteration);
+
+    // Log the prompt for debugging
+    log.debug("[LoopEngine] runIteration: Prompt details", {
+      partsCount: prompt.parts.length,
+      model: prompt.model ? `${prompt.model.providerID}/${prompt.model.modelID}` : "default",
+      textLength: prompt.parts[0]?.text?.length ?? 0,
+      textPreview: prompt.parts[0]?.text?.slice(0, 200) ?? "",
+    });
+
+    // Send prompt and collect response
+    if (!this.sessionId) {
+      throw new Error("No session ID");
+    }
+
+    // Subscribe to events BEFORE sending the prompt.
+    // IMPORTANT: We must await the subscription to ensure the SSE connection is established
+    // before sending the prompt. This prevents a race condition where events are emitted
+    // by the server before we're ready to receive them.
+    log.trace("[LoopEngine] runIteration: About to subscribe to events");
+    this.emitLog("debug", "Subscribing to AI response stream");
+    const eventStream = await this.backend.subscribeToEvents(this.sessionId);
+    log.trace("[LoopEngine] runIteration: Subscription established, got event stream");
+
+    // Now send prompt asynchronously (subscription is definitely active)
+    log.trace("[LoopEngine] runIteration: About to send prompt async");
+    this.emitLog("info", "Sending prompt to AI agent...");
+    await this.backend.sendPromptAsync(this.sessionId, prompt);
+    log.trace("[LoopEngine] runIteration: sendPromptAsync completed");
+
+    try {
+      log.trace("[LoopEngine] runIteration: About to start event iteration loop");
+      
+      // Calculate activity timeout
+      const activityTimeoutMs = (this.config.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds) * 1000;
+      
+      let event: AgentEvent | null = await nextWithTimeout(eventStream, activityTimeoutMs);
+      while (event !== null) {
+        log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
+        // Check if aborted
+        if (this.aborted) {
+          if (this.injectionPending) {
+            this.emitLog("info", "Iteration interrupted for pending message injection");
+          } else {
+            this.emitLog("info", "Iteration aborted by user");
+          }
+          break;
+        }
+
+        // Update last activity timestamp
+        this.updateState({ lastActivityAt: createTimestamp() });
+
+        // Delegate event processing to the handler
+        await this.processAgentEvent(event, ctx);
+
+        // If message is complete or error occurred, stop listening
+        if (event.type === "message.complete" || event.type === "error") {
+          this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
+          break;
+        }
+
+        // Get next event with timeout
+        event = await nextWithTimeout(eventStream, activityTimeoutMs);
+      }
+    } finally {
+      // Close the stream to abort the subscription
+      eventStream.close();
+    }
+
+    this.emitLog("debug", "Exited event stream loop", { outcome: ctx.outcome, error: ctx.error });
+  }
+
+  /**
+   * Process a single agent event during an iteration.
+   * Handles all event types: message streaming, tool calls, errors,
+   * permissions, questions, TODOs, and session status updates.
+   */
+  private async processAgentEvent(event: AgentEvent, ctx: IterationContext): Promise<void> {
+    switch (event.type) {
+      case "message.start":
+        ctx.currentMessageId = event.messageId;
+        ctx.messageCount++;
+        ctx.currentResponseLogId = null;
+        ctx.currentResponseLogContent = "";
+        this.emitLog("agent", "AI started generating response");
+        break;
+
+      case "message.delta":
+        ctx.responseContent += event.content;
+        this.handleStreamingDelta(event.content, ctx, "response");
+        this.emit({
+          type: "loop.progress",
+          loopId: this.config.id,
+          iteration: ctx.iteration,
+          content: event.content,
+          timestamp: createTimestamp(),
+        });
+        break;
+
+      case "reasoning.delta":
+        ctx.reasoningContent += event.content;
+        this.handleStreamingDelta(event.content, ctx, "reasoning");
+        break;
+
+      case "message.complete":
+        this.handleMessageComplete(ctx);
+        break;
+
+      case "tool.start":
+        this.handleToolStart(event, ctx);
+        break;
+
+      case "tool.complete":
+        await this.handleToolComplete(event, ctx);
+        break;
+
+      case "error":
+        ctx.outcome = "error";
+        ctx.error = event.message;
+        this.emitLog("error", `AI backend error: ${event.message}`);
+        break;
+
+      case "permission.asked":
+        await this.handlePermissionAsked(event);
+        break;
+
+      case "question.asked":
+        await this.handleQuestionAsked(event);
+        break;
+
+      case "todo.updated": {
+        this.loop.state.todos = event.todos;
+        this.emitLog("debug", "TODOs updated", {
+          sessionId: event.sessionId,
+          todoCount: event.todos.length,
+        });
+        this.emit({
+          type: "loop.todo.updated",
+          loopId: this.config.id,
+          todos: event.todos,
+          timestamp: createTimestamp(),
+        });
+        await this.triggerPersistence();
+        break;
+      }
+
+      case "session.status":
+        this.emitLog("debug", `Session status: ${event.status}`, {
+          sessionId: event.sessionId,
+          attempt: event.attempt,
+          message: event.message,
+        });
+        break;
+    }
+  }
+
+  /**
+   * Handle streaming delta content (response or reasoning).
+   * Combines consecutive deltas into a single log entry to reduce log noise.
+   */
+  private handleStreamingDelta(
+    content: string,
+    ctx: IterationContext,
+    kind: "response" | "reasoning",
+  ): void {
+    if (!content.trim()) return;
+
+    if (kind === "response") {
+      ctx.currentResponseLogContent += content;
+      const logMsg = "AI generating response...";
+      if (ctx.currentResponseLogId) {
+        this.emitLog("agent", logMsg, { responseContent: ctx.currentResponseLogContent }, ctx.currentResponseLogId, "trace");
+      } else {
+        ctx.currentResponseLogId = this.emitLog("agent", logMsg, { responseContent: ctx.currentResponseLogContent }, undefined, "trace");
+      }
+    } else {
+      ctx.currentReasoningLogContent += content;
+      const logMsg = "AI reasoning...";
+      if (ctx.currentReasoningLogId) {
+        this.emitLog("agent", logMsg, { responseContent: ctx.currentReasoningLogContent }, ctx.currentReasoningLogId, "trace");
+      } else {
+        ctx.currentReasoningLogId = this.emitLog("agent", logMsg, { responseContent: ctx.currentReasoningLogContent }, undefined, "trace");
+      }
+    }
+  }
+
+  /**
+   * Handle a completed AI message.
+   * Resets log tracking, persists the message, and emits the message event.
+   */
+  private handleMessageComplete(ctx: IterationContext): void {
+    ctx.currentResponseLogId = null;
+    ctx.currentResponseLogContent = "";
+    ctx.currentReasoningLogId = null;
+    ctx.currentReasoningLogContent = "";
+    this.emitLog("agent", "AI finished generating response", {
+      responseLength: ctx.responseContent.length,
+    });
+    const messageData: MessageData = {
+      id: ctx.currentMessageId || `msg-${Date.now()}`,
+      role: "assistant",
+      content: ctx.responseContent,
+      timestamp: createTimestamp(),
+    };
+    this.persistMessage(messageData);
+    this.emit({
+      type: "loop.message",
+      loopId: this.config.id,
+      iteration: ctx.iteration,
+      message: messageData,
+      timestamp: createTimestamp(),
+    });
+  }
+
+  /**
+   * Handle a tool start event.
+   * Resets streaming log tracking, records the tool call, and emits the event.
+   */
+  private handleToolStart(event: AgentEvent & { type: "tool.start" }, ctx: IterationContext): void {
+    ctx.currentResponseLogId = null;
+    ctx.currentResponseLogContent = "";
+    ctx.currentReasoningLogId = null;
+    ctx.currentReasoningLogContent = "";
+    const toolId = `tool-${ctx.iteration}-${event.toolName}-${ctx.toolCallCount}`;
+    ctx.toolCalls.set(event.toolName, { id: toolId, name: event.toolName, input: event.input });
+    ctx.toolCallCount++;
+    this.emitLog("agent", `AI calling tool: ${event.toolName}`);
+    const timestamp = createTimestamp();
+    const toolCallData: ToolCallData = {
+      id: toolId,
+      name: event.toolName,
+      input: event.input,
+      status: "running",
+      timestamp,
+    };
+    this.persistToolCall(toolCallData);
+    this.emit({
+      type: "loop.tool_call",
+      loopId: this.config.id,
+      iteration: ctx.iteration,
+      tool: toolCallData,
+      timestamp,
+    });
+  }
+
+  /**
+   * Handle a tool complete event.
+   * Matches the completion to the original tool.start, persists, and emits the event.
+   */
+  private async handleToolComplete(event: AgentEvent & { type: "tool.complete" }, ctx: IterationContext): Promise<void> {
+    const toolInfo = ctx.toolCalls.get(event.toolName);
+    const timestamp = createTimestamp();
+    const toolCompleteData: ToolCallData = {
+      id: toolInfo?.id ?? `tool-${ctx.iteration}-${event.toolName}`,
+      name: event.toolName,
+      input: toolInfo?.input,
+      output: event.output,
+      status: "completed",
+      timestamp,
+    };
+    this.persistToolCall(toolCompleteData);
+    this.emit({
+      type: "loop.tool_call",
+      loopId: this.config.id,
+      iteration: ctx.iteration,
+      tool: toolCompleteData,
+      timestamp,
+    });
+    await this.triggerPersistence();
+  }
+
+  /**
+   * Auto-approve a permission request to keep the loop running unattended.
+   */
+  private async handlePermissionAsked(event: AgentEvent & { type: "permission.asked" }): Promise<void> {
+    this.emitLog("info", `Auto-approving permission request: ${event.permission}`, {
+      requestId: event.requestId,
+      patterns: event.patterns,
+    });
+    try {
+      await this.backend.replyToPermission(event.requestId, "always");
+      this.emitLog("info", "Permission approved successfully");
+    } catch (permErr) {
+      this.emitLog("warn", `Failed to approve permission: ${String(permErr)}`);
+    }
+  }
+
+  /**
+   * Auto-respond to a question from the AI with a default answer.
+   */
+  private async handleQuestionAsked(event: AgentEvent & { type: "question.asked" }): Promise<void> {
+    this.emitLog("info", "Auto-responding to question from AI", {
+      requestId: event.requestId,
+      questionCount: event.questions.length,
+    });
+    try {
+      const answers = event.questions.map(() => 
+        ["take the best course of action you recommend"]
+      );
+      await this.backend.replyToQuestion(event.requestId, answers);
+      this.emitLog("info", "Question answered successfully");
+    } catch (questionErr) {
+      this.emitLog("warn", `Failed to answer question: ${String(questionErr)}`);
+    }
+  }
+
+  /**
+   * Evaluate the iteration outcome by checking stop patterns.
+   * In plan mode, checks for the PLAN_READY marker.
+   * In execution mode, checks the configured stop pattern.
+   * Skips evaluation if the outcome is already "error".
+   */
+  private evaluateOutcome(ctx: IterationContext): void {
+    this.emitLog("info", "Evaluating stop pattern...");
+    
+    if (ctx.outcome === "error") {
+      return;
+    }
+
+    // In plan mode, check for PLAN_READY marker instead of the normal stop pattern
+    const isInPlanMode = this.loop.state.status === "planning" && this.loop.state.planMode?.active;
+    const planReadyPattern = /<promise>PLAN_READY<\/promise>/;
+
+    if (isInPlanMode && planReadyPattern.test(ctx.responseContent)) {
+      this.emitLog("info", "PLAN_READY marker detected - plan is ready for review");
+      ctx.outcome = "plan_ready";
+      // Set isPlanReady flag in state
+      if (this.state.planMode) {
+        this.state.planMode.isPlanReady = true;
+        log.trace(`[LoopEngine] runIteration: Set isPlanReady = true, planMode:`, JSON.stringify(this.state.planMode));
+      }
+    } else if (this.stopDetector.matches(ctx.responseContent)) {
+      this.emitLog("info", "Stop pattern matched - task is complete");
+      ctx.outcome = "complete";
+    } else {
+      this.emitLog("info", "Stop pattern not matched - will continue to next iteration");
+    }
+  }
+
+  /**
+   * Build the final IterationResult from the iteration context.
+   * Records the iteration summary, emits completion events, and persists state.
+   */
+  private async buildIterationResult(ctx: IterationContext, startedAt: string): Promise<IterationResult> {
     const completedAt = createTimestamp();
 
     // Record iteration summary
     const summary: IterationSummary = {
-      iteration,
+      iteration: ctx.iteration,
       startedAt,
       completedAt,
-      messageCount,
-      toolCallCount,
-      outcome,
+      messageCount: ctx.messageCount,
+      toolCallCount: ctx.toolCallCount,
+      outcome: ctx.outcome,
     };
 
     this.updateState({
@@ -1513,17 +1691,17 @@ export class LoopEngine {
       recentIterations: [...this.loop.state.recentIterations.slice(-9), summary],
     });
 
-    this.emitLog("info", `Iteration ${iteration} completed`, {
-      outcome,
-      messageCount,
-      toolCallCount,
+    this.emitLog("info", `Iteration ${ctx.iteration} completed`, {
+      outcome: ctx.outcome,
+      messageCount: ctx.messageCount,
+      toolCallCount: ctx.toolCallCount,
     });
 
     this.emit({
       type: "loop.iteration.end",
       loopId: this.config.id,
-      iteration,
-      outcome,
+      iteration: ctx.iteration,
+      outcome: ctx.outcome,
       timestamp: completedAt,
     });
 
@@ -1532,12 +1710,12 @@ export class LoopEngine {
     await this.triggerPersistence();
 
     return {
-      continue: outcome === "continue",
-      outcome,
-      responseContent,
-      error,
-      messageCount,
-      toolCallCount,
+      continue: ctx.outcome === "continue",
+      outcome: ctx.outcome,
+      responseContent: ctx.responseContent,
+      error: ctx.error,
+      messageCount: ctx.messageCount,
+      toolCallCount: ctx.toolCallCount,
     };
   }
 
@@ -1580,13 +1758,24 @@ export class LoopEngine {
 
     // Check if this is a plan mode iteration
     if (this.loop.state.status === "planning" && this.loop.state.planMode?.active) {
-      // Plan mode prompt
-      const feedbackRounds = this.loop.state.planMode.feedbackRounds;
-      
-      if (feedbackRounds === 0) {
-        // Initial plan creation
-        const errorContext = this.buildErrorContext();
-        const text = `- Goal: ${this.config.prompt}
+      return this.buildPlanModePrompt(model);
+    }
+    
+    return this.buildExecutionPrompt(model);
+  }
+
+  /**
+   * Build the prompt for plan mode iterations.
+   * Handles both initial plan creation (feedbackRounds === 0) and
+   * subsequent plan feedback rounds.
+   */
+  private buildPlanModePrompt(model: ModelConfig | undefined): PromptInput {
+    const feedbackRounds = this.loop.state.planMode!.feedbackRounds;
+    
+    if (feedbackRounds === 0) {
+      // Initial plan creation
+      const errorContext = this.buildErrorContext();
+      const text = `- Goal: ${this.config.prompt}
 ${errorContext}
 - Create a detailed plan to achieve this goal. Write the plan to \`./.planning/plan.md\`.
 
@@ -1604,21 +1793,22 @@ ${errorContext}
 
 <promise>PLAN_READY</promise>`;
 
-        return {
-          parts: [{ type: "text", text }],
-          model,
-        };
-      } else {
-        // Plan feedback prompt (uses pending prompt set by sendPlanFeedback)
-        const feedback = this.loop.state.pendingPrompt ?? "Please refine the plan based on feedback.";
-        
-        // Log the user's plan feedback so it appears in the conversation logs
-        if (this.loop.state.pendingPrompt) {
-          this.emitLog("user", this.loop.state.pendingPrompt);
-        }
-        
-        const errorContext = this.buildErrorContext();
-        const text = `The user has provided feedback on your plan:
+      return {
+        parts: [{ type: "text", text }],
+        model,
+      };
+    }
+
+    // Plan feedback prompt (uses pending prompt set by sendPlanFeedback)
+    const feedback = this.loop.state.pendingPrompt ?? "Please refine the plan based on feedback.";
+    
+    // Log the user's plan feedback so it appears in the conversation logs
+    if (this.loop.state.pendingPrompt) {
+      this.emitLog("user", this.loop.state.pendingPrompt);
+    }
+    
+    const errorContext = this.buildErrorContext();
+    const text = `The user has provided feedback on your plan:
 
 ---
 ${feedback}
@@ -1632,16 +1822,21 @@ When the updated plan is ready, end your response with:
 
 <promise>PLAN_READY</promise>`;
 
-        // Clear the pending prompt after use
-        this.updateState({ pendingPrompt: undefined });
+    // Clear the pending prompt after use
+    this.updateState({ pendingPrompt: undefined });
 
-        return {
-          parts: [{ type: "text", text }],
-          model,
-        };
-      }
-    }
-    
+    return {
+      parts: [{ type: "text", text }],
+      model,
+    };
+  }
+
+  /**
+   * Build the prompt for execution mode iterations.
+   * Includes the original goal, any injected user message, error context for retries,
+   * and instructions for the AI to follow the planning docs pattern.
+   */
+  private buildExecutionPrompt(model: ModelConfig | undefined): PromptInput {
     // Get the pending user message if any (new message injected by the user)
     const userMessage = this.loop.state.pendingPrompt;
     
@@ -1866,8 +2061,12 @@ Output ONLY the commit message, nothing else.`
 
   /**
    * Update the loop state.
+   * Validates status transitions against the state machine when a status change is included.
    */
   private updateState(update: Partial<LoopState>): void {
+    if (update.status !== undefined && update.status !== this.loop.state.status) {
+      assertValidTransition(this.loop.state.status, update.status, "LoopEngine.updateState");
+    }
     Object.assign(this.loop.state, update);
   }
 
@@ -1992,7 +2191,7 @@ Output ONLY the commit message, nothing else.`
   /**
    * Persist a log entry in the loop state.
    * If isUpdate is true, update an existing entry; otherwise append.
-   * All logs are kept until the loop is merged or deleted.
+   * Evicts oldest entries when buffer exceeds MAX_PERSISTED_LOGS.
    */
   private persistLog(entry: LoopLogEntry, isUpdate: boolean): void {
     const logs = this.loop.state.logs ?? [];
@@ -2009,12 +2208,17 @@ Output ONLY the commit message, nothing else.`
       logs.push(entry);
     }
     
+    // Evict oldest entries if buffer is full
+    if (logs.length > MAX_PERSISTED_LOGS) {
+      logs.splice(0, logs.length - MAX_PERSISTED_LOGS);
+    }
+    
     this.updateState({ logs });
   }
 
   /**
    * Persist a message in the loop state for page refresh recovery.
-   * All messages are kept until the loop is merged or deleted.
+   * Evicts oldest entries when buffer exceeds MAX_PERSISTED_MESSAGES.
    */
   private persistMessage(message: MessageData): void {
     const messages = this.loop.state.messages ?? [];
@@ -2039,13 +2243,18 @@ Output ONLY the commit message, nothing else.`
       });
     }
     
+    // Evict oldest entries if buffer is full
+    if (messages.length > MAX_PERSISTED_MESSAGES) {
+      messages.splice(0, messages.length - MAX_PERSISTED_MESSAGES);
+    }
+    
     this.updateState({ messages });
   }
 
   /**
    * Persist a tool call in the loop state for page refresh recovery.
    * Updates existing tool call if it exists (by ID), otherwise adds new.
-   * All tool calls are kept until the loop is merged or deleted.
+   * Evicts oldest entries when buffer exceeds MAX_PERSISTED_TOOL_CALLS.
    */
   private persistToolCall(toolCall: ToolCallData): void {
     const toolCalls = this.loop.state.toolCalls ?? [];
@@ -2072,6 +2281,11 @@ Output ONLY the commit message, nothing else.`
         status: toolCall.status,
         timestamp: toolCall.timestamp,
       });
+    }
+    
+    // Evict oldest entries if buffer is full
+    if (toolCalls.length > MAX_PERSISTED_TOOL_CALLS) {
+      toolCalls.splice(0, toolCalls.length - MAX_PERSISTED_TOOL_CALLS);
     }
     
     this.updateState({ toolCalls });

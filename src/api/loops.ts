@@ -18,22 +18,23 @@
 import { loopManager } from "../core/loop-manager";
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
-import { setLastModel } from "../persistence/preferences";
-import { updateLoopState } from "../persistence/loops";
-import { getReviewComments } from "../persistence/database";
-import { getWorkspaceByDirectory } from "../persistence/workspaces";
-import { log } from "../core/logger";
+import { getWorkspaceByDirectory, getWorkspace, touchWorkspace } from "../persistence/workspaces";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("api:loops");
 import { isModelEnabled } from "./models";
 import type {
   AcceptResponse,
   PushResponse,
-  ErrorResponse,
   FileContentResponse,
   AddressCommentsResponse,
   ReviewHistoryResponse,
   GetCommentsResponse,
 } from "../types/api";
 import { parseAndValidate } from "./validation";
+import { errorResponse, successResponse } from "./helpers";
+import type { LoopConfig, Loop } from "../types/loop";
+import type { z } from "zod";
 import {
   CreateLoopRequestSchema,
   UpdateLoopRequestSchema,
@@ -45,26 +46,64 @@ import {
 } from "../types/schemas";
 
 /**
- * Create a standardized error response.
- * 
- * @param error - Error code for programmatic handling
- * @param message - Human-readable error description
- * @param status - HTTP status code (default: 400)
- * @returns JSON Response with error details
+ * Transform a validated update request body into LoopConfig updates and apply them.
+ * Shared by PATCH and PUT handlers to eliminate duplication.
+ *
+ * @returns Response with the updated loop or an error response
  */
-function errorResponse(error: string, message: string, status = 400): Response {
-  const body: ErrorResponse = { error, message };
-  return Response.json(body, { status });
-}
+async function applyLoopUpdates(
+  loopId: string,
+  body: z.infer<typeof UpdateLoopRequestSchema>,
+  currentLoop: Loop,
+): Promise<Response> {
+  try {
+    const updates: Partial<Omit<LoopConfig, "id" | "createdAt">> = {};
 
-/**
- * Create a standardized success response.
- * 
- * @param data - Additional data to include in the response
- * @returns JSON Response with success: true and any additional data
- */
-function successResponse(data: Record<string, unknown> = {}): Response {
-  return Response.json({ success: true, ...data });
+    if (body.name !== undefined) {
+      const trimmedName = body.name.trim();
+      if (trimmedName === "") {
+        return errorResponse("validation_error", "Name cannot be empty");
+      }
+      updates.name = trimmedName;
+    }
+    if (body.directory !== undefined) updates.directory = body.directory;
+    if (body.prompt !== undefined) updates.prompt = body.prompt;
+    if (body.maxIterations !== undefined) updates.maxIterations = body.maxIterations;
+    if (body.maxConsecutiveErrors !== undefined) updates.maxConsecutiveErrors = body.maxConsecutiveErrors;
+    if (body.activityTimeoutSeconds !== undefined) updates.activityTimeoutSeconds = body.activityTimeoutSeconds;
+    if (body.stopPattern !== undefined) updates.stopPattern = body.stopPattern;
+    if (body.baseBranch !== undefined) updates.baseBranch = body.baseBranch;
+    if (body.clearPlanningFolder !== undefined) updates.clearPlanningFolder = body.clearPlanningFolder;
+    if (body.planMode !== undefined) updates.planMode = body.planMode;
+
+    if (body.model !== undefined) {
+      updates.model = {
+        providerID: body.model.providerID,
+        modelID: body.model.modelID,
+        variant: body.model.variant,
+      };
+    }
+
+    if (body.git !== undefined) {
+      updates.git = {
+        branchPrefix: body.git.branchPrefix ?? currentLoop.config.git.branchPrefix,
+        commitPrefix: body.git.commitPrefix ?? currentLoop.config.git.commitPrefix,
+      };
+    }
+
+    const updatedLoop = await loopManager.updateLoop(loopId, updates);
+    return Response.json(updatedLoop);
+  } catch (error) {
+    const errorMessage = String(error);
+    if (error instanceof Error) {
+      const code = (error as Error & { code?: string }).code;
+      const status = (error as Error & { status?: number }).status;
+      if (code === "BASE_BRANCH_IMMUTABLE") {
+        return errorResponse("base_branch_immutable", errorMessage, status ?? 409);
+      }
+    }
+    return errorResponse("update_failed", errorMessage, 500);
+  }
 }
 
 /**
@@ -143,7 +182,6 @@ export const loopsCrudRoutes = {
       });
 
       // Resolve workspaceId to directory - workspaceId is required
-      const { getWorkspace, touchWorkspace } = await import("../persistence/workspaces");
       const workspace = await getWorkspace(body.workspaceId);
       if (!workspace) {
         return errorResponse("workspace_not_found", `Workspace not found: ${body.workspaceId}`, 404);
@@ -221,15 +259,11 @@ export const loopsCrudRoutes = {
 
         // Save the model as last used if provided
         if (body.model?.providerID && body.model?.modelID) {
-          try {
-            await setLastModel({
-              providerID: body.model.providerID,
-              modelID: body.model.modelID,
-              variant: body.model.variant,
-            });
-          } catch (error) {
-            log.warn(`Failed to save last model: ${String(error)}`);
-          }
+          await loopManager.saveLastUsedModel({
+            providerID: body.model.providerID,
+            modelID: body.model.modelID,
+            variant: body.model.variant,
+          });
         }
 
         // If draft mode is enabled, return the loop without starting
@@ -241,19 +275,19 @@ export const loopsCrudRoutes = {
         // Otherwise, start the loop immediately
         if (body.planMode) {
           try {
-            await loopManager.startPlanMode(loop.config.id);
-            // Return the loop with updated state after starting plan mode
-            const updatedLoop = await loopManager.getLoop(loop.config.id);
-            return Response.json(updatedLoop ?? loop, { status: 201 });
-          } catch (startError) {
-            // If start fails, delete the loop to avoid orphaned idle loops
-            try {
-              await loopManager.deleteLoop(loop.config.id);
-            } catch {
-              // Ignore delete errors
+              await loopManager.startPlanMode(loop.config.id);
+              // Return the loop with updated state after starting plan mode
+              const updatedLoop = await loopManager.getLoop(loop.config.id);
+              return Response.json(updatedLoop ?? loop, { status: 201 });
+            } catch (startError) {
+              // If start fails, delete the loop to avoid orphaned idle loops
+              try {
+                await loopManager.deleteLoop(loop.config.id);
+              } catch (deleteError) {
+                log.warn("Failed to clean up loop after start failure", { loopId: loop.config.id, error: String(deleteError) });
+              }
+              return errorResponse("start_plan_failed", `Loop created but failed to start plan mode: ${String(startError)}`, 500);
             }
-            return errorResponse("start_plan_failed", `Loop created but failed to start plan mode: ${String(startError)}`, 500);
-          }
         } else {
           // Always start the loop immediately after creation (normal mode)
           try {
@@ -265,8 +299,8 @@ export const loopsCrudRoutes = {
             // If start fails for any reason, delete the loop to avoid orphaned idle loops
             try {
               await loopManager.deleteLoop(loop.config.id);
-            } catch {
-              // Ignore delete errors
+            } catch (deleteError) {
+              log.warn("Failed to clean up loop after start failure", { loopId: loop.config.id, error: String(deleteError) });
             }
             return errorResponse("start_failed", `Loop created but failed to start: ${String(startError)}`, 500);
           }
@@ -320,60 +354,8 @@ export const loopsCrudRoutes = {
       if (!validation.success) {
         return validation.response;
       }
-      const body = validation.data;
 
-      try {
-        // Transform request body to match LoopConfig format
-        const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};
-        
-        // Zod already validated these - use directly
-        if (body.name !== undefined) {
-          const trimmedName = body.name.trim();
-          if (trimmedName === "") {
-            return errorResponse("validation_error", "Name cannot be empty");
-          }
-          updates.name = trimmedName;
-        }
-        if (body.directory !== undefined) updates.directory = body.directory;
-        if (body.prompt !== undefined) updates.prompt = body.prompt;
-        if (body.maxIterations !== undefined) updates.maxIterations = body.maxIterations;
-        if (body.maxConsecutiveErrors !== undefined) updates.maxConsecutiveErrors = body.maxConsecutiveErrors;
-        if (body.activityTimeoutSeconds !== undefined) updates.activityTimeoutSeconds = body.activityTimeoutSeconds;
-        if (body.stopPattern !== undefined) updates.stopPattern = body.stopPattern;
-        if (body.baseBranch !== undefined) updates.baseBranch = body.baseBranch;
-        if (body.clearPlanningFolder !== undefined) updates.clearPlanningFolder = body.clearPlanningFolder;
-        if (body.planMode !== undefined) updates.planMode = body.planMode;
-        
-        // Handle model config - already validated by Zod
-        if (body.model !== undefined) {
-          updates.model = {
-            providerID: body.model.providerID,
-            modelID: body.model.modelID,
-            variant: body.model.variant,
-          };
-        }
-        
-        // Handle git config - already validated by Zod
-        if (body.git !== undefined) {
-          updates.git = {
-            branchPrefix: body.git.branchPrefix ?? loop.config.git.branchPrefix,
-            commitPrefix: body.git.commitPrefix ?? loop.config.git.commitPrefix,
-          };
-        }
-
-        const updatedLoop = await loopManager.updateLoop(req.params.id, updates);
-        return Response.json(updatedLoop);
-      } catch (error) {
-        const errorMessage = String(error);
-        if (error instanceof Error) {
-          const code = (error as Error & { code?: string }).code;
-          const status = (error as Error & { status?: number }).status;
-          if (code === "BASE_BRANCH_IMMUTABLE") {
-            return errorResponse("base_branch_immutable", errorMessage, status ?? 409);
-          }
-        }
-        return errorResponse("update_failed", errorMessage, 500);
-      }
+      return applyLoopUpdates(req.params.id, validation.data, loop);
     },
 
     /**
@@ -401,69 +383,15 @@ export const loopsCrudRoutes = {
       if (!validation.success) {
         return validation.response;
       }
-      const body = validation.data;
 
-      // Debug logging for draft update operations
       log.debug("PUT /api/loops/:id - Request body", { 
         loopId: req.params.id,
-        hasPrompt: body.prompt !== undefined,
-        promptLength: typeof body.prompt === "string" ? body.prompt.length : 0,
-        promptPreview: typeof body.prompt === "string" ? body.prompt.slice(0, 50) : null,
+        hasPrompt: validation.data.prompt !== undefined,
+        promptLength: typeof validation.data.prompt === "string" ? validation.data.prompt.length : 0,
+        promptPreview: typeof validation.data.prompt === "string" ? validation.data.prompt.slice(0, 50) : null,
       });
 
-      try {
-        // Transform request body to match LoopConfig format (partial updates)
-        // Zod already validated types - use directly
-        const updates: Partial<Omit<typeof loop.config, "id" | "createdAt">> = {};
-        
-        // Apply the same validation as PATCH: trim and non-empty check for name
-        if (body.name !== undefined) {
-          const trimmedName = body.name.trim();
-          if (trimmedName === "") {
-            return errorResponse("validation_error", "Name cannot be empty");
-          }
-          updates.name = trimmedName;
-        }
-        if (body.directory !== undefined) updates.directory = body.directory;
-        if (body.prompt !== undefined) updates.prompt = body.prompt;
-        if (body.maxIterations !== undefined) updates.maxIterations = body.maxIterations;
-        if (body.maxConsecutiveErrors !== undefined) updates.maxConsecutiveErrors = body.maxConsecutiveErrors;
-        if (body.activityTimeoutSeconds !== undefined) updates.activityTimeoutSeconds = body.activityTimeoutSeconds;
-        if (body.stopPattern !== undefined) updates.stopPattern = body.stopPattern;
-        if (body.baseBranch !== undefined) updates.baseBranch = body.baseBranch;
-        if (body.clearPlanningFolder !== undefined) updates.clearPlanningFolder = body.clearPlanningFolder;
-        if (body.planMode !== undefined) updates.planMode = body.planMode;
-        
-        // Handle model config - already validated by Zod
-        if (body.model !== undefined) {
-          updates.model = {
-            providerID: body.model.providerID,
-            modelID: body.model.modelID,
-            variant: body.model.variant,
-          };
-        }
-        
-        // Handle git config - already validated by Zod
-        if (body.git !== undefined) {
-          updates.git = {
-            branchPrefix: body.git.branchPrefix ?? loop.config.git.branchPrefix,
-            commitPrefix: body.git.commitPrefix ?? loop.config.git.commitPrefix,
-          };
-        }
-
-        const updatedLoop = await loopManager.updateLoop(req.params.id, updates);
-        return Response.json(updatedLoop);
-      } catch (error) {
-        const errorMessage = String(error);
-        if (error instanceof Error) {
-          const code = (error as Error & { code?: string }).code;
-          const status = (error as Error & { status?: number }).status;
-          if (code === "BASE_BRANCH_IMMUTABLE") {
-            return errorResponse("base_branch_immutable", errorMessage, status ?? 409);
-          }
-        }
-        return errorResponse("update_failed", errorMessage, 500);
-      }
+      return applyLoopUpdates(req.params.id, validation.data, loop);
     },
 
     /**
@@ -510,19 +438,8 @@ export const loopsCrudRoutes = {
           return errorResponse("not_found", "Loop not found", 404);
         }
 
-        // Get comments from database
-        const dbComments = getReviewComments(req.params.id);
-        
-        // Convert database format to API format
-        const comments = dbComments.map((c) => ({
-          id: c.id,
-          loopId: c.loop_id,
-          reviewCycle: c.review_cycle,
-          commentText: c.comment_text,
-          createdAt: c.created_at,
-          status: c.status as "pending" | "addressed",
-          addressedAt: c.addressed_at ?? undefined,
-        }));
+        // Get comments from database via LoopManager
+        const comments = loopManager.getReviewComments(req.params.id);
         
         const responseBody: GetCommentsResponse = {
           success: true,
@@ -591,44 +508,18 @@ export const loopsControlRoutes = {
       // With worktrees, each loop operates in its own isolated directory.
       // No need to check for active loops or uncommitted changes.
 
-      // Transition draft to appropriate status before starting
-      // This is necessary because engine.start() only accepts idle/stopped/planning status
-      if (body.planMode) {
-        try {
-          // Update to planning status before starting
-          loop.state.status = "planning";
-          loop.state.planMode = {
-            active: true,
-            feedbackRounds: 0,
-            planningFolderCleared: false,
-            isPlanReady: false,
-          };
-          await updateLoopState(req.params.id, loop.state);
-          
-          // Start plan mode - this will handle git setup and further state updates
-          await loopManager.startPlanMode(req.params.id);
-          
-          // Return updated loop
-          const updatedLoop = await loopManager.getLoop(req.params.id);
-          return Response.json(updatedLoop ?? loop);
-        } catch (startError) {
-          return errorResponse("start_plan_failed", `Failed to start plan mode: ${String(startError)}`, 500);
-        }
-      } else {
-        try {
-          // Update to idle status before starting (engine will change it to "starting")
-          loop.state.status = "idle";
-          await updateLoopState(req.params.id, loop.state);
-          
-          // Start the loop immediately - this will handle git setup and state updates
-          await loopManager.startLoop(req.params.id);
-          
-          // Return updated loop
-          const updatedLoop = await loopManager.getLoop(req.params.id);
-          return Response.json(updatedLoop ?? loop);
-        } catch (startError) {
-          return errorResponse("start_failed", `Failed to start loop: ${String(startError)}`, 500);
-        }
+      // Delegate the draft → start transition to LoopManager
+      try {
+        const updatedLoop = await loopManager.startDraft(req.params.id, {
+          planMode: body.planMode,
+        });
+        return Response.json(updatedLoop);
+      } catch (startError) {
+        const errorType = body.planMode ? "start_plan_failed" : "start_failed";
+        const errorMsg = body.planMode
+          ? `Failed to start plan mode: ${String(startError)}`
+          : `Failed to start loop: ${String(startError)}`;
+        return errorResponse(errorType, errorMsg, 500);
       }
     },
   },

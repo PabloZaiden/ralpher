@@ -8,7 +8,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { serve, type Server } from "bun";
 import { apiRoutes } from "../../../src/api";
-import { ensureDataDirectories } from "../../../src/persistence/paths";
+import { ensureDataDirectories } from "../../../src/persistence/database";
 import { backendManager } from "../../../src/core/backend-manager";
 import { loopManager } from "../../../src/core/loop-manager";
 import { closeDatabase } from "../../../src/persistence/database";
@@ -104,7 +104,7 @@ export class ConfigurableMockBackend implements LoopBackend {
   /**
    * Emit a TODO update event (for testing TODO display feature).
    */
-  emitTodoUpdate(todos: import("../../../src/backends/types").TodoItem[]): void {
+  emitTodoUpdate(todos: import("../../../src/types/loop").TodoItem[]): void {
     if (this.eventPush && this.currentSessionId) {
       this.eventPush({
         type: "todo.updated",

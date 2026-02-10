@@ -52,6 +52,7 @@ export const apiRoutes = {
 };
 
 // Re-export individual route modules
+export * from "./helpers";
 export * from "./health";
 export * from "./loops";
 export * from "./models";

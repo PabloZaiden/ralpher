@@ -28,42 +28,15 @@
  */
 
 import { Logger, type ILogObj } from "tslog";
+import {
+  type LogLevelName,
+  LOG_LEVELS,
+  LOG_LEVEL_NAMES,
+  DEFAULT_LOG_LEVEL,
+} from "../utils/log-levels";
 
-/**
- * Valid log level name type.
- */
-export type LogLevelName = "silly" | "trace" | "debug" | "info" | "warn" | "error" | "fatal";
-
-/**
- * Map of log level names to their numeric values.
- */
-export const LOG_LEVELS: Record<LogLevelName, number> = {
-  silly: 0,
-  trace: 1,
-  debug: 2,
-  info: 3,
-  warn: 4,
-  error: 5,
-  fatal: 6,
-};
-
-/**
- * Map of numeric values to log level names.
- */
-export const LOG_LEVEL_NAMES: Record<number, LogLevelName> = {
-  0: "silly",
-  1: "trace",
-  2: "debug",
-  3: "info",
-  4: "warn",
-  5: "error",
-  6: "fatal",
-};
-
-/**
- * Default log level when no preference is set.
- */
-export const DEFAULT_LOG_LEVEL: LogLevelName = "info";
+// Re-export shared constants so existing consumers don't need to change their imports
+export { type LogLevelName, LOG_LEVELS, LOG_LEVEL_NAMES, DEFAULT_LOG_LEVEL };
 
 /**
  * The frontend logger instance.

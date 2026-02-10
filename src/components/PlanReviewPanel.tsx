@@ -3,7 +3,7 @@
  */
 
 import { useState } from "react";
-import { Button, Card } from "./common";
+import { Button, Card, ConfirmModal } from "./common";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { LogViewer, type LogEntry } from "./LogViewer";
 import type { Loop, MessageData, ToolCallData } from "../types";
@@ -242,34 +242,17 @@ export function PlanReviewPanel({
       </Card>
 
       {/* Discard Confirmation Modal */}
-      {showDiscardConfirm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
-              Discard Plan?
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              Are you sure you want to discard this plan? This will delete the loop and all planning work will be lost.
-            </p>
-            <div className="flex gap-4 justify-end">
-              <Button
-                onClick={() => setShowDiscardConfirm(false)}
-                disabled={isSubmitting}
-                variant="secondary"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleDiscardPlan}
-                disabled={isSubmitting}
-                variant="danger"
-              >
-                {isSubmitting ? "Discarding..." : "Discard"}
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={showDiscardConfirm}
+        onClose={() => setShowDiscardConfirm(false)}
+        onConfirm={handleDiscardPlan}
+        title="Discard Plan?"
+        message="Are you sure you want to discard this plan? This will delete the loop and all planning work will be lost."
+        confirmLabel={isSubmitting ? "Discarding..." : "Discard"}
+        cancelLabel="Cancel"
+        loading={isSubmitting}
+        variant="danger"
+      />
     </div>
   );
 }

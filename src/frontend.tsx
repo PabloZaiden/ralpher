@@ -7,10 +7,18 @@
 
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ToastProvider } from "./components/common/Toast";
 
 function start() {
   const root = createRoot(document.getElementById("root")!);
-  root.render(<App />);
+  root.render(
+    <ErrorBoundary>
+      <ToastProvider>
+        <App />
+      </ToastProvider>
+    </ErrorBoundary>
+  );
 }
 
 if (document.readyState === "loading") {

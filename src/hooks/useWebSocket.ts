@@ -6,7 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { log } from "../lib/logger";
 
-export type ConnectionStatus = "connecting" | "open" | "closed" | "error";
+export type WebSocketConnectionStatus = "connecting" | "open" | "closed" | "error";
 
 export interface UseWebSocketOptions<T> {
   /** URL to connect to (WebSocket endpoint) */
@@ -16,7 +16,7 @@ export interface UseWebSocketOptions<T> {
   /** Callback when an event is received */
   onEvent?: (event: T) => void;
   /** Callback when connection status changes */
-  onStatusChange?: (status: ConnectionStatus) => void;
+  onStatusChange?: (status: WebSocketConnectionStatus) => void;
   /** Maximum number of events to keep in history */
   maxEvents?: number;
 }
@@ -25,7 +25,7 @@ export interface UseWebSocketResult<T> {
   /** Array of received events */
   events: T[];
   /** Current connection status */
-  status: ConnectionStatus;
+  status: WebSocketConnectionStatus;
   /** Connect to the WebSocket endpoint */
   connect: () => void;
   /** Disconnect from the WebSocket endpoint */
@@ -50,7 +50,7 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
   const { url, autoConnect = true, onEvent, onStatusChange, maxEvents = 1000 } = options;
 
   const [events, setEvents] = useState<T[]>([]);
-  const [status, setStatus] = useState<ConnectionStatus>("closed");
+  const [status, setStatus] = useState<WebSocketConnectionStatus>("closed");
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
@@ -75,7 +75,7 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
   }, [maxEvents]);
 
   // Update status and call callback
-  const updateStatus = useCallback((newStatus: ConnectionStatus) => {
+  const updateStatus = useCallback((newStatus: WebSocketConnectionStatus) => {
     setStatus(newStatus);
     onStatusChangeRef.current?.(newStatus);
   }, []);

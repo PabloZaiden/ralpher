@@ -37,16 +37,35 @@ export interface EventStream<T> {
   close(): void;
 }
 
+/** Default maximum buffer size for event streams */
+const DEFAULT_MAX_BUFFER_SIZE = 10_000;
+
+/**
+ * Options for creating an event stream.
+ */
+export interface EventStreamOptions {
+  /**
+   * Maximum number of items to buffer before dropping oldest items.
+   * When the buffer exceeds this limit, the oldest items are evicted
+   * to make room for new ones. Defaults to 10,000.
+   * Values less than 1 are clamped to 1; non-integer values are floored.
+   */
+  maxBufferSize?: number;
+}
+
 /**
  * Create an EventStream from a source that pushes events.
  * The producer calls `push()` for each event and `end()` when done.
+ *
+ * @param options - Optional configuration for the stream
  */
-export function createEventStream<T>(): {
+export function createEventStream<T>(options?: EventStreamOptions): {
   stream: EventStream<T>;
   push: (item: T) => void;
   end: () => void;
   fail: (error: Error) => void;
 } {
+  const maxBufferSize = Math.max(1, Math.floor(options?.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE));
   const items: T[] = [];
   const waiters: Array<{
     resolve: (value: T | null) => void;
@@ -55,10 +74,11 @@ export function createEventStream<T>(): {
   let ended = false;
   let closed = false;
   let error: Error | null = null;
+  let droppedCount = 0;
   
   // Generate a unique ID for this stream instance for tracing
   const streamId = Math.random().toString(36).substring(2, 8);
-  log.trace("Creating new event stream", { streamId });
+  log.trace("Creating new event stream", { streamId, maxBufferSize });
 
   function push(item: T): void {
     if (ended || closed) {
@@ -71,6 +91,18 @@ export function createEventStream<T>(): {
       log.trace("Push: resolving waiting consumer", { streamId });
       waiter.resolve(item);
     } else {
+      // Evict oldest items if buffer is full
+      if (items.length >= maxBufferSize) {
+        const evictCount = Math.max(1, Math.floor(maxBufferSize * 0.1));
+        items.splice(0, evictCount);
+        droppedCount += evictCount;
+        log.debug("Push: buffer full, evicted oldest items", {
+          streamId,
+          evictCount,
+          totalDropped: droppedCount,
+          maxBufferSize,
+        });
+      }
       log.trace("Push: buffering item", { streamId, bufferSize: items.length + 1 });
       items.push(item);
     }

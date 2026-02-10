@@ -97,12 +97,6 @@ export const WorkspaceImportRequestSchema = WorkspaceExportSchema;
  */
 export type ServerSettings = z.infer<typeof ServerSettingsSchema>;
 
-// Alias for backwards compatibility
-export type ServerSettingsInput = ServerSettings;
-
-export type CreateWorkspaceRequestInput = z.infer<typeof CreateWorkspaceRequestSchema>;
-export type UpdateWorkspaceRequestInput = z.infer<typeof UpdateWorkspaceRequestSchema>;
-export type TestConnectionRequestInput = z.infer<typeof TestConnectionRequestSchema>;
 export type WorkspaceConfig = z.infer<typeof WorkspaceConfigSchema>;
 export type WorkspaceExportData = z.infer<typeof WorkspaceExportSchema>;
 export type WorkspaceImportRequest = z.infer<typeof WorkspaceImportRequestSchema>;

@@ -1,6 +1,7 @@
 # Ralpher
 
 [![Latest Release](https://img.shields.io/github/v/release/pablozaiden/ralpher?style=flat-square&label=Latest%20Release)](https://github.com/pablozaiden/ralpher/releases/latest)
+[![Docker Main](https://img.shields.io/github/actions/workflow/status/pablozaiden/ralpher/docker-main.yml?branch=main&style=flat-square&label=Docker%20Main)](https://github.com/pablozaiden/ralpher/actions/workflows/docker-main.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 [![Built with Bun](https://img.shields.io/badge/Built%20with-Bun-f9f1e1?style=flat-square&logo=bun)](https://bun.sh)
 
@@ -366,7 +367,7 @@ services:
   ralpher:
     image: ralpher:latest
     ports:
-      - "3000:3000"
+      - "8080:8080"
     volumes:
       - ralpher-data:/app/data
     environment:

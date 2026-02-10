@@ -18,7 +18,7 @@ const testWorkspaceId = "test-workspace-id";
  * Helper to ensure data directories and create test workspace.
  */
 async function setupPersistence(): Promise<void> {
-  const { ensureDataDirectories } = await import("../../src/persistence/paths");
+  const { ensureDataDirectories } = await import("../../src/persistence/database");
   const { createWorkspace } = await import("../../src/persistence/workspaces");
   
   await ensureDataDirectories();
@@ -108,7 +108,7 @@ describe("Persistence", () => {
     });
 
     test("ensureDataDirectories creates database", async () => {
-      const { ensureDataDirectories, isDataDirectoryReady } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories, isDataDirectoryReady } = await import("../../src/persistence/database");
 
       await ensureDataDirectories();
 

@@ -447,6 +447,9 @@ export class CommandExecutorImpl implements CommandExecutor {
     if (result.success) {
       return result.stdout;
     }
+    // Log failed reads so issues with missing/inaccessible files are debuggable.
+    // This is expected for optional files (e.g., AGENTS.md) so use trace level.
+    log.trace(`${LOG_PREFIX} readFile failed for ${path}: exitCode=${result.exitCode}${result.stderr ? `, stderr=${result.stderr}` : ""}`);
     return null;
   }
 

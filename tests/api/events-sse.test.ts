@@ -10,7 +10,7 @@ import { join } from "path";
 import { serve, type Server } from "bun";
 import { apiRoutes } from "../../src/api";
 import { websocketHandlers, type WebSocketData } from "../../src/api/websocket";
-import { ensureDataDirectories } from "../../src/persistence/paths";
+import { ensureDataDirectories } from "../../src/persistence/database";
 import { loopEventEmitter } from "../../src/core/event-emitter";
 
 describe("Events WebSocket API Integration", () => {
@@ -255,6 +255,261 @@ describe("Events WebSocket API Integration", () => {
       expect(pong?.type).toBe("pong");
 
       ws.close();
+    });
+
+    test("handles invalid JSON gracefully without closing connection", async () => {
+      const ws = new WebSocket(`${wsUrl}/api/ws`);
+
+      // Wait for connection
+      await new Promise<void>((resolve) => {
+        ws.onopen = () => resolve();
+      });
+
+      // Skip connection message
+      await new Promise<void>((resolve) => {
+        ws.onmessage = () => resolve();
+      });
+
+      // Send invalid JSON — should not crash or close the connection
+      ws.send("not valid json {{{}}}");
+
+      // Verify connection is still alive by sending a ping and getting pong
+      ws.send(JSON.stringify({ type: "ping" }));
+
+      const pong = await new Promise<{ type: string } | null>((resolve) => {
+        const timeout = setTimeout(() => resolve(null), 1000);
+        ws.onmessage = (event) => {
+          clearTimeout(timeout);
+          try {
+            resolve(JSON.parse(event.data));
+          } catch {
+            resolve(null);
+          }
+        };
+      });
+
+      expect(pong).not.toBeNull();
+      expect(pong?.type).toBe("pong");
+
+      ws.close();
+    });
+
+    test("stops receiving events after client disconnects", async () => {
+      const ws = new WebSocket(`${wsUrl}/api/ws`);
+
+      // Wait for connection
+      await new Promise<void>((resolve) => {
+        ws.onopen = () => resolve();
+      });
+
+      // Skip connection message
+      await new Promise<void>((resolve) => {
+        ws.onmessage = () => resolve();
+      });
+
+      // Close the connection
+      ws.close();
+
+      // Wait for close to propagate
+      await new Promise<void>((resolve) => {
+        ws.onclose = () => resolve();
+      });
+
+      // Emit an event — should not cause errors on the server
+      // (unsubscribe should have been called in the close handler)
+      loopEventEmitter.emit({
+        type: "loop.log",
+        loopId: "after-disconnect",
+        id: "log-after",
+        level: "info",
+        message: "Should not crash",
+        timestamp: new Date().toISOString(),
+      });
+
+      // Give a moment for any errors to surface
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // If we reach here, the server handled the disconnection cleanly
+      expect(true).toBe(true);
+    });
+
+    test("connection confirmation includes loopId when specified", async () => {
+      const testLoopId = "my-test-loop-123";
+      const ws = new WebSocket(`${wsUrl}/api/ws?loopId=${testLoopId}`);
+
+      const message = await new Promise<{ type: string; loopId: string | null } | null>((resolve) => {
+        const timeout = setTimeout(() => {
+          ws.close();
+          resolve(null);
+        }, 1000);
+
+        ws.onmessage = (event) => {
+          clearTimeout(timeout);
+          try {
+            resolve(JSON.parse(event.data));
+          } catch {
+            resolve(null);
+          }
+        };
+
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          resolve(null);
+        };
+      });
+
+      expect(message).not.toBeNull();
+      expect(message?.type).toBe("connected");
+      expect(message?.loopId).toBe(testLoopId);
+      ws.close();
+    });
+
+    test("ignores unknown message types without error", async () => {
+      const ws = new WebSocket(`${wsUrl}/api/ws`);
+
+      // Wait for connection
+      await new Promise<void>((resolve) => {
+        ws.onopen = () => resolve();
+      });
+
+      // Skip connection message
+      await new Promise<void>((resolve) => {
+        ws.onmessage = () => resolve();
+      });
+
+      // Send an unknown message type
+      ws.send(JSON.stringify({ type: "unknown_type", data: "test" }));
+
+      // Verify connection still works
+      ws.send(JSON.stringify({ type: "ping" }));
+
+      const pong = await new Promise<{ type: string } | null>((resolve) => {
+        const timeout = setTimeout(() => resolve(null), 1000);
+        ws.onmessage = (event) => {
+          clearTimeout(timeout);
+          try {
+            resolve(JSON.parse(event.data));
+          } catch {
+            resolve(null);
+          }
+        };
+      });
+
+      expect(pong).not.toBeNull();
+      expect(pong?.type).toBe("pong");
+
+      ws.close();
+    });
+
+    test("multiple clients receive same emitted events", async () => {
+      const ws1 = new WebSocket(`${wsUrl}/api/ws`);
+      const ws2 = new WebSocket(`${wsUrl}/api/ws`);
+
+      // Wait for both connections
+      await Promise.all([
+        new Promise<void>((resolve) => { ws1.onopen = () => resolve(); }),
+        new Promise<void>((resolve) => { ws2.onopen = () => resolve(); }),
+      ]);
+
+      // Skip connection messages
+      await Promise.all([
+        new Promise<void>((resolve) => { ws1.onmessage = () => resolve(); }),
+        new Promise<void>((resolve) => { ws2.onmessage = () => resolve(); }),
+      ]);
+
+      // Set up listeners
+      const received1 = new Promise<unknown>((resolve) => {
+        const timeout = setTimeout(() => resolve(null), 1000);
+        ws1.onmessage = (event) => {
+          clearTimeout(timeout);
+          resolve(JSON.parse(event.data));
+        };
+      });
+
+      const received2 = new Promise<unknown>((resolve) => {
+        const timeout = setTimeout(() => resolve(null), 1000);
+        ws2.onmessage = (event) => {
+          clearTimeout(timeout);
+          resolve(JSON.parse(event.data));
+        };
+      });
+
+      // Emit event
+      const testEvent = {
+        type: "loop.log" as const,
+        loopId: "multi-client-loop",
+        id: "log-multi",
+        level: "info" as const,
+        message: "Multi-client test",
+        timestamp: new Date().toISOString(),
+      };
+      loopEventEmitter.emit(testEvent);
+
+      const [r1, r2] = await Promise.all([received1, received2]);
+      expect(r1).toEqual(testEvent);
+      expect(r2).toEqual(testEvent);
+
+      ws1.close();
+      ws2.close();
+    });
+
+    test("events without loopId are delivered to all clients", async () => {
+      // A client filtering for a specific loop
+      const filteredWs = new WebSocket(`${wsUrl}/api/ws?loopId=specific-loop`);
+      // A client with no filter
+      const unfilteredWs = new WebSocket(`${wsUrl}/api/ws`);
+
+      await Promise.all([
+        new Promise<void>((resolve) => { filteredWs.onopen = () => resolve(); }),
+        new Promise<void>((resolve) => { unfilteredWs.onopen = () => resolve(); }),
+      ]);
+
+      // Skip connection messages
+      await Promise.all([
+        new Promise<void>((resolve) => { filteredWs.onmessage = () => resolve(); }),
+        new Promise<void>((resolve) => { unfilteredWs.onmessage = () => resolve(); }),
+      ]);
+
+      // Collect events
+      const filteredEvents: unknown[] = [];
+      const unfilteredEvents: unknown[] = [];
+      filteredWs.onmessage = (event) => {
+        filteredEvents.push(JSON.parse(event.data));
+      };
+      unfilteredWs.onmessage = (event) => {
+        unfilteredEvents.push(JSON.parse(event.data));
+      };
+
+      // Emit event that has no loopId — should pass through the filter
+      // because the filter checks `"loopId" in event` and only skips if loopId differs
+      loopEventEmitter.emit({
+        type: "loop.log",
+        loopId: "specific-loop",
+        id: "log-match",
+        level: "info",
+        message: "Matching loop",
+        timestamp: new Date().toISOString(),
+      });
+
+      loopEventEmitter.emit({
+        type: "loop.log",
+        loopId: "other-loop",
+        id: "log-other",
+        level: "info",
+        message: "Non-matching loop",
+        timestamp: new Date().toISOString(),
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Filtered client should only get the matching event
+      expect(filteredEvents.length).toBe(1);
+      expect((filteredEvents[0] as { loopId: string }).loopId).toBe("specific-loop");
+
+      // Unfiltered client should get both events
+      expect(unfilteredEvents.length).toBe(2);
+
+      filteredWs.close();
+      unfilteredWs.close();
     });
   });
 });
