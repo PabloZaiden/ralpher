@@ -972,6 +972,46 @@ export class GitService {
   }
 
   /**
+   * Ensure a merge strategy is configured for the repository.
+   * 
+   * Some environments don't have `pull.rebase` configured, which can cause
+   * git merge/pull operations to fail or warn. This method sets `pull.rebase false`
+   * (standard merge behavior) if no merge strategy is currently configured.
+   * 
+   * @param directory - The git repository directory
+   * @returns true if the strategy was already set or was successfully configured
+   */
+  async ensureMergeStrategy(directory: string): Promise<boolean> {
+    // Check if pull.rebase is already configured
+    const checkResult = await this.runGitCommand(
+      directory,
+      ["config", "pull.rebase"],
+      { allowFailure: true }
+    );
+
+    if (checkResult.success) {
+      // Already configured — no-op
+      log.trace(`[GitService] pull.rebase already configured: ${checkResult.stdout.trim()}`);
+      return true;
+    }
+
+    // Not configured — set to false (standard merge behavior)
+    const setResult = await this.runGitCommand(directory, [
+      "config",
+      "pull.rebase",
+      "false",
+    ]);
+
+    if (!setResult.success) {
+      log.warn(`[GitService] Failed to set pull.rebase: ${setResult.stderr}`);
+      return false;
+    }
+
+    log.trace(`[GitService] Set pull.rebase to false`);
+    return true;
+  }
+
+  /**
    * Get the diff between the current branch and a base branch.
    */
   async getDiff(directory: string, baseBranch: string): Promise<FileDiff[]> {

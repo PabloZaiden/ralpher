@@ -160,7 +160,7 @@ export interface LoopState {
     reviewBranches: string[];
   };
 
-  /** Sync state for tracking base branch sync during push */
+  /** Sync state for tracking branch sync during push */
   syncState?: {
     /** Current sync status */
     status: "syncing" | "clean" | "conflicts" | "resolved";
@@ -168,6 +168,8 @@ export interface LoopState {
     baseBranch: string;
     /** Whether to auto-push after conflict resolution completes */
     autoPushOnComplete: boolean;
+    /** Which sync phase is in progress — working branch pull or base branch merge */
+    syncPhase?: "working_branch" | "base_branch";
   };
 
   /** TODOs from the session persisted for screen refresh (always initialized as empty array) */
