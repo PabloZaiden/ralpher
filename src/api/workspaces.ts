@@ -4,6 +4,7 @@
  * This module provides CRUD operations for workspaces:
  * - Create, read, update, and delete workspaces
  * - List workspaces with loop counts
+ * - Export and import workspace configs
  * - Get loops by workspace
  * 
  * @module api/workspaces
@@ -16,6 +17,8 @@ import {
   updateWorkspace, 
   deleteWorkspace,
   getWorkspaceByDirectory,
+  exportWorkspaces,
+  importWorkspaces,
 } from "../persistence/workspaces";
 import { backendManager } from "../core/backend-manager";
 import { log } from "../core/logger";
@@ -27,6 +30,7 @@ import {
   UpdateWorkspaceRequestSchema,
   ServerSettingsSchema,
   TestConnectionRequestSchema,
+  WorkspaceImportRequestSchema,
 } from "../types/schemas";
 
 /**
@@ -481,6 +485,54 @@ export const workspacesRoutes = {
         log.error("Failed to test connection:", String(error));
         return Response.json(
           { success: false, error: String(error) },
+          { status: 500 }
+        );
+      }
+    },
+  },
+
+  /**
+   * GET /api/workspaces/export - Export all workspace configs as JSON
+   */
+  "/api/workspaces/export": {
+    async GET() {
+      log.debug("GET /api/workspaces/export - Exporting workspace configs");
+      try {
+        const exportData = await exportWorkspaces();
+        return Response.json(exportData);
+      } catch (error) {
+        log.error("Failed to export workspaces:", String(error));
+        return Response.json(
+          { message: "Failed to export workspaces", error: String(error) },
+          { status: 500 }
+        );
+      }
+    },
+  },
+
+  /**
+   * POST /api/workspaces/import - Import workspace configs from JSON
+   */
+  "/api/workspaces/import": {
+    async POST(req: Request) {
+      log.debug("POST /api/workspaces/import - Importing workspace configs");
+      const result = await parseAndValidate(WorkspaceImportRequestSchema, req);
+      
+      if (!result.success) {
+        log.warn("POST /api/workspaces/import - Validation failed");
+        return result.response;
+      }
+
+      const data = result.data;
+
+      try {
+        const importResult = await importWorkspaces(data);
+        log.info("Workspace import complete", { created: importResult.created, skipped: importResult.skipped });
+        return Response.json(importResult);
+      } catch (error) {
+        log.error("Failed to import workspaces:", String(error));
+        return Response.json(
+          { message: "Failed to import workspaces", error: String(error) },
           { status: 500 }
         );
       }

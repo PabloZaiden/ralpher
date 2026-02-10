@@ -384,3 +384,175 @@ describe("refresh", () => {
     expect(api.calls("/api/workspaces", "GET")).toHaveLength(2);
   });
 });
+
+// ─── exportConfig ────────────────────────────────────────────────────────────
+
+describe("exportConfig", () => {
+  test("calls GET /api/workspaces/export and returns data", async () => {
+    setupWorkspacesList();
+
+    const exportData = {
+      version: 1,
+      exportedAt: "2026-02-10T12:00:00.000Z",
+      workspaces: [
+        {
+          name: "WS 1",
+          directory: "/workspaces/ws1",
+          serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
+        },
+      ],
+    };
+
+    api.get("/api/workspaces/export", () => exportData);
+
+    const { result } = renderHook(() => useWorkspaces());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    let exported: unknown = null;
+    await act(async () => {
+      exported = await result.current.exportConfig();
+    });
+
+    expect(exported).toEqual(exportData);
+    expect(api.calls("/api/workspaces/export", "GET")).toHaveLength(1);
+    expect(result.current.saving).toBe(false);
+  });
+
+  test("sets error and returns null on failure", async () => {
+    setupWorkspacesList();
+    api.get("/api/workspaces/export", () => {
+      throw new MockApiError(500, { message: "Export failed" });
+    });
+
+    const { result } = renderHook(() => useWorkspaces());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    let exported: unknown = null;
+    await act(async () => {
+      exported = await result.current.exportConfig();
+    });
+
+    expect(exported).toBeNull();
+    expect(result.current.error).toBeTruthy();
+    expect(result.current.saving).toBe(false);
+  });
+});
+
+// ─── importConfig ────────────────────────────────────────────────────────────
+
+describe("importConfig", () => {
+  test("POSTs to /api/workspaces/import and returns result", async () => {
+    setupWorkspacesList();
+
+    const importData = {
+      version: 1 as const,
+      exportedAt: "2026-02-10T12:00:00.000Z",
+      workspaces: [
+        {
+          name: "Imported WS",
+          directory: "/workspaces/imported",
+          serverSettings: { mode: "connect" as const, hostname: "host.com", port: 3000, useHttps: true, allowInsecure: false },
+        },
+      ],
+    };
+
+    const importResult = {
+      created: 1,
+      skipped: 0,
+      details: [{ name: "Imported WS", directory: "/workspaces/imported", status: "created" }],
+    };
+
+    api.post("/api/workspaces/import", () => importResult);
+
+    const { result } = renderHook(() => useWorkspaces());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    let returned: unknown = null;
+    await act(async () => {
+      returned = await result.current.importConfig(importData);
+    });
+
+    expect(returned).toEqual(importResult);
+
+    // Verify POST was made with correct body
+    const postCalls = api.calls("/api/workspaces/import", "POST");
+    expect(postCalls).toHaveLength(1);
+    expect(postCalls[0]!.body).toEqual(importData);
+    expect(result.current.saving).toBe(false);
+  });
+
+  test("refreshes workspace list after successful import", async () => {
+    const ws1 = createWorkspaceWithLoopCount({ id: "ws-1", name: "WS 1" });
+    const ws2 = createWorkspaceWithLoopCount({ id: "ws-2", name: "WS 2" });
+
+    let getCallCount = 0;
+    api.get("/api/workspaces", () => {
+      getCallCount++;
+      return getCallCount === 1 ? [ws1] : [ws1, ws2];
+    });
+
+    api.post("/api/workspaces/import", () => ({
+      created: 1,
+      skipped: 0,
+      details: [{ name: "WS 2", directory: "/workspaces/ws2", status: "created" }],
+    }));
+
+    const { result } = renderHook(() => useWorkspaces());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.workspaces).toHaveLength(1);
+
+    await act(async () => {
+      await result.current.importConfig({
+        version: 1,
+        exportedAt: "2026-02-10T12:00:00.000Z",
+        workspaces: [
+          { name: "WS 2", directory: "/workspaces/ws2", serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false } },
+        ],
+      });
+    });
+
+    // Should have refreshed the list — now 2 workspaces
+    expect(result.current.workspaces).toHaveLength(2);
+    // Initial fetch + refresh after import
+    expect(api.calls("/api/workspaces", "GET").length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("sets error and returns null on failure", async () => {
+    setupWorkspacesList();
+    api.post("/api/workspaces/import", () => {
+      throw new MockApiError(400, { message: "Invalid import data" });
+    });
+
+    const { result } = renderHook(() => useWorkspaces());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    let returned: unknown = null;
+    await act(async () => {
+      returned = await result.current.importConfig({
+        version: 1,
+        exportedAt: "2026-02-10T12:00:00.000Z",
+        workspaces: [],
+      });
+    });
+
+    expect(returned).toBeNull();
+    expect(result.current.error).toBeTruthy();
+    expect(result.current.saving).toBe(false);
+  });
+});

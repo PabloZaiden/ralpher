@@ -1021,4 +1021,249 @@ describe("Workspace API Integration", () => {
       });
     });
   });
+
+  describe("Export/Import", () => {
+    describe("GET /api/workspaces/export", () => {
+      test("returns valid export format with version 1 and empty workspaces", async () => {
+        const response = await fetch(`${baseUrl}/api/workspaces/export`);
+        expect(response.ok).toBe(true);
+        const data = await response.json();
+        expect(data.version).toBe(1);
+        expect(data.exportedAt).toBeDefined();
+        expect(data.workspaces).toEqual([]);
+      });
+
+      test("returns all workspace configs with serverSettings", async () => {
+        // Create two workspaces with different settings
+        const testWorkDir2 = await mkdtemp(join(tmpdir(), "ralpher-api-ws-export-"));
+        await Bun.$`git init ${testWorkDir2}`.quiet();
+        await Bun.$`git -C ${testWorkDir2} config user.email "test@test.com"`.quiet();
+        await Bun.$`git -C ${testWorkDir2} config user.name "Test User"`.quiet();
+        await Bun.$`touch ${testWorkDir2}/README.md`.quiet();
+        await Bun.$`git -C ${testWorkDir2} add .`.quiet();
+        await Bun.$`git -C ${testWorkDir2} commit -m "Initial commit"`.quiet();
+
+        try {
+          await fetch(`${baseUrl}/api/workspaces`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: "Export WS A",
+              directory: testWorkDir,
+              serverSettings: {
+                mode: "connect",
+                hostname: "export-a.com",
+                port: 3001,
+                password: "secret-a",
+                useHttps: true,
+                allowInsecure: false,
+              },
+            }),
+          });
+
+          await fetch(`${baseUrl}/api/workspaces`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: "Export WS B",
+              directory: testWorkDir2,
+            }),
+          });
+
+          const response = await fetch(`${baseUrl}/api/workspaces/export`);
+          expect(response.ok).toBe(true);
+          const data = await response.json();
+
+          expect(data.version).toBe(1);
+          expect(data.workspaces).toHaveLength(2);
+
+          // Each workspace should have name, directory, serverSettings
+          for (const ws of data.workspaces) {
+            expect(ws.name).toBeDefined();
+            expect(ws.directory).toBeDefined();
+            expect(ws.serverSettings).toBeDefined();
+            // Should NOT have internal fields
+            expect(ws.id).toBeUndefined();
+            expect(ws.createdAt).toBeUndefined();
+            expect(ws.updatedAt).toBeUndefined();
+          }
+
+          // Verify password is included
+          const wsA = data.workspaces.find((w: { name: string }) => w.name === "Export WS A");
+          expect(wsA).toBeDefined();
+          expect(wsA.serverSettings.password).toBe("secret-a");
+        } finally {
+          await rm(testWorkDir2, { recursive: true, force: true });
+        }
+      });
+    });
+
+    describe("POST /api/workspaces/import", () => {
+      test("creates workspaces from valid payload", async () => {
+        const importPayload = {
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          workspaces: [
+            {
+              name: "Imported WS 1",
+              directory: "/tmp/import-test-1",
+              serverSettings: {
+                mode: "connect",
+                hostname: "imported.server.com",
+                port: 9000,
+                useHttps: true,
+                allowInsecure: false,
+              },
+            },
+            {
+              name: "Imported WS 2",
+              directory: "/tmp/import-test-2",
+              serverSettings: {
+                mode: "spawn",
+                useHttps: false,
+                allowInsecure: false,
+              },
+            },
+          ],
+        };
+
+        const response = await fetch(`${baseUrl}/api/workspaces/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(importPayload),
+        });
+        expect(response.ok).toBe(true);
+        const result = await response.json();
+
+        expect(result.created).toBe(2);
+        expect(result.skipped).toBe(0);
+        expect(result.details).toHaveLength(2);
+        expect(result.details[0].status).toBe("created");
+        expect(result.details[1].status).toBe("created");
+
+        // Verify workspaces appear in the list
+        const listResponse = await fetch(`${baseUrl}/api/workspaces`);
+        const workspaces = await listResponse.json();
+        expect(workspaces).toHaveLength(2);
+      });
+
+      test("skips existing directories and reports them", async () => {
+        // Create a workspace first
+        await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Existing WS",
+            directory: testWorkDir,
+          }),
+        });
+
+        const importPayload = {
+          version: 1,
+          exportedAt: new Date().toISOString(),
+          workspaces: [
+            {
+              name: "New Import",
+              directory: "/tmp/new-import-dir",
+              serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
+            },
+            {
+              name: "Duplicate Import",
+              directory: testWorkDir,
+              serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
+            },
+          ],
+        };
+
+        const response = await fetch(`${baseUrl}/api/workspaces/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(importPayload),
+        });
+        expect(response.ok).toBe(true);
+        const result = await response.json();
+
+        expect(result.created).toBe(1);
+        expect(result.skipped).toBe(1);
+
+        const skippedDetail = result.details.find((d: { status: string }) => d.status === "skipped");
+        expect(skippedDetail).toBeDefined();
+        expect(skippedDetail.name).toBe("Duplicate Import");
+        expect(skippedDetail.reason).toContain(testWorkDir);
+      });
+
+      test("validates schema and returns 400 for invalid data", async () => {
+        // Missing required fields
+        const response = await fetch(`${baseUrl}/api/workspaces/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ invalid: true }),
+        });
+        expect(response.status).toBe(400);
+      });
+
+      test("returns 400 for unknown version", async () => {
+        const response = await fetch(`${baseUrl}/api/workspaces/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            version: 999,
+            exportedAt: new Date().toISOString(),
+            workspaces: [],
+          }),
+        });
+        expect(response.status).toBe(400);
+      });
+
+      test("round-trip: export then import on clean database reproduces same workspaces", async () => {
+        // Create workspaces
+        await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "RT Workspace",
+            directory: testWorkDir,
+            serverSettings: {
+              mode: "connect",
+              hostname: "rt.server.com",
+              port: 5555,
+              password: "rt-password",
+              useHttps: true,
+              allowInsecure: false,
+            },
+          }),
+        });
+
+        // Export
+        const exportResponse = await fetch(`${baseUrl}/api/workspaces/export`);
+        expect(exportResponse.ok).toBe(true);
+        const exportedData = await exportResponse.json();
+        expect(exportedData.workspaces).toHaveLength(1);
+
+        // Clear database (via beforeEach pattern — manually delete)
+        const { getDatabase } = await import("../../src/persistence/database");
+        const db = getDatabase();
+        db.run("DELETE FROM workspaces");
+
+        // Import the exported data
+        const importResponse = await fetch(`${baseUrl}/api/workspaces/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(exportedData),
+        });
+        expect(importResponse.ok).toBe(true);
+        const importResult = await importResponse.json();
+        expect(importResult.created).toBe(1);
+
+        // Verify the imported workspace matches
+        const listResponse = await fetch(`${baseUrl}/api/workspaces`);
+        const workspaces = await listResponse.json();
+        expect(workspaces).toHaveLength(1);
+        expect(workspaces[0].name).toBe("RT Workspace");
+        expect(workspaces[0].serverSettings.hostname).toBe("rt.server.com");
+        expect(workspaces[0].serverSettings.port).toBe(5555);
+        expect(workspaces[0].serverSettings.password).toBe("rt-password");
+      });
+    });
+  });
 });

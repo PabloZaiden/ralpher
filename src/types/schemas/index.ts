@@ -39,11 +39,17 @@ export {
   CreateWorkspaceRequestSchema,
   UpdateWorkspaceRequestSchema,
   TestConnectionRequestSchema,
+  WorkspaceConfigSchema,
+  WorkspaceExportSchema,
+  WorkspaceImportRequestSchema,
   type ServerSettings,
   type ServerSettingsInput,
   type CreateWorkspaceRequestInput,
   type UpdateWorkspaceRequestInput,
   type TestConnectionRequestInput,
+  type WorkspaceConfig,
+  type WorkspaceExportData,
+  type WorkspaceImportRequest,
 } from "./workspace";
 
 // Preferences schemas

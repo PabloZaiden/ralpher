@@ -18,6 +18,9 @@ import {
 } from "./schemas";
 import type { z } from "zod";
 
+// Re-export schema-derived types for convenience
+export type { WorkspaceConfig, WorkspaceExportData, WorkspaceImportRequest } from "./schemas";
+
 /**
  * A workspace represents a directory that contains Ralph Loops.
  * 
@@ -65,4 +68,26 @@ export type UpdateWorkspaceRequest = z.infer<typeof UpdateWorkspaceRequestSchema
 export interface WorkspaceWithLoopCount extends Workspace {
   /** Number of loops in this workspace */
   loopCount: number;
+}
+
+/**
+ * Result of a workspace import operation.
+ * Reports what was created and what was skipped.
+ */
+export interface WorkspaceImportResult {
+  /** Number of workspaces successfully created */
+  created: number;
+  /** Number of workspaces skipped (directory already exists) */
+  skipped: number;
+  /** Details of each workspace in the import */
+  details: Array<{
+    /** Workspace name from the import file */
+    name: string;
+    /** Workspace directory from the import file */
+    directory: string;
+    /** Whether this workspace was created or skipped */
+    status: "created" | "skipped";
+    /** Reason for skipping (if status is "skipped") */
+    reason?: string;
+  }>;
 }

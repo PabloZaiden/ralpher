@@ -3,8 +3,9 @@
  * Handles reading and writing workspace data to SQLite database.
  */
 
-import type { Workspace, WorkspaceWithLoopCount } from "../types/workspace";
+import type { Workspace, WorkspaceWithLoopCount, WorkspaceImportResult } from "../types/workspace";
 import type { ServerSettings } from "../types/settings";
+import type { WorkspaceConfig, WorkspaceExportData } from "../types/schemas";
 import { getDefaultServerSettings } from "../types/settings";
 import { getDatabase } from "./database";
 import { createLogger } from "../core/logger";
@@ -236,4 +237,86 @@ export async function touchWorkspace(id: string): Promise<void> {
     new Date().toISOString(),
     id,
   ]);
+}
+
+/**
+ * Export all workspaces as a portable config format.
+ * Strips internal fields (id, timestamps) and returns only portable config.
+ */
+export async function exportWorkspaces(): Promise<WorkspaceExportData> {
+  log.debug("Exporting all workspaces");
+  const db = getDatabase();
+  const stmt = db.prepare("SELECT * FROM workspaces ORDER BY name COLLATE NOCASE ASC");
+  const rows = stmt.all() as Array<Record<string, unknown>>;
+
+  const workspaces: WorkspaceConfig[] = rows.map((row) => {
+    const workspace = rowToWorkspace(row);
+    return {
+      name: workspace.name,
+      directory: workspace.directory,
+      serverSettings: workspace.serverSettings,
+    };
+  });
+
+  log.info("Workspaces exported", { count: workspaces.length });
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    workspaces,
+  };
+}
+
+/**
+ * Import workspaces from a portable config format.
+ * Creates new workspaces, skipping any whose directory already exists.
+ */
+export async function importWorkspaces(data: WorkspaceExportData): Promise<WorkspaceImportResult> {
+  log.debug("Importing workspaces", { count: data.workspaces.length });
+
+  const result: WorkspaceImportResult = {
+    created: 0,
+    skipped: 0,
+    details: [],
+  };
+
+  for (const config of data.workspaces) {
+    // Check if a workspace with this directory already exists
+    const existing = await getWorkspaceByDirectory(config.directory);
+    if (existing) {
+      log.debug("Skipping workspace import - directory already exists", {
+        name: config.name,
+        directory: config.directory,
+        existingId: existing.id,
+      });
+      result.skipped++;
+      result.details.push({
+        name: config.name,
+        directory: config.directory,
+        status: "skipped",
+        reason: `A workspace already exists for directory: ${config.directory}`,
+      });
+      continue;
+    }
+
+    const now = new Date().toISOString();
+    const workspace: Workspace = {
+      id: crypto.randomUUID(),
+      name: config.name,
+      directory: config.directory,
+      serverSettings: config.serverSettings,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await createWorkspace(workspace);
+    result.created++;
+    result.details.push({
+      name: config.name,
+      directory: config.directory,
+      status: "created",
+    });
+  }
+
+  log.info("Workspaces imported", { created: result.created, skipped: result.skipped });
+  return result;
 }
