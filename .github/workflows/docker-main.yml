@@ -60,8 +60,39 @@ jobs:
         with:
           context: .
           push: true
+          load: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: ${{ env.BUILD_PLATFORMS }}
+
+      - name: Test container healthcheck
+        run: |
+          # Run the container in the background
+          docker run -d --name ralpher-test -p 8080:8080 ${{ steps.meta.outputs.tags }}
+
+          # Wait for the container to be ready and healthy
+          echo "Waiting for container to become healthy..."
+          for i in $(seq 1 30); do
+            STATUS=$(docker inspect --format='{{.State.Health.Status}}' ralpher-test 2>/dev/null || echo "starting")
+            if [ "$STATUS" = "healthy" ]; then
+              echo "Container is healthy!"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Container failed to become healthy within 60s"
+              echo "Container status: $STATUS"
+              echo "Container logs:"
+              docker logs ralpher-test
+              docker rm -f ralpher-test
+              exit 1
+            fi
+            sleep 2
+          done
+
+          # Verify the health endpoint directly
+          curl -f http://localhost:8080/api/health
+
+          # Cleanup
+          docker rm -f ralpher-test

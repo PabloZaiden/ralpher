@@ -42,11 +42,11 @@ RUN mkdir -p /app/data && chown -R ralpher:ralpher /app/data
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV RALPHER_PORT=80
+ENV RALPHER_PORT=8080
 ENV RALPHER_DATA_DIR=/app/data
 
-# Expose port 80
-EXPOSE 80
+# Expose port 8080 (non-root user cannot bind to privileged ports)
+EXPOSE 8080
 
 # Run as non-root user
 USER ralpher
