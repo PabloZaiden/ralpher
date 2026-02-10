@@ -91,6 +91,7 @@ export interface ToolCallData {
  * - **Iteration events**: iteration.start, iteration.end
  * - **Activity events**: message, tool_call, progress, log, git.commit
  * - **Completion events**: accepted (merged), discarded, pushed
+ * - **Sync events**: sync.started, sync.clean, sync.conflicts
  * - **Plan mode events**: plan.ready, plan.feedback, plan.accepted, plan.discarded
  * - **State events**: todo.updated
  */
@@ -112,6 +113,9 @@ export type LoopEvent =
   | LoopAcceptedEvent
   | LoopDiscardedEvent
   | LoopPushedEvent
+  | LoopSyncStartedEvent
+  | LoopSyncCleanEvent
+  | LoopSyncConflictsEvent
   | LoopPlanReadyEvent
   | LoopPlanFeedbackSentEvent
   | LoopPlanAcceptedEvent
@@ -382,6 +386,50 @@ export interface LoopPushedEvent {
   loopId: string;
   /** Name of the remote branch (e.g., "origin/ralph/add-feature") */
   remoteBranch: string;
+  /** ISO 8601 timestamp */
+  timestamp: string;
+}
+
+/**
+ * Emitted when a base branch sync starts during push.
+ * Indicates the system is fetching and merging the latest base branch.
+ */
+export interface LoopSyncStartedEvent {
+  type: "loop.sync.started";
+  /** ID of the loop being synced */
+  loopId: string;
+  /** The base branch being synced with */
+  baseBranch: string;
+  /** ISO 8601 timestamp */
+  timestamp: string;
+}
+
+/**
+ * Emitted when a base branch sync completes cleanly (no conflicts).
+ * The merge succeeded and push will proceed immediately.
+ */
+export interface LoopSyncCleanEvent {
+  type: "loop.sync.clean";
+  /** ID of the loop that was synced */
+  loopId: string;
+  /** The base branch that was synced with */
+  baseBranch: string;
+  /** ISO 8601 timestamp */
+  timestamp: string;
+}
+
+/**
+ * Emitted when a base branch sync detects merge conflicts.
+ * The loop engine is being restarted to resolve the conflicts.
+ */
+export interface LoopSyncConflictsEvent {
+  type: "loop.sync.conflicts";
+  /** ID of the loop with conflicts */
+  loopId: string;
+  /** The base branch that caused conflicts */
+  baseBranch: string;
+  /** List of files with conflicts */
+  conflictedFiles: string[];
   /** ISO 8601 timestamp */
   timestamp: string;
 }

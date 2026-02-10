@@ -181,6 +181,8 @@ export type PushResponse =
       success: true;
       /** The name of the remote branch that was pushed */
       remoteBranch: string;
+      /** Sync status with base branch */
+      syncStatus: "already_up_to_date" | "clean" | "conflicts_being_resolved";
     }
   | {
       success: false;

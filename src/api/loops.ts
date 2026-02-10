@@ -686,10 +686,11 @@ export const loopsControlRoutes = {
         return errorResponse("push_failed", result.error ?? "Unknown error", 400);
       }
 
-      log.info("POST /api/loops/:id/push - Loop pushed", { loopId: req.params.id, remoteBranch: result.remoteBranch });
+      log.info("POST /api/loops/:id/push - Loop pushed", { loopId: req.params.id, remoteBranch: result.remoteBranch, syncStatus: result.syncStatus });
       const response: PushResponse = {
         success: true,
         remoteBranch: result.remoteBranch!,
+        syncStatus: result.syncStatus ?? "already_up_to_date",
       };
       return Response.json(response);
     },
