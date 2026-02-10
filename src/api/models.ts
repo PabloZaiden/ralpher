@@ -74,13 +74,13 @@ export async function isModelEnabled(
       if (!testBackend.isConnected()) {
         await testBackend.connect(buildConnectionConfig(getDefaultServerSettings(), directory));
       }
-      models = await testBackend.getModels(directory) as ModelInfo[];
+      models = await testBackend.getModels(directory);
     } else {
       // Check if workspace backend is already connected
       const existingBackend = backendManager.getBackend(workspaceId);
       if (existingBackend.isConnected()) {
         // Use existing connected backend - no side effects
-        models = await existingBackend.getModels(directory) as ModelInfo[];
+        models = await existingBackend.getModels(directory);
       } else {
         // Create a temporary backend (similar to GET /api/models)
         // This avoids mutating global connection state
@@ -96,7 +96,7 @@ export async function isModelEnabled(
         const tempBackend = new OpenCodeBackend();
         try {
           await tempBackend.connect(buildConnectionConfig(workspace.serverSettings, directory));
-          models = await tempBackend.getModels(directory) as ModelInfo[];
+          models = await tempBackend.getModels(directory);
         } finally {
           // Always disconnect temporary backend
           try {

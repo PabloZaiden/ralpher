@@ -19,7 +19,9 @@ import {
   exportWorkspaces,
 } from "../persistence/workspaces";
 import { backendManager } from "../core/backend-manager";
-import { log } from "../core/logger";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("api:workspaces");
 import { getDefaultServerSettings } from "../types/settings";
 import type { Workspace, WorkspaceImportResult } from "../types/workspace";
 import type { WorkspaceExportData } from "../types/schemas";
@@ -272,11 +274,9 @@ export const workspacesRoutes = {
   /**
    * GET/PUT/DELETE /api/workspaces/:id - Single workspace operations
    */
-  "/api/workspaces/:id": async (req: Request & { params: { id: string } }) => {
-    const { id } = req.params;
-    const method = req.method;
-
-    if (method === "GET") {
+  "/api/workspaces/:id": {
+    async GET(req: Request & { params: { id: string } }) {
+      const { id } = req.params;
       log.trace("GET /api/workspaces/:id", { workspaceId: id });
       try {
         const result = await requireWorkspace(id);
@@ -289,9 +289,10 @@ export const workspacesRoutes = {
         log.error("Failed to get workspace:", String(error));
         return errorResponse("get_failed", `Failed to get workspace: ${String(error)}`, 500);
       }
-    }
+    },
 
-    if (method === "PUT") {
+    async PUT(req: Request & { params: { id: string } }) {
+      const { id } = req.params;
       log.debug("PUT /api/workspaces/:id", { workspaceId: id });
       const result = await parseAndValidate(UpdateWorkspaceRequestSchema, req);
       
@@ -323,9 +324,10 @@ export const workspacesRoutes = {
         log.error("Failed to update workspace:", String(error));
         return errorResponse("update_failed", `Failed to update workspace: ${String(error)}`, 500);
       }
-    }
+    },
 
-    if (method === "DELETE") {
+    async DELETE(req: Request & { params: { id: string } }) {
+      const { id } = req.params;
       log.debug("DELETE /api/workspaces/:id", { workspaceId: id });
       try {
         const result = await deleteWorkspace(id);
@@ -342,9 +344,7 @@ export const workspacesRoutes = {
         log.error("Failed to delete workspace:", String(error));
         return errorResponse("delete_failed", `Failed to delete workspace: ${String(error)}`, 500);
       }
-    }
-
-    return errorResponse("method_not_allowed", "Method not allowed", 405);
+    },
   },
 
   /**
@@ -375,11 +375,9 @@ export const workspacesRoutes = {
   /**
    * GET /api/workspaces/:id/server-settings - Get workspace server settings
    */
-  "/api/workspaces/:id/server-settings": async (req: Request & { params: { id: string } }) => {
-    const { id } = req.params;
-    const method = req.method;
-
-    if (method === "GET") {
+  "/api/workspaces/:id/server-settings": {
+    async GET(req: Request & { params: { id: string } }) {
+      const { id } = req.params;
       try {
         const result = await requireWorkspace(id);
         if (result instanceof Response) return result;
@@ -388,9 +386,10 @@ export const workspacesRoutes = {
         log.error("Failed to get workspace server settings:", String(error));
         return errorResponse("get_settings_failed", `Failed to get server settings: ${String(error)}`, 500);
       }
-    }
+    },
 
-    if (method === "PUT") {
+    async PUT(req: Request & { params: { id: string } }) {
+      const { id } = req.params;
       const result = await parseAndValidate(ServerSettingsSchema, req);
       
       if (!result.success) {
@@ -414,98 +413,87 @@ export const workspacesRoutes = {
         log.error("Failed to update workspace server settings:", String(error));
         return errorResponse("update_settings_failed", `Failed to update server settings: ${String(error)}`, 500);
       }
-    }
-
-    return errorResponse("method_not_allowed", "Method not allowed", 405);
+    },
   },
 
   /**
    * GET /api/workspaces/:id/server-settings/status - Get connection status for workspace
    */
-  "/api/workspaces/:id/server-settings/status": async (req: Request & { params: { id: string } }) => {
-    const { id } = req.params;
+  "/api/workspaces/:id/server-settings/status": {
+    async GET(req: Request & { params: { id: string } }) {
+      const { id } = req.params;
+      try {
+        const result = await requireWorkspace(id);
+        if (result instanceof Response) return result;
 
-    if (req.method !== "GET") {
-      return errorResponse("method_not_allowed", "Method not allowed", 405);
-    }
-
-    try {
-      const result = await requireWorkspace(id);
-      if (result instanceof Response) return result;
-
-      const status = backendManager.getWorkspaceStatus(id);
-      return Response.json(status);
-    } catch (error) {
-      log.error("Failed to get workspace connection status:", String(error));
-      return errorResponse("status_failed", `Failed to get connection status: ${String(error)}`, 500);
-    }
+        const status = backendManager.getWorkspaceStatus(id);
+        return Response.json(status);
+      } catch (error) {
+        log.error("Failed to get workspace connection status:", String(error));
+        return errorResponse("status_failed", `Failed to get connection status: ${String(error)}`, 500);
+      }
+    },
   },
 
   /**
    * POST /api/workspaces/:id/server-settings/test - Test connection for workspace
    */
-  "/api/workspaces/:id/server-settings/test": async (req: Request & { params: { id: string } }) => {
-    const { id } = req.params;
-
-    if (req.method !== "POST") {
-      return errorResponse("method_not_allowed", "Method not allowed", 405);
-    }
-
-    try {
-      const workspace = await requireWorkspace(id);
-      if (workspace instanceof Response) return workspace;
-
-      // Optionally accept settings in the body to test proposed settings
-      // If no body, use the workspace's current settings
-      let settings = workspace.serverSettings;
-      
-      // Try to parse the body - if empty or invalid JSON, use current settings
+  "/api/workspaces/:id/server-settings/test": {
+    async POST(req: Request & { params: { id: string } }) {
+      const { id } = req.params;
       try {
-        const bodyText = await req.text();
-        if (bodyText.trim()) {
-          const bodyJson = JSON.parse(bodyText);
-          // Only use the body if it has a mode (meaning it's a valid ServerSettings object)
-          if (bodyJson && bodyJson.mode) {
-            const result = ServerSettingsSchema.safeParse(bodyJson);
-            if (result.success) {
-              settings = result.data;
-            }
-            // If validation fails, just use current settings (backward compatible)
-          }
-        }
-      } catch {
-        // JSON parse error or empty body - use current settings
-      }
+        const workspace = await requireWorkspace(id);
+        if (workspace instanceof Response) return workspace;
 
-      const result = await backendManager.testConnection(settings, workspace.directory);
-      return Response.json(result);
-    } catch (error) {
-      log.error("Failed to test workspace connection:", String(error));
-      return errorResponse("test_failed", `Failed to test connection: ${String(error)}`, 500);
-    }
+        // Optionally accept settings in the body to test proposed settings
+        // If no body, use the workspace's current settings
+        let settings = workspace.serverSettings;
+        
+        // Try to parse the body - if empty or invalid JSON, use current settings
+        try {
+          const bodyText = await req.text();
+          if (bodyText.trim()) {
+            const bodyJson = JSON.parse(bodyText);
+            // Only use the body if it has a mode (meaning it's a valid ServerSettings object)
+            if (bodyJson && bodyJson.mode) {
+              const result = ServerSettingsSchema.safeParse(bodyJson);
+              if (result.success) {
+                settings = result.data;
+              }
+              // If validation fails, just use current settings (backward compatible)
+            }
+          }
+        } catch {
+          // JSON parse error or empty body - use current settings
+        }
+
+        const result = await backendManager.testConnection(settings, workspace.directory);
+        return Response.json(result);
+      } catch (error) {
+        log.error("Failed to test workspace connection:", String(error));
+        return errorResponse("test_failed", `Failed to test connection: ${String(error)}`, 500);
+      }
+    },
   },
 
   /**
    * POST /api/workspaces/:id/server-settings/reset - Reset connection for workspace
    */
-  "/api/workspaces/:id/server-settings/reset": async (req: Request & { params: { id: string } }) => {
-    const { id } = req.params;
+  "/api/workspaces/:id/server-settings/reset": {
+    async POST(req: Request & { params: { id: string } }) {
+      const { id } = req.params;
+      try {
+        const workspace = await requireWorkspace(id);
+        if (workspace instanceof Response) return workspace;
 
-    if (req.method !== "POST") {
-      return errorResponse("method_not_allowed", "Method not allowed", 405);
-    }
-
-    try {
-      const workspace = await requireWorkspace(id);
-      if (workspace instanceof Response) return workspace;
-
-      await backendManager.resetWorkspaceConnection(id);
-      log.info(`Reset connection for workspace: ${workspace.name}`);
-      return Response.json({ success: true });
-    } catch (error) {
-      log.error("Failed to reset workspace connection:", String(error));
-      return errorResponse("reset_failed", `Failed to reset connection: ${String(error)}`, 500);
-    }
+        await backendManager.resetWorkspaceConnection(id);
+        log.info(`Reset connection for workspace: ${workspace.name}`);
+        return Response.json({ success: true });
+      } catch (error) {
+        log.error("Failed to reset workspace connection:", String(error));
+        return errorResponse("reset_failed", `Failed to reset connection: ${String(error)}`, 500);
+      }
+    },
   },
 
   /**

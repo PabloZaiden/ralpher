@@ -10,7 +10,6 @@
 export {
   ModelConfigSchema,
   type ModelConfig,
-  type ModelConfigInput,
 } from "./model";
 
 // Loop schemas
@@ -23,13 +22,6 @@ export {
   PendingPromptRequestSchema,
   SetPendingRequestSchema,
   StartDraftRequestSchema,
-  type CreateLoopRequestInput,
-  type UpdateLoopRequestInput,
-  type AddressCommentsRequestInput,
-  type PlanFeedbackRequestInput,
-  type PendingPromptRequestInput,
-  type SetPendingRequestInput,
-  type StartDraftRequestInput,
 } from "./loop";
 
 // Workspace schemas
@@ -43,10 +35,6 @@ export {
   WorkspaceExportSchema,
   WorkspaceImportRequestSchema,
   type ServerSettings,
-  type ServerSettingsInput,
-  type CreateWorkspaceRequestInput,
-  type UpdateWorkspaceRequestInput,
-  type TestConnectionRequestInput,
   type WorkspaceConfig,
   type WorkspaceExportData,
   type WorkspaceImportRequest,
@@ -58,8 +46,4 @@ export {
   SetLastDirectoryRequestSchema,
   SetMarkdownRenderingRequestSchema,
   SetLogLevelRequestSchema,
-  type SetLastModelRequestInput,
-  type SetLastDirectoryRequestInput,
-  type SetMarkdownRenderingRequestInput,
-  type SetLogLevelRequestInput,
 } from "./preferences";

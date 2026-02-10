@@ -31,8 +31,27 @@ import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 import { log } from "./logger";
 import { sanitizeBranchName } from "../utils";
-import { markCommentsAsAddressed } from "../persistence/database";
+import { markCommentsAsAddressed } from "../persistence/review-comments";
 import { assertValidTransition } from "./loop-state-machine";
+
+/**
+ * Maximum number of log entries to persist in loop state.
+ * When exceeded, the oldest entries are evicted to keep memory bounded.
+ * The frontend loads the last 1000 on page refresh, so 5000 provides
+ * ample history while preventing unbounded growth.
+ */
+const MAX_PERSISTED_LOGS = 5000;
+
+/**
+ * Maximum number of messages to persist in loop state.
+ * Messages are larger than logs due to AI response content.
+ */
+const MAX_PERSISTED_MESSAGES = 2000;
+
+/**
+ * Maximum number of tool calls to persist in loop state.
+ */
+const MAX_PERSISTED_TOOL_CALLS = 5000;
 
 /**
  * Generate a git-safe branch name from a loop name and timestamp.
@@ -2172,7 +2191,7 @@ Output ONLY the commit message, nothing else.`
   /**
    * Persist a log entry in the loop state.
    * If isUpdate is true, update an existing entry; otherwise append.
-   * All logs are kept until the loop is merged or deleted.
+   * Evicts oldest entries when buffer exceeds MAX_PERSISTED_LOGS.
    */
   private persistLog(entry: LoopLogEntry, isUpdate: boolean): void {
     const logs = this.loop.state.logs ?? [];
@@ -2189,12 +2208,17 @@ Output ONLY the commit message, nothing else.`
       logs.push(entry);
     }
     
+    // Evict oldest entries if buffer is full
+    if (logs.length > MAX_PERSISTED_LOGS) {
+      logs.splice(0, logs.length - MAX_PERSISTED_LOGS);
+    }
+    
     this.updateState({ logs });
   }
 
   /**
    * Persist a message in the loop state for page refresh recovery.
-   * All messages are kept until the loop is merged or deleted.
+   * Evicts oldest entries when buffer exceeds MAX_PERSISTED_MESSAGES.
    */
   private persistMessage(message: MessageData): void {
     const messages = this.loop.state.messages ?? [];
@@ -2219,13 +2243,18 @@ Output ONLY the commit message, nothing else.`
       });
     }
     
+    // Evict oldest entries if buffer is full
+    if (messages.length > MAX_PERSISTED_MESSAGES) {
+      messages.splice(0, messages.length - MAX_PERSISTED_MESSAGES);
+    }
+    
     this.updateState({ messages });
   }
 
   /**
    * Persist a tool call in the loop state for page refresh recovery.
    * Updates existing tool call if it exists (by ID), otherwise adds new.
-   * All tool calls are kept until the loop is merged or deleted.
+   * Evicts oldest entries when buffer exceeds MAX_PERSISTED_TOOL_CALLS.
    */
   private persistToolCall(toolCall: ToolCallData): void {
     const toolCalls = this.loop.state.toolCalls ?? [];
@@ -2252,6 +2281,11 @@ Output ONLY the commit message, nothing else.`
         status: toolCall.status,
         timestamp: toolCall.timestamp,
       });
+    }
+    
+    // Evict oldest entries if buffer is full
+    if (toolCalls.length > MAX_PERSISTED_TOOL_CALLS) {
+      toolCalls.splice(0, toolCalls.length - MAX_PERSISTED_TOOL_CALLS);
     }
     
     this.updateState({ toolCalls });

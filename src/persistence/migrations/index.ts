@@ -35,7 +35,9 @@
  */
 
 import type { Database } from "bun:sqlite";
-import { log } from "../../core/logger";
+import { createLogger } from "../../core/logger";
+
+const log = createLogger("persistence:migrations");
 
 /**
  * A database migration definition.

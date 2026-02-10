@@ -16,7 +16,7 @@ describe("Markdown Rendering Preference API", () => {
     process.env["RALPHER_DATA_DIR"] = testDataDir;
     
     // Initialize the database
-    const { ensureDataDirectories } = await import("../../src/persistence/paths");
+    const { ensureDataDirectories } = await import("../../src/persistence/database");
     await ensureDataDirectories();
   });
 

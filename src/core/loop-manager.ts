@@ -21,7 +21,7 @@ import {
   updateLoopState,
   resetStaleLoops,
 } from "../persistence/loops";
-import { insertReviewComment, getReviewComments as getReviewCommentsFromDb } from "../persistence/database";
+import { insertReviewComment, getReviewComments as getReviewCommentsFromDb } from "../persistence/review-comments";
 import { setLastModel } from "../persistence/preferences";
 import { backendManager } from "./backend-manager";
 import type { CommandExecutor } from "./command-executor";

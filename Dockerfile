@@ -22,9 +22,11 @@ WORKDIR /app
 
 # Install required packages:
 # - ca-certificates: for HTTPS requests
+# - curl: for HEALTHCHECK
 # - tini: init process for proper signal handling (Ctrl+C works)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
+    curl \
     tini \
   && rm -rf /var/lib/apt/lists/*
 
@@ -48,6 +50,10 @@ EXPOSE 80
 
 # Run as non-root user
 USER ralpher
+
+# Health check using the /api/health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:${RALPHER_PORT}/api/health || exit 1
 
 # Use tini as init process for proper signal handling
 ENTRYPOINT ["/usr/bin/tini", "--"]

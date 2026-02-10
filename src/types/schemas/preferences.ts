@@ -37,8 +37,3 @@ export const SetLogLevelRequestSchema = z.object({
   level: z.string().min(1, "level is required"),
 });
 
-// Export inferred types
-export type SetLastModelRequestInput = z.infer<typeof SetLastModelRequestSchema>;
-export type SetLastDirectoryRequestInput = z.infer<typeof SetLastDirectoryRequestSchema>;
-export type SetMarkdownRenderingRequestInput = z.infer<typeof SetMarkdownRenderingRequestSchema>;
-export type SetLogLevelRequestInput = z.infer<typeof SetLogLevelRequestSchema>;

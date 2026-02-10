@@ -39,7 +39,7 @@ describe("LoopManager", () => {
     process.env["RALPHER_DATA_DIR"] = testDataDir;
 
     // Ensure data directories exist
-    const { ensureDataDirectories } = await import("../../src/persistence/paths");
+    const { ensureDataDirectories } = await import("../../src/persistence/database");
     await ensureDataDirectories();
 
     // Create the test workspace (required for loops with workspaceId)

@@ -6,7 +6,7 @@
 import { serve, type Server } from "bun";
 import index from "./index.html";
 import { apiRoutes } from "./api";
-import { ensureDataDirectories } from "./persistence/paths";
+import { ensureDataDirectories } from "./persistence/database";
 import { backendManager } from "./core/backend-manager";
 import { websocketHandlers, type WebSocketData } from "./api/websocket";
 import { log, setLogLevel, isLogLevelFromEnv } from "./core/logger";

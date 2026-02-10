@@ -18,8 +18,10 @@
 import { loopManager } from "../core/loop-manager";
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
-import { getWorkspaceByDirectory } from "../persistence/workspaces";
-import { log } from "../core/logger";
+import { getWorkspaceByDirectory, getWorkspace, touchWorkspace } from "../persistence/workspaces";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("api:loops");
 import { isModelEnabled } from "./models";
 import type {
   AcceptResponse,
@@ -180,7 +182,6 @@ export const loopsCrudRoutes = {
       });
 
       // Resolve workspaceId to directory - workspaceId is required
-      const { getWorkspace, touchWorkspace } = await import("../persistence/workspaces");
       const workspace = await getWorkspace(body.workspaceId);
       if (!workspace) {
         return errorResponse("workspace_not_found", `Workspace not found: ${body.workspaceId}`, 404);

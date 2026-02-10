@@ -28,6 +28,12 @@ import type { LoopEvent } from "../types";
 
 const log = createLogger("api:websocket");
 
+/** Maximum number of concurrent WebSocket connections allowed */
+const MAX_CONNECTIONS = 100;
+
+/** Set of active WebSocket connections for tracking and limit enforcement */
+const activeConnections = new Set<ServerWebSocket<WebSocketData>>();
+
 /**
  * WebSocket client data attached to each connection.
  * Stored in the WebSocket's data property for per-connection state.
@@ -55,6 +61,25 @@ export const websocketHandlers = {
   open(ws: ServerWebSocket<WebSocketData>) {
     const { loopId } = ws.data;
 
+    // Enforce connection limit — close oldest connection if at capacity
+    if (activeConnections.size >= MAX_CONNECTIONS) {
+      const oldest = activeConnections.values().next().value;
+      if (oldest) {
+        log.warn("WebSocket connection limit reached, closing oldest connection", {
+          maxConnections: MAX_CONNECTIONS,
+          activeConnections: activeConnections.size,
+        });
+        oldest.close(1008, "Connection limit exceeded");
+      }
+    }
+
+    // Track this connection
+    activeConnections.add(ws);
+    log.debug("WebSocket connection opened", {
+      loopId: loopId ?? "all",
+      activeConnections: activeConnections.size,
+    });
+
     // Send initial connection confirmation
     ws.send(JSON.stringify({ type: "connected", loopId: loopId ?? null }));
 
@@ -74,9 +99,6 @@ export const websocketHandlers = {
 
     // Store unsubscribe function for cleanup
     ws.data.unsubscribe = unsubscribe;
-
-    // Start heartbeat to keep connection alive
-    // Note: Bun handles ping/pong automatically, but we send app-level heartbeats too
   },
 
   /**
@@ -110,6 +132,12 @@ export const websocketHandlers = {
    * @param ws - The WebSocket connection
    */
   close(ws: ServerWebSocket<WebSocketData>) {
+    // Remove from active connections
+    activeConnections.delete(ws);
+    log.debug("WebSocket connection closed", {
+      activeConnections: activeConnections.size,
+    });
+
     // Unsubscribe from events
     if (ws.data.unsubscribe) {
       ws.data.unsubscribe();
@@ -127,7 +155,9 @@ export const websocketHandlers = {
    */
   error(ws: ServerWebSocket<WebSocketData>, error: Error) {
     log.error("WebSocket error:", error);
-    // Cleanup
+    // Remove from active connections
+    activeConnections.delete(ws);
+    // Cleanup subscription
     if (ws.data.unsubscribe) {
       ws.data.unsubscribe();
       ws.data.unsubscribe = undefined;

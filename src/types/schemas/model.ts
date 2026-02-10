@@ -29,5 +29,3 @@ export const ModelConfigSchema = z.object({
  */
 export type ModelConfig = z.infer<typeof ModelConfigSchema>;
 
-// Alias for backwards compatibility
-export type ModelConfigInput = ModelConfig;

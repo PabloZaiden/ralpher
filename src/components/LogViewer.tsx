@@ -6,7 +6,7 @@
  * re-render thousands of log entries, causing severe input lag.
  */
 
-import { useEffect, useRef, memo } from "react";
+import { useEffect, useRef, useMemo, memo } from "react";
 import type { MessageData, ToolCallData, LogLevel } from "../types";
 import { Badge } from "./common";
 
@@ -140,32 +140,35 @@ export const LogViewer = memo(function LogViewer({
     }
   }, [messages, toolCalls, logs, autoScroll, showDebugLogs]);
 
-  // Combine and sort entries by timestamp
-  const entries: Array<
-    | { type: "message"; data: MessageData; timestamp: string }
-    | { type: "tool"; data: ToolCallData; timestamp: string }
-    | { type: "log"; data: LogEntry; timestamp: string }
-  > = [];
+  // Combine and sort entries by timestamp (memoized to avoid rebuilding on every render)
+  const entries = useMemo(() => {
+    const result: Array<
+      | { type: "message"; data: MessageData; timestamp: string }
+      | { type: "tool"; data: ToolCallData; timestamp: string }
+      | { type: "log"; data: LogEntry; timestamp: string }
+    > = [];
 
-  messages.forEach((msg) => {
-    entries.push({ type: "message", data: msg, timestamp: msg.timestamp });
-  });
+    messages.forEach((msg) => {
+      result.push({ type: "message", data: msg, timestamp: msg.timestamp });
+    });
 
-  toolCalls.forEach((tool) => {
-    // Use the tool's timestamp
-    entries.push({ type: "tool", data: tool, timestamp: tool.timestamp });
-  });
+    toolCalls.forEach((tool) => {
+      result.push({ type: "tool", data: tool, timestamp: tool.timestamp });
+    });
 
-  logs.forEach((log) => {
-    // Filter out debug logs if showDebugLogs is false
-    if (!showDebugLogs && log.level === "debug") {
-      return;
-    }
-    entries.push({ type: "log", data: log, timestamp: log.timestamp });
-  });
+    logs.forEach((logEntry) => {
+      // Filter out debug logs if showDebugLogs is false
+      if (!showDebugLogs && logEntry.level === "debug") {
+        return;
+      }
+      result.push({ type: "log", data: logEntry, timestamp: logEntry.timestamp });
+    });
 
-  // Sort by timestamp
-  entries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    // Sort by timestamp
+    result.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    return result;
+  }, [messages, toolCalls, logs, showDebugLogs]);
 
   const isEmpty = entries.length === 0;
 

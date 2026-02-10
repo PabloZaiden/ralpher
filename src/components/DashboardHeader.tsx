@@ -2,12 +2,12 @@
  * Dashboard header component with title, settings, connection status, and action buttons.
  */
 
-import type { ConnectionStatus } from "../hooks/useWebSocket";
+import type { WebSocketConnectionStatus } from "../hooks/useWebSocket";
 import { Button } from "./common";
 
 export interface DashboardHeaderProps {
   version: string | null;
-  connectionStatus: ConnectionStatus;
+  connectionStatus: WebSocketConnectionStatus;
   onOpenServerSettings: () => void;
   onOpenCreateWorkspace: () => void;
   onOpenCreateLoop: () => void;

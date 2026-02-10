@@ -1,14 +1,11 @@
 import twPlugin from 'bun-plugin-tailwind'
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import { log } from './core/logger';
 
 // workDir is the current file's directory + '/..'
 const workDir = import.meta.dir + '/..';
 
 // create a temp directory for output in the os temp directory
-const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "ralpher-build-"));
+const outDir = await Bun.$`mktemp -d`.text().then(s => s.trim());
 const finalOutDir = `${workDir}/dist`;
 
 // Parse --target argument (e.g., --target=linux-x64)
@@ -50,12 +47,13 @@ if (!result.success) {
 
 
 log.info('Ensuring dist directory exists...');
-fs.mkdirSync(finalOutDir, { recursive: true });
+await Bun.$`mkdir -p ${finalOutDir}`.quiet();
 
 log.info('Copying built file to dist directory...');
-fs.copyFileSync(outfile, `${finalOutDir}/${target ? `ralpher-${target.replace('bun-', '')}` : 'ralpher'}`);
+const destName = target ? `ralpher-${target.replace('bun-', '')}` : 'ralpher';
+await Bun.write(`${finalOutDir}/${destName}`, Bun.file(outfile));
 
 log.info('Cleaning up temporary files...');
-fs.rmSync(outDir, { recursive: true, force: true });
+await Bun.$`rm -rf ${outDir}`.quiet();
 
 log.info('Build completed:', outfile);

@@ -52,7 +52,7 @@ describe("Workspace Persistence", () => {
 
   describe("CRUD operations", () => {
     test("createWorkspace creates a new workspace", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, getWorkspace } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -75,7 +75,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("getWorkspace returns null for non-existent workspace", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { getWorkspace } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -85,7 +85,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("listWorkspaces returns all workspaces sorted by name alphabetically", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, listWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -109,7 +109,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("updateWorkspace updates workspace name", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, updateWorkspace, getWorkspace } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -131,7 +131,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("updateWorkspace returns null for non-existent workspace", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { updateWorkspace } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -141,7 +141,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("deleteWorkspace removes workspace", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -162,7 +162,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("deleteWorkspace returns failure for non-existent workspace", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { deleteWorkspace } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -175,7 +175,7 @@ describe("Workspace Persistence", () => {
 
   describe("getWorkspaceByDirectory", () => {
     test("returns workspace when directory matches", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, getWorkspaceByDirectory } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -192,7 +192,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("returns null when no workspace has the directory", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, getWorkspaceByDirectory } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -208,7 +208,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("directory is unique across workspaces", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -231,7 +231,7 @@ describe("Workspace Persistence", () => {
 
   describe("touchWorkspace", () => {
     test("updates updatedAt timestamp", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, touchWorkspace, getWorkspace } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -255,7 +255,7 @@ describe("Workspace Persistence", () => {
 
   describe("getWorkspaceLoopCount", () => {
     test("returns 0 when workspace has no loops", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, getWorkspaceLoopCount } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -271,7 +271,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("returns correct count when workspace has loops", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, getWorkspaceLoopCount } = await import("../../src/persistence/workspaces");
       const { saveLoop } = await import("../../src/persistence/loops");
 
@@ -322,7 +322,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("deleteWorkspace fails when workspace has loops", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, deleteWorkspace, getWorkspace } = await import("../../src/persistence/workspaces");
       const { saveLoop } = await import("../../src/persistence/loops");
 
@@ -378,7 +378,7 @@ describe("Workspace Persistence", () => {
 
   describe("Server Settings Operations", () => {
     test("createWorkspace stores server settings", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, getWorkspace } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -404,7 +404,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("updateWorkspace updates server settings", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, updateWorkspace, getWorkspace } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -433,7 +433,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("updateWorkspace preserves server settings when only updating name", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, updateWorkspace, getWorkspace } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -466,7 +466,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("listWorkspaces includes server settings", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, listWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -492,7 +492,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("getWorkspaceByDirectory includes server settings", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, getWorkspaceByDirectory } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -520,7 +520,7 @@ describe("Workspace Persistence", () => {
 
   describe("Export/Import operations", () => {
     test("export with zero workspaces returns empty array with version 1 and exportedAt", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { exportWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -535,7 +535,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("export with multiple workspaces returns all configs without id/timestamps", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, exportWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -566,7 +566,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("export includes password in serverSettings", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, exportWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -588,7 +588,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("import with valid data creates workspaces and returns correct result", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -630,7 +630,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("import skips workspaces with duplicate directories", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -674,7 +674,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("import with empty workspaces array succeeds (no-op)", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { importWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -693,7 +693,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("import is idempotent (re-importing same file is safe — all skipped)", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -728,7 +728,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("import preserves serverSettings including password", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { importWorkspaces, getWorkspaceByDirectory } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -764,7 +764,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("import trims whitespace from name and directory", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { importWorkspaces, getWorkspaceByDirectory } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -797,7 +797,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("import deduplicates directories that differ only by whitespace", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
@@ -829,7 +829,7 @@ describe("Workspace Persistence", () => {
     });
 
     test("export then import round-trip reproduces same configs", async () => {
-      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, exportWorkspaces, importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
       const { closeDatabase } = await import("../../src/persistence/database");
 
@@ -861,7 +861,7 @@ describe("Workspace Persistence", () => {
 
       // Re-import persistence modules with fresh DB
       // Dynamic re-import won't give us a fresh module, so we use the functions we already have
-      const { ensureDataDirectories: ensureDataDirs2 } = await import("../../src/persistence/paths");
+      const { ensureDataDirectories: ensureDataDirs2 } = await import("../../src/persistence/database");
       await ensureDataDirs2();
 
       const result = await importWorkspaces(exported);
