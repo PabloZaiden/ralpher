@@ -1243,7 +1243,7 @@ No findings. Clean implementation.
 | # | Severity | Dimension | Area | Finding |
 |---|----------|-----------|------|---------|
 | 1 | Critical | Test coverage gaps | src/utils/ | No tests for `loop-status.ts`, `event-stream.ts`, or `sanitizeBranchName` — all contain critical logic. |
-| 2 | ~~Major~~ **Resolved** | Test coverage gaps | src/hooks/ | ~~No tests for any React hooks.~~ **Updated:** 145 hook tests now exist across 4 test files (`useLoop.test.ts`, `useLoops.test.ts`, `useWorkspaces.test.ts`, `loopActions.test.ts`). `useWebSocket` remains untested directly (tested indirectly via hook integration tests). |
+| 2 | ~~Major~~ **Resolved** | Test coverage gaps | src/hooks/ | ~~No tests for any React hooks.~~ **Updated:** 126 hook tests now exist across 4 test files (`useLoop.test.ts`, `useLoops.test.ts`, `useWorkspaces.test.ts`, `loopActions.test.ts`). `useWebSocket` remains untested directly (tested indirectly via hook integration tests). |
 | 3 | Major | Test coverage gaps | src/api/ | No API tests for `git.ts` endpoints or `websocket.ts`. |
 | 4 | Major | Test coverage gaps | src/backends/ | `opencode-backend.test.ts` mostly tests "not connected" error throwing — minimal positive-path coverage. |
 | 5 | Minor | Best practices | scattered | Some tests use `await new Promise(resolve => setTimeout(resolve, 100))` — flaky test risk. |
@@ -1253,7 +1253,7 @@ No findings. Clean implementation.
 
 ### Frontend Test Files (Added Post-Review)
 
-548 frontend tests were added across 31 test files in `tests/frontend/`. Key infrastructure files:
+715 frontend tests were added across 31 test files in `tests/frontend/`. Key infrastructure files:
 
 **`tests/frontend/setup.ts`** — Frontend test environment setup with happy-dom registration, ResizeObserver mock, matchMedia mock, scrollTo/IntersectionObserver polyfills.
 
@@ -1269,9 +1269,9 @@ No findings. Clean implementation.
 | Category | Files | Tests | Coverage |
 |----------|------:|------:|----------|
 | Common components (Button, Modal, Badge, Card) | 4 | 101 | Good |
-| Feature components (LoopCard, CreateLoopForm, etc.) | 11 | 308 | Good |
-| Hooks (useLoop, useLoops, useWorkspaces, loopActions) | 4 | 145 | Good |
-| Container components (App, Dashboard, LoopDetails) | 3 | 99 | Good |
+| Feature components (LoopCard, CreateLoopForm, etc.) | 13 | 406 | Good |
+| Hooks (useLoop, useLoops, useWorkspaces, loopActions) | 4 | 126 | Good |
+| Container components (App) | 1 | 13 | Good |
 | E2E scenarios (lifecycle, plan mode, errors, etc.) | 8 | 50 | Good |
 | Infrastructure validation | 1 | 19 | Good |
 
@@ -1291,4 +1291,4 @@ No structural findings. The test infrastructure is well-designed with proper abs
 - `loop-engine.test.ts` is the largest test file (~1375 lines) with good coverage of iteration logic.
 - E2E tests provide good scenario coverage: full loop lifecycle, plan mode, multi-workspace, git workflows, draft workflows.
 - Test infrastructure (`setup.ts`) follows best practices with proper cleanup and deterministic polling helpers.
-- **Frontend tests** (548 tests across 31 files) provide comprehensive coverage of components, hooks, and user workflows. Infrastructure uses proper mocking patterns (fetch interceptor, WebSocket mock, data factories).
+- **Frontend tests** (715 tests across 31 files) provide comprehensive coverage of components, hooks, and user workflows. Infrastructure uses proper mocking patterns (fetch interceptor, WebSocket mock, data factories).

@@ -571,7 +571,7 @@ SQLite database manages loop state, workspace configuration, and user preference
 | Layer | File | Role |
 |-------|------|------|
 | Persistence | `src/persistence/database.ts` | DB init, schema, connection management |
-| Persistence | `src/persistence/migrations/index.ts` | Migration system (13 migrations) |
+| Persistence | `src/persistence/migrations/index.ts` | Migration system (14 migrations) |
 | Persistence | `src/persistence/loops.ts` | Loop CRUD |
 | Persistence | `src/persistence/workspaces.ts` | Workspace CRUD |
 | Persistence | `src/persistence/preferences.ts` | Preference key-value storage |
@@ -700,8 +700,8 @@ No single module owns the transition rules. Invalid transitions are prevented on
 
 | Area | LOC | Tests |
 |------|-----|-------|
-| React hooks | 2,477 | **145 tests** (useLoop: 37, useLoops: 24, useWorkspaces: 15, loopActions: 45, + others) |
-| React components | 7,527 | **334 tests** (18 files) |
+| React hooks | 2,477 | **126 tests** (useLoop: 37, useLoops: 24, useWorkspaces: 20, loopActions: 45) |
+| React components | 7,527 | **520 tests** (18 files) |
 | Utility functions | 457 | Partial (name-generator only) |
 | API endpoints | 3,397 | Some integration tests |
 | Core business logic | 7,794 | Good unit + scenario coverage |
@@ -709,7 +709,7 @@ No single module owns the transition rules. Invalid transitions are prevented on
 | E2E scenarios (frontend) | — | **50 tests** (8 scenario files) |
 | Infrastructure tests | — | **19 tests** (1 file) |
 
-~~The frontend (9,426 LOC combined) has zero automated tests.~~ **Updated:** 548 frontend tests now cover hooks, components, and E2E user workflows. The highest-risk code (hooks with complex async state management, WebSocket integration, race conditions) is now tested.
+~~The frontend (9,426 LOC combined) has zero automated tests.~~ **Updated:** 715 frontend tests now cover hooks, components, and E2E user workflows. The highest-risk code (hooks with complex async state management, WebSocket integration, race conditions) is now tested.
 
 **Remaining gaps:** `useWebSocket` (no direct tests), `useAgentsMdOptimizer` (no tests), utility functions (`loop-status.ts`, `event-stream.ts`, `sanitizeBranchName`), `git.ts` API endpoints, `websocket.ts` API handler, `CollapsibleSection.tsx`. Utility functions and `useWebSocket` remain the primary untested areas.
 
@@ -738,4 +738,4 @@ They share identical constant definitions but diverge in behavior. Some modules 
 | 7 | Add AbortController to hooks | Major — prevents race conditions | Low |
 | 8 | ~~Add authentication to destructive endpoints~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level | ~~Critical~~ N/A — ~~security~~ | ~~Low~~ N/A |
 | 9 | Replace INSERT OR REPLACE with upsert | Major — prevents cascade deletes | Low |
-| 10 | ~~Add hook tests with renderHook~~ **Resolved** | ~~Major~~ — ~~covers highest-risk untested code~~ **Done:** 145 hook tests added | ~~Medium~~ N/A |
+| 10 | ~~Add hook tests with renderHook~~ **Resolved** | ~~Major~~ — ~~covers highest-risk untested code~~ **Done:** 126 hook tests added | ~~Medium~~ N/A |

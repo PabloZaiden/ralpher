@@ -47,7 +47,7 @@ The Ralpher codebase is **functional and well-organized at the directory level**
 - Bun idioms are used correctly throughout
 - GitService's `withExecutor()` dependency injection pattern is excellent
 - The migration system is well-designed with idempotency checks
-- Frontend test coverage is strong (548 tests) with well-designed infrastructure
+- Frontend test coverage is strong (715 tests) with well-designed infrastructure
 - Zod validation schemas provide good runtime type checking at the API boundary
 - Common UI components (Button, Card, Modal, Badge) are well-scoped
 
@@ -214,12 +214,12 @@ Two independent logger implementations (`core/logger.ts` and `lib/logger.ts`) sh
 | Area | LOC | Tests | Coverage Level |
 |------|----:|------:|----------------|
 | Core business logic | 7,794 | Many | Good (~70%) — unit + scenario tests |
-| React components | 7,527 | 334 | Good (~70%) — common + feature + container |
-| React hooks | 2,477 | 145 | Good (~65%) — useLoop, useLoops, useWorkspaces, loopActions |
+| React components | 7,527 | 520 | Good (~70%) — common + feature + container |
+| React hooks | 2,477 | 126 | Good (~65%) — useLoop, useLoops, useWorkspaces, loopActions |
 | Persistence/migrations | 2,061 | Good | Moderate (~50%) — migration tests + indirect |
 | API endpoints | 3,397 | Partial | Moderate (~40%) — main flows tested |
 | E2E scenarios (frontend) | — | 50 | Good workflow coverage |
-| External integration | 1,260 | Minimal | Poor (~15%) — mostly error-path tests |
+| External integration | 2,597 | Minimal | Poor (~15%) — mostly error-path tests |
 | Utilities | 457 | Partial | Poor — only name-generator tested |
 
 **Notable gaps:** `useWebSocket` (no direct tests), `loop-status.ts` (0% despite critical UI logic), `event-stream.ts` (0% despite being a concurrency primitive), `sanitizeBranchName` (0%), `remote-command-executor.ts` (0%).

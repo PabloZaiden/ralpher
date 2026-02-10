@@ -93,7 +93,7 @@ Client-side React application: components, hooks, frontend library, and entry po
 
 ### Health Score: C
 
-The Presentation layer is functional but carries the most technical debt of any layer. The debt is concentrated in two areas: (1) `Dashboard.tsx` as a 1,118-line god component, and (2) the hooks sublayer containing complex async state management with no tests.
+The Presentation layer is functional but carries the most technical debt of any layer. The debt is concentrated in two areas: (1) `Dashboard.tsx` as a 1,118-line god component, and (2) the hooks sublayer containing complex async state management with significant but incomplete test coverage (126 tests across 4 files).
 
 ### Pattern Analysis
 
@@ -155,12 +155,12 @@ The Presentation layer is functional but carries the most technical debt of any 
 
 | Area | LOC | Tests | Coverage |
 |------|----:|:-----:|----------|
-| Components | 7,527 | **334 tests** (18 files) | ~70% (common: 101, feature: 308, container: 99) |
-| Hooks | 2,477 | **145 tests** (4 files) | ~65% (useLoop: 37, useLoops: 24, useWorkspaces: 15, loopActions: 45) |
+| Components | 7,527 | **520 tests** (18 files) | ~70% (common: 101, feature: 406, container: 13) |
+| Hooks | 2,477 | **126 tests** (4 files) | ~65% (useLoop: 37, useLoops: 24, useWorkspaces: 20, loopActions: 45) |
 | Lib | 383 | None | 0% |
 | E2E scenarios | — | **50 tests** (8 files) | Good workflow coverage |
 
-**Assessment:** ~~Zero automated test coverage.~~ **Updated:** 548 frontend tests now exist. Components and hooks — the highest-risk code — have good coverage. `useWebSocket` remains untested directly (exercised indirectly). `lib/logger.ts` has no tests. Remaining untested components (`MarkdownRenderer`, `ServerSettingsForm`, `AppSettingsModal`, `WorkspaceSettingsModal`, `CreateWorkspaceModal`, `Icons`, `LogLevelInitializer`) are lower-risk configuration/utility components. New files `useAgentsMdOptimizer.ts` and `CollapsibleSection.tsx` have no dedicated tests.
+**Assessment:** ~~Zero automated test coverage.~~ **Updated:** 715 frontend tests now exist. Components and hooks — the highest-risk code — have good coverage. `useWebSocket` remains untested directly (exercised indirectly). `lib/logger.ts` has no tests. Remaining untested components (`MarkdownRenderer`, `ServerSettingsForm`, `AppSettingsModal`, `WorkspaceSettingsModal`, `CreateWorkspaceModal`, `Icons`, `LogLevelInitializer`) are lower-risk configuration/utility components. New files `useAgentsMdOptimizer.ts` and `CollapsibleSection.tsx` have no dedicated tests.
 
 ### Recommendations (Prioritized)
 
@@ -172,7 +172,7 @@ The Presentation layer is functional but carries the most technical debt of any 
 6. **Add focus trapping** to Modal component
 7. **Add user-facing error notifications** — toast component or error state display
 8. **Fix double-fetch** by removing array lengths from refresh dependency array
-9. ~~**Add hook tests**~~ **Resolved** — 145 hook tests added using `renderHook` covering `useLoop`, `useLoops`, `useWorkspaces`, and all `loopActions` API functions
+9. ~~**Add hook tests**~~ **Resolved** — 126 hook tests added using `renderHook` covering `useLoop`, `useLoops`, `useWorkspaces`, and all `loopActions` API functions
 10. **Memoize expensive computations** with `useMemo` (loop grouping, workspace filtering)
 
 ---
@@ -389,7 +389,7 @@ SQLite database management, schema creation, migrations, and CRUD operations for
 | File | LOC | Role |
 |------|----:|------|
 | `persistence/loops.ts` | 566 | Loop CRUD, state updates, row mapping |
-| `persistence/migrations/index.ts` | 571 | Schema migration system (13 migrations) |
+| `persistence/migrations/index.ts` | 571 | Schema migration system (14 migrations) |
 | `persistence/database.ts` | 386 | DB init, schema, review comments |
 | `persistence/workspaces.ts` | 327 | Workspace CRUD |
 | `persistence/preferences.ts` | 178 | Key-value preference storage |
@@ -807,7 +807,7 @@ These recommendations address systemic issues that span multiple layers and repr
 | 7 | ~~**Add authentication to destructive endpoints** — `POST /api/server/kill` and `POST /api/settings/reset-all` need at minimum a token-based check.~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level. See `AGENTS.md` § Authentication & Authorization. | API | ~~Critical~~ N/A — ~~prevents unauthorized server termination~~ | ~~Low~~ N/A |
 | 8 | **Decompose Dashboard.tsx** — Extract `LoopList`, `DashboardHeader`, `DashboardModals`, `LoopGroupSection` sub-components. Move inline fetch calls to hooks. | Presentation | Major — improves testability and maintainability | Medium |
 | 9 | **Fix data integrity risks in Data Access** — Replace `INSERT OR REPLACE` with upsert to prevent cascade deletes. Add try/catch to `JSON.parse` calls in `rowToLoop()`. Validate table names in `getTableColumns()`. | Data Access | Major — prevents data loss and crash-on-corruption | Low |
-| 10 | ~~**Add test coverage for hooks and utilities**~~ **Largely Resolved** — 548 frontend tests added (145 hook tests, 334 component tests, 50 E2E scenario tests, 19 infra tests). Remaining gaps: `useWebSocket`, `useAgentsMdOptimizer`, `loop-status.ts`, `sanitizeBranchName`, `event-stream.ts`. | Presentation, Shared Infra | ~~Major~~ Minor — highest-risk code now covered | ~~Medium~~ N/A |
+| 10 | ~~**Add test coverage for hooks and utilities**~~ **Largely Resolved** — 715 frontend tests added (126 hook tests, 520 component tests, 50 E2E scenario tests, 19 infra tests). Remaining gaps: `useWebSocket`, `useAgentsMdOptimizer`, `loop-status.ts`, `sanitizeBranchName`, `event-stream.ts`. | Presentation, Shared Infra | ~~Major~~ Minor — highest-risk code now covered | ~~Medium~~ N/A |
 
 ---
 
