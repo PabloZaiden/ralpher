@@ -9,6 +9,7 @@ import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import { Button } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
 import { createLogger } from "../lib/logger";
+import { PROMPT_TEMPLATES, getTemplateById } from "../lib/prompt-templates";
 
 // Create a named logger for this component
 const log = createLogger("CreateLoopForm");
@@ -142,6 +143,7 @@ export function CreateLoopForm({
   const [userChangedBranch, setUserChangedBranch] = useState(!!initialLoopData?.baseBranch);
   const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
   const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? true);
+  const [selectedTemplate, setSelectedTemplate] = useState("");
 
   // Sync prompt state when initialLoopData changes (safety measure for component reuse)
   // This handles both editing a draft (set to draft's prompt) and switching to create mode (reset to empty)
@@ -704,6 +706,50 @@ export function CreateLoopForm({
         )}
       </div>
 
+      {/* Prompt Template */}
+      <div>
+        <label
+          htmlFor="template"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+        >
+          Template
+        </label>
+        <select
+          id="template"
+          value={selectedTemplate}
+          onChange={(e) => {
+            const templateId = e.target.value;
+            setSelectedTemplate(templateId);
+            if (templateId) {
+              const template = getTemplateById(templateId);
+              if (template) {
+                setPrompt(template.prompt);
+                promptRef.current = template.prompt;
+                if (template.defaults?.planMode !== undefined) {
+                  setPlanMode(template.defaults.planMode);
+                }
+              }
+            }
+          }}
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+        >
+          <option value="">No template (custom prompt)</option>
+          {PROMPT_TEMPLATES.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+        {selectedTemplate && (() => {
+          const t = getTemplateById(selectedTemplate);
+          return t ? (
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {t.description}
+            </p>
+          ) : null;
+        })()}
+      </div>
+
       {/* Prompt */}
       <div>
         <label
@@ -716,8 +762,16 @@ export function CreateLoopForm({
           id="prompt"
           value={prompt}
           onChange={(e) => {
-            setPrompt(e.target.value);
-            promptRef.current = e.target.value;
+            const newValue = e.target.value;
+            setPrompt(newValue);
+            promptRef.current = newValue;
+            // Reset template selection if user edits the prompt away from the template text
+            if (selectedTemplate) {
+              const template = getTemplateById(selectedTemplate);
+              if (template && newValue !== template.prompt) {
+                setSelectedTemplate("");
+              }
+            }
           }}
           placeholder={planMode ? "Describe what you want to achieve. The AI will create a detailed plan based on this." : "Do everything that's pending in the plan"}
           required
