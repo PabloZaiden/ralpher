@@ -4,8 +4,11 @@
 
 import type { Loop } from "../types";
 import { Badge, getStatusBadgeVariant, Button, Card, EditIcon } from "./common";
+import type { BadgeVariant } from "./common";
 import {
   getStatusLabel,
+  getPlanningStatusLabel,
+  isLoopPlanReady,
   canAccept,
   isFinalState,
   isLoopActive,
@@ -60,14 +63,28 @@ export function LoopCard({
   const { config, state } = loop;
   const isActive = isLoopActive(state.status);
   const isPlanning = state.status === "planning";
+  const isPlanReady = isLoopPlanReady(loop);
   const isDraft = state.status === "draft";
   const isAddressable = state.reviewMode?.addressable === true;
+
+  // Determine badge variant and label for planning sub-states
+  const badgeVariant: BadgeVariant = isPlanning
+    ? (isPlanReady ? "plan_ready" : "planning")
+    : getStatusBadgeVariant(state.status);
+  const badgeLabel = isPlanning
+    ? getPlanningStatusLabel(isPlanReady)
+    : getStatusLabel(state.status, state.syncState);
+
+  // Card ring color: amber for plan-ready, cyan for planning-in-progress
+  const planningRingClass = isPlanReady
+    ? "ring-2 ring-amber-500"
+    : "ring-2 ring-cyan-500";
 
   return (
     <Card
       clickable={!!onClick}
       onClick={onClick}
-      className={`relative ${isActive ? "ring-2 ring-blue-500" : ""} ${isPlanning ? "ring-2 ring-cyan-500" : ""}`}
+      className={`relative ${isActive ? "ring-2 ring-blue-500" : ""} ${isPlanning ? planningRingClass : ""}`}
     >
       {/* Status indicator */}
       {isActive && !isPlanning && (
@@ -78,11 +95,19 @@ export function LoopCard({
           </span>
         </div>
       )}
-      {isPlanning && (
+      {/* Planning: pulsing cyan dot when AI is generating, static amber dot when plan is ready */}
+      {isPlanning && !isPlanReady && (
         <div className="absolute -top-1 -right-1">
           <span className="relative flex h-3 w-3">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500" />
+          </span>
+        </div>
+      )}
+      {isPlanReady && (
+        <div className="absolute -top-1 -right-1">
+          <span className="relative flex h-3 w-3">
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500" />
           </span>
         </div>
       )}
@@ -109,8 +134,8 @@ export function LoopCard({
             )}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <Badge variant={getStatusBadgeVariant(state.status)}>
-              {getStatusLabel(state.status, state.syncState)}
+            <Badge variant={badgeVariant}>
+              {badgeLabel}
             </Badge>
             {isAddressable && (
               <Badge variant="info">
@@ -210,7 +235,9 @@ export function LoopCard({
               e.stopPropagation();
               onClick?.();
             }}
-            className="bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-700"
+            className={isPlanReady
+              ? "bg-amber-600 hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-700"
+              : "bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-700"}
           >
             Review Plan
           </Button>

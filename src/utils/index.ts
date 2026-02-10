@@ -10,6 +10,8 @@ export {
   isLoopRunning,
   canJumpstart,
   isAwaitingFeedback,
+  getPlanningStatusLabel,
+  isLoopPlanReady,
 } from "./loop-status";
 
 /**

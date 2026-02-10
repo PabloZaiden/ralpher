@@ -24,7 +24,7 @@ import {
   UncommittedChangesModal,
   RenameLoopModal,
 } from "./LoopModals";
-import { isAwaitingFeedback } from "../utils";
+import { isAwaitingFeedback, isLoopPlanReady } from "../utils";
 
 export interface DashboardProps {
   /** Callback when a loop is selected */
@@ -384,16 +384,26 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     }
   }
 
-  // Helper function to group loops by status
+  // Helper function to group loops by status.
+  // Pre-computes plan readiness once per loop to avoid duplicate calls to isLoopPlanReady
+  // (which performs structured logging) across multiple filter passes.
   const groupLoopsByStatus = (loopsToGroup: typeof loops) => {
+    // Compute plan readiness once per loop to avoid duplicate trace log entries
+    const planReadySet = new Set(
+      loopsToGroup.filter((loop) => isLoopPlanReady(loop)).map((loop) => loop.config.id)
+    );
+
     return {
       draft: loopsToGroup.filter((loop) => loop.state.status === "draft"),
       active: loopsToGroup.filter(
         (loop) =>
           loop.state.status === "running" ||
           loop.state.status === "waiting" ||
-          loop.state.status === "starting"
+          loop.state.status === "starting" ||
+          // Planning loops where the AI is still generating go into Active
+          (loop.state.status === "planning" && !planReadySet.has(loop.config.id))
       ),
+      needsReview: loopsToGroup.filter((loop) => planReadySet.has(loop.config.id)),
       completed: loopsToGroup.filter((loop) => loop.state.status === "completed"),
       awaitingFeedback: loopsToGroup.filter((loop) =>
         isAwaitingFeedback(loop.state.status, loop.state.reviewMode?.addressable)
@@ -406,7 +416,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       ),
       other: loopsToGroup.filter(
         (loop) =>
-          !["draft", "running", "waiting", "starting", "completed", "merged", "pushed", "deleted"].includes(
+          !["draft", "running", "waiting", "starting", "completed", "merged", "pushed", "deleted", "planning"].includes(
             loop.state.status
           )
       ),
@@ -437,6 +447,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     defaultCollapsed: boolean;
   }> = [
     { key: "active", label: "Active", defaultCollapsed: false },
+    { key: "needsReview", label: "Needs Review", defaultCollapsed: false },
     { key: "completed", label: "Completed", defaultCollapsed: false },
     { key: "awaitingFeedback", label: "Awaiting Feedback", defaultCollapsed: false },
     { key: "other", label: "Other", defaultCollapsed: false },
@@ -473,8 +484,8 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       actions.onAccept = () => setAcceptModal({ open: true, loopId });
     }
 
-    // onDelete: draft, active, completed, and other sections
-    if (sectionKey === "draft" || sectionKey === "active" || sectionKey === "completed" || sectionKey === "other") {
+    // onDelete: draft, active, needsReview, completed, and other sections
+    if (sectionKey === "draft" || sectionKey === "active" || sectionKey === "needsReview" || sectionKey === "completed" || sectionKey === "other") {
       actions.onDelete = () => setDeleteModal({ open: true, loopId });
     }
 

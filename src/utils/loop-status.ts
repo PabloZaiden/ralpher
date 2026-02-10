@@ -4,7 +4,7 @@
  * to determine what actions are available for a loop.
  */
 
-import type { LoopStatus } from "../types";
+import type { Loop, LoopStatus } from "../types";
 import { createLogger } from "../lib/logger";
 
 const log = createLogger("LoopStatus");
@@ -112,5 +112,24 @@ export function canJumpstart(status: LoopStatus): boolean {
 export function isAwaitingFeedback(status: LoopStatus, reviewModeAddressable: boolean | undefined): boolean {
   const result = (status === "merged" || status === "pushed") && reviewModeAddressable === true;
   log.trace("isAwaitingFeedback check", { status, reviewModeAddressable, result });
+  return result;
+}
+
+/**
+ * Get the appropriate status label for a planning loop based on plan readiness.
+ * Returns "Plan Ready" when the plan is ready for human review,
+ * or "Planning" when the AI is still generating/revising the plan.
+ */
+export function getPlanningStatusLabel(isPlanReady: boolean): string {
+  return isPlanReady ? "Plan Ready" : "Planning";
+}
+
+/**
+ * Check if a loop's plan is ready for human review.
+ * Returns true only when the loop is in planning status AND the plan is marked as ready.
+ */
+export function isLoopPlanReady(loop: Loop): boolean {
+  const result = loop.state.status === "planning" && loop.state.planMode?.isPlanReady === true;
+  log.trace("isLoopPlanReady check", { status: loop.state.status, isPlanReady: loop.state.planMode?.isPlanReady, result });
   return result;
 }

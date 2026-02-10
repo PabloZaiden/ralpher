@@ -18,7 +18,8 @@ export type BadgeVariant =
   | "failed"
   | "merged"
   | "pushed"
-  | "deleted";
+  | "deleted"
+  | "plan_ready";
 
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
   /** Visual variant */
@@ -46,6 +47,8 @@ const variantClasses: Record<BadgeVariant, string> = {
   merged: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300",
   pushed: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300",
   deleted: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-500",
+  // Plan sub-state
+  plan_ready: "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300",
 };
 
 const sizeClasses = {
