@@ -140,6 +140,60 @@ Follow the standard workflow from AGENTS.md — update status after each complet
       planMode: false,
     },
   },
+  {
+    id: "review-fix-documentation",
+    name: "Review & Fix Documentation",
+    description:
+      "Reviews all README files, documentation, and code comments against actual code behavior and fixes any discrepancies.",
+    prompt: `Review and fix all documentation in this codebase so that it accurately reflects the current code behavior. This includes README files, markdown documentation, JSDoc/TSDoc blocks, and significant inline comments.
+
+**Phase 1: Discovery**
+Find all documentation artifacts in the codebase:
+- \`README.md\` and any other \`*.md\` files (excluding \`node_modules/\`, \`code_review/\`, and \`.planning/\`)
+- JSDoc/TSDoc comment blocks on exported functions, classes, interfaces, and types
+- Significant inline comments that describe behavior, constraints, or architecture
+- Configuration file comments (e.g., \`tsconfig.json\`, \`package.json\` scripts)
+
+**Phase 2: Analysis**
+For each documentation artifact, compare its claims against the actual code:
+- **API signatures** — Do documented parameters, return types, and method names match the code?
+- **Usage examples** — Do code snippets in docs actually work with the current API?
+- **File/folder references** — Do referenced paths still exist and point to the right things?
+- **Architectural descriptions** — Do high-level descriptions match the actual module structure and data flow?
+- **Command examples** — Do documented CLI commands, scripts, and flags match what the code supports?
+- **Configuration docs** — Do documented config options, env vars, and defaults match the implementation?
+- **Feature descriptions** — Do described features and behaviors match what the code actually does?
+- **Inline comments** — Do comments above or beside code accurately describe what the code does?
+
+**Phase 3: Fix**
+Update documentation to match the code (not the other way around — the code is the source of truth):
+1. Fix incorrect function/method descriptions and parameter docs
+2. Update outdated usage examples and code snippets so they work with current APIs
+3. Correct broken or wrong file path references
+4. Update architectural descriptions that no longer match reality
+5. Remove documentation for code, features, or APIs that no longer exist
+6. Add brief documentation for undocumented public APIs where it improves clarity
+7. Fix inline comments that describe behavior incorrectly
+8. Ensure all command examples use the correct syntax and flags
+
+**Phase 4: Verification**
+After making fixes, re-read the updated documentation to confirm:
+- All references to files, functions, and modules resolve correctly
+- Code examples are syntactically valid and use current APIs
+- No contradictions remain between different documentation files
+- The documentation tells a consistent, accurate story about the codebase
+
+**Rules:**
+- The code is the source of truth — fix docs to match code, never change code to match docs
+- Preserve the existing documentation style and tone
+- Do not rewrite documentation that is already correct
+- Do not add excessive documentation — keep it concise and useful
+- Follow the project's AGENTS.md conventions
+- Run \`bun run build\` after all changes to verify nothing is broken`,
+    defaults: {
+      planMode: true,
+    },
+  },
 ] as const;
 
 /**

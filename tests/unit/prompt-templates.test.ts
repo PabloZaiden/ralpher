@@ -6,8 +6,8 @@ import { describe, test, expect } from "bun:test";
 import { PROMPT_TEMPLATES, getTemplateById } from "../../src/lib/prompt-templates";
 
 describe("PROMPT_TEMPLATES", () => {
-  test("contains at least 4 templates", () => {
-    expect(PROMPT_TEMPLATES.length).toBeGreaterThanOrEqual(4);
+  test("contains at least 5 templates", () => {
+    expect(PROMPT_TEMPLATES.length).toBeGreaterThanOrEqual(5);
   });
 
   test("all templates have unique IDs", () => {
@@ -60,6 +60,15 @@ describe("PROMPT_TEMPLATES", () => {
     expect(template!.prompt).toContain(".planning/");
     expect(template!.defaults?.planMode).toBe(false);
   });
+
+  test("review-fix-documentation template references README and documentation", () => {
+    const template = PROMPT_TEMPLATES.find((t) => t.id === "review-fix-documentation");
+    expect(template).toBeDefined();
+    expect(template!.prompt).toContain("README");
+    expect(template!.prompt).toContain("documentation");
+    expect(template!.prompt).toContain("comments");
+    expect(template!.defaults?.planMode).toBe(true);
+  });
 });
 
 describe("getTemplateById", () => {
@@ -86,6 +95,7 @@ describe("getTemplateById", () => {
       "fix-code-review-issues",
       "fix-failing-tests",
       "continue-planned-tasks",
+      "review-fix-documentation",
     ];
 
     for (const id of expectedIds) {
