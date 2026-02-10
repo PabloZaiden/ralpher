@@ -85,6 +85,7 @@ export function getStatusBadgeVariant(status: string): BadgeVariant {
     case "starting":
     case "running":
     case "waiting":
+    case "resolving_conflicts":
       return "running";
     case "completed":
       return "completed";

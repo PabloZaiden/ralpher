@@ -4,10 +4,11 @@
  * Server settings have moved to per-workspace WorkspaceSettingsModal.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Modal, Button } from "./common";
 import { useMarkdownPreference, useLogLevelPreference } from "../hooks";
 import type { LogLevelName } from "../lib/logger";
+import type { WorkspaceExportData, WorkspaceImportResult } from "../types/workspace";
 
 export interface AppSettingsModalProps {
   /** Whether the modal is open */
@@ -22,6 +23,12 @@ export interface AppSettingsModalProps {
   onKillServer?: () => Promise<boolean>;
   /** Whether kill server is in progress */
   killingServer?: boolean;
+  /** Callback to export workspace configs */
+  onExportConfig?: () => Promise<WorkspaceExportData | null>;
+  /** Callback to import workspace configs */
+  onImportConfig?: (data: WorkspaceExportData) => Promise<WorkspaceImportResult | null>;
+  /** Whether an export/import operation is in progress */
+  configSaving?: boolean;
 }
 
 /**
@@ -34,11 +41,18 @@ export function AppSettingsModal({
   resetting = false,
   onKillServer,
   killingServer = false,
+  onExportConfig,
+  onImportConfig,
+  configSaving = false,
 }: AppSettingsModalProps) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showKillConfirm, setShowKillConfirm] = useState(false);
   const [serverKilled, setServerKilled] = useState(false);
   const [killError, setKillError] = useState(false);
+  const [importResult, setImportResult] = useState<WorkspaceImportResult | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Markdown rendering preference
   const { enabled: markdownEnabled, toggle: toggleMarkdown, saving: savingMarkdown } = useMarkdownPreference();
@@ -52,7 +66,56 @@ export function AppSettingsModal({
     setShowKillConfirm(false);
     setServerKilled(false);
     setKillError(false);
+    setImportResult(null);
+    setImportError(null);
+    setExportError(null);
     onClose();
+  }
+
+  // Handle export: fetch data, then trigger browser file download
+  async function handleExport() {
+    if (!onExportConfig) return;
+    setExportError(null);
+    const data = await onExportConfig();
+    if (!data) {
+      setExportError("Failed to export workspace configs.");
+      return;
+    }
+    const json = JSON.stringify(data, null, 2);
+    const date = new Date().toISOString().split("T")[0];
+    const filename = `ralpher-workspaces-${date}.json`;
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // Handle import: read file, parse JSON, POST to API
+  async function handleImportFile(file: File) {
+    if (!onImportConfig) return;
+    setImportResult(null);
+    setImportError(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as WorkspaceExportData;
+      const result = await onImportConfig(data);
+      if (result) {
+        setImportResult(result);
+      } else {
+        setImportError("Failed to import workspace configs.");
+      }
+    } catch (err) {
+      setImportError(`Import failed: ${String(err)}`);
+    }
+    // Reset file input so the same file can be re-selected
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   }
 
   return (
@@ -138,6 +201,92 @@ export function AppSettingsModal({
             </div>
           </div>
         </div>
+
+        {/* Import/Export Workspaces */}
+        {(onExportConfig || onImportConfig) && (
+          <div>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
+              Import / Export Workspaces
+            </h3>
+            <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Export all workspace configurations to a JSON file for backup or migration,
+                or import configurations from a previously exported file.
+              </p>
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Warning: exported files contain server settings in plain text, including
+                passwords. Store exported files securely.
+              </p>
+              <div className="flex items-center gap-3">
+                {onExportConfig && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleExport}
+                    disabled={configSaving}
+                    loading={configSaving}
+                  >
+                    Export
+                  </Button>
+                )}
+                {onImportConfig && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={configSaving}
+                      loading={configSaving}
+                    >
+                      Import
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".json,application/json"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleImportFile(file);
+                      }}
+                    />
+                  </>
+                )}
+              </div>
+              {exportError && (
+                <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-3 py-2">
+                  {exportError}
+                </div>
+              )}
+              {importError && (
+                <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded px-3 py-2">
+                  {importError}
+                </div>
+              )}
+              {importResult && (
+                <div className={`text-sm rounded px-3 py-2 ${importResult.failed > 0 ? "bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300" : "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300"}`}>
+                  <p className="font-medium mb-1">
+                    Import complete: {importResult.created} created, {importResult.skipped} skipped{importResult.failed > 0 ? `, ${importResult.failed} failed` : ""}.
+                  </p>
+                  {importResult.details.length > 0 && (
+                    <ul className="text-xs space-y-0.5">
+                      {importResult.details.map((d, i) => (
+                        <li key={i}>
+                          <span className={d.status === "created" ? "text-green-700 dark:text-green-400" : d.status === "failed" ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}>
+                            {d.status === "created" ? "+" : d.status === "failed" ? "✕" : "-"} {d.name} ({d.directory})
+                            {d.reason ? ` — ${d.reason}` : ""}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Reset All Settings - Danger Zone */}
         {(onResetAll || onKillServer) && (

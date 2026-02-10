@@ -160,6 +160,16 @@ export interface LoopState {
     reviewBranches: string[];
   };
 
+  /** Sync state for tracking base branch sync during push */
+  syncState?: {
+    /** Current sync status */
+    status: "syncing" | "clean" | "conflicts" | "resolved";
+    /** The base branch being synced with */
+    baseBranch: string;
+    /** Whether to auto-push after conflict resolution completes */
+    autoPushOnComplete: boolean;
+  };
+
   /** TODOs from the session persisted for screen refresh (always initialized as empty array) */
   todos: TodoItem[];
 }
@@ -235,19 +245,20 @@ export interface ConsecutiveErrorTracker {
  * Final states: merged, pushed, deleted (can be purged)
  */
 export type LoopStatus =
-  | "idle"           // Created but not started (transitional)
-  | "draft"          // Saved as draft, not started (no git branch or session)
-  | "planning"       // Loop is in plan creation/review mode, awaiting approval
-  | "starting"       // Initializing backend connection and git branch
-  | "running"        // Actively executing an iteration
-  | "waiting"        // Between iterations, preparing for next
-  | "completed"      // Successfully completed (stop pattern matched)
-  | "stopped"        // Manually stopped by user
-  | "failed"         // Unrecoverable error occurred
-  | "max_iterations" // Hit the maximum iteration limit
-  | "merged"         // Changes merged into original branch (final state)
-  | "pushed"         // Branch pushed to remote (final state, can receive reviews)
-  | "deleted";       // Marked for deletion (final state, awaiting purge)
+  | "idle"                // Created but not started (transitional)
+  | "draft"               // Saved as draft, not started (no git branch or session)
+  | "planning"            // Loop is in plan creation/review mode, awaiting approval
+  | "starting"            // Initializing backend connection and git branch
+  | "running"             // Actively executing an iteration
+  | "waiting"             // Between iterations, preparing for next
+  | "completed"           // Successfully completed (stop pattern matched)
+  | "stopped"             // Manually stopped by user
+  | "failed"              // Unrecoverable error occurred
+  | "max_iterations"      // Hit the maximum iteration limit
+  | "resolving_conflicts" // Resolving merge conflicts with base branch before push
+  | "merged"              // Changes merged into original branch (final state)
+  | "pushed"              // Branch pushed to remote (final state, can receive reviews)
+  | "deleted";            // Marked for deletion (final state, awaiting purge)
 
 /**
  * Backend session information.

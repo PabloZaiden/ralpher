@@ -686,11 +686,14 @@ export const loopsControlRoutes = {
         return errorResponse("push_failed", result.error ?? "Unknown error", 400);
       }
 
-      log.info("POST /api/loops/:id/push - Loop pushed", { loopId: req.params.id, remoteBranch: result.remoteBranch });
-      const response: PushResponse = {
-        success: true,
-        remoteBranch: result.remoteBranch!,
-      };
+      log.info("POST /api/loops/:id/push - Loop pushed", { loopId: req.params.id, remoteBranch: result.remoteBranch, syncStatus: result.syncStatus });
+      const syncStatus = result.syncStatus ?? "already_up_to_date";
+      let response: PushResponse;
+      if (syncStatus === "conflicts_being_resolved") {
+        response = { success: true, syncStatus };
+      } else {
+        response = { success: true, remoteBranch: result.remoteBranch!, syncStatus };
+      }
       return Response.json(response);
     },
   },

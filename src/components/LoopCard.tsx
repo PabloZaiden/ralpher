@@ -73,7 +73,7 @@ export function LoopCard({
     : getStatusBadgeVariant(state.status);
   const badgeLabel = isPlanning
     ? getPlanningStatusLabel(isPlanReady)
-    : getStatusLabel(state.status);
+    : getStatusLabel(state.status, state.syncState);
 
   // Card ring color: amber for plan-ready, cyan for planning-in-progress
   const planningRingClass = isPlanReady

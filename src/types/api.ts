@@ -175,12 +175,22 @@ export type AcceptResponse =
 /**
  * Response from POST /api/loops/:id/push endpoint.
  * Uses discriminated union for type-safe success/error handling.
+ *
+ * When syncStatus is "conflicts_being_resolved", the push is deferred
+ * (no remoteBranch yet). The loop will auto-push after conflict resolution.
  */
 export type PushResponse =
   | {
       success: true;
       /** The name of the remote branch that was pushed */
       remoteBranch: string;
+      /** Sync status with base branch */
+      syncStatus: "already_up_to_date" | "clean";
+    }
+  | {
+      success: true;
+      /** Sync status — push is deferred until conflict resolution completes */
+      syncStatus: "conflicts_being_resolved";
     }
   | {
       success: false;

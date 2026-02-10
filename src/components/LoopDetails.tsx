@@ -452,7 +452,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
               <EditIcon />
             </button>
             <Badge variant={getStatusBadgeVariant(state.status)} size="sm">
-              {getStatusLabel(state.status)}
+              {getStatusLabel(state.status, state.syncState)}
             </Badge>
             {isActive && (
               <span className="relative flex h-2 w-2">
