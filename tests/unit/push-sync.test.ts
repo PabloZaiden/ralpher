@@ -76,6 +76,34 @@ async function addRemoteCommit(
   }
 }
 
+/**
+ * Helper: add a commit to a specific branch on the remote via a second clone.
+ * Used to simulate someone else pushing to a working branch.
+ */
+async function addRemoteCommitToBranch(
+  remoteDir: string,
+  branchName: string,
+  files: Record<string, string>,
+  message: string,
+  dataDir: string,
+): Promise<void> {
+  const otherClone = join(dataDir, "other-clone-" + Date.now());
+  try {
+    await Bun.$`git clone ${remoteDir} ${otherClone}`.quiet();
+    await Bun.$`git -C ${otherClone} config user.email "other@test.com"`.quiet();
+    await Bun.$`git -C ${otherClone} config user.name "Other User"`.quiet();
+    await Bun.$`git -C ${otherClone} checkout ${branchName}`.quiet();
+    for (const [path, content] of Object.entries(files)) {
+      await writeFile(join(otherClone, path), content);
+    }
+    await Bun.$`git -C ${otherClone} add -A`.quiet();
+    await Bun.$`git -C ${otherClone} commit -m ${message}`.quiet();
+    await Bun.$`git -C ${otherClone} push`.quiet();
+  } finally {
+    await Bun.$`rm -rf ${otherClone}`.quiet();
+  }
+}
+
 describe("Push with Base Branch Sync", () => {
   describe("already up to date", () => {
     test("pushes immediately when base branch has no new commits", async () => {
@@ -420,5 +448,215 @@ describe("Push with Base Branch Sync", () => {
         await teardownTestContext(ctx);
       }
     });
+  });
+});
+
+describe("Push with Working Branch Sync", () => {
+  describe("working branch has remote commits", () => {
+    test("merges remote working branch changes before pushing", async () => {
+      // Mock responses consumed in order:
+      // Index 0: sendPrompt (name generation) → COMPLETE name
+      // Index 1: subscribeToEvents (initial loop iteration) → COMPLETE
+      const ctx = await setupTestContext({
+        initGit: true,
+        initialFiles: { "test.txt": "Initial content" },
+      });
+
+      try {
+        const { remoteDir } = await setupRemote(ctx);
+        const loop = await createAndCompleteLoop(ctx);
+
+        // Get the worktree path and working branch
+        const completedLoop = await ctx.manager.getLoop(loop.config.id);
+        const worktreePath = completedLoop!.state.git!.worktreePath!;
+        const workingBranch = completedLoop!.state.git!.workingBranch;
+
+        // Push the working branch to remote first (simulating a previous push)
+        await Bun.$`git -C ${ctx.workDir} push -u origin ${workingBranch}`.quiet();
+
+        // Add a non-conflicting commit to the working branch on the remote
+        await addRemoteCommitToBranch(
+          remoteDir,
+          workingBranch,
+          { "remote-working-file.txt": "Added by remote reviewer\n" },
+          "Non-conflicting commit on working branch",
+          ctx.dataDir,
+        );
+
+        // Also make a local change in the worktree (non-conflicting)
+        await writeFile(join(worktreePath, "local-change.txt"), "Local change\n");
+        await Bun.$`git -C ${worktreePath} add -A`.quiet();
+        await Bun.$`git -C ${worktreePath} commit -m "Local changes in worktree"`.quiet();
+
+        // Push the loop — should merge remote working branch changes first, then push
+        const pushResult = await ctx.manager.pushLoop(loop.config.id);
+        expect(pushResult.success).toBe(true);
+        expect(pushResult.remoteBranch).toBeDefined();
+
+        // Verify loop is in pushed state
+        const pushedLoop = await ctx.manager.getLoop(loop.config.id);
+        expect(pushedLoop).not.toBeNull();
+        expect(pushedLoop!.state.status).toBe("pushed");
+        expect(pushedLoop!.state.syncState).toBeUndefined();
+
+        // Verify the remote file from the working branch was merged in
+        const remoteFileExists = await Bun.$`git -C ${worktreePath} show HEAD:remote-working-file.txt`.quiet().then(() => true).catch(() => false);
+        expect(remoteFileExists).toBe(true);
+      } finally {
+        await teardownTestContext(ctx);
+      }
+    });
+  });
+
+  describe("working branch conflicts", () => {
+    test("starts conflict resolution when working branch has conflicting remote changes", async () => {
+      // Mock responses consumed in order:
+      // Index 0: sendPrompt (name generation) → COMPLETE name
+      // Index 1: subscribeToEvents (initial loop iteration) → COMPLETE
+      // Index 2: subscribeToEvents (conflict resolution for working branch) → COMPLETE
+      //
+      // NOTE: We only verify that conflict resolution starts with the correct syncPhase.
+      // We do NOT wait for the full flow to reach "pushed" because the mock AI doesn't
+      // actually run `git merge` to resolve conflicts — it just emits COMPLETE.
+      // After the mock "resolves", handleConflictResolutionComplete calls syncBaseBranchAndPush
+      // which tries to push, but the push is rejected (non-fast-forward) because the local
+      // branch is still behind the remote working branch.
+      // The base branch conflict test already covers the full resolution→push flow.
+      const ctx = await setupTestContext({
+        initGit: true,
+        initialFiles: { "test.txt": "Initial content" },
+        mockResponses: [
+          "<promise>COMPLETE</promise>",
+          "<promise>COMPLETE</promise>",
+          "<promise>COMPLETE</promise>",
+        ],
+      });
+
+      try {
+        const { remoteDir } = await setupRemote(ctx);
+
+        // Create loop
+        const loop = await ctx.manager.createLoop({
+          ...testModelFields,
+          directory: ctx.workDir,
+          prompt: "Modify test.txt",
+          planMode: false,
+          workspaceId: testWorkspaceId,
+        });
+
+        await ctx.manager.startLoop(loop.config.id);
+        await waitForEvent(ctx.events, "loop.completed");
+
+        // Get worktree path and working branch
+        const completedLoop = await ctx.manager.getLoop(loop.config.id);
+        const worktreePath = completedLoop!.state.git!.worktreePath!;
+        const workingBranch = completedLoop!.state.git!.workingBranch;
+
+        // Push the working branch to remote first
+        await Bun.$`git -C ${ctx.workDir} push -u origin ${workingBranch}`.quiet();
+
+        // Modify test.txt locally in the worktree
+        await writeFile(join(worktreePath, "test.txt"), "Modified locally in worktree\n");
+        await Bun.$`git -C ${worktreePath} add -A`.quiet();
+        await Bun.$`git -C ${worktreePath} commit -m "Local changes to test.txt"`.quiet();
+
+        // Add a conflicting commit to the working branch on the remote
+        await addRemoteCommitToBranch(
+          remoteDir,
+          workingBranch,
+          { "test.txt": "Modified by remote reviewer on working branch\n" },
+          "Conflicting remote commit on working branch",
+          ctx.dataDir,
+        );
+
+        // Push the loop — should detect working branch conflicts and start resolution
+        const pushResult = await ctx.manager.pushLoop(loop.config.id);
+        expect(pushResult.success).toBe(true);
+        expect(pushResult.syncStatus).toBe("conflicts_being_resolved");
+        expect(pushResult.remoteBranch).toBeUndefined();
+
+        // Verify sync conflicts event was emitted
+        const syncConflicts = ctx.events.find((e) => e.type === "loop.sync.conflicts");
+        expect(syncConflicts).toBeDefined();
+
+        // Verify syncState was set with the correct syncPhase
+        const conflictLoop = await ctx.manager.getLoop(loop.config.id);
+        expect(conflictLoop).not.toBeNull();
+        expect(conflictLoop!.state.syncState).toBeDefined();
+        expect(conflictLoop!.state.syncState!.syncPhase).toBe("working_branch");
+        expect(conflictLoop!.state.syncState!.autoPushOnComplete).toBe(true);
+      } finally {
+        await teardownTestContext(ctx);
+      }
+    });
+  });
+});
+
+describe("Merge Strategy Configuration", () => {
+  test("ensureMergeStrategy sets pull.rebase false when not configured", async () => {
+    const ctx = await setupTestContext({
+      initGit: true,
+      initialFiles: { "test.txt": "Initial content" },
+    });
+
+    try {
+      const { GitService } = await import("../../src/core/git-service");
+      const { TestCommandExecutor } = await import("../mocks/mock-executor");
+      const executor = new TestCommandExecutor();
+      const git = GitService.withExecutor(executor);
+
+      // Ensure pull.rebase is NOT configured initially
+      // (unset it explicitly in case the test environment has it set)
+      await Bun.$`git -C ${ctx.workDir} config --unset pull.rebase`.quiet().nothrow();
+
+      // Verify it's not set
+      const checkBefore = await Bun.$`git -C ${ctx.workDir} config pull.rebase`.quiet().nothrow();
+      expect(checkBefore.exitCode).not.toBe(0);
+
+      // Call ensureMergeStrategy
+      const result = await git.ensureMergeStrategy(ctx.workDir);
+      expect(result).toBe(true);
+
+      // Verify pull.rebase is now set to false
+      const checkAfter = (await Bun.$`git -C ${ctx.workDir} config pull.rebase`.text()).trim();
+      expect(checkAfter).toBe("false");
+
+      // Call again — should be a no-op and still return true
+      const result2 = await git.ensureMergeStrategy(ctx.workDir);
+      expect(result2).toBe(true);
+
+      // Verify it's still false (wasn't changed)
+      const checkFinal = (await Bun.$`git -C ${ctx.workDir} config pull.rebase`.text()).trim();
+      expect(checkFinal).toBe("false");
+    } finally {
+      await teardownTestContext(ctx);
+    }
+  });
+
+  test("ensureMergeStrategy is a no-op when already configured", async () => {
+    const ctx = await setupTestContext({
+      initGit: true,
+      initialFiles: { "test.txt": "Initial content" },
+    });
+
+    try {
+      const { GitService } = await import("../../src/core/git-service");
+      const { TestCommandExecutor } = await import("../mocks/mock-executor");
+      const executor = new TestCommandExecutor();
+      const git = GitService.withExecutor(executor);
+
+      // Set pull.rebase to true explicitly
+      await Bun.$`git -C ${ctx.workDir} config pull.rebase true`.quiet();
+
+      // Call ensureMergeStrategy — should not overwrite the existing value
+      const result = await git.ensureMergeStrategy(ctx.workDir);
+      expect(result).toBe(true);
+
+      // Verify it's still true (not changed to false)
+      const checkAfter = (await Bun.$`git -C ${ctx.workDir} config pull.rebase`.text()).trim();
+      expect(checkAfter).toBe("true");
+    } finally {
+      await teardownTestContext(ctx);
+    }
   });
 });
