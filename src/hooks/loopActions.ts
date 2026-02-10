@@ -21,6 +21,8 @@ export interface AcceptLoopResult {
 export interface PushLoopResult {
   success: boolean;
   remoteBranch?: string;
+  /** Sync status with base branch */
+  syncStatus?: "already_up_to_date" | "clean" | "conflicts_being_resolved";
 }
 
 /**
@@ -59,8 +61,8 @@ export async function pushLoopApi(loopId: string): Promise<PushLoopResult> {
   }
 
   const data = await response.json();
-  log.trace("API: Push loop success", { loopId, remoteBranch: data.remoteBranch });
-  return { success: true, remoteBranch: data.remoteBranch };
+  log.trace("API: Push loop success", { loopId, remoteBranch: data.remoteBranch, syncStatus: data.syncStatus });
+  return { success: true, remoteBranch: data.remoteBranch, syncStatus: data.syncStatus };
 }
 
 /**

@@ -11,11 +11,20 @@ const log = createLogger("LoopStatus");
 
 /**
  * Get a human-readable label for a loop status.
+ * Optionally considers syncState to show "Resolving Conflicts" when
+ * a loop is running to resolve merge conflicts before push.
  */
-export function getStatusLabel(status: LoopStatus): string {
+export function getStatusLabel(status: LoopStatus, syncState?: { status: string } | null): string {
+  // If the loop is actively running and has a sync conflict state, show the sync label
+  if (syncState?.status === "conflicts" && (status === "running" || status === "starting" || status === "waiting")) {
+    return "Resolving Conflicts";
+  }
+
   switch (status) {
     case "idle":
       return "Idle";
+    case "draft":
+      return "Draft";
     case "planning":
       return "Planning";
     case "starting":
@@ -32,6 +41,8 @@ export function getStatusLabel(status: LoopStatus): string {
       return "Failed";
     case "max_iterations":
       return "Max Iterations";
+    case "resolving_conflicts":
+      return "Resolving Conflicts";
     case "merged":
       return "Merged";
     case "pushed":
