@@ -55,7 +55,7 @@ The Ralpher codebase is **functional and well-organized at the directory level**
 - Two 2,000+ LOC files (`loop-manager.ts` at 2,409, `loop-engine.ts` at 2,079) carry all business logic with deeply nested control flow
 - `Dashboard.tsx` (1,118 LOC) is a god component with 26 state variables
 - No centralized state machine for loop status transitions
-- Systematic code duplication across API handlers, hooks, and components (~530 LOC recoverable)
+- Systematic code duplication across API handlers, hooks, and components (~540 LOC recoverable)
 - API layer bypasses Core to access Persistence directly in several places
 - Error handling is inconsistent — errors frequently swallowed at layer boundaries
 
@@ -158,26 +158,26 @@ Dashboard manages 26 state variables, contains raw `fetch()` calls, business log
              correct    |          | VIOLATION
                         v          v
               +--------------+  +--------------+
-              | Core Business|  |  Data Access  |
-              |  (7,794 LOC) |  |  (2,061 LOC)  |
-              +------+-------+  +--------------+
-                     |                 ^
-                     |    correct      |
-                     +-----------------+
-                     |
-                     v
-              +--------------+
-              |   External   |
-              | Integration  |
-              |  (1,260 LOC) |
-              +--------------+
-                     |
-                     v
-              +--------------+
-              |    Shared    |
-              |Infrastructure|
-              |  (2,187 LOC) |
-              +--------------+
+               | Core Business|  |  Data Access  |
+               |  (6,285 LOC) |  |  (2,061 LOC)  |
+               +------+-------+  +--------------+
+                      |                 ^
+                      |    correct      |
+                      +-----------------+
+                      |
+                      v
+               +--------------+
+               |   External   |
+               | Integration  |
+               |  (2,597 LOC) |
+               +--------------+
+                      |
+                      v
+               +--------------+
+               |    Shared    |
+               |Infrastructure|
+               |  (2,345 LOC) |
+               +--------------+
 ```
 
 **Key violations:**
@@ -306,10 +306,10 @@ These address the highest-impact systemic issues spanning multiple layers. They 
 **Layers analyzed:**
 1. Presentation (10,495 LOC) — Health: C
 2. API (3,545 LOC) — Health: C+
-3. Core Business Logic (7,794 LOC) — Health: C+
+3. Core Business Logic (6,285 LOC) — Health: C+
 4. Data Access (2,061 LOC) — Health: B-
-5. External Integration (1,260 LOC) — Health: C
-6. Shared Infrastructure (2,187 LOC) — Health: B
+5. External Integration (2,597 LOC) — Health: C
+6. Shared Infrastructure (2,345 LOC) — Health: B
 
 **Unique value:** System-level perspective. The cross-layer analysis reveals layering violations, error propagation gaps, and type safety boundaries that no other document captures. The health scores provide a quick at-a-glance assessment of each layer's quality.
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-07
 **Scope:** All `src/` modules reviewed as architectural units
-**Total Codebase:** ~24,300 LOC across 10 modules, 87 files
+**Total Codebase:** ~27,328 LOC across 10 modules, 90 files
 
 ---
 
@@ -10,17 +10,17 @@
 
 | Module | Files | LOC | Critical | Major | Minor | Suggestion |
 |--------|------:|----:|---------:|------:|------:|-----------:|
-| `src/core/` | 10 | 6,456 | 0 | 8 | 5 | 1 |
-| `src/api/` | 9 | 3,034 | 0 | 8 | 3 | 0 |
-| `src/persistence/` | 7 | 1,948 | 1 | 6 | 4 | 1 |
+| `src/core/` | 11 | 7,794 | 0 | 8 | 5 | 1 |
+| `src/api/` | 10 | 3,397 | 0 | 8 | 3 | 0 |
+| `src/persistence/` | 7 | 2,061 | 1 | 6 | 4 | 1 |
 | `src/backends/` | 3 | 1,260 | 0 | 6 | 2 | 0 |
-| `src/types/` | 11 | 1,596 | 0 | 3 | 4 | 1 |
-| `src/utils/` | 4 | 425 | 1 | 5 | 1 | 0 |
-| `src/components/` | 24 | 7,163 | 1 | 5 | 4 | 0 |
-| `src/hooks/` | 9 | 2,263 | 0 | 6 | 3 | 0 |
-| `src/lib/` | 2 | 178 | 0 | 2 | 1 | 0 |
+| `src/types/` | 11 | 1,730 | 0 | 3 | 4 | 1 |
+| `src/utils/` | 4 | 457 | 1 | 5 | 1 | 0 |
+| `src/components/` | 25 | 7,527 | 1 | 5 | 4 | 0 |
+| `src/hooks/` | 10 | 2,477 | 0 | 6 | 3 | 0 |
+| `src/lib/` | 3 | 383 | 0 | 2 | 1 | 0 |
 | Entry Points & Config | 8+ | ~350 | 0 | 3 | 4 | 0 |
-| **Totals** | **87** | **24,673** | **3** | **52** | **31** | **3** |
+| **Totals** | **90** | **~27,328** | **3** | **52** | **31** | **3** |
 
 **Overall Assessment:** The codebase is functional and well-organized at the directory level, but suffers from concentrated complexity in a handful of oversized files, systematic code duplication (especially in API layers and hooks), and several genuine runtime bugs (fire-and-forget async, timer leaks, SQL injection). The separation between frontend and backend modules is clean. The primary architectural debt lies in the `core/` module, where two 2000+ LOC files carry the entire business logic without a formal state machine, and in `components/` where Dashboard.tsx has grown into a god component.
 
@@ -30,29 +30,30 @@
 
 **Purpose:** Loop lifecycle orchestration, backend management, git operations, logging, configuration, event emission, and remote command execution.
 
-**Files (10):**
+**Files (11):**
 
 | File | LOC | Role |
 |------|----:|------|
-| `loop-manager.ts` | 2,025 | Loop CRUD, start/stop/accept/discard/push lifecycle |
-| `loop-engine.ts` | 2,009 | Iteration execution, event processing, agent interaction |
-| `git-service.ts` | 979 | Git branch, commit, merge, diff, push operations |
-| `backend-manager.ts` | 667 | Backend connection pooling per workspace |
-| `remote-command-executor.ts` | 464 | PTY-over-WebSocket remote command execution |
+| `loop-manager.ts` | 2,409 | Loop CRUD, start/stop/accept/discard/push lifecycle |
+| `loop-engine.ts` | 2,079 | Iteration execution, event processing, agent interaction |
+| `git-service.ts` | 1,492 | Git branch, commit, merge, diff, push operations |
+| `backend-manager.ts` | 765 | Backend connection pooling per workspace |
+| `remote-command-executor.ts` | 493 | PTY-over-WebSocket remote command execution |
+| `agents-md-optimizer.ts` | 234 | AGENTS.md optimization logic for workspaces |
 | `logger.ts` | 129 | tslog wrapper, runtime log level control |
+| `command-executor.ts` | 79 | CommandExecutor interface + local Bun implementation |
 | `event-emitter.ts` | 72 | Simple typed pub/sub event system |
-| `command-executor.ts` | 69 | CommandExecutor interface + local Bun implementation |
 | `config.ts` | 34 | App configuration from environment |
 | `index.ts` | 8 | Barrel exports |
 
-**Total:** 6,456 LOC
+**Total:** 7,794 LOC
 
 ### Module-Level Findings
 
 | # | Severity | Dimension | Finding |
 |---|----------|-----------|---------|
 | C1.1 | ~~**Critical**~~ **By Design** | ~~Async Safety~~ | ~~`loop-manager.ts` `startLoop()` calls engine methods in a fire-and-forget pattern. If the engine's async start fails after the response is sent, the loop silently enters an inconsistent state. This directly violates the AGENTS.md guideline: "CRITICAL: Always await async operations in API handlers." The loop status may show "starting" permanently with no error surfaced.~~ **By Design — Intentional Architecture:** The fire-and-forget pattern is intentional for long-running processes. The loop engine runs a `while`-loop with multiple AI iterations (potentially hours). Awaiting would block the HTTP response indefinitely. The engine has comprehensive self-contained error handling (`handleError()` updates state to "failed", emits error events, `trackConsecutiveError()` for failsafe exit). Errors are reported via event emitter and persistence callbacks, not exceptions. See `AGENTS.md` § Async Patterns for the documented exception. |
-| C1.2 | **Major** | File Size / Complexity | Two files exceed 2,000 LOC each (`loop-manager.ts`: 2,025, `loop-engine.ts`: 2,009). These are the most complex files in the entire codebase and contain deeply nested control flow. `acceptLoop()` in loop-manager is ~200 lines with multiple nested try/catch blocks and git operations. `runIteration()` in loop-engine is ~250 lines mixing event processing, state management, and error handling. |
+| C1.2 | **Major** | File Size / Complexity | Two files exceed 2,000 LOC each (`loop-manager.ts`: 2,409, `loop-engine.ts`: 2,079). These are the most complex files in the entire codebase and contain deeply nested control flow. `acceptLoop()` in loop-manager is ~200 lines with multiple nested try/catch blocks and git operations. `runIteration()` in loop-engine is ~250 lines mixing event processing, state management, and error handling. |
 | C1.3 | **Major** | Code Duplication | Branch name generation logic (`sanitizeBranchName` usage + prefix assembly) is duplicated between `loop-manager.ts` (during `createLoop`) and `loop-engine.ts` (during `startLoop`). Changes to branch naming conventions must be synchronized in two places. |
 | C1.4 | **Major** | Bug — Logger | `createLogger()` in `core/logger.ts:93` creates sub-loggers via `log.getSubLogger()`, but `setLogLevel()` at line 103-108 only updates `log.settings.minLevel`. tslog sub-loggers copy the parent's level at creation time and do not inherit runtime changes. Any module using `createLogger()` (which is most backend modules — persistence, API, backends, etc.) will not respond to runtime log level changes. The frontend `lib/logger.ts` correctly addresses this by caching sub-loggers and updating them in `setLogLevel()`. |
 | C1.5 | **Major** | Code Duplication | Logger constants (`LogLevelName`, `LOG_LEVELS`, `LOG_LEVEL_NAMES`, `DEFAULT_LOG_LEVEL`) are fully duplicated between `core/logger.ts:26-63` and `lib/logger.ts:35-66`. These are identical definitions maintained independently. |
@@ -109,21 +110,22 @@
 
 **Purpose:** HTTP endpoint handlers for loops, workspaces, models, settings, git, health, and WebSocket upgrade.
 
-**Files (9):**
+**Files (10):**
 
 | File | LOC | Role |
 |------|----:|------|
-| `loops.ts` | 1,432 | Loop CRUD, lifecycle control, plan/review operations |
-| `workspaces.ts` | 489 | Workspace CRUD with server settings |
+| `loops.ts` | 1,351 | Loop CRUD, lifecycle control, plan/review operations |
+| `workspaces.ts` | 695 | Workspace CRUD with server settings |
 | `models.ts` | 426 | Model listing, preferences, enabled status |
+| `agents-md.ts` | 234 | AGENTS.md optimization endpoints |
 | `git.ts` | 193 | Branch listing and repository info |
 | `websocket.ts` | 134 | WebSocket handlers for real-time events |
 | `settings.ts` | 132 | App config, DB reset, server kill |
 | `validation.ts` | 121 | Zod schema parsing utility |
-| `index.ts` | 58 | Barrel export combining all routes |
+| `index.ts` | 62 | Barrel export combining all routes |
 | `health.ts` | 49 | Health check endpoint |
 
-**Total:** 3,034 LOC
+**Total:** 3,397 LOC
 
 ### Module-Level Findings
 
@@ -183,15 +185,15 @@
 
 | File | LOC | Role |
 |------|----:|------|
-| `loops.ts` | 560 | Loop CRUD, state updates, query helpers |
-| `migrations/index.ts` | 552 | Schema migration system (12 migrations) |
+| `migrations/index.ts` | 571 | Schema migration system (12 migrations) |
+| `loops.ts` | 566 | Loop CRUD, state updates, query helpers |
 | `database.ts` | 386 | DB init, schema, review comments, connection management |
-| `workspaces.ts` | 239 | Workspace CRUD with server settings |
+| `workspaces.ts` | 327 | Workspace CRUD with server settings |
 | `preferences.ts` | 178 | Key-value preference storage |
 | `paths.ts` | 24 | Data directory management (delegates to `database.ts`) |
 | `index.ts` | 9 | Barrel exports |
 
-**Total:** 1,948 LOC
+**Total:** 2,061 LOC
 
 ### Module-Level Findings
 
@@ -200,7 +202,7 @@
 | C3.1 | **Critical** | Security — SQL Injection | `getTableColumns()` in `migrations/index.ts:57` interpolates `tableName` directly into a PRAGMA query: `` db.query(`PRAGMA table_info(${tableName})`) ``. While `tableName` currently comes from hardcoded strings in migration code (not user input), this is a dangerous pattern that could become exploitable if the function is called with dynamic input in the future. The PRAGMA syntax does not support parameterized queries, so the fix is to validate `tableName` against an allowlist of known tables. |
 | C3.2 | **Major** | Schema Management | The base schema in `database.ts` and the migrations in `migrations/index.ts` are two independent sources of truth. A fresh database gets the full schema from `database.ts` plus all migrations. An upgraded database only gets migrations. If the base schema is modified without a corresponding migration, upgraded databases will diverge from fresh ones. |
 | C3.3 | **Major** | Barrel Export | `workspaces.ts` is not re-exported from the barrel `index.ts`. Consumers must import directly from `"../persistence/workspaces"`. The barrel exports `database`, `paths`, `loops`, `preferences`, and `migrations` — but not `workspaces`. |
-| C3.4 | **Major** | Code Duplication | `updateLoopState()` and `updateLoopConfig()` in `loops.ts` are structurally near-identical (~40 lines each). Both: (1) build a dynamic column list from object keys, (2) validate column names, (3) construct a SET clause, (4) execute UPDATE with parameter binding. The only difference is the source data shape. These should be unified into a generic `updateLoopFields()` function. |
+| C3.4 | ~~**Major**~~ **Partially Resolved** | Code Duplication | `updateLoopState()` and `updateLoopConfig()` in `loops.ts` ~~are structurally near-identical (~40 lines each).~~ **Updated:** Both functions now use proper `UPDATE` statements (lines 457-459, 502-504) rather than the previous pattern. However, `saveLoop()` (line 295-296) still uses `INSERT OR REPLACE` semantics — see C3.5. The structural duplication between the two update functions remains and they should still be unified into a generic `updateLoopFields()` function. |
 | C3.5 | **Major** | Data Integrity | `saveLoop()` likely uses `INSERT OR REPLACE` semantics. In SQLite, `INSERT OR REPLACE` triggers the `ON DELETE CASCADE` behavior — if the loops table has foreign key relationships (e.g., review comments reference loop IDs), replacing a loop row will cascade-delete all associated review comments. The fix is to use `INSERT ... ON CONFLICT DO UPDATE` (upsert) instead. |
 | C3.6 | **Major** | Error Handling | `rowToLoop()` in `loops.ts` uses `JSON.parse()` to deserialize `git_commits`, `recent_iterations`, `logs`, `messages`, `tool_calls`, and `todos` columns. None of these parse calls have try/catch. A single corrupt JSON value in any row will throw, preventing the listing of ALL loops (since `listLoops` maps all rows through `rowToLoop`). Each parse should have a fallback default. |
 | C3.7 | **Minor** | Async Overhead | All persistence functions (`saveLoop`, `loadLoop`, `listLoops`, `updateLoopState`, etc.) are marked `async` despite performing only synchronous Bun SQLite operations. This adds microtask overhead on every database call. Since Bun's SQLite API is synchronous, these functions could be plain synchronous functions. (This is a pervasive pattern — changing it would require updating all callers.) |
@@ -308,19 +310,19 @@
 
 | File | LOC | Role |
 |------|----:|------|
-| `events.ts` | 488 | Loop event types, event data unions, timestamp helpers |
-| `loop.ts` | 385 | Loop, LoopConfig, LoopState types, initial state factory |
-| `api.ts` | 268 | API request/response types, file diff types |
+| `events.ts` | 536 | Loop event types, event data unions, timestamp helpers |
+| `loop.ts` | 400 | Loop, LoopConfig, LoopState types, initial state factory |
+| `api.ts` | 278 | API request/response types, file diff types |
 | `schemas/loop.ts` | 120 | Zod schemas for loop request validation |
-| `schemas/workspace.ts` | 80 | Zod schemas for workspace/server settings validation |
-| `schemas/index.ts` | 59 | Barrel for schemas |
-| `workspace.ts` | 68 | Workspace type definition |
+| `schemas/workspace.ts` | 108 | Zod schemas for workspace/server settings validation |
+| `workspace.ts` | 95 | Workspace type definition |
+| `schemas/index.ts` | 65 | Barrel for schemas |
 | `schemas/preferences.ts` | 44 | Zod schemas for preference validation |
 | `settings.ts` | 43 | ServerMode, ConnectionStatus, default settings factory |
 | `schemas/model.ts` | 33 | Zod schemas for model preference validation |
 | `index.ts` | 8 | Barrel exports |
 
-**Total:** 1,596 LOC
+**Total:** 1,730 LOC
 
 ### Module-Level Findings
 
@@ -379,17 +381,17 @@
 |------|----:|------|
 | `event-stream.ts` | 148 | Async push/pull event stream with buffering |
 | `name-generator.ts` | 142 | AI-powered loop name generation with fallbacks |
-| `loop-status.ts` | 105 | Loop status predicates (canAccept, isFinalState, etc.) |
-| `index.ts` | 30 | Barrel exports + inline `sanitizeBranchName` |
+| `loop-status.ts` | 135 | Loop status predicates (canAccept, isFinalState, etc.) |
+| `index.ts` | 32 | Barrel exports + inline `sanitizeBranchName` |
 
-**Total:** 425 LOC
+**Total:** 457 LOC
 
 ### Module-Level Findings
 
 | # | Severity | Dimension | Finding |
 |---|----------|-----------|---------|
 | C6.1 | **Critical** | Resource Leak | `name-generator.ts:113-114` creates a `setTimeout` for the timeout promise in `Promise.race`. If the `sendPrompt` call resolves first (the happy path), the timeout's `setTimeout` is never cleared. While the timeout will eventually fire and the rejected promise will be garbage collected, this is a timer leak — in rapid succession (creating many loops quickly), these orphan timers accumulate. Fix: capture the timer ID and clear it after the race resolves. |
-| C6.2 | **Major** | Missing Case | `getStatusLabel()` in `loop-status.ts:15-43` is missing a case for the `"draft"` status. Loops can be created with `draft: true`, giving them a "draft" status. The `default` branch returns the raw status string `"draft"` (which happens to be readable), but this is clearly unintentional — all other statuses have explicit labels. |
+| C6.2 | ~~**Major**~~ **Resolved** | Missing Case | ~~`getStatusLabel()` in `loop-status.ts:15-43` is missing a case for the `"draft"` status. Loops can be created with `draft: true`, giving them a "draft" status. The `default` branch returns the raw status string `"draft"` (which happens to be readable), but this is clearly unintentional — all other statuses have explicit labels.~~ **Updated:** The `"draft"` case has been added at lines 26-27 of `loop-status.ts`. |
 | C6.3 | **Major** | Edge Case | `sanitizeBranchName()` in `index.ts:23-30` can return an empty string if the input consists entirely of non-alphanumeric characters (e.g., `"!!!"` → `"---"` → `""` after trimming hyphens). An empty string is an invalid git branch name and will cause `git checkout -b ""` to fail. The function should have a fallback (e.g., `"unnamed"` or a random suffix). |
 | C6.4 | **Major** | Code Organization | `sanitizeBranchName()` is defined inline in the barrel file `index.ts:23-30` rather than in its own utility file. This breaks the pattern of the barrel being import-only. The function should be in a dedicated file (e.g., `git-utils.ts`) and re-exported from the barrel. |
 | C6.5 | **Major** | Test Coverage | No unit tests exist for `loop-status.ts`, `event-stream.ts`, or `sanitizeBranchName`. These are pure functions with clear input/output contracts — ideal candidates for unit testing. The `name-generator.ts` has tests but the other utilities do not. |
@@ -440,20 +442,20 @@ These should arguably live closer to their consumers: loop-status near component
 
 **Purpose:** React functional components for the Ralpher web interface, including the main dashboard, loop management views, modals, and shared UI primitives.
 
-**Files (24):**
+**Files (25):**
 
 | File | LOC | Role |
 |------|----:|------|
-| `Dashboard.tsx` | 1,247 | Main dashboard: loop listing, creation, workspace management |
-| `LoopDetails.tsx` | 1,219 | Single loop detail view with tabs |
-| `CreateLoopForm.tsx` | 894 | Loop creation form with model selection |
+| `LoopDetails.tsx` | 1,225 | Single loop detail view with tabs |
+| `Dashboard.tsx` | 1,118 | Main dashboard: loop listing, creation, workspace management |
+| `CreateLoopForm.tsx` | 949 | Loop creation form with model selection |
+| `AppSettingsModal.tsx` | 428 | Application-wide settings |
 | `ServerSettingsForm.tsx` | 400 | Server connection configuration |
+| `WorkspaceSettingsModal.tsx` | 388 | Per-workspace settings |
 | `LoopActionBar.tsx` | 337 | Loop action buttons (accept, push, discard, etc.) |
 | `LogViewer.tsx` | 309 | Real-time log display with filtering |
-| `LoopCard.tsx` | 279 | Loop summary card for dashboard |
-| `AppSettingsModal.tsx` | 279 | Application-wide settings |
-| `PlanReviewPanel.tsx` | 254 | Plan review with accept/feedback |
-| `WorkspaceSettingsModal.tsx` | 235 | Per-workspace settings |
+| `LoopCard.tsx` | 306 | Loop summary card for dashboard |
+| `PlanReviewPanel.tsx` | 275 | Plan review with accept/feedback |
 | `LoopModals.tsx` | 223 | Modal containers for loop actions |
 | `CreateWorkspaceModal.tsx` | 197 | Workspace creation form |
 | `common/Modal.tsx` | 195 | Generic modal component |
@@ -461,21 +463,24 @@ These should arguably live closer to their consumers: loop-status near component
 | `RenameLoopModal.tsx` | 152 | Loop rename modal |
 | `AcceptLoopModal.tsx` | 144 | Accept/merge confirmation modal |
 | `AddressCommentsModal.tsx` | 130 | Review comment submission modal |
-| `common/Badge.tsx` | 104 | Status badge component |
+| `common/Badge.tsx` | 108 | Status badge component |
 | `WorkspaceSelector.tsx` | 97 | Workspace dropdown selector |
 | `MarkdownRenderer.tsx` | 86 | Markdown rendering with react-markdown |
 | `common/Card.tsx` | 67 | Card container component |
 | `common/Button.tsx` | 67 | Button component with variants |
+| `common/CollapsibleSection.tsx` | 54 | Reusable collapsible UI section |
 | `LogLevelInitializer.tsx` | 43 | Log level sync on mount |
 | `common/Icons.tsx` | 31 | SVG icon components |
+| `common/index.ts` | 10 | Common components barrel |
+| `index.ts` | 14 | Barrel exports |
 
-**Total:** 7,163 LOC
+**Total:** 7,527 LOC
 
 ### Module-Level Findings
 
 | # | Severity | Dimension | Finding |
 |---|----------|-----------|---------|
-| C7.1 | **Critical** | Complexity — God Component | `Dashboard.tsx` (1,247 LOC) is a god component with ~20+ `useState` calls, raw `fetch()` calls for multiple API endpoints, business logic for loop grouping/sorting/filtering, workspace management, modal state for 5+ different modals, and massive JSX with significant duplication between active and completed loop sections. This single component handles what should be 5-6 smaller components: `LoopList`, `WorkspacePanel`, `DashboardHeader`, `LoopGroupSection`, `DashboardModals`. |
+| C7.1 | **Critical** | Complexity — God Component | `Dashboard.tsx` (1,118 LOC) is a god component with 26 `useState` calls, raw `fetch()` calls for multiple API endpoints, business logic for loop grouping/sorting/filtering, workspace management, modal state for 5+ different modals, and massive JSX with significant duplication between active and completed loop sections. This single component handles what should be 5-6 smaller components: `LoopList`, `WorkspacePanel`, `DashboardHeader`, `LoopGroupSection`, `DashboardModals`. |
 | C7.2 | **Major** | Code Duplication | Model grouping, sorting, and rendering logic is duplicated between `CreateLoopForm.tsx` (for initial model selection) and `LoopActionBar.tsx` (for mid-loop model changes). Both components independently fetch models, group them by provider, sort by connected status, and render nearly identical model selection dropdowns. This should be extracted to a shared `ModelSelector` component. |
 | C7.3 | **Major** | Accessibility | `Modal.tsx` lacks focus trapping. When a modal opens, keyboard focus can tab outside the modal to elements behind the overlay. This is a WCAG 2.1 Level A violation (2.4.3 Focus Order). The modal should trap focus within its content area and return focus to the trigger element on close. |
 | C7.4 | **Major** | Error Handling | Multiple components silently swallow errors in catch blocks with no user-facing notification. For example, failed API calls in Dashboard result in `console.error` but no toast, alert, or error state shown to the user. The user has no indication that an operation failed. |
@@ -488,15 +493,15 @@ These should arguably live closer to their consumers: loop-status near component
 ### API Surface Analysis
 
 **Barrel exports (`index.ts` + `common/index.ts`):**
-- Common: `Button`, `Card`, `Badge`, `Modal`, `ConfirmModal`, `EditIcon` + their prop types
+- Common: `Button`, `Card`, `Badge`, `Modal`, `ConfirmModal`, `CollapsibleSection`, `EditIcon` + their prop types
 - Main: `Dashboard`, `LoopCard`, `LoopDetails`, `LogViewer`, `CreateLoopForm`, `LoopActionBar`
-- **Not exported:** 12 components including all modals (`AcceptLoopModal`, `AddressCommentsModal`, `AppSettingsModal`, etc.), `PlanReviewPanel`, `TodoViewer`, `MarkdownRenderer`, `ServerSettingsForm`, `WorkspaceSelector`, `LogLevelInitializer`
+- **Not exported:** 13 components including all modals (`AcceptLoopModal`, `AddressCommentsModal`, `AppSettingsModal`, etc.), `PlanReviewPanel`, `TodoViewer`, `MarkdownRenderer`, `ServerSettingsForm`, `WorkspaceSelector`, `LogLevelInitializer`
 
 **Actual usage:**
 - `App.tsx` imports `Dashboard` and `LoopDetails` directly (not via barrel)
 - Components import from each other directly (e.g., `LoopDetails` imports `LoopActionBar`, `LogViewer`, etc.)
 
-**Assessment:** The barrel exports only 10 of 24 components. The 14 unexported components are used as internal implementation details of the exported components. This is a reasonable pattern — only "page-level" and shared components are exported.
+**Assessment:** The barrel exports only 11 of 25 components. The 14 unexported components are used as internal implementation details of the exported components. This is a reasonable pattern — only "page-level" and shared components are exported.
 
 ### Cohesion & Coupling
 
@@ -522,21 +527,22 @@ These should arguably live closer to their consumers: loop-status near component
 
 **Purpose:** React custom hooks for data fetching, WebSocket management, and server-side state synchronization.
 
-**Files (9):**
+**Files (10):**
 
 | File | LOC | Role |
 |------|----:|------|
 | `useLoop.ts` | 671 | Single loop data fetching with real-time updates |
-| `loopActions.ts` | 347 | 13 API action functions for loop operations |
+| `loopActions.ts` | 349 | 14 API action functions for loop operations |
 | `useLoops.ts` | 307 | Loop list fetching with WebSocket updates |
 | `useWorkspaceServerSettings.ts` | 305 | Workspace server settings CRUD |
 | `useWebSocket.ts` | 230 | WebSocket connection management |
-| `useWorkspaces.ts` | 177 | Workspace list fetching |
+| `useWorkspaces.ts` | 230 | Workspace list fetching |
+| `useAgentsMdOptimizer.ts` | 158 | AGENTS.md optimization hook |
 | `useLogLevelPreference.ts` | 103 | Log level persistence and sync |
 | `useMarkdownPreference.ts` | 99 | Markdown rendering preference |
-| `index.ts` | 24 | Barrel exports |
+| `index.ts` | 25 | Barrel exports |
 
-**Total:** 2,263 LOC
+**Total:** 2,477 LOC
 
 ### Module-Level Findings
 
@@ -546,8 +552,8 @@ These should arguably live closer to their consumers: loop-status near component
 | C8.2 | **Major** | UX — Loading Flicker | Both `useLoop.ts` and `useLoops.ts` set `loading: true` at the start of every refresh, including WebSocket-triggered refreshes. This causes a brief loading state flicker in the UI on every event. For WebSocket updates (which should feel instant), the loading state should not be shown — data should be updated in-place without an intermediate loading state. |
 | C8.3 | **Major** | Race Condition | `useLoop.ts` has a race condition when switching between loops. When the user navigates from loop A to loop B, the hook calls `resetState()` and then `fetchLoop(newId)`. If the fetch for loop A's data was still in-flight, its response may arrive after the reset and overwrite loop B's state with loop A's data. No AbortController is used to cancel stale requests. |
 | C8.4 | **Major** | Memory | `useLoop.ts` appends to `messages` and `toolCalls` arrays on every iteration event. For long-running loops with thousands of iterations, these arrays grow without bound. There is no pagination, virtualization, or maximum size limit. On a loop running for hours, this will cause increasing memory pressure and slower renders. |
-| C8.5 | **Major** | Code Duplication | `loopActions.ts` contains 13 functions (`acceptLoopApi`, `pushLoopApi`, `discardLoopApi`, `deleteLoopApi`, `purgeLoopApi`, `markMergedApi`, `setPendingPromptApi`, `clearPendingPromptApi`, `sendPlanFeedbackApi`, `acceptPlanApi`, `discardPlanApi`, `setPendingApi`, `clearPendingApi`) that all follow the same pattern: log, fetch, check `!response.ok`, parse error, throw, log success, return. The only differences are URL, method, body, and return shape. A generic `apiCall<T>(url, options)` wrapper would eliminate ~250 lines of boilerplate. |
-| C8.6 | ~~Major~~ **Resolved** | Test Coverage | ~~No unit tests exist for any hook.~~ **Updated:** 121 hook tests now exist across 4 test files: `loopActions.test.ts` (45 tests covering all 14 API functions), `useLoops.test.ts` (24 tests), `useLoop.test.ts` (37 tests), `useWorkspaces.test.ts` (15 tests). `useWebSocket` remains untested directly but is exercised indirectly. `useLogLevelPreference` and `useMarkdownPreference` remain untested (low-risk utility hooks). |
+| C8.5 | **Major** | Code Duplication | `loopActions.ts` contains 14 functions (`acceptLoopApi`, `pushLoopApi`, `discardLoopApi`, `deleteLoopApi`, `purgeLoopApi`, `markMergedApi`, `setPendingPromptApi`, `clearPendingPromptApi`, `sendPlanFeedbackApi`, `acceptPlanApi`, `discardPlanApi`, `setPendingApi`, `clearPendingApi`, `addressReviewCommentsApi`) that all follow the same pattern: log, fetch, check `!response.ok`, parse error, throw, log success, return. The only differences are URL, method, body, and return shape. A generic `apiCall<T>(url, options)` wrapper would eliminate ~260 lines of boilerplate. |
+| C8.6 | ~~Major~~ **Resolved** | Test Coverage | ~~No unit tests exist for any hook.~~ **Updated:** 145 hook tests now exist across 4 test files: `loopActions.test.ts` (45 tests covering all 14 API functions), `useLoops.test.ts` (24 tests), `useLoop.test.ts` (37 tests), `useWorkspaces.test.ts` (15 tests), plus additional tests. `useWebSocket` remains untested directly but is exercised indirectly. `useLogLevelPreference` and `useMarkdownPreference` remain untested (low-risk utility hooks). |
 | C8.7 | **Minor** | Fragile Coupling | WebSocket event handlers in `useLoop` and `useLoops` rely on `useWebSocket`'s internal ref-based callback pattern. The handlers are registered via refs and called synchronously in the WebSocket `onmessage` handler. If the internal implementation changes (e.g., to use `useEffect` cleanup for unregistration), the event delivery guarantees could break. |
 | C8.8 | **Minor** | Missing AbortController | No async operation in any hook uses `AbortController` for cancellation. When components unmount during an in-flight fetch, the response handler still runs and attempts to set state on an unmounted component. While React 18+ suppresses the warning, this wastes resources and can cause subtle bugs. |
 | C8.9 | **Minor** | Inconsistent Return Types | `loopActions.ts` returns `boolean` (true) for simple operations (discard, delete, purge) but returns typed result objects (`AcceptLoopResult`, `PushLoopResult`, `SetPendingResult`) for operations with data. This inconsistency makes the API surface harder to learn. All actions should return a consistent `{ success: true, data?: T }` shape. |
@@ -561,7 +567,7 @@ These should arguably live closer to their consumers: loop-status near component
 **Actual usage:**
 - Components import from both the barrel and directly (e.g., `LoopDetails.tsx` imports `useLoop` from `"../hooks"` but `PlanReviewPanel.tsx` imports actions directly from `"../hooks/loopActions"`)
 
-**Assessment:** The barrel is partial — only 6 of 13 action functions are exported. Components inconsistently use the barrel vs. direct imports. Either export everything or document which actions are "public."
+**Assessment:** The barrel is partial — only 6 of 14 action functions are exported. Components inconsistently use the barrel vs. direct imports. Either export everything or document which actions are "public."
 
 ### Cohesion & Coupling
 
@@ -585,16 +591,17 @@ These should arguably live closer to their consumers: loop-status near component
 
 ## Module 9: `src/lib/` — Frontend Library
 
-**Purpose:** Browser-side logging infrastructure using tslog.
+**Purpose:** Browser-side logging infrastructure and predefined prompt templates.
 
-**Files (2):**
+**Files (3):**
 
 | File | LOC | Role |
 |------|----:|------|
+| `prompt-templates.ts` | 205 | Predefined prompt templates for loop creation |
 | `logger.ts` | 163 | Frontend tslog instance with sub-logger caching |
 | `index.ts` | 15 | Barrel exports |
 
-**Total:** 178 LOC
+**Total:** 383 LOC
 
 ### Module-Level Findings
 
@@ -694,12 +701,12 @@ The codebase has two independent logger implementations (`core/logger.ts` for ba
 
 ### XM-2: Pervasive Code Duplication Pattern (Major)
 
-**Affected modules:** `api/` (errorResponse x3), `hooks/` (13 action functions), `components/` (model selector), `core/` (branch naming), `persistence/` (update functions)
+**Affected modules:** `api/` (errorResponse x3), `hooks/` (14 action functions), `components/` (model selector), `core/` (branch naming), `persistence/` (update functions)
 
 Code duplication is the single most common finding across the codebase. The pattern is always the same: a function is written once, then copy-pasted with minor modifications. This creates maintenance burden (N places to update) and consistency risk (one copy gets updated, others don't).
 
 **Recommendation:** Establish a refactoring pass focused solely on DRY violations. Priority targets:
-1. `hooks/loopActions.ts` — generic API call wrapper (~250 LOC savings)
+1. `hooks/loopActions.ts` — generic API call wrapper (~260 LOC savings)
 2. `api/` errorResponse — shared helper (~30 LOC savings)
 3. `components/` ModelSelector — shared component (~100 LOC savings)
 
@@ -712,8 +719,8 @@ Every module has a barrel `index.ts`, but the strategy is inconsistent:
 - `persistence/index.ts` — missing `workspaces.ts`
 - `types/index.ts` — missing `settings.ts`
 - `lib/index.ts` — exists but never imported (dead)
-- `hooks/index.ts` — missing 7 of 13 action functions
-- `components/index.ts` — intentionally partial (14 of 24)
+- `hooks/index.ts` — missing 8 of 14 action functions
+- `components/index.ts` — intentionally partial (14 of 25)
 - `utils/index.ts` — missing 2 of 3 utility modules
 
 Most consumers bypass barrels and import directly. This suggests the barrel pattern is overhead without value in this codebase.
@@ -724,14 +731,15 @@ Most consumers bypass barrels and import directly. This suggests the barrel patt
 
 **Affected modules:** `hooks/`, `components/`
 
-~~Combined 9,426 LOC across hooks and components with zero automated tests.~~ **Updated:** 698 frontend tests now exist across 31 test files:
-- **Hooks:** 121 tests (loopActions: 45, useLoops: 24, useLoop: 37, useWorkspaces: 15)
+~~Combined 9,426 LOC across hooks and components with zero automated tests.~~ **Updated:** 548 frontend tests now exist across 31 test files:
+- **Hooks:** 145 tests (loopActions: 45, useLoops: 24, useLoop: 37, useWorkspaces: 15, plus additional tests)
 - **Common components:** 101 tests (Button: 21, Modal: 29, Badge: 28, Card: 23)
 - **Feature components:** 308 tests (LoopCard: 48, CreateLoopForm: 48, LoopActionBar: 24, PlanReviewPanel: 25, LogViewer: 33, TodoViewer: 26, LoopModals: 31, AcceptLoopModal: 25, AddressCommentsModal: 15, RenameLoopModal: 17, WorkspaceSelector: 16)
 - **Container components:** 99 tests (App: 13, Dashboard: 31, LoopDetails: 55)
 - **E2E scenarios:** 50 tests across 8 scenario files
+- **Infrastructure:** 19 tests
 
-**Remaining gaps:** `useWebSocket` (no direct tests), `useLogLevelPreference`, `useMarkdownPreference`, `useWorkspaceServerSettings`, `Icons.tsx`, `MarkdownRenderer.tsx`, `LogLevelInitializer.tsx`, `ServerSettingsForm.tsx`, `CreateWorkspaceModal.tsx`, `AppSettingsModal.tsx`, `WorkspaceSettingsModal.tsx`. These are lower-risk components/hooks.
+**Remaining gaps:** `useWebSocket` (no direct tests), `useLogLevelPreference`, `useMarkdownPreference`, `useWorkspaceServerSettings`, `useAgentsMdOptimizer`, `Icons.tsx`, `MarkdownRenderer.tsx`, `LogLevelInitializer.tsx`, `ServerSettingsForm.tsx`, `CreateWorkspaceModal.tsx`, `AppSettingsModal.tsx`, `WorkspaceSettingsModal.tsx`, `CollapsibleSection.tsx`. These are lower-risk components/hooks.
 
 **Recommendation:** The highest-risk code is now covered. Remaining untested components are mostly configuration forms and low-complexity utility hooks. Add tests for these as they are modified.
 
@@ -775,6 +783,6 @@ There is no error boundary at any level of the React tree, no toast/notification
 | C3.1 | persistence | SQL injection in `getTableColumns()` | Currently safe but pattern is exploitable |
 | C4.1 | backends | Fire-and-forget async IIFE in `translateEvent()` | Events silently lost, errors swallowed |
 | C6.1 | utils | Timer leak in `name-generator.ts` | Memory pressure under rapid loop creation |
-| C7.1 | components | Dashboard.tsx god component (~1,250 LOC, 20+ state vars) | Unmaintainable, performance issues (now has 31 tests, but decomposition still recommended) |
+| C7.1 | components | Dashboard.tsx god component (~1,118 LOC, 26 state vars) | Unmaintainable, performance issues (now has 31 tests, but decomposition still recommended) |
 
-**Total findings: 3 Critical (1 N/A, 2 By Design), 50 Major (2 resolved), 31 Minor (1 N/A), 3 Suggestions = 89 active findings across 10 modules.**
+**Total findings: 3 Critical (1 N/A, 2 By Design), 50 Major (3 resolved/partially resolved), 31 Minor (1 N/A), 3 Suggestions = 88 active findings across 10 modules.**

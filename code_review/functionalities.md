@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-07
 **Scope:** 10 end-to-end functionalities traced through all architectural layers
-**Total Codebase:** ~24,300 LOC across 87 files
+**Total Codebase:** ~27,328 LOC across 90 files
 
 ---
 
@@ -47,7 +47,7 @@ The core functionality of Ralpher — creating, starting, monitoring, stopping, 
 | Frontend | `src/components/LoopActionBar.tsx` | Action buttons (accept, push, discard) |
 | Frontend | `src/hooks/useLoop.ts` | Single loop data fetching + WebSocket updates |
 | Frontend | `src/hooks/useLoops.ts` | Loop list fetching + WebSocket updates |
-| Frontend | `src/hooks/loopActions.ts` | 13 API action functions |
+| Frontend | `src/hooks/loopActions.ts` | 14 API action functions |
 | API | `src/api/loops.ts` | Loop CRUD + lifecycle endpoints |
 | Core | `src/core/loop-manager.ts` | Loop lifecycle orchestration |
 | Core | `src/core/loop-engine.ts` | Iteration execution |
@@ -81,7 +81,7 @@ User Action (click "Create Loop")
 | 1.3 | **Major** | Data integrity | `loop-manager.ts` scattered | Direct mutation of `loop.state` properties (e.g., `loop.state.status = "starting"`) before calling `updateLoopState()`. If persistence fails, in-memory state diverges from database. |
 | 1.4 | **Major** | Separation of concerns | `api/loops.ts:695-702` | Draft-to-planning transition directly calls `updateLoopState()` from persistence layer, bypassing `LoopManager`. This skips event emission and any business rules in the manager. The API handler directly mutates `loop.state.status` and `loop.state.planMode` before persisting. |
 | 1.5 | **Major** | Code duplication | `api/loops.ts:169-216` vs `631-688` | Preflight validation (uncommitted changes check + active loop check) is duplicated between the create handler and the draft/start handler. ~50 lines of identical logic. |
-| 1.6 | **Major** | Code duplication | `hooks/loopActions.ts` scattered | 13 action functions with identical boilerplate (log, fetch, check ok, parse error, throw, return). A generic `apiCall<T>()` wrapper would save ~250 LOC. |
+| 1.6 | **Major** | Code duplication | `hooks/loopActions.ts` scattered | 14 action functions with identical boilerplate (log, fetch, check ok, parse error, throw, return). A generic `apiCall<T>()` wrapper would save ~260 LOC. |
 | 1.7 | **Major** | Concurrency | `api/loops.ts:198-216` | TOCTOU race condition: checking for active loops and then creating one are separate operations. Two concurrent create requests for the same directory could both pass validation. |
 | 1.8 | **Major** | Error handling | `Dashboard.tsx` scattered | Multiple catch blocks in Dashboard silently swallow errors (console.error only). Users have no indication that loop creation, deletion, or other operations failed. |
 | 1.9 | **Major** | Performance | `hooks/useLoop.ts` scattered | Unbounded growth of `messages`, `toolCalls`, `logs` arrays. For long-running loops, memory pressure increases continuously with no pagination or maximum size. |
@@ -602,7 +602,7 @@ Runtime operations:
 | 10.1 | **Critical** | Security | `migrations/index.ts:57` | SQL injection in `getTableColumns()` — `tableName` is interpolated directly into PRAGMA query. Currently called only with hardcoded strings, but the function signature accepts any string. |
 | 10.2 | **Major** | Schema management | `database.ts:createTables` vs migrations | Dual schema sources of truth. Base schema includes columns from migrations 1-8. A fresh database gets both, while an upgraded database only gets migrations. If base schema diverges from migration history, databases created at different times will have different schemas. |
 | 10.3 | **Major** | Error handling | `persistence/loops.ts:196-267` | Multiple `JSON.parse()` calls in `rowToLoop()` with no error handling. A single corrupt JSON value in any row prevents listing ALL loops. |
-| 10.4 | **Major** | Code duplication | `persistence/loops.ts:422-506` | `updateLoopState()` and `updateLoopConfig()` are near-identical ~40-line functions differing only in which field they serialize. |
+| 10.4 | **Major** | Code duplication | `persistence/loops.ts:422-506` | `updateLoopState()` and `updateLoopConfig()` are near-identical ~40-line functions differing only in which field they serialize. **Partially Resolved:** Both now use `UPDATE` instead of `INSERT OR REPLACE`, eliminating cascade delete risk for these paths. `saveLoop()` still uses `INSERT OR REPLACE`. |
 | 10.5 | **Minor** | Async overhead | `persistence/loops.ts`, `workspaces.ts`, `preferences.ts` | All persistence functions are marked `async` but contain zero `await` expressions — Bun SQLite is synchronous. Every caller pays unnecessary Promise wrapping overhead. |
 | 10.6 | **Minor** | Performance | `persistence/loops.ts` scattered | No prepared statement caching. Frequently-called queries (like `loadLoop` on every polling cycle) create new statement objects each time. |
 | 10.7 | **Minor** | Architecture | `persistence/paths.ts` | Vestigial module (24 LOC) that just delegates to `database.ts`. `ensureDataDirectories` calls `initializeDatabase`, `isDataDirectoryReady` calls `isDatabaseReady`. |
@@ -663,13 +663,13 @@ This bypasses the Core layer's business rules, event emission, and state validat
 | Duplication | LOC Savings | Locations |
 |-------------|-------------|-----------|
 | `errorResponse()` helper | ~30 | 3 API files |
-| Loop action functions | ~250 | `hooks/loopActions.ts` |
+| Loop action functions | ~260 | `hooks/loopActions.ts` |
 | Preflight validation | ~50 | `api/loops.ts` (create + draft/start) |
 | Model selector UI | ~100 | CreateLoopForm + LoopActionBar |
 | Branch name generation | ~20 | loop-manager + loop-engine |
 | Workspace lookup + 404 | ~40 | 5 places in `api/workspaces.ts` |
 | Logger constants | ~40 | core/logger + lib/logger |
-| **Total estimated** | **~530** | — |
+| **Total estimated** | **~540** | — |
 
 ### CF-4: Missing User-Facing Error Feedback (Major)
 
@@ -700,17 +700,18 @@ No single module owns the transition rules. Invalid transitions are prevented on
 
 | Area | LOC | Tests |
 |------|-----|-------|
-| React hooks | 2,263 | **121 tests** (useLoop: 37, useLoops: 24, useWorkspaces: 15, loopActions: 45) |
-| React components | 7,163 | **508 tests** (101 common + 308 feature + 99 container) |
-| Utility functions | 425 | Partial (name-generator only) |
-| API endpoints | 3,034 | Some integration tests |
-| Core business logic | 6,456 | Good unit + scenario coverage |
-| Persistence | 1,948 | Good migration tests |
+| React hooks | 2,477 | **145 tests** (useLoop: 37, useLoops: 24, useWorkspaces: 15, loopActions: 45, + others) |
+| React components | 7,527 | **334 tests** (18 files) |
+| Utility functions | 457 | Partial (name-generator only) |
+| API endpoints | 3,397 | Some integration tests |
+| Core business logic | 7,794 | Good unit + scenario coverage |
+| Persistence | 2,061 | Good migration tests |
 | E2E scenarios (frontend) | — | **50 tests** (8 scenario files) |
+| Infrastructure tests | — | **19 tests** (1 file) |
 
-~~The frontend (9,426 LOC combined) has zero automated tests.~~ **Updated:** 698 frontend tests now cover hooks, components, and E2E user workflows. The highest-risk code (hooks with complex async state management, WebSocket integration, race conditions) is now tested.
+~~The frontend (9,426 LOC combined) has zero automated tests.~~ **Updated:** 548 frontend tests now cover hooks, components, and E2E user workflows. The highest-risk code (hooks with complex async state management, WebSocket integration, race conditions) is now tested.
 
-**Remaining gaps:** `useWebSocket` (no direct tests), utility functions (`loop-status.ts`, `event-stream.ts`, `sanitizeBranchName`), `git.ts` API endpoints, `websocket.ts` API handler. Utility functions and `useWebSocket` remain the primary untested areas.
+**Remaining gaps:** `useWebSocket` (no direct tests), `useAgentsMdOptimizer` (no tests), utility functions (`loop-status.ts`, `event-stream.ts`, `sanitizeBranchName`), `git.ts` API endpoints, `websocket.ts` API handler, `CollapsibleSection.tsx`. Utility functions and `useWebSocket` remain the primary untested areas.
 
 ### CF-7: Dual Logger Systems (Minor)
 
@@ -731,10 +732,10 @@ They share identical constant definitions but diverge in behavior. Some modules 
 | 1 | ~~Fix fire-and-forget async patterns~~ **By Design** — Intentional for long-running processes | ~~Critical — prevents silent failures~~ N/A — engine has self-contained error handling | ~~Low~~ N/A |
 | 2 | Introduce loop state machine | Major — centralizes transition logic | Medium |
 | 3 | Route all state mutations through LoopManager | Major — enforces architectural layers | Medium |
-| 4 | Extract shared helpers (errorResponse, apiCall, preflight) | Major — eliminates ~530 LOC duplication | Low |
+| 4 | Extract shared helpers (errorResponse, apiCall, preflight) | Major — eliminates ~540 LOC duplication | Low |
 | 5 | Add React Error Boundary + toast notifications | Major — gives users error visibility | Low |
 | 6 | Fix backend logger sub-logger sync | Major — runtime log level changes work | Low |
 | 7 | Add AbortController to hooks | Major — prevents race conditions | Low |
 | 8 | ~~Add authentication to destructive endpoints~~ **Not Applicable** — authentication and authorization are enforced by a reverse proxy at the infrastructure level | ~~Critical~~ N/A — ~~security~~ | ~~Low~~ N/A |
 | 9 | Replace INSERT OR REPLACE with upsert | Major — prevents cascade deletes | Low |
-| 10 | ~~Add hook tests with renderHook~~ **Resolved** | ~~Major~~ — ~~covers highest-risk untested code~~ **Done:** 121 hook tests added | ~~Medium~~ N/A |
+| 10 | ~~Add hook tests with renderHook~~ **Resolved** | ~~Major~~ — ~~covers highest-risk untested code~~ **Done:** 145 hook tests added | ~~Medium~~ N/A |
