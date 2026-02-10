@@ -3,7 +3,7 @@
  */
 
 import { test, expect, describe } from "bun:test";
-import { createLoop, createLoopWithStatus, createWorkspaceWithLoopCount, createModelInfo, createBranchInfo } from "./helpers/factories";
+import { createLoop, createLoopWithStatus, createWorkspace, createModelInfo, createBranchInfo } from "./helpers/factories";
 import { createMockApi, MockApiError } from "./helpers/mock-api";
 import { createMockWebSocket } from "./helpers/mock-websocket";
 
@@ -49,10 +49,9 @@ describe("Frontend Test Infrastructure", () => {
       expect(pushed.state.reviewMode?.addressable).toBe(true);
     });
 
-    test("createWorkspaceWithLoopCount returns valid workspace", () => {
-      const ws = createWorkspaceWithLoopCount({ name: "My Workspace", loopCount: 3 });
+    test("createWorkspace returns valid workspace", () => {
+      const ws = createWorkspace({ name: "My Workspace" });
       expect(ws.name).toBe("My Workspace");
-      expect(ws.loopCount).toBe(3);
       expect(ws.serverSettings.mode).toBe("spawn");
     });
 

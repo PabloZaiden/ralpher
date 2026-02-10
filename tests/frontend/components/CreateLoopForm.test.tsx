@@ -12,10 +12,10 @@ import { renderWithUser, waitFor } from "../helpers/render";
 import {
   createModelInfo,
   createBranchInfo,
-  createWorkspaceWithLoopCount,
+  createWorkspace,
 } from "../helpers/factories";
 import type { ModelInfo, CreateLoopRequest } from "@/types";
-import type { WorkspaceWithLoopCount } from "@/types/workspace";
+import type { Workspace } from "@/types/workspace";
 import { DEFAULT_LOOP_CONFIG } from "@/types/loop";
 import { PROMPT_TEMPLATES, getTemplateById } from "@/lib/prompt-templates";
 
@@ -66,19 +66,17 @@ function connectedModels(): ModelInfo[] {
   ];
 }
 
-function testWorkspaces(): WorkspaceWithLoopCount[] {
+function testWorkspaces(): Workspace[] {
   return [
-    createWorkspaceWithLoopCount({
+    createWorkspace({
       id: "ws-1",
       name: "Project A",
       directory: "/workspaces/project-a",
-      loopCount: 2,
     }),
-    createWorkspaceWithLoopCount({
+    createWorkspace({
       id: "ws-2",
       name: "Project B",
       directory: "/workspaces/project-b",
-      loopCount: 0,
     }),
   ];
 }

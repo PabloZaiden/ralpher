@@ -3,7 +3,7 @@
  * 
  * This module provides CRUD operations for workspaces:
  * - Create, read, update, and delete workspaces
- * - List workspaces with loop counts
+ * - List workspaces
  * - Export and import workspace configs
  * - Get loops by workspace
  * 
@@ -174,7 +174,7 @@ async function importWorkspacesWithValidation(
  */
 export const workspacesRoutes = {
   /**
-   * GET /api/workspaces - List all workspaces with loop counts
+   * GET /api/workspaces - List all workspaces
    */
   "/api/workspaces": {
     async GET() {

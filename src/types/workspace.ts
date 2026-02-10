@@ -63,14 +63,6 @@ export type CreateWorkspaceRequest = z.infer<typeof CreateWorkspaceRequestSchema
 export type UpdateWorkspaceRequest = z.infer<typeof UpdateWorkspaceRequestSchema>;
 
 /**
- * Response for workspace list operations.
- */
-export interface WorkspaceWithLoopCount extends Workspace {
-  /** Number of loops in this workspace */
-  loopCount: number;
-}
-
-/**
  * Result of a workspace import operation.
  * Reports what was created, skipped, and failed.
  */

@@ -302,15 +302,6 @@ describe("Multi-Workspace E2E", () => {
       expect(loop1.config.directory).toBe(testWorkDir1);
       expect(loop2.config.directory).toBe(testWorkDir2);
 
-      // Verify workspace loop counts
-      const listResponse = await fetch(`${baseUrl}/api/workspaces`);
-      const workspaces = await listResponse.json();
-
-      const fetchedWs1 = workspaces.find((w: { id: string }) => w.id === ws1.id);
-      const fetchedWs2 = workspaces.find((w: { id: string }) => w.id === ws2.id);
-
-      expect(fetchedWs1.loopCount).toBe(1);
-      expect(fetchedWs2.loopCount).toBe(1);
     });
 
     test("deleting one workspace does not affect another", async () => {

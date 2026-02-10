@@ -12,7 +12,7 @@ import { renderWithUser, waitFor } from "../helpers/render";
 import {
   createLoop,
   createLoopWithStatus,
-  createWorkspaceWithLoopCount,
+  createWorkspace,
   createModelInfo,
 } from "../helpers/factories";
 import { App } from "@/App";
@@ -22,11 +22,10 @@ const ws = createMockWebSocket();
 
 const LOOP_ID = "lifecycle-loop-1";
 
-const WORKSPACE = createWorkspaceWithLoopCount({
+const WORKSPACE = createWorkspace({
   id: "ws-1",
   name: "My Project",
   directory: "/workspaces/my-project",
-  loopCount: 1,
 });
 
 function setupApi(loop: ReturnType<typeof createLoop>) {

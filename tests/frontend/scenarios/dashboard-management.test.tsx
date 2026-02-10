@@ -11,7 +11,7 @@ import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor } from "../helpers/render";
 import {
   createLoopWithStatus,
-  createWorkspaceWithLoopCount,
+  createWorkspace,
   createModelInfo,
 } from "../helpers/factories";
 import { App } from "@/App";
@@ -19,18 +19,16 @@ import { App } from "@/App";
 const api = createMockApi();
 const ws = createMockWebSocket();
 
-const WORKSPACE_A = createWorkspaceWithLoopCount({
+const WORKSPACE_A = createWorkspace({
   id: "ws-a",
   name: "Project Alpha",
   directory: "/workspaces/alpha",
-  loopCount: 0,
 });
 
-const WORKSPACE_B = createWorkspaceWithLoopCount({
+const WORKSPACE_B = createWorkspace({
   id: "ws-b",
   name: "Project Beta",
   directory: "/workspaces/beta",
-  loopCount: 0,
 });
 
 function setupBaseApi() {
