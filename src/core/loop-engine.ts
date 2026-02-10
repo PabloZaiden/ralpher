@@ -115,16 +115,27 @@ export interface IterationResult {
  * Checks if the AI response indicates completion.
  */
 export class StopPatternDetector {
-  private pattern: RegExp;
+  private pattern: RegExp | null;
 
   constructor(patternString: string) {
-    this.pattern = new RegExp(patternString);
+    try {
+      this.pattern = new RegExp(patternString);
+    } catch (error) {
+      // Invalid regex pattern — log a warning and disable matching
+      // to prevent ReDoS or runtime crashes from user-supplied patterns.
+      this.pattern = null;
+      console.warn(`Invalid stop pattern regex "${patternString}": ${String(error)}`);
+    }
   }
 
   /**
    * Check if the content matches the stop pattern.
+   * Returns false if the pattern was invalid.
    */
   matches(content: string): boolean {
+    if (!this.pattern) {
+      return false;
+    }
     return this.pattern.test(content);
   }
 }

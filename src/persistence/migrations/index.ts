@@ -50,10 +50,31 @@ export interface Migration {
 }
 
 /**
+ * Known table names that are used in migrations.
+ * Used to validate tableName before interpolation into PRAGMA queries,
+ * since PRAGMA does not support parameterized queries.
+ */
+const KNOWN_TABLE_NAMES = new Set([
+  "loops",
+  "workspaces",
+  "preferences",
+  "review_comments",
+  "schema_migrations",
+]);
+
+/**
  * Get the column names for a table.
  * Useful for checking if a column already exists before adding it.
+ *
+ * @throws Error if tableName is not in the KNOWN_TABLE_NAMES whitelist.
  */
 export function getTableColumns(db: Database, tableName: string): string[] {
+  // Validate table name against whitelist to prevent SQL injection.
+  // PRAGMA queries do not support parameterized values, so we must
+  // ensure the table name is safe before interpolation.
+  if (!KNOWN_TABLE_NAMES.has(tableName)) {
+    throw new Error(`Unknown table name: "${tableName}". Add it to KNOWN_TABLE_NAMES if it is a valid table.`);
+  }
   const result = db.query(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>;
   return result.map((row) => row.name);
 }
