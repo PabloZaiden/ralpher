@@ -399,11 +399,12 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         (loop) =>
           loop.state.status === "running" ||
           loop.state.status === "waiting" ||
-          loop.state.status === "starting" ||
-          // Planning loops where the AI is still generating go into Active
-          (loop.state.status === "planning" && !planReadySet.has(loop.config.id))
+          loop.state.status === "starting"
       ),
       needsReview: loopsToGroup.filter((loop) => planReadySet.has(loop.config.id)),
+      planning: loopsToGroup.filter(
+        (loop) => loop.state.status === "planning" && !planReadySet.has(loop.config.id)
+      ),
       completed: loopsToGroup.filter((loop) => loop.state.status === "completed"),
       awaitingFeedback: loopsToGroup.filter((loop) =>
         isAwaitingFeedback(loop.state.status, loop.state.reviewMode?.addressable)
@@ -448,6 +449,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   }> = [
     { key: "active", label: "Active", defaultCollapsed: false },
     { key: "needsReview", label: "Needs Review", defaultCollapsed: false },
+    { key: "planning", label: "Planning", defaultCollapsed: false },
     { key: "completed", label: "Completed", defaultCollapsed: false },
     { key: "awaitingFeedback", label: "Awaiting Feedback", defaultCollapsed: false },
     { key: "other", label: "Other", defaultCollapsed: false },
@@ -484,8 +486,8 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       actions.onAccept = () => setAcceptModal({ open: true, loopId });
     }
 
-    // onDelete: draft, active, needsReview, completed, and other sections
-    if (sectionKey === "draft" || sectionKey === "active" || sectionKey === "needsReview" || sectionKey === "completed" || sectionKey === "other") {
+    // onDelete: draft, active, planning, needsReview, completed, and other sections
+    if (sectionKey === "draft" || sectionKey === "active" || sectionKey === "planning" || sectionKey === "needsReview" || sectionKey === "completed" || sectionKey === "other") {
       actions.onDelete = () => setDeleteModal({ open: true, loopId });
     }
 
