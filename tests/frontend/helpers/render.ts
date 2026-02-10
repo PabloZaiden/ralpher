@@ -2,12 +2,13 @@
  * Custom render helper for frontend tests.
  *
  * Wraps @testing-library/react's render with common setup
- * like hash-based routing support.
+ * like hash-based routing support and required context providers (ToastProvider).
  */
 
 import { render, type RenderOptions, type RenderResult } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactElement } from "react";
+import { createElement, type ReactElement, type ReactNode } from "react";
+import { ToastProvider } from "@/components/common/Toast";
 
 interface CustomRenderOptions extends Omit<RenderOptions, "wrapper"> {
   /** Set window.location.hash before rendering */
@@ -20,9 +21,18 @@ interface CustomRenderResult extends RenderResult {
 }
 
 /**
+ * Wrapper component that provides all required context providers for tests.
+ * Currently includes ToastProvider (required by Dashboard and components that use useToast).
+ */
+function AllProviders({ children }: { children: ReactNode }) {
+  return createElement(ToastProvider, null, children);
+}
+
+/**
  * Custom render function that provides:
  * - Hash route setup via `route` option
  * - Pre-configured userEvent instance
+ * - Wraps components in required context providers (ToastProvider)
  *
  * @example
  * ```typescript
@@ -42,7 +52,7 @@ export function renderWithUser(
   }
 
   const user = userEvent.setup();
-  const result = render(ui, renderOptions);
+  const result = render(ui, { wrapper: AllProviders, ...renderOptions });
 
   return {
     ...result,
