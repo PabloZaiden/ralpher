@@ -15,23 +15,10 @@
 import { backendManager } from "../core/backend-manager";
 import { getAppConfig } from "../core/config";
 import { deleteAndReinitializeDatabase } from "../persistence/database";
-import type { ErrorResponse } from "../types/api";
 import { createLogger } from "../core/logger";
+import { errorResponse } from "./helpers";
 
 const log = createLogger("api:settings");
-
-/**
- * Create a standardized error response.
- * 
- * @param error - Error code for programmatic handling
- * @param message - Human-readable error description
- * @param status - HTTP status code (default: 400)
- * @returns JSON Response with error details
- */
-function errorResponse(error: string, message: string, status = 400): Response {
-  const body: ErrorResponse = { error, message };
-  return Response.json(body, { status });
-}
 
 /**
  * Settings API routes.

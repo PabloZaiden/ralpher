@@ -104,7 +104,7 @@ export class ConfigurableMockBackend implements LoopBackend {
   /**
    * Emit a TODO update event (for testing TODO display feature).
    */
-  emitTodoUpdate(todos: import("../../../src/backends/types").TodoItem[]): void {
+  emitTodoUpdate(todos: import("../../../src/types/loop").TodoItem[]): void {
     if (this.eventPush && this.currentSessionId) {
       this.eventPush({
         type: "todo.updated",

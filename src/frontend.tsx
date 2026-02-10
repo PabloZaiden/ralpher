@@ -8,12 +8,15 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { ToastProvider } from "./components/common/Toast";
 
 function start() {
   const root = createRoot(document.getElementById("root")!);
   root.render(
     <ErrorBoundary>
-      <App />
+      <ToastProvider>
+        <App />
+      </ToastProvider>
     </ErrorBoundary>
   );
 }

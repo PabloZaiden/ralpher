@@ -12,7 +12,6 @@
 
 import { 
   createWorkspace, 
-  getWorkspace, 
   listWorkspaces, 
   updateWorkspace, 
   deleteWorkspace,
@@ -25,6 +24,7 @@ import { getDefaultServerSettings } from "../types/settings";
 import type { Workspace, WorkspaceImportResult } from "../types/workspace";
 import type { WorkspaceExportData } from "../types/schemas";
 import { parseAndValidate } from "./validation";
+import { requireWorkspace, errorResponse } from "./helpers";
 import {
   CreateWorkspaceRequestSchema,
   UpdateWorkspaceRequestSchema,
@@ -185,10 +185,7 @@ export const workspacesRoutes = {
         return Response.json(workspaces);
       } catch (error) {
         log.error("Failed to list workspaces:", String(error));
-        return Response.json(
-          { message: "Failed to list workspaces", error: String(error) },
-          { status: 500 }
-        );
+        return errorResponse("list_failed", `Failed to list workspaces: ${String(error)}`, 500);
       }
     },
 
@@ -228,34 +225,25 @@ export const workspacesRoutes = {
             directory: trimmedDirectory, 
             error: validation.error 
           });
-          return Response.json(
-            { message: `Failed to validate directory: ${validation.error}` },
-            { status: 400 }
-          );
+          return errorResponse("validation_failed", `Failed to validate directory: ${validation.error}`);
         }
         
         // Check if directory exists first to provide a clearer error message
         if (validation.directoryExists === false) {
           log.warn("Directory does not exist on remote server", { directory: trimmedDirectory });
-          return Response.json(
-            { message: "Directory does not exist on the remote server" },
-            { status: 400 }
-          );
+          return errorResponse("directory_not_found", "Directory does not exist on the remote server");
         }
         
         if (!validation.isGitRepo) {
           log.warn("Directory is not a git repository", { directory: trimmedDirectory });
-          return Response.json(
-            { message: "Directory must be a git repository" },
-            { status: 400 }
-          );
+          return errorResponse("not_git_repo", "Directory must be a git repository");
         }
 
         // Check if a workspace already exists for this directory
         const existingWorkspace = await getWorkspaceByDirectory(trimmedDirectory);
         if (existingWorkspace) {
           return Response.json(
-            { message: "A workspace already exists for this directory", existingWorkspace },
+            { error: "duplicate_workspace", message: "A workspace already exists for this directory", existingWorkspace },
             { status: 409 }
           );
         }
@@ -276,10 +264,7 @@ export const workspacesRoutes = {
         return Response.json(workspace, { status: 201 });
       } catch (error) {
         log.error("Failed to create workspace:", String(error));
-        return Response.json(
-          { message: "Failed to create workspace", error: String(error) },
-          { status: 500 }
-        );
+        return errorResponse("create_failed", `Failed to create workspace: ${String(error)}`, 500);
       }
     },
   },
@@ -294,21 +279,15 @@ export const workspacesRoutes = {
     if (method === "GET") {
       log.trace("GET /api/workspaces/:id", { workspaceId: id });
       try {
-        const workspace = await getWorkspace(id);
-        if (!workspace) {
+        const result = await requireWorkspace(id);
+        if (result instanceof Response) {
           log.debug("GET /api/workspaces/:id - Workspace not found", { workspaceId: id });
-          return Response.json(
-            { message: "Workspace not found" },
-            { status: 404 }
-          );
+          return result;
         }
-        return Response.json(workspace);
+        return Response.json(result);
       } catch (error) {
         log.error("Failed to get workspace:", String(error));
-        return Response.json(
-          { message: "Failed to get workspace", error: String(error) },
-          { status: 500 }
-        );
+        return errorResponse("get_failed", `Failed to get workspace: ${String(error)}`, 500);
       }
     }
 
@@ -330,10 +309,7 @@ export const workspacesRoutes = {
         });
         if (!workspace) {
           log.debug("PUT /api/workspaces/:id - Workspace not found", { workspaceId: id });
-          return Response.json(
-            { message: "Workspace not found" },
-            { status: 404 }
-          );
+          return errorResponse("workspace_not_found", "Workspace not found", 404);
         }
         
         // Reset connection if server settings were updated so new config takes effect
@@ -345,10 +321,7 @@ export const workspacesRoutes = {
         return Response.json(workspace);
       } catch (error) {
         log.error("Failed to update workspace:", String(error));
-        return Response.json(
-          { message: "Failed to update workspace", error: String(error) },
-          { status: 500 }
-        );
+        return errorResponse("update_failed", `Failed to update workspace: ${String(error)}`, 500);
       }
     }
 
@@ -358,26 +331,20 @@ export const workspacesRoutes = {
         const result = await deleteWorkspace(id);
         if (!result.success) {
           log.warn("DELETE /api/workspaces/:id - Failed", { workspaceId: id, reason: result.reason });
-          return Response.json(
-            { message: result.reason },
-            { status: result.reason === "Workspace not found" ? 404 : 400 }
-          );
+          const reason = result.reason ?? "Delete failed";
+          const errorCode = reason === "Workspace not found" ? "workspace_not_found" : "delete_failed";
+          const status = reason === "Workspace not found" ? 404 : 400;
+          return errorResponse(errorCode, reason, status);
         }
         log.info(`Deleted workspace: ${id}`);
         return Response.json({ success: true });
       } catch (error) {
         log.error("Failed to delete workspace:", String(error));
-        return Response.json(
-          { message: "Failed to delete workspace", error: String(error) },
-          { status: 500 }
-        );
+        return errorResponse("delete_failed", `Failed to delete workspace: ${String(error)}`, 500);
       }
     }
 
-    return Response.json(
-      { message: "Method not allowed" },
-      { status: 405 }
-    );
+    return errorResponse("method_not_allowed", "Method not allowed", 405);
   },
 
   /**
@@ -389,27 +356,18 @@ export const workspacesRoutes = {
       const directory = url.searchParams.get("directory");
       
       if (!directory) {
-        return Response.json(
-          { message: "directory query parameter is required" },
-          { status: 400 }
-        );
+        return errorResponse("missing_parameter", "directory query parameter is required");
       }
 
       try {
         const workspace = await getWorkspaceByDirectory(directory);
         if (!workspace) {
-          return Response.json(
-            { message: "No workspace found for this directory" },
-            { status: 404 }
-          );
+          return errorResponse("workspace_not_found", "No workspace found for this directory", 404);
         }
         return Response.json(workspace);
       } catch (error) {
         log.error("Failed to get workspace by directory:", String(error));
-        return Response.json(
-          { message: "Failed to get workspace", error: String(error) },
-          { status: 500 }
-        );
+        return errorResponse("get_failed", `Failed to get workspace: ${String(error)}`, 500);
       }
     },
   },
@@ -423,20 +381,12 @@ export const workspacesRoutes = {
 
     if (method === "GET") {
       try {
-        const workspace = await getWorkspace(id);
-        if (!workspace) {
-          return Response.json(
-            { message: "Workspace not found" },
-            { status: 404 }
-          );
-        }
-        return Response.json(workspace.serverSettings);
+        const result = await requireWorkspace(id);
+        if (result instanceof Response) return result;
+        return Response.json(result.serverSettings);
       } catch (error) {
         log.error("Failed to get workspace server settings:", String(error));
-        return Response.json(
-          { message: "Failed to get server settings", error: String(error) },
-          { status: 500 }
-        );
+        return errorResponse("get_settings_failed", `Failed to get server settings: ${String(error)}`, 500);
       }
     }
 
@@ -452,10 +402,7 @@ export const workspacesRoutes = {
       try {
         const workspace = await updateWorkspace(id, { serverSettings: body });
         if (!workspace) {
-          return Response.json(
-            { message: "Workspace not found" },
-            { status: 404 }
-          );
+          return errorResponse("workspace_not_found", "Workspace not found", 404);
         }
         
         // Reset the connection for this workspace so it picks up new settings
@@ -465,17 +412,11 @@ export const workspacesRoutes = {
         return Response.json(workspace.serverSettings);
       } catch (error) {
         log.error("Failed to update workspace server settings:", String(error));
-        return Response.json(
-          { message: "Failed to update server settings", error: String(error) },
-          { status: 500 }
-        );
+        return errorResponse("update_settings_failed", `Failed to update server settings: ${String(error)}`, 500);
       }
     }
 
-    return Response.json(
-      { message: "Method not allowed" },
-      { status: 405 }
-    );
+    return errorResponse("method_not_allowed", "Method not allowed", 405);
   },
 
   /**
@@ -485,29 +426,18 @@ export const workspacesRoutes = {
     const { id } = req.params;
 
     if (req.method !== "GET") {
-      return Response.json(
-        { message: "Method not allowed" },
-        { status: 405 }
-      );
+      return errorResponse("method_not_allowed", "Method not allowed", 405);
     }
 
     try {
-      const workspace = await getWorkspace(id);
-      if (!workspace) {
-        return Response.json(
-          { message: "Workspace not found" },
-          { status: 404 }
-        );
-      }
+      const result = await requireWorkspace(id);
+      if (result instanceof Response) return result;
 
       const status = backendManager.getWorkspaceStatus(id);
       return Response.json(status);
     } catch (error) {
       log.error("Failed to get workspace connection status:", String(error));
-      return Response.json(
-        { message: "Failed to get connection status", error: String(error) },
-        { status: 500 }
-      );
+      return errorResponse("status_failed", `Failed to get connection status: ${String(error)}`, 500);
     }
   },
 
@@ -518,20 +448,12 @@ export const workspacesRoutes = {
     const { id } = req.params;
 
     if (req.method !== "POST") {
-      return Response.json(
-        { message: "Method not allowed" },
-        { status: 405 }
-      );
+      return errorResponse("method_not_allowed", "Method not allowed", 405);
     }
 
     try {
-      const workspace = await getWorkspace(id);
-      if (!workspace) {
-        return Response.json(
-          { message: "Workspace not found" },
-          { status: 404 }
-        );
-      }
+      const workspace = await requireWorkspace(id);
+      if (workspace instanceof Response) return workspace;
 
       // Optionally accept settings in the body to test proposed settings
       // If no body, use the workspace's current settings
@@ -559,10 +481,7 @@ export const workspacesRoutes = {
       return Response.json(result);
     } catch (error) {
       log.error("Failed to test workspace connection:", String(error));
-      return Response.json(
-        { message: "Failed to test connection", error: String(error) },
-        { status: 500 }
-      );
+      return errorResponse("test_failed", `Failed to test connection: ${String(error)}`, 500);
     }
   },
 
@@ -573,30 +492,19 @@ export const workspacesRoutes = {
     const { id } = req.params;
 
     if (req.method !== "POST") {
-      return Response.json(
-        { message: "Method not allowed" },
-        { status: 405 }
-      );
+      return errorResponse("method_not_allowed", "Method not allowed", 405);
     }
 
     try {
-      const workspace = await getWorkspace(id);
-      if (!workspace) {
-        return Response.json(
-          { message: "Workspace not found" },
-          { status: 404 }
-        );
-      }
+      const workspace = await requireWorkspace(id);
+      if (workspace instanceof Response) return workspace;
 
       await backendManager.resetWorkspaceConnection(id);
       log.info(`Reset connection for workspace: ${workspace.name}`);
       return Response.json({ success: true });
     } catch (error) {
       log.error("Failed to reset workspace connection:", String(error));
-      return Response.json(
-        { message: "Failed to reset connection", error: String(error) },
-        { status: 500 }
-      );
+      return errorResponse("reset_failed", `Failed to reset connection: ${String(error)}`, 500);
     }
   },
 
@@ -638,10 +546,7 @@ export const workspacesRoutes = {
         return Response.json(exportData);
       } catch (error) {
         log.error("Failed to export workspaces:", String(error));
-        return Response.json(
-          { message: "Failed to export workspaces", error: String(error) },
-          { status: 500 }
-        );
+        return errorResponse("export_failed", `Failed to export workspaces: ${String(error)}`, 500);
       }
     },
   },
@@ -685,10 +590,7 @@ export const workspacesRoutes = {
         return Response.json(importResult);
       } catch (error) {
         log.error("Failed to import workspaces:", String(error));
-        return Response.json(
-          { message: "Failed to import workspaces", error: String(error) },
-          { status: 500 }
-        );
+        return errorResponse("import_failed", `Failed to import workspaces: ${String(error)}`, 500);
       }
     },
   },

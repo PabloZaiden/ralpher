@@ -296,7 +296,13 @@ export class OpenCodeBackend implements Backend {
     });
 
     if (result.error) {
-      // 404 means not found
+      // 404 means the session genuinely doesn't exist — return null
+      if (result.response?.status === 404) {
+        return null;
+      }
+      // Any other error (network, parse failure, server error) should be logged
+      // so unexpected issues are visible rather than silently treated as "not found"
+      log.warn(`[OpenCodeBackend] Unexpected error fetching session ${id}: ${JSON.stringify(result.error)} (status: ${result.response?.status ?? "unknown"})`);
       return null;
     }
 

@@ -21,7 +21,8 @@ import {
   updateLoopState,
   resetStaleLoops,
 } from "../persistence/loops";
-import { insertReviewComment } from "../persistence/database";
+import { insertReviewComment, getReviewComments as getReviewCommentsFromDb } from "../persistence/database";
+import { setLastModel } from "../persistence/preferences";
 import { backendManager } from "./backend-manager";
 import { GitService } from "./git-service";
 import { LoopEngine } from "./loop-engine";
@@ -29,6 +30,7 @@ import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
 import { log } from "./logger";
 import { sanitizeBranchName } from "../utils";
 import { generateLoopName } from "../utils/name-generator";
+import { assertValidTransition } from "./loop-state-machine";
 
 /**
  * Options for creating a new loop.
@@ -216,10 +218,12 @@ export class LoopManager {
     
     // If draft mode is enabled, set status to draft (no session or git setup)
     if (options.draft) {
+      assertValidTransition(state.status, "draft", "createLoop");
       state.status = "draft";
     }
     // Else if plan mode is enabled, initialize plan mode state
     else if (options.planMode) {
+      assertValidTransition(state.status, "planning", "createLoop");
       state.status = "planning";
       state.planMode = {
         active: true,
@@ -306,7 +310,7 @@ export class LoopManager {
     try {
       await engine.setupGitBranchForPlanAcceptance();
     } catch (error) {
-      throw new Error(`Failed to set up git branch for plan mode: ${String(error)}`);
+      throw new Error(`Failed to set up git branch for plan mode: ${String(error)}`, { cause: error });
     }
 
     // Now that the worktree exists, use the worktree path for .planning operations
@@ -364,6 +368,57 @@ export class LoopManager {
     engine.start().catch((error) => {
       log.error(`Loop ${loopId} plan mode failed:`, String(error));
     });
+  }
+
+  /**
+   * Start a draft loop — transitions from draft to either plan mode or immediate execution.
+   *
+   * Handles the draft → planning and draft → idle → starting transitions internally,
+   * including state mutation and persistence, so the API layer doesn't need to
+   * interact with the persistence layer directly.
+   *
+   * @param loopId - The ID of the draft loop to start
+   * @param options - Start options
+   * @param options.planMode - If true, start in plan mode; if false, start immediately
+   * @returns The updated loop
+   */
+  async startDraft(loopId: string, options: { planMode: boolean }): Promise<Loop> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      throw new Error(`Loop not found: ${loopId}`);
+    }
+
+    if (loop.state.status !== "draft") {
+      throw new Error(`Loop is not in draft status: ${loop.state.status}`);
+    }
+
+    if (options.planMode) {
+      // draft → planning
+      assertValidTransition(loop.state.status, "planning", "startDraft");
+      loop.state.status = "planning";
+      loop.state.planMode = {
+        active: true,
+        feedbackRounds: 0,
+        planningFolderCleared: false,
+        isPlanReady: false,
+      };
+      await updateLoopState(loopId, loop.state);
+
+      // Start plan mode — handles git setup and further state updates
+      await this.startPlanMode(loopId);
+    } else {
+      // draft → idle (engine will then transition idle → starting → running)
+      assertValidTransition(loop.state.status, "idle", "startDraft");
+      loop.state.status = "idle";
+      await updateLoopState(loopId, loop.state);
+
+      // Start the loop immediately
+      await this.startLoop(loopId);
+    }
+
+    // Return updated loop
+    const updatedLoop = await this.getLoop(loopId);
+    return updatedLoop ?? loop;
   }
 
   /**
@@ -490,6 +545,7 @@ export class LoopManager {
     // Update state to transition from planning to running
     // Mark plan mode as no longer active but preserve all existing planMode fields
     // (especially isPlanReady and planContent which may have been set by the planning iteration)
+    assertValidTransition(engine.state.status, "running", "acceptPlan");
     const updatedState: Partial<LoopState> = {
       status: "running",
       planMode: {
@@ -694,6 +750,7 @@ Follow the standard loop execution flow:
     // Update status to 'deleted' (soft delete - final state)
     // Also clear reviewMode.addressable so the loop cannot be addressed again
     log.debug(`[LoopManager] deleteLoop: Updating status to deleted for loop ${loopId}`);
+    assertValidTransition(loop.state.status, "deleted", "deleteLoop");
     const updatedState = {
       ...loop.state,
       status: "deleted" as const,
@@ -865,6 +922,7 @@ Follow the standard loop execution flow:
           };
 
       // Update status to 'merged' with review mode enabled
+      assertValidTransition(loop.state.status, "merged", "acceptLoop");
       const updatedState = {
         ...loop.state,
         status: "merged" as const,
@@ -1003,6 +1061,7 @@ Follow the standard loop execution flow:
               autoPushOnComplete: true,
               syncPhase: "working_branch",
             };
+            assertValidTransition(loop.state.status, "resolving_conflicts", "pushLoop");
             loop.state.status = "resolving_conflicts";
             loop.state.completedAt = undefined;
             await updateLoopState(loopId, loop.state);
@@ -1132,6 +1191,7 @@ Follow the standard loop execution flow:
           autoPushOnComplete: true,
           syncPhase: "base_branch",
         };
+        assertValidTransition(loop.state.status, "resolving_conflicts", "syncBaseBranchAndPush");
         loop.state.status = "resolving_conflicts";
         loop.state.completedAt = undefined;
         await updateLoopState(loopId, loop.state);
@@ -1178,6 +1238,7 @@ Follow the standard loop execution flow:
 
     // Update status to 'pushed' with review mode enabled
     // Clear syncState since sync completed successfully
+    assertValidTransition(loop.state.status, "pushed", "syncBaseBranchAndPush");
     const updatedState = {
       ...loop.state,
       status: "pushed" as const,
@@ -1353,6 +1414,7 @@ Follow the standard loop execution flow:
           };
 
       // Update status to 'pushed', clear syncState
+      assertValidTransition(loop.state.status, "pushed", "handleConflictResolutionComplete");
       const updatedState = {
         ...loop.state,
         status: "pushed" as const,
@@ -1405,6 +1467,7 @@ Follow the standard loop execution flow:
       // No need to reset or checkout - the main working directory is not affected.
 
       // Update status to 'deleted' (final state)
+      assertValidTransition(loop.state.status, "deleted", "discardLoop");
       const updatedState = {
         ...loop.state,
         status: "deleted" as const,
@@ -1558,6 +1621,7 @@ Follow the standard loop execution flow:
 
       // Update status to 'deleted' (final cleanup state)
       // Also clear reviewMode.addressable so the loop cannot be addressed again
+      assertValidTransition(loop.state.status, "deleted", "markMerged");
       const updatedState = {
         ...loop.state,
         status: "deleted" as const,
@@ -1852,12 +1916,14 @@ Follow the standard loop execution flow:
     // Reset the loop to a restartable state
     // If it was in planning mode, keep it in planning mode; otherwise reset to stopped
     if (wasInPlanningMode) {
+      assertValidTransition(loop.state.status, "planning", "jumpstartLoop");
       loop.state.status = "planning";
       // Reset isPlanReady to false so it will generate a plan again
       if (loop.state.planMode) {
         loop.state.planMode.isPlanReady = false;
       }
     } else {
+      assertValidTransition(loop.state.status, "stopped", "jumpstartLoop");
       loop.state.status = "stopped"; // LoopEngine.start() accepts 'idle', 'stopped', or 'planning'
     }
     loop.state.completedAt = undefined;
@@ -2034,6 +2100,7 @@ Follow the standard loop execution flow:
         loop.state.reviewMode.reviewCycles += 1;
         
         // Set status to idle so engine.start() can run (it will set to running)
+        assertValidTransition(loop.state.status, "idle", "addressReviewComments:pushed");
         loop.state.status = "idle";
         loop.state.completedAt = undefined;
 
@@ -2120,6 +2187,7 @@ Follow the standard loop execution flow:
         loop.state.reviewMode.reviewBranches.push(reviewBranchName);
 
         // Set status to idle so engine.start() can run (it will set to running)
+        assertValidTransition(loop.state.status, "idle", "addressReviewComments:merged");
         loop.state.status = "idle";
         loop.state.completedAt = undefined;
 
@@ -2266,6 +2334,47 @@ ${fileList}
         reviewBranches: loop.state.reviewMode.reviewBranches,
       },
     };
+  }
+
+  /**
+   * Get review comments for a loop.
+   * Returns comments in API-friendly format (camelCase keys).
+   */
+  getReviewComments(loopId: string): Array<{
+    id: string;
+    loopId: string;
+    reviewCycle: number;
+    commentText: string;
+    createdAt: string;
+    status: "pending" | "addressed";
+    addressedAt?: string;
+  }> {
+    const dbComments = getReviewCommentsFromDb(loopId);
+    return dbComments.map((c) => ({
+      id: c.id,
+      loopId: c.loop_id,
+      reviewCycle: c.review_cycle,
+      commentText: c.comment_text,
+      createdAt: c.created_at,
+      status: c.status as "pending" | "addressed",
+      addressedAt: c.addressed_at ?? undefined,
+    }));
+  }
+
+  /**
+   * Save the last used model as a user preference.
+   * Called after loop creation to remember the user's model selection.
+   */
+  async saveLastUsedModel(model: {
+    providerID: string;
+    modelID: string;
+    variant?: string;
+  }): Promise<void> {
+    try {
+      await setLastModel(model);
+    } catch (error) {
+      log.warn(`Failed to save last model: ${String(error)}`);
+    }
   }
 
   /**

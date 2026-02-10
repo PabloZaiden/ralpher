@@ -32,6 +32,7 @@ import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 import { log } from "./logger";
 import { sanitizeBranchName } from "../utils";
 import { markCommentsAsAddressed } from "../persistence/database";
+import { assertValidTransition } from "./loop-state-machine";
 
 /**
  * Generate a git-safe branch name from a loop name and timestamp.
@@ -1877,8 +1878,12 @@ Output ONLY the commit message, nothing else.`
 
   /**
    * Update the loop state.
+   * Validates status transitions against the state machine when a status change is included.
    */
   private updateState(update: Partial<LoopState>): void {
+    if (update.status !== undefined && update.status !== this.loop.state.status) {
+      assertValidTransition(this.loop.state.status, update.status, "LoopEngine.updateState");
+    }
     Object.assign(this.loop.state, update);
   }
 

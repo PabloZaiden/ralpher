@@ -23,8 +23,10 @@
 
 import type { ServerWebSocket } from "bun";
 import { loopEventEmitter } from "../core/event-emitter";
-import { log } from "../core/logger";
+import { createLogger } from "../core/logger";
 import type { LoopEvent } from "../types";
+
+const log = createLogger("api:websocket");
 
 /**
  * WebSocket client data attached to each connection.
@@ -65,8 +67,8 @@ export const websocketHandlers = {
 
       try {
         ws.send(JSON.stringify(event));
-      } catch {
-        // Connection may be closed, ignore
+      } catch (sendError) {
+        log.trace("Failed to send event to WebSocket client", { error: String(sendError) });
       }
     });
 
@@ -95,8 +97,8 @@ export const websocketHandlers = {
       if (data.type === "ping") {
         ws.send(JSON.stringify({ type: "pong" }));
       }
-    } catch {
-      // Ignore invalid JSON
+    } catch (parseError) {
+      log.trace("Received invalid JSON from WebSocket client", { error: String(parseError) });
     }
   },
 

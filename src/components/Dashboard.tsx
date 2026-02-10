@@ -4,7 +4,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import type { UncommittedChangesError, ModelInfo, HealthResponse, BranchInfo } from "../types";
-import { useLoops, useWorkspaces } from "../hooks";
+import { useLoops, useWorkspaces, useToast } from "../hooks";
 import { Button, Modal, CollapsibleSection } from "./common";
 import { LoopCard } from "./LoopCard";
 import { CreateLoopForm, type CreateLoopFormActionState } from "./CreateLoopForm";
@@ -32,6 +32,7 @@ export interface DashboardProps {
 }
 
 export function Dashboard({ onSelectLoop }: DashboardProps) {
+  const toast = useToast();
   const {
     loops,
     loading,
@@ -56,8 +57,13 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     setAppSettingsResetting(true);
     try {
       const response = await fetch("/api/settings/reset-all", { method: "POST" });
+      if (!response.ok) {
+        toast.error("Failed to reset settings");
+      }
       return response.ok;
-    } catch {
+    } catch (error) {
+      log.error("Failed to reset settings:", error);
+      toast.error("Failed to reset settings");
       return false;
     } finally {
       setAppSettingsResetting(false);
@@ -71,10 +77,12 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       const response = await fetch("/api/server/kill", { method: "POST" });
       if (!response.ok) {
         log.error("Failed to kill server: HTTP", response.status);
+        toast.error("Failed to kill server");
       }
       return response.ok;
     } catch (error) {
       log.error("Failed to kill server:", error);
+      toast.error("Failed to kill server");
       return false;
     } finally {
       setAppSettingsKilling(false);
@@ -380,7 +388,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
       setAddressCommentsModal({ open: false, loopId: null });
     } catch (error) {
       log.error("Failed to address comments:", error);
-      // TODO: Show error toast
+      toast.error("Failed to address review comments");
     }
   }
 
@@ -736,7 +744,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                         if (confirm(`Delete workspace "${workspace.name}"?`)) {
                           const result = await deleteWorkspace(workspace.id);
                           if (!result.success) {
-                            alert(result.error || "Failed to delete workspace");
+                            toast.error(result.error || "Failed to delete workspace");
                           }
                         }
                       }}
@@ -842,6 +850,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                       if (!response.ok) {
                         const error = await response.json();
                         log.error("Failed to update draft:", error);
+                        toast.error("Failed to update draft");
                         return false;
                       }
                       
@@ -852,6 +861,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                       return true;
                     } catch (error) {
                       log.error("Failed to update draft:", error);
+                      toast.error("Failed to update draft");
                       return false;
                     }
                   }
@@ -878,6 +888,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                       }
                       
                       log.error("Failed to start draft:", error);
+                      toast.error("Failed to start loop");
                       return false;
                     }
                     
@@ -888,6 +899,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
                     return true;
                   } catch (error) {
                     log.error("Failed to start draft:", error);
+                    toast.error("Failed to start loop");
                     return false;
                   }
                 }

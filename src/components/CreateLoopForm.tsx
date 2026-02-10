@@ -8,6 +8,7 @@ import type { Workspace } from "../types/workspace";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import { Button } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
+import { ModelSelector, makeModelKey, parseModelKey, isModelEnabled, modelVariantExists, groupModelsByProvider } from "./ModelSelector";
 import { createLogger } from "../lib/logger";
 import { PROMPT_TEMPLATES, getTemplateById } from "../lib/prompt-templates";
 
@@ -159,20 +160,7 @@ export function CreateLoopForm({
   }, [initialLoopData?.prompt]);
 
   // Check if the selected model is enabled (connected)
-  // Format: providerID:modelID:variant (variant can be empty string)
-  const isSelectedModelEnabled = (): boolean => {
-    if (!selectedModel) return false; // No model selected = not valid (model is required)
-    const parts = selectedModel.split(":");
-    // Format is providerID:modelID:variant (variant may be empty)
-    if (parts.length < 2) return false;
-    const providerID = parts[0];
-    const modelID = parts[1];
-    if (!providerID || !modelID) return false;
-    const model = models.find((m) => m.providerID === providerID && m.modelID === modelID);
-    return model?.connected ?? false;
-  };
-  
-  const selectedModelEnabled = isSelectedModelEnabled();
+  const selectedModelEnabled = selectedModel ? isModelEnabled(models, selectedModel) : false;
 
   // Reset selected branch when default branch changes (directory changed)
   useEffect(() => {
@@ -197,30 +185,11 @@ export function CreateLoopForm({
     });
     if (selectedModel) return; // Don't override if user already selected
 
-    // Helper to create model key with variant
-    // Format: providerID:modelID:variant (variant can be empty string)
-    const makeModelKey = (m: { providerID: string; modelID: string; variant?: string }) => {
-      const variant = m.variant ?? "";
-      return `${m.providerID}:${m.modelID}:${variant}`;
-    };
-
-    // Helper to check if a model+variant combination exists in the models list
-    const modelVariantExists = (providerID: string, modelID: string, variant: string): boolean => {
-      const model = models.find((m) => m.providerID === providerID && m.modelID === modelID);
-      if (!model) return false;
-      // If model has no variants, only empty string variant is valid
-      if (!model.variants || model.variants.length === 0) {
-        return variant === "";
-      }
-      // Check if variant exists in model's variants
-      return model.variants.includes(variant);
-    };
-
     // If editing and initial loop data has a model, use that
     if (initialLoopData?.model && models.length > 0) {
       const variant = initialLoopData.model.variant ?? "";
-      if (modelVariantExists(initialLoopData.model.providerID, initialLoopData.model.modelID, variant)) {
-        const modelKey = makeModelKey(initialLoopData.model);
+      if (modelVariantExists(models, initialLoopData.model.providerID, initialLoopData.model.modelID, variant)) {
+        const modelKey = makeModelKey(initialLoopData.model.providerID, initialLoopData.model.modelID, variant);
         log.debug('Setting model from initialLoopData:', modelKey);
         setSelectedModel(modelKey);
         return;
@@ -230,8 +199,8 @@ export function CreateLoopForm({
     // Otherwise, try lastModel
     if (lastModel && models.length > 0) {
       const variant = lastModel.variant ?? "";
-      if (modelVariantExists(lastModel.providerID, lastModel.modelID, variant)) {
-        const modelKey = makeModelKey(lastModel);
+      if (modelVariantExists(models, lastModel.providerID, lastModel.modelID, variant)) {
+        const modelKey = makeModelKey(lastModel.providerID, lastModel.modelID, variant);
         log.debug('Setting model from lastModel:', modelKey);
         setSelectedModel(modelKey);
         return;
@@ -245,7 +214,7 @@ export function CreateLoopForm({
       const variant = firstConnected.variants && firstConnected.variants.length > 0 
         ? firstConnected.variants[0] 
         : "";
-      const modelKey = `${firstConnected.providerID}:${firstConnected.modelID}:${variant}`;
+      const modelKey = makeModelKey(firstConnected.providerID, firstConnected.modelID, variant);
       log.debug('Setting model to first connected:', modelKey);
       setSelectedModel(modelKey);
     }
@@ -328,14 +297,8 @@ export function CreateLoopForm({
     setSubmitting(true);
 
     // Parse model from selectedModel string
-    // Format: providerID:modelID:variant (variant can be empty string)
-    const parts = selectedModel.split(":");
-    const providerID = parts[0];
-    const modelID = parts[1];
-    // Variant is everything after the second colon (may be empty string)
-    const variant = parts.length >= 3 ? parts.slice(2).join(":") : "";
-    
-    if (!providerID || !modelID) {
+    const parsedModel = parseModelKey(selectedModel);
+    if (!parsedModel) {
       setSubmitting(false);
       return;
     }
@@ -344,7 +307,7 @@ export function CreateLoopForm({
       workspaceId: selectedWorkspaceId,
       prompt: currentPrompt.trim(),
       planMode: planMode, // planMode is required
-      model: { providerID, modelID, variant },
+      model: { providerID: parsedModel.providerID, modelID: parsedModel.modelID, variant: parsedModel.variant },
       // Backend settings are now global (not per-loop)
       // Git is always enabled - no toggle exposed to users
     };
@@ -493,71 +456,6 @@ export function CreateLoopForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSubmitting, canSubmit, canSaveDraft, isEditing, isEditingDraft, planMode]);
 
-  // Group models by provider and sort by name
-  const modelsByProvider = models.reduce<Record<string, ModelInfo[]>>(
-    (acc, model) => {
-      const key = model.providerName;
-      if (!acc[key]) {
-        acc[key] = [];
-      }
-      acc[key].push(model);
-      return acc;
-    },
-    {}
-  );
-
-  // Sort models within each provider by name
-  for (const provider of Object.keys(modelsByProvider)) {
-    const providerModels = modelsByProvider[provider];
-    if (providerModels) {
-      providerModels.sort((a, b) => a.modelName.localeCompare(b.modelName));
-    }
-  }
-
-  // Get connected providers (for display order), sorted by name
-  // Only connected providers are shown - disconnected models are not displayed
-  const connectedProviders = Object.keys(modelsByProvider)
-    .filter((provider) => {
-      const providerModels = modelsByProvider[provider];
-      return providerModels && providerModels.some((m) => m.connected);
-    })
-    .sort((a, b) => a.localeCompare(b));
-
-  /**
-   * Generate options for a model, expanding variants into separate options.
-   * For models without variants, renders a single option.
-   * For models with variants, renders one option per variant.
-   */
-  function renderModelOptions(model: ModelInfo, disabled: boolean = false) {
-    const variants = model.variants && model.variants.length > 0 
-      ? model.variants 
-      : [""]; // No variants = single option with empty variant
-    
-    // Sort variants: empty string first, then alphabetically
-    const sortedVariants = [...variants].sort((a, b) => {
-      if (a === "") return -1;
-      if (b === "") return 1;
-      return a.localeCompare(b);
-    });
-
-    return sortedVariants.map((variant) => {
-      // Format: providerID:modelID:variant
-      const optionValue = `${model.providerID}:${model.modelID}:${variant}`;
-      // Display: "Model Name (variant)" or just "Model Name" for empty variant
-      const displayName = variant ? `${model.modelName} (${variant})` : model.modelName;
-      
-      return (
-        <option
-          key={optionValue}
-          value={optionValue}
-          disabled={disabled}
-        >
-          {displayName}
-        </option>
-      );
-    });
-  }
-
   // Handle workspace selection - stores both workspaceId and directory
   function handleWorkspaceSelect(workspaceId: string | null, workspaceDirectory: string) {
     setSelectedWorkspaceId(workspaceId || undefined);
@@ -662,44 +560,20 @@ export function CreateLoopForm({
         >
           Model
         </label>
-        <select
+        <ModelSelector
           id="model"
           value={selectedModel}
-          onChange={(e) => setSelectedModel(e.target.value)}
-          disabled={modelsLoading || models.length === 0}
+          onChange={setSelectedModel}
+          models={models}
+          loading={modelsLoading}
           className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
-        >
-          {modelsLoading && (
-            <option value="">Loading models...</option>
-          )}
-          {!modelsLoading && models.length === 0 && (
-            <option value="">Select a workspace to load models</option>
-          )}
-          {!modelsLoading && models.length > 0 && (
-            <>
-              <option value="">Select a model...</option>
-              {/* Only show connected providers */}
-              {connectedProviders.map((provider) => {
-                const providerModels = modelsByProvider[provider] ?? [];
-                return (
-                  <optgroup key={provider} label={provider}>
-                    {providerModels.map((model) => renderModelOptions(model, false))}
-                  </optgroup>
-                );
-              })}
-              {/* Show message if no providers are connected */}
-              {connectedProviders.length === 0 && (
-                <option value="" disabled>No connected providers available</option>
-              )}
-            </>
-          )}
-        </select>
-        {!modelsLoading && models.length > 0 && connectedProviders.length === 0 && (
+        />
+        {!modelsLoading && models.length > 0 && groupModelsByProvider(models).connectedProviders.length === 0 && (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
             No providers are connected. Please configure API credentials in the opencode server.
           </p>
         )}
-        {!modelsLoading && models.length > 0 && connectedProviders.length > 0 && !selectedModel && (
+        {!modelsLoading && models.length > 0 && groupModelsByProvider(models).connectedProviders.length > 0 && !selectedModel && (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
             Model is required. Please select a model.
           </p>

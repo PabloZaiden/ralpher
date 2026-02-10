@@ -5,12 +5,11 @@
  * partial overrides via the spread pattern.
  */
 
-import type { Loop, LoopConfig, LoopState, LoopStatus, ModelConfig } from "@/types/loop";
+import type { Loop, LoopConfig, LoopState, LoopStatus, ModelConfig, TodoItem } from "@/types/loop";
 import type { GitConfig, GitState, GitCommit, IterationSummary, LoopLogEntry, PersistedMessage, PersistedToolCall, LoopError, SessionInfo } from "@/types/loop";
 import type { Workspace } from "@/types/workspace";
 import type { BranchInfo, ModelInfo, FileDiff } from "@/types/api";
 import type { MessageData, ToolCallData, LoopEvent } from "@/types/events";
-import type { TodoItem } from "@/backends/types";
 import type { ServerSettings } from "@/types/settings";
 
 let counter = 0;

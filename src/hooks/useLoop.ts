@@ -12,8 +12,8 @@ import type {
   FileContentResponse,
   MessageData,
   ToolCallData,
+  TodoItem,
 } from "../types";
-import type { TodoItem } from "../backends/types";
 import type { LogEntry } from "../components/LogViewer";
 import { useLoopEvents } from "./useWebSocket";
 import {

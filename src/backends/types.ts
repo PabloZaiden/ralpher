@@ -4,6 +4,10 @@
  */
 
 import type { EventStream } from "../utils/event-stream";
+import type { TodoItem } from "../types/loop";
+
+// Re-export TodoItem for backward compatibility
+export type { TodoItem };
 
 /**
  * Connection info needed for WebSocket and other direct connections.
@@ -134,20 +138,6 @@ export interface QuestionInfo {
   options: QuestionOption[];
   multiple?: boolean;
   custom?: boolean;
-}
-
-/**
- * A TODO item from an agent session.
- */
-export interface TodoItem {
-  /** Brief description of the task */
-  content: string;
-  /** Current status of the task */
-  status: "pending" | "in_progress" | "completed" | "cancelled";
-  /** Priority level of the task */
-  priority: "high" | "medium" | "low";
-  /** Unique identifier for the todo item */
-  id: string;
 }
 
 /**

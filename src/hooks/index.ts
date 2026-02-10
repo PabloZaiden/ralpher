@@ -10,6 +10,7 @@ export { useMarkdownPreference, type UseMarkdownPreferenceResult } from "./useMa
 export { useLogLevelPreference, type UseLogLevelPreferenceResult } from "./useLogLevelPreference";
 export { useWorkspaces, type UseWorkspacesResult } from "./useWorkspaces";
 export { useAgentsMdOptimizer, type UseAgentsMdOptimizerResult, type AgentsMdStatus, type OptimizeResult } from "./useAgentsMdOptimizer";
+export { useToast, type ToastContextValue, type Toast, type ToastType, type ToastOptions } from "./useToast";
 
 // Shared loop action API functions
 export {

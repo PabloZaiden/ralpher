@@ -15,9 +15,12 @@ import { OpenCodeBackend } from "../backends/opencode";
 import { getWorkspace } from "../persistence/workspaces";
 import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled, getLogLevelPreference, setLogLevelPreference, DEFAULT_LOG_LEVEL } from "../persistence/preferences";
 import { getDefaultServerSettings } from "../types/settings";
-import type { ErrorResponse, ModelInfo } from "../types/api";
-import { setLogLevel as setBackendLogLevel, type LogLevelName, VALID_LOG_LEVELS, isLogLevelFromEnv } from "../core/logger";
+import type { ModelInfo } from "../types/api";
+import { createLogger, setLogLevel as setBackendLogLevel, type LogLevelName, VALID_LOG_LEVELS, isLogLevelFromEnv } from "../core/logger";
 import { parseAndValidate } from "./validation";
+import { errorResponse } from "./helpers";
+
+const log = createLogger("api:models");
 import {
   SetLastModelRequestSchema,
   SetLastDirectoryRequestSchema,
@@ -98,8 +101,8 @@ export async function isModelEnabled(
           // Always disconnect temporary backend
           try {
             await tempBackend.disconnect();
-          } catch {
-            // Ignore disconnect errors
+          } catch (disconnectError) {
+            log.trace("Failed to disconnect temporary backend", { error: String(disconnectError) });
           }
         }
       }
@@ -142,19 +145,6 @@ export async function isModelEnabled(
       errorCode: "validation_failed",
     };
   }
-}
-
-/**
- * Create a standardized error response.
- * 
- * @param error - Error code for programmatic handling
- * @param message - Human-readable error description
- * @param status - HTTP status code (default: 400)
- * @returns JSON Response with error details
- */
-function errorResponse(error: string, message: string, status = 400): Response {
-  const body: ErrorResponse = { error, message };
-  return Response.json(body, { status });
 }
 
 /**
@@ -214,8 +204,8 @@ export const modelsRoutes = {
         // Make sure to disconnect on error
         try {
           await backend.disconnect();
-        } catch {
-          // Ignore disconnect errors
+        } catch (disconnectError) {
+          log.trace("Failed to disconnect backend on error path", { error: String(disconnectError) });
         }
         return errorResponse("models_failed", String(error), 500);
       }

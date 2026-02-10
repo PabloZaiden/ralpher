@@ -9,11 +9,23 @@
  * @module types/loop
  */
 
-import type { TodoItem } from "../backends/types";
-
 // Import and re-export ModelConfig from schema (single source of truth)
 import type { ModelConfig } from "./schemas/model";
 export type { ModelConfig };
+
+/**
+ * A TODO item from an agent session.
+ */
+export interface TodoItem {
+  /** Brief description of the task */
+  content: string;
+  /** Current status of the task */
+  status: "pending" | "in_progress" | "completed" | "cancelled";
+  /** Priority level of the task */
+  priority: "high" | "medium" | "low";
+  /** Unique identifier for the todo item */
+  id: string;
+}
 
 /**
  * Configuration for a Ralph Loop.

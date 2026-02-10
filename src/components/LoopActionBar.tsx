@@ -11,6 +11,7 @@
 import { useState, useCallback, type FormEvent } from "react";
 import type { ModelInfo, ModelConfig } from "../types";
 import { Button } from "./common";
+import { ModelSelector, makeModelKey, parseModelKey, isModelEnabled, getModelDisplayName } from "./ModelSelector";
 import { createLogger } from "../lib/logger";
 
 const log = createLogger("LoopActionBar");
@@ -49,14 +50,13 @@ export function LoopActionBar({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Build current model key for display
-  // Format: providerID:modelID:variant (variant can be empty string)
   const currentModelKey = currentModel 
-    ? `${currentModel.providerID}:${currentModel.modelID}:${currentModel.variant ?? ""}` 
+    ? makeModelKey(currentModel.providerID, currentModel.modelID, currentModel.variant)
     : "";
 
   // Build pending model key for comparison
   const pendingModelKey = pendingModel
-    ? `${pendingModel.providerID}:${pendingModel.modelID}:${pendingModel.variant ?? ""}`
+    ? makeModelKey(pendingModel.providerID, pendingModel.modelID, pendingModel.variant)
     : "";
 
   // Check if we have any pending changes
@@ -68,105 +68,7 @@ export function LoopActionBar({
   const hasLocalChanges = message.trim().length > 0 || selectedModel !== "";
 
   // Check if the selected model is enabled (connected)
-  // Format: providerID:modelID:variant (variant can be empty string)
-  const isSelectedModelEnabled = (): boolean => {
-    if (!selectedModel) return true; // No model selected = keep current model
-    const parts = selectedModel.split(":");
-    // Format is providerID:modelID:variant (variant may be empty)
-    if (parts.length < 2) return true;
-    const providerID = parts[0];
-    const modelID = parts[1];
-    if (!providerID || !modelID) return true;
-    const model = models.find((m) => m.providerID === providerID && m.modelID === modelID);
-    return model?.connected ?? false;
-  };
-  
-  const selectedModelEnabled = isSelectedModelEnabled();
-
-  // Group models by provider
-  const modelsByProvider = models.reduce<Record<string, ModelInfo[]>>(
-    (acc, model) => {
-      const key = model.providerName;
-      if (!acc[key]) {
-        acc[key] = [];
-      }
-      acc[key].push(model);
-      return acc;
-    },
-    {}
-  );
-
-  // Sort models within each provider by name
-  for (const provider of Object.keys(modelsByProvider)) {
-    const providerModels = modelsByProvider[provider];
-    if (providerModels) {
-      providerModels.sort((a, b) => a.modelName.localeCompare(b.modelName));
-    }
-  }
-
-  // Get connected providers (for display order), sorted by name
-  const connectedProviders = Object.keys(modelsByProvider)
-    .filter((provider) => {
-      const providerModels = modelsByProvider[provider];
-      return providerModels && providerModels.some((m) => m.connected);
-    })
-    .sort((a, b) => a.localeCompare(b));
-  const disconnectedProviders = Object.keys(modelsByProvider)
-    .filter((provider) => {
-      const providerModels = modelsByProvider[provider];
-      return providerModels && !providerModels.some((m) => m.connected);
-    })
-    .sort((a, b) => a.localeCompare(b));
-
-  // Find model display name
-  // Format: providerID:modelID:variant
-  const getModelDisplayName = (modelKey: string): string => {
-    if (!modelKey) return "Default";
-    const parts = modelKey.split(":");
-    const providerID = parts[0];
-    const modelID = parts[1];
-    const variant = parts.length >= 3 ? parts.slice(2).join(":") : "";
-    
-    const model = models.find((m) => m.providerID === providerID && m.modelID === modelID);
-    const baseName = model?.modelName ?? modelID ?? "Unknown";
-    return variant ? `${baseName} (${variant})` : baseName;
-  };
-
-  /**
-   * Generate options for a model, expanding variants into separate options.
-   * For models without variants, renders a single option.
-   * For models with variants, renders one option per variant.
-   */
-  function renderModelOptions(model: ModelInfo, isDisconnected: boolean = false) {
-    const variants = model.variants && model.variants.length > 0 
-      ? model.variants 
-      : [""]; // No variants = single option with empty variant
-    
-    // Sort variants: empty string first, then alphabetically
-    const sortedVariants = [...variants].sort((a, b) => {
-      if (a === "") return -1;
-      if (b === "") return 1;
-      return a.localeCompare(b);
-    });
-
-    return sortedVariants.map((variant) => {
-      // Format: providerID:modelID:variant
-      const optionValue = `${model.providerID}:${model.modelID}:${variant}`;
-      // Display: "Model Name (variant)" or just "Model Name" for empty variant
-      const displayName = variant ? `${model.modelName} (${variant})` : model.modelName;
-      const isCurrent = optionValue === currentModelKey;
-      
-      return (
-        <option
-          key={optionValue}
-          value={optionValue}
-          disabled={isDisconnected || isCurrent}
-        >
-          {displayName}{isCurrent ? " (current)" : ""}
-        </option>
-      );
-    });
-  }
+  const selectedModelEnabled = selectedModel ? isModelEnabled(models, selectedModel) : true;
 
   // Handle form submission
   const handleSubmit = useCallback(async (e: FormEvent) => {
@@ -192,13 +94,9 @@ export function LoopActionBar({
       }
       
       if (selectedModel) {
-        const parts = selectedModel.split(":");
-        const providerID = parts[0];
-        const modelID = parts[1];
-        // Variant is everything after the second colon (may be empty string)
-        const variant = parts.length >= 3 ? parts.slice(2).join(":") : "";
-        if (providerID && modelID) {
-          options.model = { providerID, modelID, variant };
+        const parsed = parseModelKey(selectedModel);
+        if (parsed) {
+          options.model = { providerID: parsed.providerID, modelID: parsed.modelID, variant: parsed.variant };
         }
       }
 
@@ -244,7 +142,7 @@ export function LoopActionBar({
               )}
               {hasPendingModel && (
                 <p className="text-xs text-yellow-800 dark:text-yellow-200">
-                  <span className="font-medium">Model change:</span> {getModelDisplayName(pendingModelKey)}
+                  <span className="font-medium">Model change:</span> {getModelDisplayName(models, pendingModelKey)}
                 </p>
               )}
             </div>
@@ -264,40 +162,19 @@ export function LoopActionBar({
       <form onSubmit={handleSubmit} className="p-3 sm:p-4">
         <div className="flex flex-row gap-2 sm:gap-3">
           {/* Model selector */}
-          <select
+          <ModelSelector
             value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            disabled={disabled || isSubmitting || modelsLoading}
+            onChange={setSelectedModel}
+            models={models}
+            loading={modelsLoading}
+            disabled={disabled || isSubmitting}
+            showDisconnected={true}
+            currentModelKey={currentModelKey}
+            placeholder={currentModelKey ? getModelDisplayName(models, currentModelKey) : "Select model..."}
+            loadingText="Loading..."
+            emptyText="Select model..."
             className="min-w-[112px] sm:min-w-[128px] md:w-48 max-w-[120px] sm:max-w-none flex-shrink-0 h-9 text-sm rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-          >
-            {modelsLoading ? (
-              <option value="">Loading...</option>
-            ) : (
-              <>
-                <option value="">
-                  {currentModelKey ? getModelDisplayName(currentModelKey) : "Select model..."}
-                </option>
-                {/* Connected providers first */}
-                {connectedProviders.map((provider) => {
-                  const providerModels = modelsByProvider[provider] ?? [];
-                  return (
-                    <optgroup key={provider} label={`${provider}`}>
-                      {providerModels.map((model) => renderModelOptions(model, false))}
-                    </optgroup>
-                  );
-                })}
-                {/* Disconnected providers */}
-                {disconnectedProviders.map((provider) => {
-                  const providerModels = modelsByProvider[provider] ?? [];
-                  return (
-                    <optgroup key={provider} label={`${provider} (not connected)`}>
-                      {providerModels.map((model) => renderModelOptions(model, true))}
-                    </optgroup>
-                  );
-                })}
-              </>
-            )}
-          </select>
+          />
 
           {/* Message input */}
           <input

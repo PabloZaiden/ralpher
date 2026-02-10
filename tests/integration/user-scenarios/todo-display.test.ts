@@ -13,8 +13,7 @@ import {
   discardLoopViaAPI,
   type TestServerContext,
 } from "./helpers";
-import type { Loop } from "../../../src/types/loop";
-import type { TodoItem } from "../../../src/backends/types";
+import type { Loop, TodoItem } from "../../../src/types/loop";
 
 describe("TODO Display User Scenarios", () => {
   describe("TODO Events During Loop Execution", () => {

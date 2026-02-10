@@ -8,3 +8,4 @@ export { Badge, getStatusBadgeVariant, type BadgeProps, type BadgeVariant } from
 export { Modal, ConfirmModal, type ModalProps, type ConfirmModalProps } from "./Modal";
 export { EditIcon, type IconProps } from "./Icons";
 export { CollapsibleSection, type CollapsibleSectionProps } from "./CollapsibleSection";
+export { ToastProvider } from "./Toast";
