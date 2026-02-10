@@ -72,22 +72,24 @@ export interface WorkspaceWithLoopCount extends Workspace {
 
 /**
  * Result of a workspace import operation.
- * Reports what was created and what was skipped.
+ * Reports what was created, skipped, and failed.
  */
 export interface WorkspaceImportResult {
   /** Number of workspaces successfully created */
   created: number;
   /** Number of workspaces skipped (directory already exists) */
   skipped: number;
+  /** Number of workspaces that failed validation */
+  failed: number;
   /** Details of each workspace in the import */
   details: Array<{
     /** Workspace name from the import file */
     name: string;
     /** Workspace directory from the import file */
     directory: string;
-    /** Whether this workspace was created or skipped */
-    status: "created" | "skipped";
-    /** Reason for skipping (if status is "skipped") */
+    /** Whether this workspace was created, skipped, or failed validation */
+    status: "created" | "skipped" | "failed";
+    /** Reason for skipping or failure */
     reason?: string;
   }>;
 }

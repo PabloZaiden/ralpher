@@ -276,24 +276,29 @@ export async function importWorkspaces(data: WorkspaceExportData): Promise<Works
   const result: WorkspaceImportResult = {
     created: 0,
     skipped: 0,
+    failed: 0,
     details: [],
   };
 
   for (const config of data.workspaces) {
+    // Normalize inputs: trim whitespace from name and directory
+    const name = config.name.trim();
+    const directory = config.directory.trim();
+
     // Check if a workspace with this directory already exists
-    const existing = await getWorkspaceByDirectory(config.directory);
+    const existing = await getWorkspaceByDirectory(directory);
     if (existing) {
       log.debug("Skipping workspace import - directory already exists", {
-        name: config.name,
-        directory: config.directory,
+        name,
+        directory,
         existingId: existing.id,
       });
       result.skipped++;
       result.details.push({
-        name: config.name,
-        directory: config.directory,
+        name,
+        directory,
         status: "skipped",
-        reason: `A workspace already exists for directory: ${config.directory}`,
+        reason: `A workspace already exists for directory: ${directory}`,
       });
       continue;
     }
@@ -301,8 +306,8 @@ export async function importWorkspaces(data: WorkspaceExportData): Promise<Works
     const now = new Date().toISOString();
     const workspace: Workspace = {
       id: crypto.randomUUID(),
-      name: config.name,
-      directory: config.directory,
+      name,
+      directory,
       serverSettings: config.serverSettings,
       createdAt: now,
       updatedAt: now,
@@ -311,8 +316,8 @@ export async function importWorkspaces(data: WorkspaceExportData): Promise<Works
     await createWorkspace(workspace);
     result.created++;
     result.details.push({
-      name: config.name,
-      directory: config.directory,
+      name,
+      directory,
       status: "created",
     });
   }

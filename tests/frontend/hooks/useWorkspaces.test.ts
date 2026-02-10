@@ -465,6 +465,7 @@ describe("importConfig", () => {
     const importResult = {
       created: 1,
       skipped: 0,
+      failed: 0,
       details: [{ name: "Imported WS", directory: "/workspaces/imported", status: "created" }],
     };
 
@@ -503,6 +504,7 @@ describe("importConfig", () => {
     api.post("/api/workspaces/import", () => ({
       created: 1,
       skipped: 0,
+      failed: 0,
       details: [{ name: "WS 2", directory: "/workspaces/ws2", status: "created" }],
     }));
 

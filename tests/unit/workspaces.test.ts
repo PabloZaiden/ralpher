@@ -529,8 +529,9 @@ describe("Workspace Persistence", () => {
       expect(result.version).toBe(1);
       expect(result.exportedAt).toBeDefined();
       expect(result.workspaces).toEqual([]);
-      // Verify exportedAt is a valid ISO timestamp
-      expect(() => new Date(result.exportedAt)).not.toThrow();
+      // Verify exportedAt is a valid, normalized ISO timestamp
+      expect(Number.isNaN(Date.parse(result.exportedAt))).toBe(false);
+      expect(new Date(result.exportedAt).toISOString()).toBe(result.exportedAt);
     });
 
     test("export with multiple workspaces returns all configs without id/timestamps", async () => {
@@ -618,6 +619,7 @@ describe("Workspace Persistence", () => {
       const result = await importWorkspaces(importData);
       expect(result.created).toBe(2);
       expect(result.skipped).toBe(0);
+      expect(result.failed).toBe(0);
       expect(result.details).toHaveLength(2);
       expect(result.details[0]!.status).toBe("created");
       expect(result.details[1]!.status).toBe("created");
@@ -657,6 +659,7 @@ describe("Workspace Persistence", () => {
       const result = await importWorkspaces(importData);
       expect(result.created).toBe(1);
       expect(result.skipped).toBe(1);
+      expect(result.failed).toBe(0);
       expect(result.details).toHaveLength(2);
 
       const createdDetail = result.details.find((d) => d.status === "created");
@@ -685,6 +688,7 @@ describe("Workspace Persistence", () => {
       const result = await importWorkspaces(importData);
       expect(result.created).toBe(0);
       expect(result.skipped).toBe(0);
+      expect(result.failed).toBe(0);
       expect(result.details).toEqual([]);
     });
 
@@ -710,11 +714,13 @@ describe("Workspace Persistence", () => {
       const result1 = await importWorkspaces(importData);
       expect(result1.created).toBe(1);
       expect(result1.skipped).toBe(0);
+      expect(result1.failed).toBe(0);
 
       // Second import — should skip
       const result2 = await importWorkspaces(importData);
       expect(result2.created).toBe(0);
       expect(result2.skipped).toBe(1);
+      expect(result2.failed).toBe(0);
 
       // Should still only have 1 workspace
       const workspaces = await listWorkspaces();
@@ -757,6 +763,71 @@ describe("Workspace Persistence", () => {
       expect(workspace!.serverSettings.password).toBe("super-secret");
     });
 
+    test("import trims whitespace from name and directory", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { importWorkspaces, getWorkspaceByDirectory } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const importData = {
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        workspaces: [
+          {
+            name: "  Padded Name  ",
+            directory: "  /tmp/padded-dir  ",
+            serverSettings: getDefaultServerSettings(),
+          },
+        ],
+      };
+
+      const result = await importWorkspaces(importData);
+      expect(result.created).toBe(1);
+      expect(result.failed).toBe(0);
+
+      // Detail should have trimmed values
+      expect(result.details[0]!.name).toBe("Padded Name");
+      expect(result.details[0]!.directory).toBe("/tmp/padded-dir");
+
+      // Workspace should be findable by trimmed directory
+      const ws = await getWorkspaceByDirectory("/tmp/padded-dir");
+      expect(ws).not.toBeNull();
+      expect(ws!.name).toBe("Padded Name");
+      expect(ws!.directory).toBe("/tmp/padded-dir");
+    });
+
+    test("import deduplicates directories that differ only by whitespace", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/paths");
+      const { createWorkspace, importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      // Pre-create a workspace with a trimmed directory
+      const existing = createTestWorkspace({ name: "Existing", directory: "/tmp/trim-dup" });
+      await createWorkspace(existing);
+
+      const importData = {
+        version: 1 as const,
+        exportedAt: new Date().toISOString(),
+        workspaces: [
+          {
+            name: "Duplicate With Spaces",
+            directory: "  /tmp/trim-dup  ",
+            serverSettings: getDefaultServerSettings(),
+          },
+        ],
+      };
+
+      const result = await importWorkspaces(importData);
+      expect(result.created).toBe(0);
+      expect(result.skipped).toBe(1);
+      expect(result.failed).toBe(0);
+
+      // Should still only have 1 workspace
+      const workspaces = await listWorkspaces();
+      expect(workspaces).toHaveLength(1);
+    });
+
     test("export then import round-trip reproduces same configs", async () => {
       const { ensureDataDirectories } = await import("../../src/persistence/paths");
       const { createWorkspace, exportWorkspaces, importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
@@ -796,6 +867,7 @@ describe("Workspace Persistence", () => {
       const result = await importWorkspaces(exported);
       expect(result.created).toBe(2);
       expect(result.skipped).toBe(0);
+      expect(result.failed).toBe(0);
 
       // Verify the imported workspaces match the exported configs
       const workspaces = await listWorkspaces();

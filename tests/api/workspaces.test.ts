@@ -1099,30 +1099,85 @@ describe("Workspace API Integration", () => {
     });
 
     describe("POST /api/workspaces/import", () => {
-      test("creates workspaces from valid payload", async () => {
+      test("creates workspaces from valid payload (directories must be valid git repos)", async () => {
+        // Create two real git repo directories for import
+        const importDir1 = await mkdtemp(join(tmpdir(), "ralpher-api-import-1-"));
+        const importDir2 = await mkdtemp(join(tmpdir(), "ralpher-api-import-2-"));
+        await Bun.$`git init ${importDir1}`.quiet();
+        await Bun.$`git -C ${importDir1} config user.email "test@test.com"`.quiet();
+        await Bun.$`git -C ${importDir1} config user.name "Test User"`.quiet();
+        await Bun.$`touch ${importDir1}/README.md`.quiet();
+        await Bun.$`git -C ${importDir1} add .`.quiet();
+        await Bun.$`git -C ${importDir1} commit -m "Init"`.quiet();
+        await Bun.$`git init ${importDir2}`.quiet();
+        await Bun.$`git -C ${importDir2} config user.email "test@test.com"`.quiet();
+        await Bun.$`git -C ${importDir2} config user.name "Test User"`.quiet();
+        await Bun.$`touch ${importDir2}/README.md`.quiet();
+        await Bun.$`git -C ${importDir2} add .`.quiet();
+        await Bun.$`git -C ${importDir2} commit -m "Init"`.quiet();
+
+        try {
+          const importPayload = {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            workspaces: [
+              {
+                name: "Imported WS 1",
+                directory: importDir1,
+                serverSettings: {
+                  mode: "connect",
+                  hostname: "imported.server.com",
+                  port: 9000,
+                  useHttps: true,
+                  allowInsecure: false,
+                },
+              },
+              {
+                name: "Imported WS 2",
+                directory: importDir2,
+                serverSettings: {
+                  mode: "spawn",
+                  useHttps: false,
+                  allowInsecure: false,
+                },
+              },
+            ],
+          };
+
+          const response = await fetch(`${baseUrl}/api/workspaces/import`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(importPayload),
+          });
+          expect(response.ok).toBe(true);
+          const result = await response.json();
+
+          expect(result.created).toBe(2);
+          expect(result.skipped).toBe(0);
+          expect(result.failed).toBe(0);
+          expect(result.details).toHaveLength(2);
+          expect(result.details[0].status).toBe("created");
+          expect(result.details[1].status).toBe("created");
+
+          // Verify workspaces appear in the list
+          const listResponse = await fetch(`${baseUrl}/api/workspaces`);
+          const workspaces = await listResponse.json();
+          expect(workspaces).toHaveLength(2);
+        } finally {
+          await rm(importDir1, { recursive: true, force: true });
+          await rm(importDir2, { recursive: true, force: true });
+        }
+      });
+
+      test("fails validation for non-existent directories", async () => {
         const importPayload = {
           version: 1,
           exportedAt: new Date().toISOString(),
           workspaces: [
             {
-              name: "Imported WS 1",
-              directory: "/tmp/import-test-1",
-              serverSettings: {
-                mode: "connect",
-                hostname: "imported.server.com",
-                port: 9000,
-                useHttps: true,
-                allowInsecure: false,
-              },
-            },
-            {
-              name: "Imported WS 2",
-              directory: "/tmp/import-test-2",
-              serverSettings: {
-                mode: "spawn",
-                useHttps: false,
-                allowInsecure: false,
-              },
+              name: "Non-Existent Dir WS",
+              directory: "/tmp/does-not-exist-at-all-" + Date.now(),
+              serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
             },
           ],
         };
@@ -1135,20 +1190,50 @@ describe("Workspace API Integration", () => {
         expect(response.ok).toBe(true);
         const result = await response.json();
 
-        expect(result.created).toBe(2);
-        expect(result.skipped).toBe(0);
-        expect(result.details).toHaveLength(2);
-        expect(result.details[0].status).toBe("created");
-        expect(result.details[1].status).toBe("created");
-
-        // Verify workspaces appear in the list
-        const listResponse = await fetch(`${baseUrl}/api/workspaces`);
-        const workspaces = await listResponse.json();
-        expect(workspaces).toHaveLength(2);
+        expect(result.created).toBe(0);
+        expect(result.failed).toBe(1);
+        expect(result.details).toHaveLength(1);
+        expect(result.details[0].status).toBe("failed");
+        expect(result.details[0].reason).toContain("does not exist");
       });
 
-      test("skips existing directories and reports them", async () => {
-        // Create a workspace first
+      test("fails validation for directories that are not git repos", async () => {
+        // Create a real directory that is NOT a git repo
+        const nonGitDir = await mkdtemp(join(tmpdir(), "ralpher-api-import-nongit-"));
+
+        try {
+          const importPayload = {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            workspaces: [
+              {
+                name: "Non-Git Dir WS",
+                directory: nonGitDir,
+                serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
+              },
+            ],
+          };
+
+          const response = await fetch(`${baseUrl}/api/workspaces/import`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(importPayload),
+          });
+          expect(response.ok).toBe(true);
+          const result = await response.json();
+
+          expect(result.created).toBe(0);
+          expect(result.failed).toBe(1);
+          expect(result.details).toHaveLength(1);
+          expect(result.details[0].status).toBe("failed");
+          expect(result.details[0].reason).toContain("not a git repository");
+        } finally {
+          await rm(nonGitDir, { recursive: true, force: true });
+        }
+      });
+
+      test("reports mix of created, skipped, and failed entries", async () => {
+        // Create a workspace first (for skip detection)
         await fetch(`${baseUrl}/api/workspaces`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1158,18 +1243,74 @@ describe("Workspace API Integration", () => {
           }),
         });
 
+        // Create a valid git repo for the "new" entry
+        const importDir = await mkdtemp(join(tmpdir(), "ralpher-api-import-mix-"));
+        await Bun.$`git init ${importDir}`.quiet();
+        await Bun.$`git -C ${importDir} config user.email "test@test.com"`.quiet();
+        await Bun.$`git -C ${importDir} config user.name "Test User"`.quiet();
+        await Bun.$`touch ${importDir}/README.md`.quiet();
+        await Bun.$`git -C ${importDir} add .`.quiet();
+        await Bun.$`git -C ${importDir} commit -m "Init"`.quiet();
+
+        try {
+          const importPayload = {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            workspaces: [
+              {
+                name: "New Import",
+                directory: importDir,
+                serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
+              },
+              {
+                name: "Duplicate Import",
+                directory: testWorkDir,
+                serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
+              },
+              {
+                name: "Invalid Import",
+                directory: "/tmp/nonexistent-dir-" + Date.now(),
+                serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
+              },
+            ],
+          };
+
+          const response = await fetch(`${baseUrl}/api/workspaces/import`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(importPayload),
+          });
+          expect(response.ok).toBe(true);
+          const result = await response.json();
+
+          expect(result.created).toBe(1);
+          expect(result.skipped).toBe(1);
+          expect(result.failed).toBe(1);
+          expect(result.details).toHaveLength(3);
+
+          const createdDetail = result.details.find((d: { status: string }) => d.status === "created");
+          const skippedDetail = result.details.find((d: { status: string }) => d.status === "skipped");
+          const failedDetail = result.details.find((d: { status: string }) => d.status === "failed");
+          expect(createdDetail).toBeDefined();
+          expect(createdDetail.name).toBe("New Import");
+          expect(skippedDetail).toBeDefined();
+          expect(skippedDetail.name).toBe("Duplicate Import");
+          expect(skippedDetail.reason).toContain(testWorkDir);
+          expect(failedDetail).toBeDefined();
+          expect(failedDetail.name).toBe("Invalid Import");
+        } finally {
+          await rm(importDir, { recursive: true, force: true });
+        }
+      });
+
+      test("trims whitespace from name and directory before validation", async () => {
         const importPayload = {
           version: 1,
           exportedAt: new Date().toISOString(),
           workspaces: [
             {
-              name: "New Import",
-              directory: "/tmp/new-import-dir",
-              serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
-            },
-            {
-              name: "Duplicate Import",
-              directory: testWorkDir,
+              name: "  Trimmed WS  ",
+              directory: `  ${testWorkDir}  `,
               serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
             },
           ],
@@ -1184,12 +1325,14 @@ describe("Workspace API Integration", () => {
         const result = await response.json();
 
         expect(result.created).toBe(1);
-        expect(result.skipped).toBe(1);
+        expect(result.failed).toBe(0);
 
-        const skippedDetail = result.details.find((d: { status: string }) => d.status === "skipped");
-        expect(skippedDetail).toBeDefined();
-        expect(skippedDetail.name).toBe("Duplicate Import");
-        expect(skippedDetail.reason).toContain(testWorkDir);
+        // Verify the workspace was stored with trimmed values
+        const listResponse = await fetch(`${baseUrl}/api/workspaces`);
+        const workspaces = await listResponse.json();
+        expect(workspaces).toHaveLength(1);
+        expect(workspaces[0].name).toBe("Trimmed WS");
+        expect(workspaces[0].directory).toBe(testWorkDir);
       });
 
       test("validates schema and returns 400 for invalid data", async () => {
@@ -1254,6 +1397,7 @@ describe("Workspace API Integration", () => {
         expect(importResponse.ok).toBe(true);
         const importResult = await importResponse.json();
         expect(importResult.created).toBe(1);
+        expect(importResult.failed).toBe(0);
 
         // Verify the imported workspace matches
         const listResponse = await fetch(`${baseUrl}/api/workspaces`);

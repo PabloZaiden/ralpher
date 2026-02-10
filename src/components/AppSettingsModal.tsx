@@ -213,6 +213,10 @@ export function AppSettingsModal({
                 Export all workspace configurations to a JSON file for backup or migration,
                 or import configurations from a previously exported file.
               </p>
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                Warning: exported files contain server settings in plain text, including
+                passwords. Store exported files securely.
+              </p>
               <div className="flex items-center gap-3">
                 {onExportConfig && (
                   <Button
@@ -262,16 +266,16 @@ export function AppSettingsModal({
                 </div>
               )}
               {importResult && (
-                <div className="text-sm rounded px-3 py-2 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300">
+                <div className={`text-sm rounded px-3 py-2 ${importResult.failed > 0 ? "bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300" : "bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-300"}`}>
                   <p className="font-medium mb-1">
-                    Import complete: {importResult.created} created, {importResult.skipped} skipped.
+                    Import complete: {importResult.created} created, {importResult.skipped} skipped{importResult.failed > 0 ? `, ${importResult.failed} failed` : ""}.
                   </p>
                   {importResult.details.length > 0 && (
                     <ul className="text-xs space-y-0.5">
                       {importResult.details.map((d, i) => (
                         <li key={i}>
-                          <span className={d.status === "created" ? "text-green-700 dark:text-green-400" : "text-gray-500 dark:text-gray-400"}>
-                            {d.status === "created" ? "+" : "-"} {d.name} ({d.directory})
+                          <span className={d.status === "created" ? "text-green-700 dark:text-green-400" : d.status === "failed" ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}>
+                            {d.status === "created" ? "+" : d.status === "failed" ? "✕" : "-"} {d.name} ({d.directory})
                             {d.reason ? ` — ${d.reason}` : ""}
                           </span>
                         </li>

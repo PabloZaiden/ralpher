@@ -26,7 +26,7 @@ export interface UseWorkspacesResult {
   deleteWorkspace: (id: string) => Promise<{ success: boolean; error?: string }>;
   /** Get workspace by directory */
   getWorkspaceByDirectory: (directory: string) => Promise<Workspace | null>;
-  /** Export all workspace configs as JSON and trigger a file download */
+  /** Fetch all workspace configs as JSON from the export API */
   exportConfig: () => Promise<WorkspaceExportData | null>;
   /** Import workspace configs from a JSON object */
   importConfig: (data: WorkspaceExportData) => Promise<WorkspaceImportResult | null>;
