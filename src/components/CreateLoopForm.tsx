@@ -576,7 +576,7 @@ export function CreateLoopForm({
           onSelect={handleWorkspaceSelect}
           error={workspaceError}
         />
-        {planningWarning && (
+        {planningWarning && !planMode && (
           <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-300">
             <svg
               className="h-5 w-5 flex-shrink-0 text-amber-500"
