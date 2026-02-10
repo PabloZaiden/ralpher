@@ -8,7 +8,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { createMockApi, MockApiError } from "../helpers/mock-api";
-import { createWorkspace, createWorkspaceWithLoopCount } from "../helpers/factories";
+import { createWorkspace } from "../helpers/factories";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 
 const api = createMockApi();
@@ -26,7 +26,7 @@ afterEach(() => {
  * Helper to set up the default GET /api/workspaces mock.
  * Most tests need the initial fetch to succeed.
  */
-function setupWorkspacesList(workspaces = [createWorkspaceWithLoopCount()]) {
+function setupWorkspacesList(workspaces = [createWorkspace()]) {
   api.get("/api/workspaces", () => workspaces);
   return workspaces;
 }
@@ -89,7 +89,7 @@ describe("createWorkspace", () => {
     let callCount = 0;
     api.get("/api/workspaces", () => {
       callCount++;
-      return callCount > 1 ? [createWorkspaceWithLoopCount({ ...newWorkspace, loopCount: 0 })] : workspaces;
+      return callCount > 1 ? [createWorkspace({ ...newWorkspace })] : workspaces;
     });
 
     const { result } = renderHook(() => useWorkspaces());
@@ -178,7 +178,7 @@ describe("createWorkspace", () => {
 
 describe("updateWorkspace", () => {
   test("sends PUT request and returns updated workspace", async () => {
-    const ws = createWorkspaceWithLoopCount({ id: "ws-1", name: "Old Name" });
+    const ws = createWorkspace({ id: "ws-1", name: "Old Name" });
     setupWorkspacesList([ws]);
     const updated = createWorkspace({ id: "ws-1", name: "New Name" });
 
@@ -359,8 +359,8 @@ describe("getWorkspaceByDirectory", () => {
 
 describe("refresh", () => {
   test("re-fetches workspaces list", async () => {
-    const ws1 = createWorkspaceWithLoopCount({ id: "ws-1", name: "WS 1" });
-    const ws2 = createWorkspaceWithLoopCount({ id: "ws-2", name: "WS 2" });
+    const ws1 = createWorkspace({ id: "ws-1", name: "WS 1" });
+    const ws2 = createWorkspace({ id: "ws-2", name: "WS 2" });
 
     let callCount = 0;
     api.get("/api/workspaces", () => {
@@ -492,8 +492,8 @@ describe("importConfig", () => {
   });
 
   test("refreshes workspace list after successful import", async () => {
-    const ws1 = createWorkspaceWithLoopCount({ id: "ws-1", name: "WS 1" });
-    const ws2 = createWorkspaceWithLoopCount({ id: "ws-2", name: "WS 2" });
+    const ws1 = createWorkspace({ id: "ws-1", name: "WS 1" });
+    const ws2 = createWorkspace({ id: "ws-2", name: "WS 2" });
 
     let getCallCount = 0;
     api.get("/api/workspaces", () => {

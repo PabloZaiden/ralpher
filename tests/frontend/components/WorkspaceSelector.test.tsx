@@ -6,7 +6,7 @@ import { test, expect, describe } from "bun:test";
 import { mock } from "bun:test";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 import { renderWithUser } from "../helpers/render";
-import { createWorkspaceWithLoopCount } from "../helpers/factories";
+import { createWorkspace } from "../helpers/factories";
 
 describe("WorkspaceSelector", () => {
   describe("rendering", () => {
@@ -26,7 +26,7 @@ describe("WorkspaceSelector", () => {
     });
 
     test("renders default placeholder option", () => {
-      const workspaces = [createWorkspaceWithLoopCount({ name: "My Project" })];
+      const workspaces = [createWorkspace({ name: "My Project" })];
       const { getByRole } = renderWithUser(
         <WorkspaceSelector workspaces={workspaces} onSelect={mock()} />
       );
@@ -36,20 +36,20 @@ describe("WorkspaceSelector", () => {
   });
 
   describe("workspace options", () => {
-    test("renders workspace options with name and loop count", () => {
+    test("renders workspace options with name only", () => {
       const workspaces = [
-        createWorkspaceWithLoopCount({ name: "Project A", loopCount: 3 }),
-        createWorkspaceWithLoopCount({ name: "Project B", loopCount: 0 }),
+        createWorkspace({ name: "Project A" }),
+        createWorkspace({ name: "Project B" }),
       ];
       const { getByText } = renderWithUser(
         <WorkspaceSelector workspaces={workspaces} onSelect={mock()} />
       );
-      expect(getByText("Project A (3 loops)")).toBeInTheDocument();
-      expect(getByText("Project B (0 loops)")).toBeInTheDocument();
+      expect(getByText("Project A")).toBeInTheDocument();
+      expect(getByText("Project B")).toBeInTheDocument();
     });
 
     test("shows directory when workspace is selected", () => {
-      const workspace = createWorkspaceWithLoopCount({
+      const workspace = createWorkspace({
         id: "ws-1",
         name: "My Workspace",
         directory: "/home/user/project",
@@ -65,7 +65,7 @@ describe("WorkspaceSelector", () => {
     });
 
     test("does not show directory when no workspace selected", () => {
-      const workspace = createWorkspaceWithLoopCount({
+      const workspace = createWorkspace({
         directory: "/home/user/project",
       });
       const { queryByText } = renderWithUser(
@@ -148,7 +148,7 @@ describe("WorkspaceSelector", () => {
   describe("selection interaction", () => {
     test("calls onSelect with workspace id and directory on selection", async () => {
       const onSelect = mock();
-      const workspace = createWorkspaceWithLoopCount({
+      const workspace = createWorkspace({
         id: "ws-1",
         name: "Project A",
         directory: "/home/user/project-a",
@@ -163,7 +163,7 @@ describe("WorkspaceSelector", () => {
 
     test("calls onSelect with null when deselecting", async () => {
       const onSelect = mock();
-      const workspace = createWorkspaceWithLoopCount({
+      const workspace = createWorkspace({
         id: "ws-1",
         name: "Project A",
       });

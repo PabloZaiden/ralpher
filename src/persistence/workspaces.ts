@@ -3,7 +3,7 @@
  * Handles reading and writing workspace data to SQLite database.
  */
 
-import type { Workspace, WorkspaceWithLoopCount, WorkspaceImportResult } from "../types/workspace";
+import type { Workspace, WorkspaceImportResult } from "../types/workspace";
 import type { ServerSettings } from "../types/settings";
 import type { WorkspaceConfig, WorkspaceExportData } from "../types/schemas";
 import { getDefaultServerSettings } from "../types/settings";
@@ -114,23 +114,17 @@ export async function getWorkspaceByDirectory(directory: string): Promise<Worksp
 }
 
 /**
- * List all workspaces with loop counts, sorted by name alphabetically.
+ * List all workspaces sorted by name alphabetically.
  */
-export async function listWorkspaces(): Promise<WorkspaceWithLoopCount[]> {
+export async function listWorkspaces(): Promise<Workspace[]> {
   log.debug("Listing all workspaces");
   const db = getDatabase();
   const stmt = db.prepare(`
-    SELECT w.*, COUNT(l.id) as loop_count
-    FROM workspaces w
-    LEFT JOIN loops l ON l.workspace_id = w.id
-    GROUP BY w.id
-    ORDER BY w.name COLLATE NOCASE ASC
+    SELECT * FROM workspaces
+    ORDER BY name COLLATE NOCASE ASC
   `);
   const rows = stmt.all() as Array<Record<string, unknown>>;
-  const workspaces = rows.map((row) => ({
-    ...rowToWorkspace(row),
-    loopCount: (row["loop_count"] as number) ?? 0,
-  }));
+  const workspaces = rows.map(rowToWorkspace);
   log.trace("Workspaces listed", { count: workspaces.length });
   return workspaces;
 }

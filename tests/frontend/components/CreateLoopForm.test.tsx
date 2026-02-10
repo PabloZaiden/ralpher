@@ -12,10 +12,10 @@ import { renderWithUser, waitFor } from "../helpers/render";
 import {
   createModelInfo,
   createBranchInfo,
-  createWorkspaceWithLoopCount,
+  createWorkspace,
 } from "../helpers/factories";
 import type { ModelInfo, CreateLoopRequest } from "@/types";
-import type { WorkspaceWithLoopCount } from "@/types/workspace";
+import type { Workspace } from "@/types/workspace";
 import { DEFAULT_LOOP_CONFIG } from "@/types/loop";
 import { PROMPT_TEMPLATES, getTemplateById } from "@/lib/prompt-templates";
 
@@ -66,19 +66,17 @@ function connectedModels(): ModelInfo[] {
   ];
 }
 
-function testWorkspaces(): WorkspaceWithLoopCount[] {
+function testWorkspaces(): Workspace[] {
   return [
-    createWorkspaceWithLoopCount({
+    createWorkspace({
       id: "ws-1",
       name: "Project A",
       directory: "/workspaces/project-a",
-      loopCount: 2,
     }),
-    createWorkspaceWithLoopCount({
+    createWorkspace({
       id: "ws-2",
       name: "Project B",
       directory: "/workspaces/project-b",
-      loopCount: 0,
     }),
   ];
 }
@@ -427,11 +425,12 @@ describe("CreateLoopForm", () => {
   });
 
   describe("planning warning", () => {
-    test("shows planning warning when provided", () => {
+    test("shows planning warning when Plan Mode is unchecked", () => {
       const { getByText } = renderWithUser(
         <CreateLoopForm
           {...defaultProps({
             planningWarning: "A .planning folder already exists",
+            initialLoopData: { directory: "/test", prompt: "", planMode: false },
           })}
         />
       );
@@ -443,6 +442,45 @@ describe("CreateLoopForm", () => {
         <CreateLoopForm {...defaultProps({ planningWarning: null })} />
       );
       expect(queryByText(/\.planning folder/)).not.toBeInTheDocument();
+    });
+
+    test("hides planning warning when Plan Mode is checked (default)", () => {
+      const { queryByText } = renderWithUser(
+        <CreateLoopForm
+          {...defaultProps({
+            planningWarning: "The .planning directory does not exist.",
+          })}
+        />
+      );
+      // Plan Mode defaults to true, so warning should be hidden
+      expect(queryByText("The .planning directory does not exist.")).not.toBeInTheDocument();
+    });
+
+    test("toggles warning visibility when Plan Mode checkbox changes", async () => {
+      const { queryByText, getByRole, user } = renderWithUser(
+        <CreateLoopForm
+          {...defaultProps({
+            planningWarning: "The .planning directory is empty.",
+            initialLoopData: { directory: "/test", prompt: "", planMode: false },
+          })}
+        />
+      );
+
+      // Warning should be visible when Plan Mode is off
+      expect(queryByText("The .planning directory is empty.")).toBeInTheDocument();
+
+      // Enable Plan Mode
+      const planModeCheckbox = getByRole("checkbox", { name: /Plan Mode/ });
+      await user.click(planModeCheckbox);
+
+      // Warning should disappear
+      expect(queryByText("The .planning directory is empty.")).not.toBeInTheDocument();
+
+      // Disable Plan Mode again
+      await user.click(planModeCheckbox);
+
+      // Warning should reappear
+      expect(queryByText("The .planning directory is empty.")).toBeInTheDocument();
     });
   });
 

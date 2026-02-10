@@ -7,7 +7,7 @@
 
 import type { Loop, LoopConfig, LoopState, LoopStatus, ModelConfig } from "@/types/loop";
 import type { GitConfig, GitState, GitCommit, IterationSummary, LoopLogEntry, PersistedMessage, PersistedToolCall, LoopError, SessionInfo } from "@/types/loop";
-import type { Workspace, WorkspaceWithLoopCount } from "@/types/workspace";
+import type { Workspace } from "@/types/workspace";
 import type { BranchInfo, ModelInfo, FileDiff } from "@/types/api";
 import type { MessageData, ToolCallData, LoopEvent } from "@/types/events";
 import type { TodoItem } from "@/backends/types";
@@ -321,14 +321,6 @@ export function createWorkspace(overrides?: Partial<Workspace>): Workspace {
     serverSettings: createServerSettings(),
     createdAt: isoNow(),
     updatedAt: isoNow(),
-    ...overrides,
-  };
-}
-
-export function createWorkspaceWithLoopCount(overrides?: Partial<WorkspaceWithLoopCount>): WorkspaceWithLoopCount {
-  return {
-    ...createWorkspace(overrides),
-    loopCount: 0,
     ...overrides,
   };
 }

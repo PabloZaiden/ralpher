@@ -108,7 +108,6 @@ describe("Workspace API Integration", () => {
       expect(data.length).toBe(1);
       expect(data[0].name).toBe("Test Workspace");
       expect(data[0].directory).toBe(testWorkDir);
-      expect(data[0].loopCount).toBe(0);
     });
   });
 
@@ -394,12 +393,6 @@ describe("Workspace API Integration", () => {
         new Date(originalUpdatedAt).getTime()
       );
 
-      // Step 4: Verify the workspace's loop count increased
-      const workspacesListResponse = await fetch(`${baseUrl}/api/workspaces`);
-      expect(workspacesListResponse.ok).toBe(true);
-      const workspacesList = await workspacesListResponse.json();
-      const workspaceWithCount = workspacesList.find((w: { id: string }) => w.id === workspace.id);
-      expect(workspaceWithCount.loopCount).toBe(1);
     });
 
     test("fails when creating loop with non-existent workspaceId", async () => {

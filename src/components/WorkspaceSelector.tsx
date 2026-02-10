@@ -6,11 +6,11 @@
  */
 
 import type { ChangeEvent } from "react";
-import type { WorkspaceWithLoopCount } from "../types/workspace";
+import type { Workspace } from "../types/workspace";
 
 export interface WorkspaceSelectorProps {
   /** List of available workspaces */
-  workspaces: WorkspaceWithLoopCount[];
+  workspaces: Workspace[];
   /** Whether workspaces are loading */
   loading?: boolean;
   /** Currently selected workspace ID */
@@ -70,7 +70,7 @@ export function WorkspaceSelector({
         
         {workspaces.map((workspace) => (
           <option key={workspace.id} value={workspace.id}>
-            {workspace.name} ({workspace.loopCount} loops)
+            {workspace.name}
           </option>
         ))}
       </select>

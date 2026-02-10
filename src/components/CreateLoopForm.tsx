@@ -4,7 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
 import type { CreateLoopRequest, ModelInfo, BranchInfo } from "../types";
-import type { WorkspaceWithLoopCount } from "../types/workspace";
+import type { Workspace } from "../types/workspace";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import { Button } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
@@ -79,7 +79,7 @@ export interface CreateLoopFormProps {
   /** Whether editing a draft loop (to show Update Draft button) */
   isEditingDraft?: boolean;
   /** Available workspaces */
-  workspaces?: WorkspaceWithLoopCount[];
+  workspaces?: Workspace[];
   /** Whether workspaces are loading */
   workspacesLoading?: boolean;
   /** Workspace-related error */
@@ -576,7 +576,7 @@ export function CreateLoopForm({
           onSelect={handleWorkspaceSelect}
           error={workspaceError}
         />
-        {planningWarning && (
+        {planningWarning && !planMode && (
           <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-300">
             <svg
               className="h-5 w-5 flex-shrink-0 text-amber-500"

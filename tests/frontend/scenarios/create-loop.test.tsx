@@ -12,7 +12,7 @@ import { renderWithUser, waitFor } from "../helpers/render";
 import {
   createLoop,
   createLoopWithStatus,
-  createWorkspaceWithLoopCount,
+  createWorkspace,
   createModelInfo,
 } from "../helpers/factories";
 import { App } from "@/App";
@@ -20,11 +20,10 @@ import { App } from "@/App";
 const api = createMockApi();
 const ws = createMockWebSocket();
 
-const WORKSPACE = createWorkspaceWithLoopCount({
+const WORKSPACE = createWorkspace({
   id: "ws-1",
   name: "My Project",
   directory: "/workspaces/my-project",
-  loopCount: 0,
 });
 
 function connectedModel() {
