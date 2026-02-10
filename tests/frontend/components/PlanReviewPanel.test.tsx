@@ -292,10 +292,10 @@ describe("PlanReviewPanel", () => {
 
   describe("original prompt display", () => {
     test("renders collapsible Original Prompt section", () => {
-      const { getByText } = renderWithUser(
+      const { getByRole } = renderWithUser(
         <PlanReviewPanel {...defaultProps()} />
       );
-      expect(getByText("Original Prompt")).toBeInTheDocument();
+      expect(getByRole("button", { name: "Original Prompt" })).toBeInTheDocument();
     });
 
     test("prompt section is collapsed by default", () => {
@@ -309,12 +309,12 @@ describe("PlanReviewPanel", () => {
 
     test("expands to show prompt content when clicked", async () => {
       const props = defaultProps();
-      const { getByText, user } = renderWithUser(
+      const { getByRole, getByText, user } = renderWithUser(
         <PlanReviewPanel {...props} />
       );
 
       // Click the "Original Prompt" button to expand
-      await user.click(getByText("Original Prompt"));
+      await user.click(getByRole("button", { name: "Original Prompt" }));
 
       // Now the prompt text should be visible
       expect(getByText(props.loop.config.prompt)).toBeInTheDocument();
@@ -322,16 +322,18 @@ describe("PlanReviewPanel", () => {
 
     test("collapses again when clicked a second time", async () => {
       const props = defaultProps();
-      const { getByText, queryByText, user } = renderWithUser(
+      const { getByRole, getByText, queryByText, user } = renderWithUser(
         <PlanReviewPanel {...props} />
       );
 
+      const button = getByRole("button", { name: "Original Prompt" });
+
       // Expand
-      await user.click(getByText("Original Prompt"));
+      await user.click(button);
       expect(getByText(props.loop.config.prompt)).toBeInTheDocument();
 
       // Collapse
-      await user.click(getByText("Original Prompt"));
+      await user.click(button);
       expect(queryByText(props.loop.config.prompt)).not.toBeInTheDocument();
     });
 
@@ -339,11 +341,11 @@ describe("PlanReviewPanel", () => {
       const loop = createLoopWithStatus("planning", {
         config: { prompt: "Build a REST API with authentication" },
       });
-      const { getByText, user } = renderWithUser(
+      const { getByRole, getByText, user } = renderWithUser(
         <PlanReviewPanel {...defaultProps({ loop })} />
       );
 
-      await user.click(getByText("Original Prompt"));
+      await user.click(getByRole("button", { name: "Original Prompt" }));
       expect(getByText("Build a REST API with authentication")).toBeInTheDocument();
     });
 
@@ -351,24 +353,24 @@ describe("PlanReviewPanel", () => {
       const loop = createLoopWithStatus("planning", {
         config: { prompt: "" },
       });
-      const { getByText, user } = renderWithUser(
+      const { getByRole, getByText, user } = renderWithUser(
         <PlanReviewPanel {...defaultProps({ loop })} />
       );
 
-      await user.click(getByText("Original Prompt"));
+      await user.click(getByRole("button", { name: "Original Prompt" }));
       expect(getByText("No prompt specified.")).toBeInTheDocument();
     });
 
     test("has correct aria-expanded attribute", async () => {
-      const { getByText, user } = renderWithUser(
+      const { getByRole, user } = renderWithUser(
         <PlanReviewPanel {...defaultProps()} />
       );
 
-      const button = getByText("Original Prompt").closest("button")!;
-      expect(button.getAttribute("aria-expanded")).toBe("false");
+      const button = getByRole("button", { name: "Original Prompt" });
+      expect(button).toHaveAttribute("aria-expanded", "false");
 
       await user.click(button);
-      expect(button.getAttribute("aria-expanded")).toBe("true");
+      expect(button).toHaveAttribute("aria-expanded", "true");
     });
   });
 

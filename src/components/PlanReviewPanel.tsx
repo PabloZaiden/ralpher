@@ -110,7 +110,7 @@ export function PlanReviewPanel({
           className="w-full flex items-center gap-2 px-4 py-3 text-left cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors rounded-lg"
           aria-expanded={promptExpanded}
         >
-          <span className="text-xs text-gray-500 dark:text-gray-400">{promptExpanded ? "\u25BC" : "\u25B6"}</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400" aria-hidden="true">{promptExpanded ? "\u25BC" : "\u25B6"}</span>
           <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Original Prompt</h3>
         </button>
         {promptExpanded && (
