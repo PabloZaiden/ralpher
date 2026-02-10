@@ -290,6 +290,90 @@ describe("PlanReviewPanel", () => {
     });
   });
 
+  describe("original prompt display", () => {
+    test("renders collapsible Original Prompt section", () => {
+      const { getByRole } = renderWithUser(
+        <PlanReviewPanel {...defaultProps()} />
+      );
+      expect(getByRole("button", { name: "Original Prompt" })).toBeInTheDocument();
+    });
+
+    test("prompt section is collapsed by default", () => {
+      const props = defaultProps();
+      const { queryByText } = renderWithUser(
+        <PlanReviewPanel {...props} />
+      );
+      // The prompt text should not be visible when collapsed
+      expect(queryByText(props.loop.config.prompt)).not.toBeInTheDocument();
+    });
+
+    test("expands to show prompt content when clicked", async () => {
+      const props = defaultProps();
+      const { getByRole, getByText, user } = renderWithUser(
+        <PlanReviewPanel {...props} />
+      );
+
+      // Click the "Original Prompt" button to expand
+      await user.click(getByRole("button", { name: "Original Prompt" }));
+
+      // Now the prompt text should be visible
+      expect(getByText(props.loop.config.prompt)).toBeInTheDocument();
+    });
+
+    test("collapses again when clicked a second time", async () => {
+      const props = defaultProps();
+      const { getByRole, getByText, queryByText, user } = renderWithUser(
+        <PlanReviewPanel {...props} />
+      );
+
+      const button = getByRole("button", { name: "Original Prompt" });
+
+      // Expand
+      await user.click(button);
+      expect(getByText(props.loop.config.prompt)).toBeInTheDocument();
+
+      // Collapse
+      await user.click(button);
+      expect(queryByText(props.loop.config.prompt)).not.toBeInTheDocument();
+    });
+
+    test("displays custom prompt from loop config", async () => {
+      const loop = createLoopWithStatus("planning", {
+        config: { prompt: "Build a REST API with authentication" },
+      });
+      const { getByRole, getByText, user } = renderWithUser(
+        <PlanReviewPanel {...defaultProps({ loop })} />
+      );
+
+      await user.click(getByRole("button", { name: "Original Prompt" }));
+      expect(getByText("Build a REST API with authentication")).toBeInTheDocument();
+    });
+
+    test("shows fallback text when prompt is empty", async () => {
+      const loop = createLoopWithStatus("planning", {
+        config: { prompt: "" },
+      });
+      const { getByRole, getByText, user } = renderWithUser(
+        <PlanReviewPanel {...defaultProps({ loop })} />
+      );
+
+      await user.click(getByRole("button", { name: "Original Prompt" }));
+      expect(getByText("No prompt specified.")).toBeInTheDocument();
+    });
+
+    test("has correct aria-expanded attribute", async () => {
+      const { getByRole, user } = renderWithUser(
+        <PlanReviewPanel {...defaultProps()} />
+      );
+
+      const button = getByRole("button", { name: "Original Prompt" });
+      expect(button).toHaveAttribute("aria-expanded", "false");
+
+      await user.click(button);
+      expect(button).toHaveAttribute("aria-expanded", "true");
+    });
+  });
+
   describe("activity log tab", () => {
     test("shows activity indicator dot when log has activity", () => {
       const { container } = renderWithUser(
