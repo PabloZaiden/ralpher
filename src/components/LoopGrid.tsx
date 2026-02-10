@@ -2,10 +2,11 @@
  * Main content area for the Dashboard — renders loops grouped by workspace and status.
  */
 
+import { useState } from "react";
 import type { Loop, Workspace } from "../types";
 import type { StatusGroups, StatusSectionKey, WorkspaceGroup } from "../hooks/useLoopGrouping";
 import { sectionConfig } from "../hooks/useLoopGrouping";
-import { CollapsibleSection } from "./common";
+import { CollapsibleSection, ConfirmModal } from "./common";
 import { LoopCard } from "./LoopCard";
 import { useToast } from "../hooks";
 
@@ -55,6 +56,8 @@ export function LoopGrid({
   onDeleteWorkspace,
 }: LoopGridProps) {
   const toast = useToast();
+  const [deleteWorkspace, setDeleteWorkspace] = useState<Workspace | null>(null);
+  const [deletingWorkspace, setDeletingWorkspace] = useState(false);
 
   /** Get LoopCard action props based on section type */
   function getLoopCardActions(sectionKey: StatusSectionKey, loopId: string): LoopCardActions {
@@ -229,14 +232,7 @@ export function LoopGrid({
                     <WorkspaceGearIcon />
                   </button>
                   <button
-                    onClick={async () => {
-                      if (confirm(`Delete workspace "${workspace.name}"?`)) {
-                        const result = await onDeleteWorkspace(workspace.id);
-                        if (!result.success) {
-                          toast.error(result.error || "Failed to delete workspace");
-                        }
-                      }
-                    }}
+                    onClick={() => setDeleteWorkspace(workspace)}
                     className="p-1 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
                     title="Delete empty workspace"
                   >
@@ -249,6 +245,30 @@ export function LoopGrid({
           </div>
         </div>
       )}
+
+      {/* Workspace deletion confirmation modal */}
+      <ConfirmModal
+        isOpen={deleteWorkspace !== null}
+        onClose={() => setDeleteWorkspace(null)}
+        onConfirm={async () => {
+          if (!deleteWorkspace) return;
+          setDeletingWorkspace(true);
+          try {
+            const result = await onDeleteWorkspace(deleteWorkspace.id);
+            if (!result.success) {
+              toast.error(result.error || "Failed to delete workspace");
+            }
+          } finally {
+            setDeletingWorkspace(false);
+            setDeleteWorkspace(null);
+          }
+        }}
+        title="Delete Workspace"
+        message={`Are you sure you want to delete workspace "${deleteWorkspace?.name ?? ""}"?`}
+        confirmLabel="Delete"
+        loading={deletingWorkspace}
+        variant="danger"
+      />
     </main>
   );
 }

@@ -48,6 +48,7 @@ export interface EventStreamOptions {
    * Maximum number of items to buffer before dropping oldest items.
    * When the buffer exceeds this limit, the oldest items are evicted
    * to make room for new ones. Defaults to 10,000.
+   * Values less than 1 are clamped to 1; non-integer values are floored.
    */
   maxBufferSize?: number;
 }
@@ -64,7 +65,7 @@ export function createEventStream<T>(options?: EventStreamOptions): {
   end: () => void;
   fail: (error: Error) => void;
 } {
-  const maxBufferSize = options?.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE;
+  const maxBufferSize = Math.max(1, Math.floor(options?.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE));
   const items: T[] = [];
   const waiters: Array<{
     resolve: (value: T | null) => void;

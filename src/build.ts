@@ -51,7 +51,13 @@ await Bun.$`mkdir -p ${finalOutDir}`.quiet();
 
 log.info('Copying built file to dist directory...');
 const destName = target ? `ralpher-${target.replace('bun-', '')}` : 'ralpher';
-await Bun.write(`${finalOutDir}/${destName}`, Bun.file(outfile));
+const destPath = `${finalOutDir}/${destName}`;
+await Bun.write(destPath, Bun.file(outfile));
+
+// Mark the output binary as executable (skip for Windows targets)
+if (!target?.startsWith('bun-windows')) {
+  await Bun.$`chmod +x ${destPath}`.quiet();
+}
 
 log.info('Cleaning up temporary files...');
 await Bun.$`rm -rf ${outDir}`.quiet();

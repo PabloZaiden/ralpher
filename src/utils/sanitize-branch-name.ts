@@ -9,6 +9,7 @@
  * - Collapses multiple consecutive hyphens
  * - Removes leading and trailing hyphens
  * - Limits length to 40 characters
+ * - Trims any trailing hyphens introduced by truncation
  * - Returns "unnamed" if the result would be empty (e.g., input is all special characters)
  */
 export function sanitizeBranchName(name: string): string {
@@ -17,7 +18,8 @@ export function sanitizeBranchName(name: string): string {
     .replace(/[^a-z0-9-]/g, "-")  // Replace non-alphanumeric with -
     .replace(/-+/g, "-")          // Collapse multiple hyphens
     .replace(/^-|-$/g, "")        // Trim leading/trailing hyphens
-    .slice(0, 40);                // Limit length
+    .slice(0, 40)                 // Limit length
+    .replace(/^-|-$/g, "");       // Trim again after truncation
 
   return sanitized || "unnamed";
 }

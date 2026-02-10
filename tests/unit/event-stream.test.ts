@@ -349,5 +349,43 @@ describe("createEventStream", () => {
       expect(results.length).toBeLessThanOrEqual(5);
       expect(results[results.length - 1]).toBe(7);
     });
+
+    test("maxBufferSize of 0 is clamped to 1", async () => {
+      const { stream, push, end } = createEventStream<string>({ maxBufferSize: 0 });
+      push("a");
+      push("b");
+      push("c");
+      // Clamped to 1, so only the most recent item survives
+      expect(await stream.next()).toBe("c");
+      end();
+      expect(await stream.next()).toBeNull();
+    });
+
+    test("negative maxBufferSize is clamped to 1", async () => {
+      const { stream, push, end } = createEventStream<string>({ maxBufferSize: -5 });
+      push("a");
+      push("b");
+      // Clamped to 1, so only "b" survives
+      expect(await stream.next()).toBe("b");
+      end();
+      expect(await stream.next()).toBeNull();
+    });
+
+    test("fractional maxBufferSize is floored", async () => {
+      const { stream, push, end } = createEventStream<number>({ maxBufferSize: 2.9 });
+      // Floored to 2
+      push(1);
+      push(2);
+      push(3);
+      // Buffer holds max 2, so item 1 is evicted
+      end();
+      const results: number[] = [];
+      let item = await stream.next();
+      while (item !== null) {
+        results.push(item);
+        item = await stream.next();
+      }
+      expect(results).toEqual([2, 3]);
+    });
   });
 });

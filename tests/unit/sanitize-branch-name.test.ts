@@ -87,6 +87,23 @@ describe("sanitizeBranchName", () => {
     expect(sanitizeBranchName(longName).length).toBe(40);
   });
 
+  test("trims trailing hyphen introduced by truncation", () => {
+    // 39 a's + space + "b..." => after sanitization becomes "aaa...a-b..."
+    // Truncation at 40 chars lands right after the hyphen separator
+    const name = "a".repeat(39) + " bbbbb";
+    const result = sanitizeBranchName(name);
+    expect(result).not.toMatch(/-$/);
+    expect(result).toBe("a".repeat(39));
+  });
+
+  test("trims leading hyphen introduced by truncation edge case", () => {
+    // This shouldn't happen with normal input since leading hyphens are trimmed
+    // before truncation, but ensures robustness
+    const result = sanitizeBranchName("a".repeat(40) + "-tail");
+    expect(result).not.toMatch(/^-/);
+    expect(result).not.toMatch(/-$/);
+  });
+
   test("preserves names under 40 characters", () => {
     const shortName = "short-name";
     expect(sanitizeBranchName(shortName)).toBe("short-name");
