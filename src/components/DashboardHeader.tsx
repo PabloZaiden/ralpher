@@ -3,11 +3,14 @@
  */
 
 import type { WebSocketConnectionStatus } from "../hooks/useWebSocket";
-import { Button } from "./common";
+import type { DashboardViewMode } from "../hooks/useViewModePreference";
+import { Button, GridIcon, ListIcon } from "./common";
 
 export interface DashboardHeaderProps {
   version: string | null;
   connectionStatus: WebSocketConnectionStatus;
+  viewMode: DashboardViewMode;
+  onToggleViewMode: () => void;
   onOpenServerSettings: () => void;
   onOpenCreateWorkspace: () => void;
   onOpenCreateLoop: () => void;
@@ -16,6 +19,8 @@ export interface DashboardHeaderProps {
 export function DashboardHeader({
   version,
   connectionStatus,
+  viewMode,
+  onToggleViewMode,
   onOpenServerSettings,
   onOpenCreateWorkspace,
   onOpenCreateLoop,
@@ -45,6 +50,35 @@ export function DashboardHeader({
             </button>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {/* View mode toggle */}
+            <div className="flex items-center rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <button
+                type="button"
+                onClick={viewMode === "rows" ? undefined : onToggleViewMode}
+                className={`p-1.5 sm:p-2 transition-colors ${
+                  viewMode === "rows"
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                    : "bg-white text-gray-500 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                }`}
+                title="Row view"
+                aria-label="Switch to row view"
+              >
+                <ListIcon size="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={viewMode === "cards" ? undefined : onToggleViewMode}
+                className={`p-1.5 sm:p-2 transition-colors ${
+                  viewMode === "cards"
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                    : "bg-white text-gray-500 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                }`}
+                title="Card view"
+                aria-label="Switch to card view"
+              >
+                <GridIcon size="h-4 w-4" />
+              </button>
+            </div>
             {/* WebSocket Status indicator - Ralpher connection */}
             <div className="flex items-center gap-2 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-gray-100 dark:bg-gray-800">
               <span className="text-gray-500 dark:text-gray-400 font-medium hidden sm:inline">Ralpher:</span>

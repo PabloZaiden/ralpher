@@ -46,4 +46,5 @@ export {
   SetLastDirectoryRequestSchema,
   SetMarkdownRenderingRequestSchema,
   SetLogLevelRequestSchema,
+  SetDashboardViewModeRequestSchema,
 } from "./preferences";

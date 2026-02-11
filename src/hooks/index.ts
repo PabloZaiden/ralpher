@@ -15,6 +15,7 @@ export { useToast, type ToastContextValue, type Toast, type ToastType, type Toas
 export { useLoopGrouping, groupLoopsByStatus, sectionConfig, type StatusGroups, type StatusSectionKey, type SectionConfig, type WorkspaceGroup, type UseLoopGroupingResult } from "./useLoopGrouping";
 export { useDashboardModals, type ModalState, type UncommittedModalState, type UseDashboardModalsResult } from "./useDashboardModals";
 export { useDashboardData, type UseDashboardDataResult } from "./useDashboardData";
+export { useViewModePreference, type UseViewModePreferenceResult, type DashboardViewMode } from "./useViewModePreference";
 
 // Shared loop action API functions
 export {
