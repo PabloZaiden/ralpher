@@ -102,9 +102,6 @@ export function LoopCard({
             )}
           </div>
         </div>
-        <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
-          {config.directory}
-        </p>
         {state.reviewMode && state.reviewMode.reviewCycles > 0 && (
           <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
             Review Cycle: {state.reviewMode.reviewCycles}
@@ -154,8 +151,6 @@ export function LoopCard({
           )}
         </div>
       )}
-
-
     </Card>
   );
 }

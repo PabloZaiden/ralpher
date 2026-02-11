@@ -52,7 +52,7 @@ export function LoopRow({
     >
       <div className="px-4 py-3">
         {/* Desktop layout: single row with all info */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
           {/* Status indicator dot + Name + Rename */}
           <div className="flex items-center gap-2 sm:min-w-0 sm:flex-1">
             {/* Status dot */}
@@ -113,7 +113,7 @@ export function LoopRow({
             )}
           </div>
 
-          {/* Meta info - iterations, last activity, branch */}
+          {/* Meta info - iterations, last activity */}
           {!isDraft && (
             <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
               <span title="Iterations">
@@ -126,25 +126,10 @@ export function LoopRow({
               <span title="Last activity">
                 {formatRelativeTime(state.lastActivityAt)}
               </span>
-              {state.git && (
-                <span className="font-mono text-xs" title={`Branch: ${state.git.workingBranch}`}>
-                  {state.git.workingBranch}
-                  {state.git.commits.length > 0 && (
-                    <span className="ml-1 text-gray-400 dark:text-gray-500">
-                      ({state.git.commits.length}c)
-                    </span>
-                  )}
-                </span>
-              )}
             </div>
           )}
 
 
-        </div>
-
-        {/* Directory path - shown below on its own line, no truncation */}
-        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 break-all">
-          {config.directory}
         </div>
 
         {/* Error display */}
