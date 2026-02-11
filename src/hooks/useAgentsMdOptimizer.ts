@@ -44,6 +44,29 @@ export interface UseAgentsMdOptimizerResult {
 }
 
 /**
+ * Format error messages from the AGENTS.md optimizer API to be user-friendly.
+ * Connection failures from getCommandExecutorAsync() can produce verbose error
+ * messages -- this simplifies them for display.
+ */
+function formatOptimizerError(rawMessage: string): string {
+  const lower = rawMessage.toLowerCase();
+  if (lower.includes("econnrefused") || lower.includes("connect error") || lower.includes("connection refused")) {
+    return "Could not connect to the server. Check your connection settings and try again.";
+  }
+  if (lower.includes("not connected") || lower.includes("call connect() first")) {
+    return "Server connection not available. The connection will be established on-demand when retried.";
+  }
+  if (lower.includes("timeout") || lower.includes("timed out")) {
+    return "Connection timed out. The server may be unreachable or slow to respond.";
+  }
+  if (lower.includes("workspace not found")) {
+    return "Workspace not found. It may have been deleted.";
+  }
+  // Strip "Error: " prefix if present for cleaner display
+  return rawMessage.replace(/^Error:\s*/i, "");
+}
+
+/**
  * Hook for managing AGENTS.md optimization for a workspace.
  */
 export function useAgentsMdOptimizer(): UseAgentsMdOptimizerResult {
@@ -65,7 +88,9 @@ export function useAgentsMdOptimizer(): UseAgentsMdOptimizerResult {
       setStatus(data);
       return data;
     } catch (err) {
-      const message = String(err);
+      const rawMessage = String(err);
+      // Provide user-friendly messages for common connection errors
+      const message = formatOptimizerError(rawMessage);
       setError(message);
       log.error("Failed to fetch AGENTS.md status:", err);
       return null;
@@ -129,7 +154,8 @@ export function useAgentsMdOptimizer(): UseAgentsMdOptimizerResult {
       }
       return data;
     } catch (err) {
-      const message = String(err);
+      const rawMessage = String(err);
+      const message = formatOptimizerError(rawMessage);
       setError(message);
       log.error("Failed to optimize AGENTS.md:", err);
       return null;
