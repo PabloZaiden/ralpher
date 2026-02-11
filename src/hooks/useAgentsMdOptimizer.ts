@@ -120,7 +120,9 @@ export function useAgentsMdOptimizer(): UseAgentsMdOptimizerResult {
       });
       return data;
     } catch (err) {
-      const message = String(err);
+      const rawMessage = String(err);
+      // Apply the same user-friendly formatting as fetchStatus and optimize
+      const message = formatOptimizerError(rawMessage);
       setError(message);
       log.error("Failed to preview AGENTS.md optimization:", err);
       return null;
