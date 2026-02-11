@@ -1,13 +1,11 @@
 /**
- * Dashboard header component with title, settings, connection status, and action buttons.
+ * Dashboard header component with title, settings, and action buttons.
  */
 
-import type { WebSocketConnectionStatus } from "../hooks/useWebSocket";
 import { Button } from "./common";
 
 export interface DashboardHeaderProps {
   version: string | null;
-  connectionStatus: WebSocketConnectionStatus;
   onOpenServerSettings: () => void;
   onOpenCreateWorkspace: () => void;
   onOpenCreateLoop: () => void;
@@ -15,7 +13,6 @@ export interface DashboardHeaderProps {
 
 export function DashboardHeader({
   version,
-  connectionStatus,
   onOpenServerSettings,
   onOpenCreateWorkspace,
   onOpenCreateLoop,
@@ -45,26 +42,6 @@ export function DashboardHeader({
             </button>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* WebSocket Status indicator - Ralpher connection */}
-            <div className="flex items-center gap-2 text-xs sm:text-sm px-2 sm:px-3 py-1 sm:py-1.5 rounded-md bg-gray-100 dark:bg-gray-800">
-              <span className="text-gray-500 dark:text-gray-400 font-medium hidden sm:inline">Ralpher:</span>
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  connectionStatus === "open"
-                    ? "bg-green-500"
-                    : connectionStatus === "connecting"
-                    ? "bg-yellow-500"
-                    : "bg-red-500"
-                }`}
-              />
-              <span className="text-gray-700 dark:text-gray-300">
-                {connectionStatus === "open"
-                  ? "Connected"
-                  : connectionStatus === "connecting"
-                  ? "Connecting..."
-                  : "Disconnected"}
-              </span>
-            </div>
             <Button
               variant="secondary"
               onClick={onOpenCreateWorkspace}
