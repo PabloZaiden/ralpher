@@ -24,14 +24,6 @@ export interface UseDashboardModalsResult {
   setShowCreateModal: (show: boolean) => void;
   editDraftId: string | null;
   setEditDraftId: (id: string | null) => void;
-  deleteModal: ModalState;
-  setDeleteModal: (state: ModalState) => void;
-  acceptModal: ModalState;
-  setAcceptModal: (state: ModalState) => void;
-  purgeModal: ModalState;
-  setPurgeModal: (state: ModalState) => void;
-  addressCommentsModal: ModalState;
-  setAddressCommentsModal: (state: ModalState) => void;
   uncommittedModal: UncommittedModalState;
   setUncommittedModal: (state: UncommittedModalState) => void;
   renameModal: ModalState;
@@ -57,10 +49,6 @@ export function useDashboardModals(
 ): UseDashboardModalsResult {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editDraftId, setEditDraftId] = useState<string | null>(null);
-  const [deleteModal, setDeleteModal] = useState<ModalState>({ open: false, loopId: null });
-  const [acceptModal, setAcceptModal] = useState<ModalState>({ open: false, loopId: null });
-  const [purgeModal, setPurgeModal] = useState<ModalState>({ open: false, loopId: null });
-  const [addressCommentsModal, setAddressCommentsModal] = useState<ModalState>({ open: false, loopId: null });
   const [uncommittedModal, setUncommittedModal] = useState<UncommittedModalState>({
     open: false,
     loopId: null,
@@ -91,14 +79,6 @@ export function useDashboardModals(
     setShowCreateModal,
     editDraftId,
     setEditDraftId,
-    deleteModal,
-    setDeleteModal,
-    acceptModal,
-    setAcceptModal,
-    purgeModal,
-    setPurgeModal,
-    addressCommentsModal,
-    setAddressCommentsModal,
     uncommittedModal,
     setUncommittedModal,
     renameModal,

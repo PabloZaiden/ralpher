@@ -254,84 +254,27 @@ describe("LoopCard", () => {
   });
 
   describe("action buttons - draft", () => {
-    test("shows Edit button for draft loops", () => {
-      const loop = createLoopWithStatus("draft" as any);
-      const onClick = mock();
-      const { getByRole } = renderWithUser(
-        <LoopCard loop={loop} onClick={onClick} />
-      );
-      expect(getByRole("button", { name: "Edit" })).toBeInTheDocument();
-    });
-
-    test("Edit button calls onClick with stopPropagation", async () => {
-      const loop = createLoopWithStatus("draft" as any);
-      const onClick = mock();
-      const { getByRole, user } = renderWithUser(
-        <LoopCard loop={loop} onClick={onClick} />
-      );
-      await user.click(getByRole("button", { name: "Edit" }));
-      expect(onClick).toHaveBeenCalled();
-    });
-
-    test("shows Delete button for draft loops when onDelete provided", () => {
-      const loop = createLoopWithStatus("draft" as any);
-      const { getByRole } = renderWithUser(
-        <LoopCard loop={loop} onDelete={mock()} />
-      );
-      expect(getByRole("button", { name: "Delete" })).toBeInTheDocument();
-    });
-
-    test("hides Delete button for draft loops when onDelete not provided", () => {
+    test("draft loop does not show Edit button (actions moved to detail view)", () => {
       const loop = createLoopWithStatus("draft" as any);
       const { queryByRole } = renderWithUser(<LoopCard loop={loop} />);
-      expect(queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
-    });
-  });
-
-  describe("action buttons - planning", () => {
-    test("shows Review Plan button for planning loops", () => {
-      const loop = createLoopWithStatus("planning");
-      const { getByRole } = renderWithUser(
-        <LoopCard loop={loop} onClick={mock()} />
-      );
-      expect(getByRole("button", { name: "Review Plan" })).toBeInTheDocument();
+      expect(queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     });
 
-    test("Review Plan button calls onClick", async () => {
-      const loop = createLoopWithStatus("planning");
+    test("draft loop card invokes onClick when clicked", async () => {
+      const loop = createLoopWithStatus("draft" as any, {
+        config: { name: "Draft Loop" },
+      });
       const onClick = mock();
-      const { getByRole, user } = renderWithUser(
+      const { getByText, user } = renderWithUser(
         <LoopCard loop={loop} onClick={onClick} />
       );
-      await user.click(getByRole("button", { name: "Review Plan" }));
-      expect(onClick).toHaveBeenCalled();
+      await user.click(getByText("Draft Loop"));
+      expect(onClick).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe("action buttons - completed/acceptable", () => {
-    test("shows Accept button for completed loops with git state", () => {
-      const loop = createLoopWithStatus("completed", {
-        state: { git: createGitState() },
-      });
-      const { getByRole } = renderWithUser(
-        <LoopCard loop={loop} onAccept={mock()} />
-      );
-      expect(getByRole("button", { name: "Accept" })).toBeInTheDocument();
-    });
-
-    test("Accept button calls onAccept", async () => {
-      const loop = createLoopWithStatus("completed", {
-        state: { git: createGitState() },
-      });
-      const onAccept = mock();
-      const { getByRole, user } = renderWithUser(
-        <LoopCard loop={loop} onAccept={onAccept} />
-      );
-      await user.click(getByRole("button", { name: "Accept" }));
-      expect(onAccept).toHaveBeenCalled();
-    });
-
-    test("hides Accept button when onAccept not provided", () => {
+  describe("no action buttons on dashboard cards", () => {
+    test("completed loop does not show Accept button", () => {
       const loop = createLoopWithStatus("completed", {
         state: { git: createGitState() },
       });
@@ -339,53 +282,25 @@ describe("LoopCard", () => {
       expect(queryByRole("button", { name: "Accept" })).not.toBeInTheDocument();
     });
 
-    test("shows Delete button for completed loops", () => {
+    test("completed loop does not show Delete button", () => {
       const loop = createLoopWithStatus("completed");
-      const { getByRole } = renderWithUser(
-        <LoopCard loop={loop} onDelete={mock()} />
-      );
-      expect(getByRole("button", { name: "Delete" })).toBeInTheDocument();
+      const { queryByRole } = renderWithUser(<LoopCard loop={loop} />);
+      expect(queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     });
 
-    test("Delete button calls onDelete", async () => {
-      const loop = createLoopWithStatus("completed");
-      const onDelete = mock();
-      const { getByRole, user } = renderWithUser(
-        <LoopCard loop={loop} onDelete={onDelete} />
-      );
-      await user.click(getByRole("button", { name: "Delete" }));
-      expect(onDelete).toHaveBeenCalled();
-    });
-  });
-
-  describe("action buttons - final state", () => {
-    test("shows Purge button for merged loops", () => {
+    test("merged loop does not show Purge button", () => {
       const loop = createLoopWithStatus("merged");
-      const { getByRole } = renderWithUser(
-        <LoopCard loop={loop} onPurge={mock()} />
-      );
-      expect(getByRole("button", { name: "Purge" })).toBeInTheDocument();
+      const { queryByRole } = renderWithUser(<LoopCard loop={loop} />);
+      expect(queryByRole("button", { name: "Purge" })).not.toBeInTheDocument();
     });
 
-    test("Purge button calls onPurge", async () => {
-      const loop = createLoopWithStatus("merged");
-      const onPurge = mock();
-      const { getByRole, user } = renderWithUser(
-        <LoopCard loop={loop} onPurge={onPurge} />
-      );
-      await user.click(getByRole("button", { name: "Purge" }));
-      expect(onPurge).toHaveBeenCalled();
+    test("planning loop does not show Review Plan button", () => {
+      const loop = createLoopWithStatus("planning");
+      const { queryByRole } = renderWithUser(<LoopCard loop={loop} />);
+      expect(queryByRole("button", { name: "Review Plan" })).not.toBeInTheDocument();
     });
 
-    test("shows Purge button for deleted loops", () => {
-      const loop = createLoopWithStatus("deleted");
-      const { getByRole } = renderWithUser(
-        <LoopCard loop={loop} onPurge={mock()} />
-      );
-      expect(getByRole("button", { name: "Purge" })).toBeInTheDocument();
-    });
-
-    test("shows Address Comments button for addressable pushed loops", () => {
+    test("addressable pushed loop does not show Address Comments button", () => {
       const loop = createLoopWithStatus("pushed", {
         state: {
           reviewMode: {
@@ -396,45 +311,7 @@ describe("LoopCard", () => {
           },
         },
       });
-      const { getByRole } = renderWithUser(
-        <LoopCard loop={loop} onAddressComments={mock()} />
-      );
-      expect(getByRole("button", { name: "Address Comments" })).toBeInTheDocument();
-    });
-
-    test("Address Comments button calls onAddressComments", async () => {
-      const loop = createLoopWithStatus("pushed", {
-        state: {
-          reviewMode: {
-            addressable: true,
-            completionAction: "push",
-            reviewCycles: 1,
-            reviewBranches: [],
-          },
-        },
-      });
-      const onAddressComments = mock();
-      const { getByRole, user } = renderWithUser(
-        <LoopCard loop={loop} onAddressComments={onAddressComments} />
-      );
-      await user.click(getByRole("button", { name: "Address Comments" }));
-      expect(onAddressComments).toHaveBeenCalled();
-    });
-
-    test("hides Address Comments for deleted loops even if addressable", () => {
-      const loop = createLoopWithStatus("deleted", {
-        state: {
-          reviewMode: {
-            addressable: true,
-            completionAction: "push",
-            reviewCycles: 1,
-            reviewBranches: [],
-          },
-        },
-      });
-      const { queryByRole } = renderWithUser(
-        <LoopCard loop={loop} onAddressComments={mock()} />
-      );
+      const { queryByRole } = renderWithUser(<LoopCard loop={loop} />);
       expect(queryByRole("button", { name: "Address Comments" })).not.toBeInTheDocument();
     });
   });
@@ -466,13 +343,21 @@ describe("LoopCard", () => {
   });
 
   describe("card click", () => {
-    test("card is clickable when onClick provided", () => {
-      const loop = createLoop();
-      const { container } = renderWithUser(
-        <LoopCard loop={loop} onClick={mock()} />
+    test("clicking card invokes onClick handler", async () => {
+      const loop = createLoop({ config: { name: "Clickable Loop" } });
+      const onClick = mock();
+      const { getByText, user } = renderWithUser(
+        <LoopCard loop={loop} onClick={onClick} />
       );
-      const card = container.querySelector("[role='button'], .cursor-pointer");
-      expect(card).toBeInTheDocument();
+      await user.click(getByText("Clickable Loop"));
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    test("card does not have clickable styling when onClick not provided", () => {
+      const loop = createLoop({ config: { name: "Non-Clickable Loop" } });
+      const { container } = renderWithUser(<LoopCard loop={loop} />);
+      const clickableCard = container.querySelector(".cursor-pointer");
+      expect(clickableCard).not.toBeInTheDocument();
     });
   });
 });
