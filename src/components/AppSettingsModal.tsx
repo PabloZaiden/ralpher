@@ -52,6 +52,7 @@ export function AppSettingsModal({
   const [importResult, setImportResult] = useState<WorkspaceImportResult | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [dangerZoneExpanded, setDangerZoneExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Countdown timer: when the server is killed, count down and reload the page
@@ -76,6 +77,7 @@ export function AppSettingsModal({
     setImportResult(null);
     setImportError(null);
     setExportError(null);
+    setDangerZoneExpanded(false);
     onClose();
   }
 
@@ -299,133 +301,143 @@ export function AppSettingsModal({
         {(onResetAll || onKillServer) && (
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
             <div className="p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
-              <h3 className="text-sm font-medium text-red-800 dark:text-red-200 mb-4">
-                Danger Zone
-              </h3>
-              
-              {/* Reset All Settings */}
-              {onResetAll && (
-                <div className="mb-4">
-                  <p className="text-sm text-red-600 dark:text-red-400 mb-3">
-                    This will delete all loops, sessions, workspaces, and preferences. This action cannot be undone.
-                  </p>
-                  {!showResetConfirm ? (
-                    <Button
-                      type="button"
-                      variant="danger"
-                      size="sm"
-                      onClick={() => setShowResetConfirm(true)}
-                      disabled={resetting || killingServer}
-                    >
-                      Reset all settings
-                    </Button>
-                  ) : (
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-red-600 dark:text-red-400">Are you sure?</span>
-                      <Button
-                        type="button"
-                        variant="danger"
-                        size="sm"
-                        onClick={async () => {
-                          if (onResetAll) {
-                            const success = await onResetAll();
-                            if (success) {
-                              setShowResetConfirm(false);
-                              onClose();
-                              // Reload the page to get fresh state
-                              window.location.reload();
-                            }
-                          }
-                        }}
-                        loading={resetting}
-                      >
-                        Yes, delete everything
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setShowResetConfirm(false)}
-                        disabled={resetting}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => setDangerZoneExpanded((v) => !v)}
+                className="w-full flex items-center gap-2 text-sm font-medium text-red-800 dark:text-red-200 hover:text-red-900 dark:hover:text-red-100 transition-colors text-left cursor-pointer"
+                aria-expanded={dangerZoneExpanded}
+              >
+                <span className="text-xs">{dangerZoneExpanded ? "\u25BC" : "\u25B6"}</span>
+                <span>Danger Zone</span>
+              </button>
 
-              {/* Kill Server */}
-              {onKillServer && (
-                <div className={onResetAll ? "pt-4 border-t border-red-200 dark:border-red-800" : ""}>
-                  <p className="text-sm text-red-600 dark:text-red-400 mb-3">
-                    Terminate the server process. In containerized environments (k8s), this will restart the container.
-                  </p>
-                  {serverKilled ? (
-                    <div className="space-y-2">
-                      <div className="text-sm text-red-600 dark:text-red-400 font-medium">
-                        Server is shutting down... Reloading in {countdown}s
-                      </div>
-                      <div className="w-full h-1.5 bg-red-200 dark:bg-red-900 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-red-500 dark:bg-red-400 rounded-full transition-all duration-1000 ease-linear"
-                          style={{ width: `${progressPercent}%` }}
-                        />
-                      </div>
-                    </div>
-                  ) : !showKillConfirm ? (
-                    <Button
-                      type="button"
-                      variant="danger"
-                      size="sm"
-                      onClick={() => {
-                        setKillError(false);
-                        setShowKillConfirm(true);
-                      }}
-                      disabled={resetting || killingServer}
-                    >
-                      Kill server
-                    </Button>
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm text-red-600 dark:text-red-400">Are you sure?</span>
+              {dangerZoneExpanded && (
+                <div className="mt-4">
+                  {/* Reset All Settings */}
+                  {onResetAll && (
+                    <div className="mb-4">
+                      <p className="text-sm text-red-600 dark:text-red-400 mb-3">
+                        This will delete all loops, sessions, workspaces, and preferences. This action cannot be undone.
+                      </p>
+                      {!showResetConfirm ? (
                         <Button
                           type="button"
                           variant="danger"
                           size="sm"
-                          onClick={async () => {
-                            if (onKillServer) {
-                              setKillError(false);
-                              const success = await onKillServer();
-                              if (success) {
-                                setServerKilled(true);
-                                // Don't close the modal - let the user see the shutdown message
-                              } else {
-                                setKillError(true);
-                              }
-                            }
-                          }}
-                          loading={killingServer}
+                          onClick={() => setShowResetConfirm(true)}
+                          disabled={resetting || killingServer}
                         >
-                          Yes, kill server
+                          Reset all settings
                         </Button>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm text-red-600 dark:text-red-400">Are you sure?</span>
+                          <Button
+                            type="button"
+                            variant="danger"
+                            size="sm"
+                            onClick={async () => {
+                              if (onResetAll) {
+                                const success = await onResetAll();
+                                if (success) {
+                                  setShowResetConfirm(false);
+                                  onClose();
+                                  // Reload the page to get fresh state
+                                  window.location.reload();
+                                }
+                              }
+                            }}
+                            loading={resetting}
+                          >
+                            Yes, delete everything
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowResetConfirm(false)}
+                            disabled={resetting}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Kill Server */}
+                  {onKillServer && (
+                    <div className={onResetAll ? "pt-4 border-t border-red-200 dark:border-red-800" : ""}>
+                      <p className="text-sm text-red-600 dark:text-red-400 mb-3">
+                        Terminate the server process. In containerized environments (k8s), this will restart the container.
+                      </p>
+                      {serverKilled ? (
+                        <div className="space-y-2">
+                          <div className="text-sm text-red-600 dark:text-red-400 font-medium">
+                            Server is shutting down... Reloading in {countdown}s
+                          </div>
+                          <div className="w-full h-1.5 bg-red-200 dark:bg-red-900 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-red-500 dark:bg-red-400 rounded-full transition-all duration-1000 ease-linear"
+                              style={{ width: `${progressPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      ) : !showKillConfirm ? (
                         <Button
                           type="button"
-                          variant="ghost"
+                          variant="danger"
                           size="sm"
                           onClick={() => {
-                            setShowKillConfirm(false);
                             setKillError(false);
+                            setShowKillConfirm(true);
                           }}
-                          disabled={killingServer}
+                          disabled={resetting || killingServer}
                         >
-                          Cancel
+                          Kill server
                         </Button>
-                      </div>
-                      {killError && (
-                        <div className="text-sm text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 rounded px-2 py-1">
-                          Failed to kill server. Please try again.
+                      ) : (
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-red-600 dark:text-red-400">Are you sure?</span>
+                            <Button
+                              type="button"
+                              variant="danger"
+                              size="sm"
+                              onClick={async () => {
+                                if (onKillServer) {
+                                  setKillError(false);
+                                  const success = await onKillServer();
+                                  if (success) {
+                                    setServerKilled(true);
+                                    // Don't close the modal - let the user see the shutdown message
+                                  } else {
+                                    setKillError(true);
+                                  }
+                                }
+                              }}
+                              loading={killingServer}
+                            >
+                              Yes, kill server
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setShowKillConfirm(false);
+                                setKillError(false);
+                              }}
+                              disabled={killingServer}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                          {killError && (
+                            <div className="text-sm text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/30 rounded px-2 py-1">
+                              Failed to kill server. Please try again.
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
