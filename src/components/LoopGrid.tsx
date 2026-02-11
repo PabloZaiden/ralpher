@@ -6,7 +6,7 @@
 import { useState } from "react";
 import type { Loop, Workspace } from "../types";
 import type { StatusGroups, StatusSectionKey, WorkspaceGroup } from "../hooks/useLoopGrouping";
-import type { DashboardViewMode } from "../hooks/useViewModePreference";
+import type { DashboardViewMode } from "../types/preferences";
 import { sectionConfig } from "../hooks/useLoopGrouping";
 import { CollapsibleSection, ConfirmModal } from "./common";
 import { LoopCard } from "./LoopCard";

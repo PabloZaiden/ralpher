@@ -13,13 +13,14 @@
 
 import { getDatabase } from "./database";
 import { createLogger } from "../core/logger";
+import type { DashboardViewMode } from "../types/preferences";
 
 const log = createLogger("persistence:preferences");
 
 /**
- * Valid dashboard view modes.
+ * Re-export DashboardViewMode so existing consumers of this module don't break.
  */
-export type DashboardViewMode = "rows" | "cards";
+export type { DashboardViewMode } from "../types/preferences";
 
 /**
  * Valid dashboard view mode values for validation.

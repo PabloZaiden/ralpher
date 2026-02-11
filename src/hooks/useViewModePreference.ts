@@ -4,9 +4,12 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { DashboardViewMode } from "../types/preferences";
 
-/** Dashboard view mode type */
-export type DashboardViewMode = "rows" | "cards";
+/**
+ * Re-export DashboardViewMode so existing consumers of this module don't break.
+ */
+export type { DashboardViewMode } from "../types/preferences";
 
 export interface UseViewModePreferenceResult {
   /** Current view mode */

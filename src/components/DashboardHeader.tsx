@@ -2,7 +2,7 @@
  * Dashboard header component with title, settings, and action buttons.
  */
 
-import type { DashboardViewMode } from "../hooks/useViewModePreference";
+import type { DashboardViewMode } from "../types/preferences";
 import { Button, GridIcon, ListIcon } from "./common";
 
 export interface DashboardHeaderProps {
