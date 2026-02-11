@@ -10,6 +10,9 @@ import { useMarkdownPreference, useLogLevelPreference, useCountdownReload } from
 import type { LogLevelName } from "../lib/logger";
 import type { WorkspaceExportData, WorkspaceImportResult } from "../types/workspace";
 
+/** The exact phrase the user must type to confirm a full reset. */
+const RESET_CONFIRMATION_PHRASE = "EXECUTE ORDER 66";
+
 export interface AppSettingsModalProps {
   /** Whether the modal is open */
   isOpen: boolean;
@@ -363,6 +366,7 @@ export function AppSettingsModal({
                             variant="danger"
                             size="sm"
                             onClick={() => setShowResetTextConfirm(true)}
+                            disabled={resetting || killingServer}
                           >
                             Yes, delete everything
                           </Button>
@@ -371,6 +375,7 @@ export function AppSettingsModal({
                             variant="ghost"
                             size="sm"
                             onClick={() => setShowResetConfirm(false)}
+                            disabled={resetting || killingServer}
                           >
                             Cancel
                           </Button>
@@ -385,7 +390,7 @@ export function AppSettingsModal({
                           <p className="text-sm text-red-600 dark:text-red-400">
                             To confirm, type{" "}
                             <code className="font-mono font-bold bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded text-red-800 dark:text-red-200">
-                              EXECUTE ORDER 66
+                              {RESET_CONFIRMATION_PHRASE}
                             </code>
                             {" "}below.
                           </p>
@@ -395,16 +400,17 @@ export function AppSettingsModal({
                             value={resetConfirmText}
                             onChange={(e) => setResetConfirmText(e.target.value)}
                             placeholder="Type here to confirm"
-                            className="block w-full rounded-md border-red-300 dark:border-red-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2"
+                            className="block w-full rounded-md border-red-300 dark:border-red-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2 disabled:opacity-50"
                             autoComplete="off"
                             spellCheck={false}
+                            disabled={resetting || killingServer}
                           />
                           <div className="flex items-center gap-3">
                             <Button
                               type="button"
                               variant="danger"
                               size="sm"
-                              disabled={resetConfirmText !== "EXECUTE ORDER 66" || resetting}
+                              disabled={resetConfirmText !== RESET_CONFIRMATION_PHRASE || resetting || killingServer}
                               onClick={async () => {
                                 if (onResetAll) {
                                   const success = await onResetAll();
@@ -431,7 +437,7 @@ export function AppSettingsModal({
                                 setShowResetTextConfirm(false);
                                 setResetConfirmText("");
                               }}
-                              disabled={resetting}
+                              disabled={resetting || killingServer}
                             >
                               Cancel
                             </Button>
