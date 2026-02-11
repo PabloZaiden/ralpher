@@ -558,13 +558,14 @@ Follow the standard loop execution flow:
       timestamp: createTimestamp(),
     });
 
-    // Start the execution loop
-    try {
-      await engine.continueExecution();
-    } catch (error) {
+    // Start the execution loop (fire-and-forget, same pattern as engine.start()).
+    // This is a long-running process that runs AI iterations for minutes to hours.
+    // The engine has its own error handling via handleError() and emits error events.
+    // We must not await here — doing so would block the API response indefinitely,
+    // preventing the frontend from transitioning to the execution view.
+    engine.continueExecution().catch((error) => {
       log.error(`Loop ${loopId} execution after plan acceptance failed:`, String(error));
-      throw error;
-    }
+    });
   }
 
   /**
