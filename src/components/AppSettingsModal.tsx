@@ -4,9 +4,9 @@
  * Server settings have moved to per-workspace WorkspaceSettingsModal.
  */
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Modal, Button } from "./common";
-import { useMarkdownPreference, useLogLevelPreference } from "../hooks";
+import { useMarkdownPreference, useLogLevelPreference, useCountdownReload } from "../hooks";
 import type { LogLevelName } from "../lib/logger";
 import type { WorkspaceExportData, WorkspaceImportResult } from "../types/workspace";
 
@@ -53,6 +53,13 @@ export function AppSettingsModal({
   const [importError, setImportError] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Countdown timer: when the server is killed, count down and reload the page
+  const reloadPage = useCallback(() => {
+    window.location.reload();
+  }, []);
+
+  const { countdown, progressPercent } = useCountdownReload(serverKilled, reloadPage);
 
   // Markdown rendering preference
   const { enabled: markdownEnabled, toggle: toggleMarkdown, saving: savingMarkdown } = useMarkdownPreference();
@@ -355,8 +362,16 @@ export function AppSettingsModal({
                     Terminate the server process. In containerized environments (k8s), this will restart the container.
                   </p>
                   {serverKilled ? (
-                    <div className="text-sm text-red-600 dark:text-red-400 font-medium">
-                      Server is shutting down... Connection will be lost.
+                    <div className="space-y-2">
+                      <div className="text-sm text-red-600 dark:text-red-400 font-medium">
+                        Server is shutting down... Reloading in {countdown}s
+                      </div>
+                      <div className="w-full h-1.5 bg-red-200 dark:bg-red-900 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-red-500 dark:bg-red-400 rounded-full transition-all duration-1000 ease-linear"
+                          style={{ width: `${progressPercent}%` }}
+                        />
+                      </div>
                     </div>
                   ) : !showKillConfirm ? (
                     <Button
