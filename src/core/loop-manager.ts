@@ -73,8 +73,8 @@ export interface CreateLoopOptions {
 
 /**
  * Options for starting a loop.
- * Note: Previously supported handleUncommitted option has been removed.
- * Loops now fail to start if there are uncommitted changes.
+ * Loops use git worktrees for isolation, so uncommitted changes
+ * in the main repository do not affect loop execution.
  */
 export interface StartLoopOptions {
   // Reserved for future options
@@ -741,7 +741,8 @@ Follow the standard loop execution flow:
 
   /**
    * Start a loop.
-   * Fails with UNCOMMITTED_CHANGES error if the directory has uncommitted changes.
+   * Each loop operates in its own git worktree, so no uncommitted-changes
+   * checks are needed on the main repository checkout.
    */
   async startLoop(loopId: string, _options?: StartLoopOptions): Promise<void> {
     const loop = await loadLoop(loopId);
@@ -1560,10 +1561,12 @@ Follow the standard loop execution flow:
   }
 
   /**
-   * Mark a loop as merged (externally merged via PR).
-   * With worktrees, no checkout/reset operations are needed on the main repo.
+   * Handle an externally merged loop (e.g., merged via PR on GitHub).
+   * Transitions the loop to `deleted` status, clears reviewMode.addressable,
+   * and disconnects the backend. Despite the name, this does NOT set status
+   * to "merged" — it performs final cleanup by marking the loop as deleted.
    * The worktree and branch are preserved until purgeLoop() is called.
-   * 
+   *
    * Only works for loops in final states: pushed, merged, completed, max_iterations, deleted.
    */
   async markMerged(loopId: string): Promise<{ success: boolean; error?: string }> {
