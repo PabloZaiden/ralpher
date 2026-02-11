@@ -7,16 +7,20 @@ import { LOG_LEVELS, setLogLevel, getLogLevel, isLogLevelFromEnv, DEFAULT_LOG_LE
 
 describe("Logger", () => {
   const originalLogLevel = process.env["RALPHER_LOG_LEVEL"];
+  // Capture the actual log level before any test modifies it,
+  // so we can restore it and avoid polluting other test files in the same process.
+  const originalActiveLevel = getLogLevel();
 
   afterEach(() => {
-    // Restore original log level
+    // Restore original env var
     if (originalLogLevel === undefined) {
       delete process.env["RALPHER_LOG_LEVEL"];
     } else {
       process.env["RALPHER_LOG_LEVEL"] = originalLogLevel;
     }
-    // Reset logger to default level
-    setLogLevel(DEFAULT_LOG_LEVEL);
+    // Restore the log level that was active before tests ran
+    // (e.g., "fatal" when running under RALPHER_LOG_LEVEL=fatal)
+    setLogLevel(originalActiveLevel);
   });
 
   test("log module exports log instance", async () => {
