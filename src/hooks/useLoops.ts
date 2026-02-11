@@ -94,6 +94,10 @@ export function useLoops(): UseLoopsResult {
       case "loop.error":
       case "loop.iteration.start":
       case "loop.iteration.end":
+      case "loop.plan.accepted":
+      case "loop.plan.ready":
+      case "loop.plan.feedback":
+      case "loop.plan.discarded":
         // Refresh the specific loop to get updated state
         refreshLoop(event.loopId);
         break;
