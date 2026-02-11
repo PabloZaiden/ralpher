@@ -65,16 +65,19 @@ export function DashboardHeader({
                   : "Disconnected"}
               </span>
             </div>
-            <Button
-              variant="secondary"
-              onClick={onOpenCreateWorkspace}
-              className="flex-1 sm:flex-none"
-            >
-              New Workspace
-            </Button>
-            <Button onClick={onOpenCreateLoop} className="flex-1 sm:flex-none">
-              New Loop
-            </Button>
+            {/* Button group: always side-by-side, equal width on mobile */}
+            <div className="flex gap-2 flex-1 sm:flex-none">
+              <Button
+                variant="secondary"
+                onClick={onOpenCreateWorkspace}
+                className="flex-1 sm:flex-none whitespace-nowrap"
+              >
+                New Workspace
+              </Button>
+              <Button onClick={onOpenCreateLoop} className="flex-1 sm:flex-none whitespace-nowrap">
+                New Loop
+              </Button>
+            </div>
           </div>
         </div>
       </div>
