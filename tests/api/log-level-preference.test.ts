@@ -6,10 +6,15 @@ import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
+import { getLogLevel, setLogLevel } from "../../src/core/logger";
 
 let testDataDir: string;
 
 describe("Log Level Preference API", () => {
+  // Capture the log level before any test modifies it,
+  // so we can restore it and avoid polluting other test files in the same process.
+  const originalActiveLevel = getLogLevel();
+
   beforeEach(async () => {
     // Create a temp directory for each test
     testDataDir = await mkdtemp(join(tmpdir(), "ralpher-test-"));
@@ -21,6 +26,10 @@ describe("Log Level Preference API", () => {
   });
 
   afterEach(async () => {
+    // Restore the log level that was active before tests ran
+    // (e.g., "fatal" when running under RALPHER_LOG_LEVEL=fatal)
+    setLogLevel(originalActiveLevel);
+
     // Close the database before cleaning up
     const { closeDatabase } = await import("../../src/persistence/database");
     closeDatabase();
