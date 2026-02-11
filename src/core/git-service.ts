@@ -5,6 +5,7 @@
  */
 
 import type { CommandExecutor } from "./command-executor";
+import { realpath } from "node:fs/promises";
 import { log } from "./logger";
 
 /**
@@ -1395,7 +1396,16 @@ export class GitService {
     worktreePath: string
   ): Promise<boolean> {
     const worktrees = await this.listWorktrees(repoDirectory);
-    return worktrees.some(wt => wt.path === worktreePath);
+    // Resolve symlinks in the worktree path before comparing, because
+    // git resolves symlinks in its output (e.g., macOS /var → /private/var).
+    let resolvedPath: string;
+    try {
+      resolvedPath = await realpath(worktreePath);
+    } catch {
+      // If the path doesn't exist, it can't be a worktree
+      return false;
+    }
+    return worktrees.some(wt => wt.path === resolvedPath);
   }
 
   /**
