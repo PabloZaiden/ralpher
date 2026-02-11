@@ -33,8 +33,6 @@ export interface UseLoopsResult {
   loading: boolean;
   /** Error message if any */
   error: string | null;
-  /** WebSocket connection status */
-  connectionStatus: "connecting" | "open" | "closed" | "error";
   /** Refresh loops from the server */
   refresh: () => Promise<void>;
   /** Create a new loop (loops are always started immediately) */
@@ -69,7 +67,7 @@ export function useLoops(): UseLoopsResult {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // WebSocket connection for real-time updates
-  const { status: connectionStatus } = useGlobalEvents<LoopEvent>({
+  useGlobalEvents<LoopEvent>({
     onEvent: handleEvent,
   });
 
@@ -94,6 +92,10 @@ export function useLoops(): UseLoopsResult {
       case "loop.error":
       case "loop.iteration.start":
       case "loop.iteration.end":
+      case "loop.plan.accepted":
+      case "loop.plan.ready":
+      case "loop.plan.feedback":
+      case "loop.plan.discarded":
         // Refresh the specific loop to get updated state
         refreshLoop(event.loopId);
         break;
@@ -306,7 +308,6 @@ export function useLoops(): UseLoopsResult {
     loops,
     loading,
     error,
-    connectionStatus,
     refresh,
     createLoop,
     updateLoop,
