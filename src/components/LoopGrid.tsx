@@ -32,8 +32,8 @@ export interface LoopGridProps {
   onDeleteWorkspace: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
-/** Explicit action props type for LoopCard */
-interface LoopCardActions {
+/** Explicit action props type for loop summary components (LoopCard/LoopRow) */
+interface LoopActions {
   onClick?: () => void;
   onAccept?: () => void;
   onDelete?: () => void;
@@ -65,8 +65,8 @@ export function LoopGrid({
   const [deletingWorkspace, setDeletingWorkspace] = useState(false);
 
   /** Get LoopCard action props based on section type */
-  function getLoopCardActions(sectionKey: StatusSectionKey, loopId: string): LoopCardActions {
-    const actions: LoopCardActions = {
+  function getLoopActions(sectionKey: StatusSectionKey, loopId: string): LoopActions {
+    const actions: LoopActions = {
       onRename: () => onRename(loopId),
     };
 
@@ -123,7 +123,7 @@ export function LoopGrid({
                 <LoopRow
                   key={loop.config.id}
                   loop={loop}
-                  {...getLoopCardActions(key, loop.config.id)}
+                  {...getLoopActions(key, loop.config.id)}
                 />
               ))}
             </div>
@@ -133,7 +133,7 @@ export function LoopGrid({
                 <LoopCard
                   key={loop.config.id}
                   loop={loop}
-                  {...getLoopCardActions(key, loop.config.id)}
+                  {...getLoopActions(key, loop.config.id)}
                 />
               ))}
             </div>

@@ -3,7 +3,7 @@
  * Shows full loop info without truncation, one row per loop.
  */
 
-import type { LoopCardProps } from "./LoopCard";
+import type { LoopSummaryProps } from "../types";
 import { Badge, getStatusBadgeVariant, Button, EditIcon } from "./common";
 import type { BadgeVariant } from "./common";
 import {
@@ -24,7 +24,7 @@ export function LoopRow({
   onPurge,
   onAddressComments,
   onRename,
-}: LoopCardProps) {
+}: LoopSummaryProps) {
   const { config, state } = loop;
   const isActive = isLoopActive(state.status);
   const isPlanning = state.status === "planning";

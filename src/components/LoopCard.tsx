@@ -2,7 +2,7 @@
  * LoopCard component for displaying a loop summary in the dashboard grid.
  */
 
-import type { Loop } from "../types";
+import type { LoopSummaryProps } from "../types";
 import { Badge, getStatusBadgeVariant, Button, Card, EditIcon } from "./common";
 import type { BadgeVariant } from "./common";
 import {
@@ -15,23 +15,6 @@ import {
   formatRelativeTime,
 } from "../utils";
 
-export interface LoopCardProps {
-  /** The loop to display */
-  loop: Loop;
-  /** Callback when card is clicked */
-  onClick?: () => void;
-  /** Callback when accept button is clicked (merge) */
-  onAccept?: () => void;
-  /** Callback when delete button is clicked */
-  onDelete?: () => void;
-  /** Callback when purge button is clicked */
-  onPurge?: () => void;
-  /** Callback when address comments button is clicked */
-  onAddressComments?: () => void;
-  /** Callback when rename button is clicked */
-  onRename?: () => void;
-}
-
 export function LoopCard({
   loop,
   onClick,
@@ -40,7 +23,7 @@ export function LoopCard({
   onPurge,
   onAddressComments,
   onRename,
-}: LoopCardProps) {
+}: LoopSummaryProps) {
   const { config, state } = loop;
   const isActive = isLoopActive(state.status);
   const isPlanning = state.status === "planning";
