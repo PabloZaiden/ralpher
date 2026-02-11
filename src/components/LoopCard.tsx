@@ -108,9 +108,6 @@ export function LoopCard({
             )}
           </div>
         </div>
-        <p className="mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">
-          {config.directory}
-        </p>
         {state.reviewMode && state.reviewMode.reviewCycles > 0 && (
           <p className="mt-1 text-xs text-blue-600 dark:text-blue-400">
             Review Cycle: {state.reviewMode.reviewCycles}
@@ -143,21 +140,6 @@ export function LoopCard({
           <p className="text-xs sm:text-sm text-red-800 dark:text-red-300 break-words">
             {state.error.message}
           </p>
-        </div>
-      )}
-
-      {/* Git info - hide for drafts (no branch yet) */}
-      {!isDraft && state.git && (
-        <div className="mb-3 sm:mb-4 text-xs sm:text-sm">
-          <span className="text-gray-500 dark:text-gray-400">Branch:</span>
-          <span className="ml-2 font-mono text-gray-900 dark:text-gray-100 break-all">
-            {state.git.workingBranch}
-          </span>
-          {state.git.commits.length > 0 && (
-            <span className="ml-2 text-gray-500 dark:text-gray-400">
-              ({state.git.commits.length} commits)
-            </span>
-          )}
         </div>
       )}
 
