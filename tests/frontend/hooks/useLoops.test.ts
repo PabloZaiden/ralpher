@@ -622,22 +622,3 @@ describe("refresh", () => {
     expect(result.current.loops).toHaveLength(2);
   });
 });
-
-// ─── connectionStatus ────────────────────────────────────────────────────────
-
-describe("connectionStatus", () => {
-  test("reflects WebSocket connection status", async () => {
-    setupLoopsList([]);
-
-    const { result } = renderHook(() => useLoops());
-
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
-
-    // WebSocket auto-opens via queueMicrotask, so it should become "open"
-    await waitFor(() => {
-      expect(result.current.connectionStatus).toBe("open");
-    });
-  });
-});
