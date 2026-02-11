@@ -2,7 +2,7 @@
  * LoopCard component for displaying a loop summary in the dashboard grid.
  */
 
-import type { Loop } from "../types";
+import type { LoopSummaryProps } from "../types";
 import { Badge, getStatusBadgeVariant, Button, Card, EditIcon } from "./common";
 import type { BadgeVariant } from "./common";
 import {
@@ -12,44 +12,8 @@ import {
   canAccept,
   isFinalState,
   isLoopActive,
+  formatRelativeTime,
 } from "../utils";
-
-export interface LoopCardProps {
-  /** The loop to display */
-  loop: Loop;
-  /** Callback when card is clicked */
-  onClick?: () => void;
-  /** Callback when accept button is clicked (merge) */
-  onAccept?: () => void;
-  /** Callback when delete button is clicked */
-  onDelete?: () => void;
-  /** Callback when purge button is clicked */
-  onPurge?: () => void;
-  /** Callback when address comments button is clicked */
-  onAddressComments?: () => void;
-  /** Callback when rename button is clicked */
-  onRename?: () => void;
-}
-
-/**
- * Format a relative time string.
- */
-function formatRelativeTime(isoString: string | undefined): string {
-  if (!isoString) return "Never";
-
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-
-  if (diffSec < 60) return "Just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHour < 24) return `${diffHour}h ago`;
-  return `${diffDay}d ago`;
-}
 
 export function LoopCard({
   loop,
@@ -59,7 +23,7 @@ export function LoopCard({
   onPurge,
   onAddressComments,
   onRename,
-}: LoopCardProps) {
+}: LoopSummaryProps) {
   const { config, state } = loop;
   const isActive = isLoopActive(state.status);
   const isPlanning = state.status === "planning";

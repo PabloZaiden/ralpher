@@ -2,10 +2,13 @@
  * Dashboard header component with title, settings, and action buttons.
  */
 
-import { Button } from "./common";
+import type { DashboardViewMode } from "../types/preferences";
+import { Button, GridIcon, ListIcon } from "./common";
 
 export interface DashboardHeaderProps {
   version: string | null;
+  viewMode: DashboardViewMode;
+  onToggleViewMode: () => void;
   onOpenServerSettings: () => void;
   onOpenCreateWorkspace: () => void;
   onOpenCreateLoop: () => void;
@@ -13,6 +16,8 @@ export interface DashboardHeaderProps {
 
 export function DashboardHeader({
   version,
+  viewMode,
+  onToggleViewMode,
   onOpenServerSettings,
   onOpenCreateWorkspace,
   onOpenCreateLoop,
@@ -42,6 +47,35 @@ export function DashboardHeader({
             </button>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {/* View mode toggle */}
+            <div className="flex items-center rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+              <button
+                type="button"
+                onClick={viewMode === "rows" ? undefined : onToggleViewMode}
+                className={`p-1.5 sm:p-2 transition-colors ${
+                  viewMode === "rows"
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                    : "bg-white text-gray-500 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                }`}
+                title="Row view"
+                aria-label="Switch to row view"
+              >
+                <ListIcon size="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={viewMode === "cards" ? undefined : onToggleViewMode}
+                className={`p-1.5 sm:p-2 transition-colors ${
+                  viewMode === "cards"
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                    : "bg-white text-gray-500 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                }`}
+                title="Card view"
+                aria-label="Switch to card view"
+              >
+                <GridIcon size="h-4 w-4" />
+              </button>
+            </div>
             {/* Button group: always side-by-side, equal width on mobile */}
             <div className="flex gap-2 flex-1 sm:flex-none">
               <Button

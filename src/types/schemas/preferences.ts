@@ -37,3 +37,10 @@ export const SetLogLevelRequestSchema = z.object({
   level: z.string().min(1, "level is required"),
 });
 
+/**
+ * Schema for setting dashboard view mode - PUT /api/preferences/dashboard-view-mode
+ */
+export const SetDashboardViewModeRequestSchema = z.object({
+  mode: z.enum(["rows", "cards"], { error: "mode must be 'rows' or 'cards'" }),
+});
+

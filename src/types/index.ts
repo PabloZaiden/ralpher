@@ -7,3 +7,5 @@ export * from "./events";
 export * from "./api";
 export * from "./workspace";
 export * from "./settings";
+export * from "./preferences";
+export * from "./components";

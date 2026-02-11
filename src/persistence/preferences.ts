@@ -13,8 +13,24 @@
 
 import { getDatabase } from "./database";
 import { createLogger } from "../core/logger";
+import type { DashboardViewMode } from "../types/preferences";
 
 const log = createLogger("persistence:preferences");
+
+/**
+ * Re-export DashboardViewMode so existing consumers of this module don't break.
+ */
+export type { DashboardViewMode } from "../types/preferences";
+
+/**
+ * Valid dashboard view mode values for validation.
+ */
+const VALID_VIEW_MODES: DashboardViewMode[] = ["rows", "cards"];
+
+/**
+ * Default dashboard view mode when no preference is set.
+ */
+export const DEFAULT_VIEW_MODE: DashboardViewMode = "rows";
 
 /**
  * Valid log level names.
@@ -43,6 +59,8 @@ export interface UserPreferences {
   markdownRenderingEnabled?: boolean;
   /** Log level for both frontend and backend (defaults to "info") */
   logLevel?: LogLevelName;
+  /** Dashboard view mode (defaults to "rows") */
+  dashboardViewMode?: DashboardViewMode;
 }
 
 /**
@@ -180,4 +198,35 @@ export async function setLogLevelPreference(level: LogLevelName): Promise<void> 
     throw new Error(`Invalid log level: ${level}. Valid levels are: ${VALID_LOG_LEVELS.join(", ")}`);
   }
   setPreference("logLevel", level);
+}
+
+/**
+ * Get the dashboard view mode preference.
+ * Defaults to "rows" if not set.
+ */
+export async function getDashboardViewMode(): Promise<DashboardViewMode> {
+  log.debug("Getting dashboard view mode preference");
+  const value = getPreference("dashboardViewMode");
+  if (value === null) {
+    log.trace("Dashboard view mode preference not set, using default", { default: DEFAULT_VIEW_MODE });
+    return DEFAULT_VIEW_MODE;
+  }
+  if (VALID_VIEW_MODES.includes(value as DashboardViewMode)) {
+    log.trace("Dashboard view mode preference", { mode: value });
+    return value as DashboardViewMode;
+  }
+  log.warn("Invalid dashboard view mode preference, using default", { storedValue: value, default: DEFAULT_VIEW_MODE });
+  return DEFAULT_VIEW_MODE;
+}
+
+/**
+ * Set the dashboard view mode preference.
+ */
+export async function setDashboardViewMode(mode: DashboardViewMode): Promise<void> {
+  log.debug("Setting dashboard view mode preference", { mode });
+  if (!VALID_VIEW_MODES.includes(mode)) {
+    log.error("Invalid dashboard view mode provided", { mode, validModes: VALID_VIEW_MODES });
+    throw new Error(`Invalid dashboard view mode: ${mode}. Valid modes are: ${VALID_VIEW_MODES.join(", ")}`);
+  }
+  setPreference("dashboardViewMode", mode);
 }

@@ -3,7 +3,7 @@
  * Orchestrates data fetching, modal state, and loop grouping via extracted hooks and components.
  */
 
-import { useLoops, useWorkspaces, useToast } from "../hooks";
+import { useLoops, useWorkspaces, useToast, useViewModePreference } from "../hooks";
 import { useWorkspaceServerSettings } from "../hooks";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useDashboardModals } from "../hooks/useDashboardModals";
@@ -56,6 +56,9 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
 
   // Loop grouping hook (memoized)
   const { workspaceGroups, unassignedLoops, unassignedStatusGroups } = useLoopGrouping(loops, workspaces);
+
+  // View mode preference hook
+  const { viewMode, toggle: toggleViewMode } = useViewModePreference();
 
   // Workspace server settings hook for the workspace being edited
   const {
@@ -113,6 +116,8 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     <div className="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
       <DashboardHeader
         version={dashboardData.version}
+        viewMode={viewMode}
+        onToggleViewMode={toggleViewMode}
         onOpenServerSettings={() => modals.setShowServerSettingsModal(true)}
         onOpenCreateWorkspace={() => modals.setShowCreateWorkspaceModal(true)}
         onOpenCreateLoop={() => modals.setShowCreateModal(true)}
@@ -122,6 +127,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         loops={loops}
         loading={loading}
         error={error}
+        viewMode={viewMode}
         workspaceGroups={workspaceGroups}
         unassignedLoops={unassignedLoops}
         unassignedStatusGroups={unassignedStatusGroups}

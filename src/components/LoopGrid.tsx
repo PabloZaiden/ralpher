@@ -1,19 +1,23 @@
 /**
  * Main content area for the Dashboard — renders loops grouped by workspace and status.
+ * Supports both card grid and row list view modes.
  */
 
 import { useState } from "react";
 import type { Loop, Workspace } from "../types";
 import type { StatusGroups, StatusSectionKey, WorkspaceGroup } from "../hooks/useLoopGrouping";
+import type { DashboardViewMode } from "../types/preferences";
 import { sectionConfig } from "../hooks/useLoopGrouping";
 import { CollapsibleSection, ConfirmModal } from "./common";
 import { LoopCard } from "./LoopCard";
+import { LoopRow } from "./LoopRow";
 import { useToast } from "../hooks";
 
 export interface LoopGridProps {
   loops: Loop[];
   loading: boolean;
   error: string | null;
+  viewMode: DashboardViewMode;
   workspaceGroups: WorkspaceGroup[];
   unassignedLoops: Loop[];
   unassignedStatusGroups: StatusGroups;
@@ -28,8 +32,8 @@ export interface LoopGridProps {
   onDeleteWorkspace: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
 }
 
-/** Explicit action props type for LoopCard */
-interface LoopCardActions {
+/** Explicit action props type for loop summary components (LoopCard/LoopRow) */
+interface LoopActions {
   onClick?: () => void;
   onAccept?: () => void;
   onDelete?: () => void;
@@ -42,6 +46,7 @@ export function LoopGrid({
   loops,
   loading,
   error,
+  viewMode,
   workspaceGroups,
   unassignedLoops,
   unassignedStatusGroups,
@@ -60,8 +65,8 @@ export function LoopGrid({
   const [deletingWorkspace, setDeletingWorkspace] = useState(false);
 
   /** Get LoopCard action props based on section type */
-  function getLoopCardActions(sectionKey: StatusSectionKey, loopId: string): LoopCardActions {
-    const actions: LoopCardActions = {
+  function getLoopActions(sectionKey: StatusSectionKey, loopId: string): LoopActions {
+    const actions: LoopActions = {
       onRename: () => onRename(loopId),
     };
 
@@ -112,15 +117,27 @@ export function LoopGrid({
           defaultCollapsed={defaultCollapsed}
           idPrefix={`${keyPrefix}-${key}`}
         >
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
-            {sectionLoops.map((loop) => (
-              <LoopCard
-                key={loop.config.id}
-                loop={loop}
-                {...getLoopCardActions(key, loop.config.id)}
-              />
-            ))}
-          </div>
+          {viewMode === "rows" ? (
+            <div className="flex flex-col gap-2">
+              {sectionLoops.map((loop) => (
+                <LoopRow
+                  key={loop.config.id}
+                  loop={loop}
+                  {...getLoopActions(key, loop.config.id)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+              {sectionLoops.map((loop) => (
+                <LoopCard
+                  key={loop.config.id}
+                  loop={loop}
+                  {...getLoopActions(key, loop.config.id)}
+                />
+              ))}
+            </div>
+          )}
         </CollapsibleSection>
       );
     });

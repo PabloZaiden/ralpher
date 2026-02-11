@@ -13,7 +13,7 @@
 import { backendManager, buildConnectionConfig } from "../core/backend-manager";
 import { OpenCodeBackend } from "../backends/opencode";
 import { getWorkspace } from "../persistence/workspaces";
-import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled, getLogLevelPreference, setLogLevelPreference, DEFAULT_LOG_LEVEL } from "../persistence/preferences";
+import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled, getLogLevelPreference, setLogLevelPreference, DEFAULT_LOG_LEVEL, getDashboardViewMode, setDashboardViewMode } from "../persistence/preferences";
 import { getDefaultServerSettings } from "../types/settings";
 import type { ModelInfo } from "../types/api";
 import { createLogger, setLogLevel as setBackendLogLevel, type LogLevelName, VALID_LOG_LEVELS, isLogLevelFromEnv } from "../core/logger";
@@ -26,6 +26,7 @@ import {
   SetLastDirectoryRequestSchema,
   SetMarkdownRenderingRequestSchema,
   SetLogLevelRequestSchema,
+  SetDashboardViewModeRequestSchema,
 } from "../types/schemas";
 
 /**
@@ -399,6 +400,45 @@ export const preferencesRoutes = {
         setBackendLogLevel(level as LogLevelName);
 
         return Response.json({ success: true, level });
+      } catch (error) {
+        return errorResponse("save_failed", String(error), 500);
+      }
+    },
+  },
+
+  "/api/preferences/dashboard-view-mode": {
+    /**
+     * GET /api/preferences/dashboard-view-mode - Get dashboard view mode preference.
+     * 
+     * Returns the current dashboard view mode ("rows" or "cards").
+     * Defaults to "rows" if not set.
+     * 
+     * @returns Object with mode property
+     */
+    async GET(): Promise<Response> {
+      const mode = await getDashboardViewMode();
+      return Response.json({ mode });
+    },
+
+    /**
+     * PUT /api/preferences/dashboard-view-mode - Set dashboard view mode preference.
+     * 
+     * Sets the dashboard view mode.
+     * 
+     * Request Body:
+     * - mode (required): "rows" or "cards"
+     * 
+     * @returns Success response
+     */
+    async PUT(req: Request): Promise<Response> {
+      const result = await parseAndValidate(SetDashboardViewModeRequestSchema, req);
+      if (!result.success) {
+        return result.response;
+      }
+
+      try {
+        await setDashboardViewMode(result.data.mode);
+        return Response.json({ success: true, mode: result.data.mode });
       } catch (error) {
         return errorResponse("save_failed", String(error), 500);
       }
