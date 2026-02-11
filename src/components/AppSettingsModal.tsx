@@ -4,7 +4,7 @@
  * Server settings have moved to per-workspace WorkspaceSettingsModal.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal, Button } from "./common";
 import { useMarkdownPreference, useLogLevelPreference, useCountdownReload } from "../hooks";
 import type { LogLevelName } from "../lib/logger";
@@ -46,6 +46,8 @@ export function AppSettingsModal({
   configSaving = false,
 }: AppSettingsModalProps) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showResetTextConfirm, setShowResetTextConfirm] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState("");
   const [showKillConfirm, setShowKillConfirm] = useState(false);
   const [serverKilled, setServerKilled] = useState(false);
   const [killError, setKillError] = useState(false);
@@ -54,6 +56,7 @@ export function AppSettingsModal({
   const [exportError, setExportError] = useState<string | null>(null);
   const [dangerZoneExpanded, setDangerZoneExpanded] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const resetConfirmInputRef = useRef<HTMLInputElement>(null);
 
   // Countdown timer: when the server is killed, count down and reload the page
   const reloadPage = useCallback(() => {
@@ -65,12 +68,21 @@ export function AppSettingsModal({
   // Markdown rendering preference
   const { enabled: markdownEnabled, toggle: toggleMarkdown, saving: savingMarkdown } = useMarkdownPreference();
 
+  // Auto-focus the text confirmation input when it appears
+  useEffect(() => {
+    if (showResetTextConfirm) {
+      resetConfirmInputRef.current?.focus();
+    }
+  }, [showResetTextConfirm]);
+
   // Log level preference
   const { level: logLevel, availableLevels, setLevel: setLogLevel, saving: savingLogLevel, isFromEnv: logLevelFromEnv } = useLogLevelPreference();
 
   // Reset state when modal closes
   function handleClose() {
     setShowResetConfirm(false);
+    setShowResetTextConfirm(false);
+    setResetConfirmText("");
     setShowKillConfirm(false);
     setServerKilled(false);
     setKillError(false);
@@ -303,7 +315,19 @@ export function AppSettingsModal({
             <div className="p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
               <button
                 type="button"
-                onClick={() => setDangerZoneExpanded((v) => !v)}
+                onClick={() => {
+                  setDangerZoneExpanded((v) => {
+                    if (v) {
+                      // Collapsing: reset all confirmation state
+                      setShowResetConfirm(false);
+                      setShowResetTextConfirm(false);
+                      setResetConfirmText("");
+                      setShowKillConfirm(false);
+                      setKillError(false);
+                    }
+                    return !v;
+                  });
+                }}
                 className="w-full flex items-center gap-2 text-sm font-medium text-red-800 dark:text-red-200 hover:text-red-900 dark:hover:text-red-100 transition-colors text-left cursor-pointer"
                 aria-expanded={dangerZoneExpanded}
               >
@@ -320,6 +344,7 @@ export function AppSettingsModal({
                         This will delete all loops, sessions, workspaces, and preferences. This action cannot be undone.
                       </p>
                       {!showResetConfirm ? (
+                        // Step 1: Initial button
                         <Button
                           type="button"
                           variant="danger"
@@ -329,25 +354,15 @@ export function AppSettingsModal({
                         >
                           Reset all settings
                         </Button>
-                      ) : (
+                      ) : !showResetTextConfirm ? (
+                        // Step 2: "Are you sure?" confirmation
                         <div className="flex items-center gap-3">
                           <span className="text-sm text-red-600 dark:text-red-400">Are you sure?</span>
                           <Button
                             type="button"
                             variant="danger"
                             size="sm"
-                            onClick={async () => {
-                              if (onResetAll) {
-                                const success = await onResetAll();
-                                if (success) {
-                                  setShowResetConfirm(false);
-                                  onClose();
-                                  // Reload the page to get fresh state
-                                  window.location.reload();
-                                }
-                              }
-                            }}
-                            loading={resetting}
+                            onClick={() => setShowResetTextConfirm(true)}
                           >
                             Yes, delete everything
                           </Button>
@@ -356,10 +371,71 @@ export function AppSettingsModal({
                             variant="ghost"
                             size="sm"
                             onClick={() => setShowResetConfirm(false)}
-                            disabled={resetting}
                           >
                             Cancel
                           </Button>
+                        </div>
+                      ) : (
+                        // Step 3: Type confirmation phrase
+                        <div className="space-y-3">
+                          <p className="text-sm text-red-700 dark:text-red-300 font-medium">
+                            This will permanently delete all loops, sessions, workspaces, and preferences.
+                            This action cannot be undone.
+                          </p>
+                          <p className="text-sm text-red-600 dark:text-red-400">
+                            To confirm, type{" "}
+                            <code className="font-mono font-bold bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded text-red-800 dark:text-red-200">
+                              EXECUTE ORDER 66
+                            </code>
+                            {" "}below.
+                          </p>
+                          <input
+                            ref={resetConfirmInputRef}
+                            type="text"
+                            value={resetConfirmText}
+                            onChange={(e) => setResetConfirmText(e.target.value)}
+                            placeholder="Type here to confirm"
+                            className="block w-full rounded-md border-red-300 dark:border-red-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2"
+                            autoComplete="off"
+                            spellCheck={false}
+                          />
+                          <div className="flex items-center gap-3">
+                            <Button
+                              type="button"
+                              variant="danger"
+                              size="sm"
+                              disabled={resetConfirmText !== "EXECUTE ORDER 66" || resetting}
+                              onClick={async () => {
+                                if (onResetAll) {
+                                  const success = await onResetAll();
+                                  if (success) {
+                                    setShowResetConfirm(false);
+                                    setShowResetTextConfirm(false);
+                                    setResetConfirmText("");
+                                    onClose();
+                                    // Reload the page to get fresh state
+                                    window.location.reload();
+                                  }
+                                }
+                              }}
+                              loading={resetting}
+                            >
+                              Confirm Reset
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setShowResetConfirm(false);
+                                setShowResetTextConfirm(false);
+                                setResetConfirmText("");
+                              }}
+                              disabled={resetting}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
                         </div>
                       )}
                     </div>
