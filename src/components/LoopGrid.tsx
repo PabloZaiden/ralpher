@@ -58,11 +58,11 @@ export function LoopGrid({
       onRename: () => onRename(loopId),
     };
 
-    // onClick: drafts use edit, everything else uses select
+    // onClick: drafts use edit, everything else uses select (only when handler is provided)
     if (sectionKey === "draft") {
       actions.onClick = () => onEditDraft(loopId);
-    } else {
-      actions.onClick = () => onSelectLoop?.(loopId);
+    } else if (onSelectLoop) {
+      actions.onClick = () => onSelectLoop(loopId);
     }
 
     return actions;

@@ -260,14 +260,16 @@ describe("LoopCard", () => {
       expect(queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     });
 
-    test("draft loop card is clickable when onClick provided", () => {
-      const loop = createLoopWithStatus("draft" as any);
+    test("draft loop card invokes onClick when clicked", async () => {
+      const loop = createLoopWithStatus("draft" as any, {
+        config: { name: "Draft Loop" },
+      });
       const onClick = mock();
-      const { container } = renderWithUser(
+      const { getByText, user } = renderWithUser(
         <LoopCard loop={loop} onClick={onClick} />
       );
-      const card = container.querySelector("[role='button'], .cursor-pointer");
-      expect(card).toBeInTheDocument();
+      await user.click(getByText("Draft Loop"));
+      expect(onClick).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -341,13 +343,21 @@ describe("LoopCard", () => {
   });
 
   describe("card click", () => {
-    test("card is clickable when onClick provided", () => {
-      const loop = createLoop();
-      const { container } = renderWithUser(
-        <LoopCard loop={loop} onClick={mock()} />
+    test("clicking card invokes onClick handler", async () => {
+      const loop = createLoop({ config: { name: "Clickable Loop" } });
+      const onClick = mock();
+      const { getByText, user } = renderWithUser(
+        <LoopCard loop={loop} onClick={onClick} />
       );
-      const card = container.querySelector("[role='button'], .cursor-pointer");
-      expect(card).toBeInTheDocument();
+      await user.click(getByText("Clickable Loop"));
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    test("card does not have clickable styling when onClick not provided", () => {
+      const loop = createLoop({ config: { name: "Non-Clickable Loop" } });
+      const { container } = renderWithUser(<LoopCard loop={loop} />);
+      const clickableCard = container.querySelector(".cursor-pointer");
+      expect(clickableCard).not.toBeInTheDocument();
     });
   });
 });
