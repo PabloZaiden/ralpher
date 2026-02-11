@@ -4,14 +4,12 @@
  */
 
 import type { LoopSummaryProps } from "../types";
-import { Badge, getStatusBadgeVariant, Button, EditIcon } from "./common";
+import { Badge, getStatusBadgeVariant, EditIcon } from "./common";
 import type { BadgeVariant } from "./common";
 import {
   getStatusLabel,
   getPlanningStatusLabel,
   isLoopPlanReady,
-  canAccept,
-  isFinalState,
   isLoopActive,
   formatRelativeTime,
 } from "../utils";
@@ -19,10 +17,6 @@ import {
 export function LoopRow({
   loop,
   onClick,
-  onAccept,
-  onDelete,
-  onPurge,
-  onAddressComments,
   onRename,
 }: LoopSummaryProps) {
   const { config, state } = loop;
@@ -145,105 +139,7 @@ export function LoopRow({
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {isDraft ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="primary"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onClick?.();
-                  }}
-                >
-                  Edit
-                </Button>
-                {onDelete && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete();
-                    }}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-                  >
-                    Delete
-                  </Button>
-                )}
-              </>
-            ) : isPlanning ? (
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onClick?.();
-                }}
-                className={isPlanReady
-                  ? "bg-amber-600 hover:bg-amber-700 dark:bg-amber-600 dark:hover:bg-amber-700"
-                  : "bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-700"}
-              >
-                Review Plan
-              </Button>
-            ) : isFinalState(state.status) ? (
-              <>
-                {isAddressable && state.status !== "deleted" && onAddressComments && (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAddressComments();
-                    }}
-                  >
-                    Address Comments
-                  </Button>
-                )}
-                {onPurge && (
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPurge();
-                    }}
-                  >
-                    Purge
-                  </Button>
-                )}
-              </>
-            ) : (
-              <>
-                {canAccept(state.status) && state.git && onAccept && (
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAccept();
-                    }}
-                  >
-                    Accept
-                  </Button>
-                )}
-                {onDelete && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete();
-                    }}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
-                  >
-                    Delete
-                  </Button>
-                )}
-              </>
-            )}
-          </div>
+
         </div>
 
         {/* Directory path - shown below on its own line, no truncation */}
