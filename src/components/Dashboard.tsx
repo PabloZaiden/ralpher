@@ -26,7 +26,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     loops,
     loading,
     error,
-    connectionStatus,
     refresh,
     createLoop,
     deleteLoop,
@@ -114,7 +113,6 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     <div className="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
       <DashboardHeader
         version={dashboardData.version}
-        connectionStatus={connectionStatus}
         onOpenServerSettings={() => modals.setShowServerSettingsModal(true)}
         onOpenCreateWorkspace={() => modals.setShowCreateWorkspaceModal(true)}
         onOpenCreateLoop={() => modals.setShowCreateModal(true)}

@@ -370,6 +370,69 @@ expect(loop.state.status).toBe("completed");
 - **Never use time estimates** in plans, documentation, or task descriptions. Time estimates are inherently inaccurate and create false expectations. Use complexity levels (Low, Medium, High) instead.
 - **Avoid code duplication**: When you find yourself writing similar code in multiple places, refactor to extract the common logic into a shared function or method. Use parameters to handle variations rather than duplicating code. This improves maintainability and reduces the risk of inconsistent behavior.
 
+## Code Review Learnings — Anti-Patterns to Avoid
+
+These guidelines are distilled from a comprehensive code review (108+ findings). Follow these to avoid repeating past mistakes.
+
+### Data Safety in Persistence
+
+- **Never interpolate variables into SQL** — even for `PRAGMA` queries. Use whitelists or parameterized queries. The `getTableColumns()` function previously interpolated table names directly into SQL strings.
+- **Never use `INSERT OR REPLACE`** — it triggers `ON DELETE CASCADE`, silently destroying related rows (e.g., review comments). Always use `INSERT ... ON CONFLICT DO UPDATE` (upsert).
+- **Always wrap `JSON.parse` in try/catch** when parsing persisted data. One corrupt row should not prevent loading all records. Use a `safeJsonParse<T>(raw, fallback)` pattern with warning logs.
+- **Validate dynamic column names** — if column names come from variables, validate against an allowlist (e.g., `ALLOWED_LOOP_COLUMNS`).
+
+### Resource Management
+
+- **Clear timers in `Promise.race`** — when using `setTimeout` as a timeout in `Promise.race`, store the timer ID and call `clearTimeout` in a `.finally()` block.
+- **Bound all buffer/array growth** — any array that accumulates data over time (logs, messages, events) must have a maximum size with eviction. Use constants like `MAX_PERSISTED_LOGS` and `slice(-MAX)` eviction.
+- **Use `AbortController` for fetch in React hooks** — create an `AbortController` in the effect, pass `signal` to `fetch()`, and call `abort()` in the cleanup function.
+- **Cap WebSocket connections** — track active connections and close the oldest when a limit is exceeded.
+
+### Architecture & Layering
+
+- **Respect the layer hierarchy: API → Core → Persistence.** The API layer should never import directly from persistence modules. Route all data access through Core layer managers (e.g., `LoopManager`).
+- **Never define shared types in backend-specific modules.** Domain types (like `TodoItem`) belong in `src/types/`. Backends should import from types, not the other way around.
+- **Centralize state transitions.** Use a state machine with a transition table (`src/core/loop-state-machine.ts`) instead of ad-hoc status checks scattered across files. Always call `assertValidTransition()` before changing state.
+- **Never mutate state directly in API handlers.** Always delegate state changes to the appropriate Core layer manager method.
+
+### Shared Helpers & Deduplication
+
+Beyond the general "avoid duplication" guideline, watch for these specific recurring patterns:
+
+- **API error/success responses** — use `errorResponse()` and `successResponse()` from `src/api/helpers.ts`. Never create ad-hoc `Response.json({ error: ... })` calls.
+- **Workspace lookup + 404** — use `requireWorkspace(workspaceId)` from `src/api/helpers.ts` instead of repeating the lookup-and-check pattern.
+- **Frontend API calls** — use `apiCall<T>()`, `apiAction()`, and `apiActionWithBody()` from `src/hooks/loopActions.ts` instead of writing raw fetch+check+parse boilerplate.
+- **Shared UI components** — always check if a reusable component exists (e.g., `ModelSelector`, `ConfirmModal`, `Toast`) before building inline equivalents.
+
+### Frontend Performance
+
+- **Wrap expensive computations in `useMemo`** — any grouping, sorting, or filtering logic that depends on props/state should be memoized. This applies to loop grouping, log entry sorting, and workspace grouping.
+- **Use `memo()` for pure display components** — components like `LogViewer` that receive data and render it should be wrapped in `React.memo()`.
+- **Prevent double-fetch on mount** — use a ref (`initialLoadDoneRef`) to track whether the initial fetch has completed, preventing duplicate requests from dependency array changes.
+- **Avoid loading flicker on event-driven refreshes** — only show loading spinners on initial load, not when refreshing data from WebSocket events.
+
+### Error Visibility
+
+The existing Error Handling section covers try/catch syntax. Additionally:
+
+- **Never leave empty catch blocks** — every catch must either log the error, surface it to the user, or explicitly comment why it's safe to ignore.
+- **Use the Toast system** (`useToast()` hook, `ToastProvider`) to surface errors to users. Silent `console.error` is insufficient for user-facing operations.
+- **Chain error causes** — when re-throwing or wrapping errors, use `new Error("context message", { cause: originalError })` to preserve the stack trace.
+- **Use structured error classes** for domain errors (e.g., `GitCommandError` with command, stderr, exit code fields).
+
+### Component & Method Decomposition
+
+- **Components over 300 LOC should be decomposed.** Extract sub-components (`DashboardHeader`, `LoopGrid`, `DashboardModals`) and custom hooks (`useDashboardData`, `useLoopGrouping`).
+- **Methods over 100 LOC should be broken into named sub-methods** with clear single responsibilities (e.g., `buildPrompt()`, `evaluateOutcome()`, `commitIteration()`).
+- **Bundle functions with 4+ parameters** into a context/options object (e.g., `TranslateEventContext`).
+
+### Type Hygiene
+
+- **Remove dead types promptly** — unused type aliases, interfaces, and re-exports accumulate fast. If a type is created but never imported, remove it.
+- **Single source of truth for shared types** — if the same type (e.g., `ModelInfo`) exists in multiple files, consolidate to one canonical location and import from there.
+- **Avoid name collisions** — if two modules export types with the same name but different meanings, rename one to be specific (e.g., `ConnectionStatus` → `WebSocketConnectionStatus`).
+- **Keep barrel exports complete and clean** — when adding new modules, add them to the barrel (`index.ts`). When removing modules, clean up their re-exports.
+
 ## Common Patterns
 
 ### Adding a New API Endpoint
