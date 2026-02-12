@@ -382,20 +382,16 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
   // Handle update branch
   async function handleUpdateBranch() {
-    try {
-      const result = await updateBranch();
-      if (!result.success) {
-        toast.error("Failed to update branch");
-        setUpdateBranchModal(false);
-        return;
-      }
-      if (result.syncStatus === "conflicts_being_resolved") {
-        toast.info("Conflicts detected — resolving automatically");
-      } else {
-        toast.success("Branch updated and pushed");
-      }
-    } catch {
+    const result = await updateBranch();
+    if (!result.success) {
       toast.error("Failed to update branch");
+      setUpdateBranchModal(false);
+      return;
+    }
+    if (result.syncStatus === "conflicts_being_resolved") {
+      toast.info("Conflicts detected — resolving automatically");
+    } else {
+      toast.success("Branch updated and pushed");
     }
     setUpdateBranchModal(false);
   }
