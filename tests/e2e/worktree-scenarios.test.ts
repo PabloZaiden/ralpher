@@ -55,6 +55,8 @@ async function listWorktrees(workDir: string): Promise<string[]> {
   const paths: string[] = [];
   for (const line of output.split("\n")) {
     if (line.startsWith("worktree ")) {
+      // Git resolves symlinks in its output (e.g., macOS /var → /private/var),
+      // so the paths are already resolved. Return them as-is.
       paths.push(line.slice("worktree ".length));
     }
   }

@@ -23,10 +23,6 @@ export interface LoopGridProps {
   unassignedStatusGroups: StatusGroups;
   onSelectLoop?: (loopId: string) => void;
   onEditDraft: (loopId: string) => void;
-  onAccept: (loopId: string) => void;
-  onDelete: (loopId: string) => void;
-  onPurge: (loopId: string) => void;
-  onAddressComments: (loopId: string) => void;
   onRename: (loopId: string) => void;
   onOpenWorkspaceSettings: (workspaceId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
@@ -35,10 +31,6 @@ export interface LoopGridProps {
 /** Explicit action props type for loop summary components (LoopCard/LoopRow) */
 interface LoopActions {
   onClick?: () => void;
-  onAccept?: () => void;
-  onDelete?: () => void;
-  onPurge?: () => void;
-  onAddressComments?: () => void;
   onRename?: () => void;
 }
 
@@ -52,10 +44,6 @@ export function LoopGrid({
   unassignedStatusGroups,
   onSelectLoop,
   onEditDraft,
-  onAccept,
-  onDelete,
-  onPurge,
-  onAddressComments,
   onRename,
   onOpenWorkspaceSettings,
   onDeleteWorkspace,
@@ -70,31 +58,11 @@ export function LoopGrid({
       onRename: () => onRename(loopId),
     };
 
-    // onClick: drafts use edit, everything else uses select
+    // onClick: drafts use edit, everything else uses select (only when handler is provided)
     if (sectionKey === "draft") {
       actions.onClick = () => onEditDraft(loopId);
-    } else {
-      actions.onClick = () => onSelectLoop?.(loopId);
-    }
-
-    // onAccept: completed and other sections
-    if (sectionKey === "completed" || sectionKey === "other") {
-      actions.onAccept = () => onAccept(loopId);
-    }
-
-    // onDelete: draft, active, planning, needsReview, completed, and other sections
-    if (sectionKey === "draft" || sectionKey === "active" || sectionKey === "planning" || sectionKey === "needsReview" || sectionKey === "completed" || sectionKey === "other") {
-      actions.onDelete = () => onDelete(loopId);
-    }
-
-    // onPurge: awaitingFeedback and archived sections
-    if (sectionKey === "awaitingFeedback" || sectionKey === "archived") {
-      actions.onPurge = () => onPurge(loopId);
-    }
-
-    // onAddressComments: awaitingFeedback section only
-    if (sectionKey === "awaitingFeedback") {
-      actions.onAddressComments = () => onAddressComments(loopId);
+    } else if (onSelectLoop) {
+      actions.onClick = () => onSelectLoop(loopId);
     }
 
     return actions;

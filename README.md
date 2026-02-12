@@ -167,10 +167,10 @@ The web UI will be available at `http://localhost:3000` (configurable via `RALPH
 ### Creating Your First Loop
 
 1. Click **"New Loop"** in the dashboard
-2. Enter a name and the working directory path
+2. Select a workspace (or create one with the project directory path)
 3. Write your task prompt (the PRD/requirements)
 4. Select a model and configure max iterations
-5. Click **"Create"** - the loop starts automatically
+5. Click **"Create"** - the loop starts automatically and its name is auto-generated from the prompt
 
 ---
 
@@ -180,6 +180,8 @@ The web UI will be available at `http://localhost:3000` (configurable via `RALPH
 |----------|-------------|---------|
 | `RALPHER_PORT` | Server port | `3000` |
 | `RALPHER_DATA_DIR` | Data directory for persistence | `./data` |
+| `RALPHER_REMOTE_ONLY` | Disable spawn mode, only allow remote connections (`true`/`1`/`yes`) | unset |
+| `RALPHER_LOG_LEVEL` | Override server log level (`silly`, `trace`, `debug`, `info`, `warn`, `error`, `fatal`) | `info` |
 
 ### Data Storage
 
@@ -312,15 +314,13 @@ bun run build --target=bun-linux-x64
 bun run build --target=bun-linux-arm64
 bun run build --target=bun-darwin-x64
 bun run build --target=bun-darwin-arm64
-bun run build --target=bun-windows-x64
 ```
 
 ### Testing
 
 ```bash
 bun run test           # Run all tests
-bun run test:watch     # Watch mode
-bunx tsc --noEmit      # Type check
+bun run tsc            # Type check
 ```
 
 ### Code Style
@@ -365,7 +365,7 @@ Changes take effect immediately - the workspace connection will be reset to use 
 ```yaml
 services:
   ralpher:
-    image: ralpher:latest
+    image: ghcr.io/pablozaiden/ralpher:latest
     ports:
       - "8080:8080"
     volumes:

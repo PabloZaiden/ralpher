@@ -10,10 +10,6 @@ import type { UseWorkspaceServerSettingsResult } from "../hooks/useWorkspaceServ
 import { Modal, Button } from "./common";
 import { CreateLoopForm } from "./CreateLoopForm";
 import {
-  AcceptLoopModal,
-  AddressCommentsModal,
-  DeleteLoopModal,
-  PurgeLoopModal,
   UncommittedChangesModal,
   RenameLoopModal,
 } from "./LoopModals";
@@ -51,27 +47,6 @@ export interface DashboardModalsProps {
   branchesLoading: boolean;
   currentBranch: string;
   defaultBranch: string;
-
-  // Delete modal
-  deleteModal: { open: boolean; loopId: string | null };
-  onCloseDeleteModal: () => void;
-  onDelete: () => Promise<void>;
-
-  // Accept modal
-  acceptModal: { open: boolean; loopId: string | null };
-  onCloseAcceptModal: () => void;
-  onAccept: () => Promise<void>;
-  onPush: () => Promise<void>;
-
-  // Purge modal
-  purgeModal: { open: boolean; loopId: string | null };
-  onClosePurgeModal: () => void;
-  onPurge: () => Promise<void>;
-
-  // Address comments modal
-  addressCommentsModal: { open: boolean; loopId: string | null };
-  onCloseAddressCommentsModal: () => void;
-  onAddressComments: (comments: string) => Promise<void>;
 
   // Uncommitted changes modal
   uncommittedModal: { open: boolean; loopId: string | null; error: UncommittedChangesError | null };
@@ -209,40 +184,6 @@ export function DashboardModals(props: DashboardModalsProps) {
           workspaceError={props.workspaceError}
         />
       </Modal>
-
-      {/* Delete confirmation modal */}
-      <DeleteLoopModal
-        isOpen={props.deleteModal.open}
-        onClose={props.onCloseDeleteModal}
-        onDelete={props.onDelete}
-      />
-
-      {/* Accept/Push modal */}
-      <AcceptLoopModal
-        isOpen={props.acceptModal.open}
-        onClose={props.onCloseAcceptModal}
-        onAccept={props.onAccept}
-        onPush={props.onPush}
-        restrictToAction={props.loops.find(l => l.config.id === props.acceptModal.loopId)?.state.reviewMode?.completionAction}
-      />
-
-      {/* Purge confirmation modal */}
-      <PurgeLoopModal
-        isOpen={props.purgeModal.open}
-        onClose={props.onClosePurgeModal}
-        onPurge={props.onPurge}
-      />
-
-      {/* Address Comments modal */}
-      {props.addressCommentsModal.loopId && (
-        <AddressCommentsModal
-          isOpen={props.addressCommentsModal.open}
-          onClose={props.onCloseAddressCommentsModal}
-          onSubmit={props.onAddressComments}
-          loopName={props.loops.find(l => l.config.id === props.addressCommentsModal.loopId)?.config.name || ""}
-          reviewCycle={(props.loops.find(l => l.config.id === props.addressCommentsModal.loopId)?.state.reviewMode?.reviewCycles || 0) + 1}
-        />
-      )}
 
       {/* Uncommitted changes modal */}
       <UncommittedChangesModal

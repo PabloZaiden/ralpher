@@ -27,14 +27,16 @@ export function DashboardHeader({
       <div className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
-              Ralpher
+            <div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
+                Ralpher
+              </h1>
               {version && (
-                <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   v{version}
-                </span>
+                </p>
               )}
-            </h1>
+            </div>
             {/* App Settings Button */}
             <button
               type="button"
@@ -46,7 +48,7 @@ export function DashboardHeader({
               <GearIcon />
             </button>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-shrink-0">
             {/* View mode toggle */}
             <div className="flex items-center rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
               <button
@@ -76,16 +78,16 @@ export function DashboardHeader({
                 <GridIcon size="h-4 w-4" />
               </button>
             </div>
-            {/* Button group: always side-by-side, equal width on mobile */}
-            <div className="flex gap-2 flex-1 sm:flex-none">
+            {/* Button group: always side-by-side */}
+            <div className="flex gap-2">
               <Button
                 variant="secondary"
                 onClick={onOpenCreateWorkspace}
-                className="flex-1 sm:flex-none whitespace-nowrap"
+                className="whitespace-nowrap"
               >
                 New Workspace
               </Button>
-              <Button onClick={onOpenCreateLoop} className="flex-1 sm:flex-none whitespace-nowrap">
+              <Button onClick={onOpenCreateLoop} className="whitespace-nowrap">
                 New Loop
               </Button>
             </div>

@@ -5,7 +5,7 @@
  */
 
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, readFile } from "fs/promises";
+import { mkdtemp, rm, readFile, realpath } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { GitService } from "../../src/core/git-service";
@@ -17,7 +17,8 @@ describe("GitService Worktree Operations", () => {
 
   beforeEach(async () => {
     // Create a temp directory for each test
-    testDir = await mkdtemp(join(tmpdir(), "ralpher-worktree-test-"));
+    // Resolve symlinks (macOS /var → /private/var) to match git's resolved paths
+    testDir = await realpath(await mkdtemp(join(tmpdir(), "ralpher-worktree-test-")));
     const executor = new TestCommandExecutor();
     git = new GitService(executor);
 
