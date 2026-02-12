@@ -498,6 +498,25 @@ export const migrations: Migration[] = [
       }
     },
   },
+
+  // Migration 15: Add mode column for chat vs loop distinction
+  {
+    version: 15,
+    name: "add_mode_column",
+    up: (db) => {
+      if (!tableExists(db, "loops")) {
+        log.debug("loops table does not exist, skipping migration 15");
+        return;
+      }
+
+      const columns = getTableColumns(db, "loops");
+
+      if (!columns.includes("mode")) {
+        db.run("ALTER TABLE loops ADD COLUMN mode TEXT DEFAULT 'loop'");
+        log.info("Added mode column to loops table");
+      }
+    },
+  },
 ];
 
 /**

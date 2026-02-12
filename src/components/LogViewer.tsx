@@ -181,7 +181,7 @@ export const LogViewer = memo(function LogViewer({
     >
       {isEmpty ? (
         <div className="flex items-center justify-center h-32 text-gray-500 text-xs sm:text-sm">
-          No logs yet. Start the loop to see activity.
+          No logs yet. Waiting for activity.
         </div>
       ) : (
         <div className="p-2 sm:p-4 space-y-2 sm:space-y-3">

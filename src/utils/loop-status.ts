@@ -4,7 +4,7 @@
  * to determine what actions are available for a loop.
  */
 
-import type { Loop, LoopStatus } from "../types";
+import type { Loop, LoopConfig, LoopStatus } from "../types";
 import { createLogger } from "../lib/logger";
 
 const log = createLogger("LoopStatus");
@@ -132,4 +132,51 @@ export function isLoopPlanReady(loop: Loop): boolean {
   const result = loop.state.status === "planning" && loop.state.planMode?.isPlanReady === true;
   log.trace("isLoopPlanReady check", { status: loop.state.status, isPlanReady: loop.state.planMode?.isPlanReady, result });
   return result;
+}
+
+/**
+ * Mode-aware display labels for loops and chats.
+ * Use this instead of scattering ternaries throughout the UI.
+ */
+export interface EntityLabels {
+  /** Lowercase singular: "loop" or "chat" */
+  singular: string;
+  /** Lowercase plural: "loops" or "chats" */
+  plural: string;
+  /** Capitalized singular: "Loop" or "Chat" */
+  capitalized: string;
+  /** Capitalized plural: "Loops" or "Chats" */
+  capitalizedPlural: string;
+  /** Action verb: "Start Loop" or "Start Chat" */
+  actionVerb: string;
+}
+
+/**
+ * Get mode-appropriate display labels for UI text.
+ * Defaults to "loop" labels if mode is undefined (backward compatibility).
+ */
+export function getEntityLabel(mode: LoopConfig["mode"] | undefined): EntityLabels {
+  if (mode === "chat") {
+    return {
+      singular: "chat",
+      plural: "chats",
+      capitalized: "Chat",
+      capitalizedPlural: "Chats",
+      actionVerb: "Start Chat",
+    };
+  }
+  return {
+    singular: "loop",
+    plural: "loops",
+    capitalized: "Loop",
+    capitalizedPlural: "Loops",
+    actionVerb: "Start Loop",
+  };
+}
+
+/**
+ * Check if a loop is in chat mode.
+ */
+export function isChat(loop: Loop): boolean {
+  return loop.config.mode === "chat";
 }

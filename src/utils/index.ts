@@ -12,6 +12,9 @@ export {
   isAwaitingFeedback,
   getPlanningStatusLabel,
   isLoopPlanReady,
+  getEntityLabel,
+  isChat,
+  type EntityLabels,
 } from "./loop-status";
 
 export { sanitizeBranchName } from "./sanitize-branch-name";

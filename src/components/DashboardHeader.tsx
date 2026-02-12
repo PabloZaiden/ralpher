@@ -12,6 +12,7 @@ export interface DashboardHeaderProps {
   onOpenServerSettings: () => void;
   onOpenCreateWorkspace: () => void;
   onOpenCreateLoop: () => void;
+  onOpenCreateChat: () => void;
 }
 
 export function DashboardHeader({
@@ -21,6 +22,7 @@ export function DashboardHeader({
   onOpenServerSettings,
   onOpenCreateWorkspace,
   onOpenCreateLoop,
+  onOpenCreateChat,
 }: DashboardHeaderProps) {
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 safe-area-top">
@@ -86,6 +88,13 @@ export function DashboardHeader({
                 className="whitespace-nowrap"
               >
                 New Workspace
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={onOpenCreateChat}
+                className="whitespace-nowrap"
+              >
+                New Chat
               </Button>
               <Button onClick={onOpenCreateLoop} className="whitespace-nowrap">
                 New Loop

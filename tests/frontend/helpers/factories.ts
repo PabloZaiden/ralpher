@@ -199,6 +199,7 @@ export function createLoopConfig(overrides?: Partial<LoopConfig>): LoopConfig {
     git: createGitConfig(),
     clearPlanningFolder: false,
     planMode: true,
+    mode: "loop",
     ...overrides,
   };
 }

@@ -32,6 +32,7 @@ import {
   discardPlanApi,
   addressReviewCommentsApi,
   updateBranchApi,
+  sendChatMessageApi,
   type AcceptLoopResult,
   type PushLoopResult,
   type AddressCommentsResult,
@@ -71,6 +72,8 @@ export interface UseLoopResult {
   todos: TodoItem[];
   /** Counter that increments when git changes occur (use to trigger diff refresh) */
   gitChangeCounter: number;
+  /** Whether this loop is in chat mode */
+  isChatMode: boolean;
   /** Refresh loop data */
   refresh: () => Promise<void>;
   /** Update the loop */
@@ -111,6 +114,8 @@ export interface UseLoopResult {
   setPending: (options: { message?: string; model?: { providerID: string; modelID: string } }) => Promise<SetPendingResult>;
   /** Clear all pending values (message and model) */
   clearPending: () => Promise<boolean>;
+  /** Send a message to a chat (only works for chat-mode loops) */
+  sendChatMessage: (message: string, model?: { providerID: string; modelID: string }) => Promise<boolean>;
 }
 
 /**
@@ -663,6 +668,27 @@ export function useLoop(loopId: string): UseLoopResult {
     }
   }, [loopId, refresh]);
 
+  // Send a message to a chat
+  const sendChatMessage = useCallback(
+    async (message: string, model?: { providerID: string; modelID: string }): Promise<boolean> => {
+      log.debug("Sending chat message", { loopId, messageLength: message.length });
+      try {
+        await sendChatMessageApi(loopId, message, model);
+        await refresh();
+        log.trace("Chat message sent", { loopId });
+        return true;
+      } catch (err) {
+        log.error("Failed to send chat message", { loopId, error: String(err) });
+        setError(String(err));
+        return false;
+      }
+    },
+    [loopId, refresh]
+  );
+
+  // Whether this loop is in chat mode
+  const isChatMode = loop?.config.mode === "chat";
+
   // Initial fetch
   useEffect(() => {
     refresh();
@@ -718,6 +744,7 @@ export function useLoop(loopId: string): UseLoopResult {
     logs,
     todos,
     gitChangeCounter,
+    isChatMode,
     refresh,
     update,
     remove,
@@ -738,5 +765,6 @@ export function useLoop(loopId: string): UseLoopResult {
     addressReviewComments,
     setPending,
     clearPending,
+    sendChatMessage,
   };
 }

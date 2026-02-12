@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Loop, LoopEvent, CreateLoopRequest, UpdateLoopRequest, UncommittedChangesError } from "../types";
+import type { Loop, LoopEvent, CreateLoopRequest, CreateChatRequest, UpdateLoopRequest, UncommittedChangesError } from "../types";
 import { useGlobalEvents } from "./useWebSocket";
 import { log } from "../lib/logger";
 import {
@@ -15,6 +15,7 @@ import {
   purgeLoopApi,
   addressReviewCommentsApi,
   updateBranchApi,
+  createChatApi,
   type AcceptLoopResult,
   type PushLoopResult,
   type AddressCommentsResult,
@@ -24,6 +25,13 @@ export interface CreateLoopResult {
   /** The created loop, or null if creation failed */
   loop: Loop | null;
   /** Error if the loop was created but failed to start (e.g., uncommitted changes) */
+  startError?: UncommittedChangesError;
+}
+
+export interface CreateChatResult {
+  /** The created chat, or null if creation failed */
+  loop: Loop | null;
+  /** Error if the chat was created but failed to start (e.g., uncommitted changes) */
   startError?: UncommittedChangesError;
 }
 
@@ -38,6 +46,8 @@ export interface UseLoopsResult {
   refresh: () => Promise<void>;
   /** Create a new loop (loops are always started immediately) */
   createLoop: (request: CreateLoopRequest) => Promise<CreateLoopResult>;
+  /** Create a new interactive chat */
+  createChat: (request: CreateChatRequest) => Promise<CreateChatResult>;
   /** Update an existing loop */
   updateLoop: (id: string, request: UpdateLoopRequest) => Promise<Loop | null>;
   /** Delete a loop */
@@ -191,6 +201,18 @@ export function useLoops(): UseLoopsResult {
     }
   }, []);
 
+  // Create a new interactive chat
+  const createChat = useCallback(async (request: CreateChatRequest): Promise<CreateChatResult> => {
+    try {
+      const loop = await createChatApi(request);
+      // Don't add to state here - let the WebSocket event handle it
+      return { loop };
+    } catch (err) {
+      setError(String(err));
+      return { loop: null };
+    }
+  }, []);
+
   // Update an existing loop
   const updateLoop = useCallback(async (id: string, request: UpdateLoopRequest): Promise<Loop | null> => {
     try {
@@ -325,6 +347,7 @@ export function useLoops(): UseLoopsResult {
     error,
     refresh,
     createLoop,
+    createChat,
     updateLoop,
     deleteLoop,
     acceptLoop,

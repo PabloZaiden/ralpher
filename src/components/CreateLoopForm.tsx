@@ -91,6 +91,8 @@ export interface CreateLoopFormProps {
    * This is useful for rendering actions in a Modal footer (sticky position).
    */
   renderActions?: (state: CreateLoopFormActionState) => void;
+  /** Mode: "loop" (default) or "chat" — controls which fields are shown */
+  mode?: "loop" | "chat";
 }
 
 export function CreateLoopForm({
@@ -113,8 +115,10 @@ export function CreateLoopForm({
   workspacesLoading = false,
   workspaceError = null,
   renderActions,
+  mode = "loop",
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
+  const isChatMode = mode === "chat";
   
   // Track if this is the first render to prevent infinite loops
   const isInitialMount = useRef(true);
@@ -474,7 +478,7 @@ export function CreateLoopForm({
           onSelect={handleWorkspaceSelect}
           error={workspaceError}
         />
-        {planningWarning && !planMode && (
+        {planningWarning && !planMode && !isChatMode && (
           <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-300">
             <svg
               className="h-5 w-5 flex-shrink-0 text-amber-500"
@@ -580,7 +584,8 @@ export function CreateLoopForm({
         )}
       </div>
 
-      {/* Prompt Template */}
+      {/* Prompt Template — hidden in chat mode */}
+      {!isChatMode && (
       <div>
         <label
           htmlFor="template"
@@ -623,6 +628,7 @@ export function CreateLoopForm({
           ) : null;
         })()}
       </div>
+      )}
 
       {/* Prompt */}
       <div>
@@ -630,7 +636,7 @@ export function CreateLoopForm({
           htmlFor="prompt"
           className="block text-sm font-medium text-gray-700 dark:text-gray-300"
         >
-          Prompt <span className="text-red-500">*</span>
+          {isChatMode ? "Message" : "Prompt"} <span className="text-red-500">*</span>
         </label>
         <textarea
           id="prompt"
@@ -647,17 +653,18 @@ export function CreateLoopForm({
               }
             }
           }}
-          placeholder={planMode ? "Describe what you want to achieve. The AI will create a detailed plan based on this." : "Do everything that's pending in the plan"}
+          placeholder={isChatMode ? "Ask a question or describe what you want to do..." : (planMode ? "Describe what you want to achieve. The AI will create a detailed plan based on this." : "Do everything that's pending in the plan")}
           required
           rows={3}
           className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 min-h-[76px] sm:min-h-[120px] resize-y"
         />
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          The prompt sent to the AI agent at the start of each iteration
+          {isChatMode ? "Your first message to start the conversation" : "The prompt sent to the AI agent at the start of each iteration"}
         </p>
       </div>
 
-      {/* Plan Mode Toggle */}
+      {/* Plan Mode Toggle — hidden in chat mode */}
+      {!isChatMode && (
       <div>
         <label className="flex items-start gap-3">
           <input
@@ -680,8 +687,10 @@ export function CreateLoopForm({
           </div>
         </label>
       </div>
+      )}
 
-      {/* Advanced options toggle */}
+      {/* Advanced options toggle — hidden in chat mode */}
+      {!isChatMode && (
       <button
         type="button"
         onClick={() => setShowAdvanced(!showAdvanced)}
@@ -689,9 +698,10 @@ export function CreateLoopForm({
       >
         {showAdvanced ? "Hide" : "Show"} advanced options
       </button>
+      )}
 
-      {/* Advanced options */}
-      {showAdvanced && (
+      {/* Advanced options — hidden in chat mode */}
+      {!isChatMode && showAdvanced && (
         <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-md">
           {/* Max iterations */}
           <div>

@@ -16,6 +16,8 @@ import {
   CreateLoopRequestSchema,
   UpdateLoopRequestSchema,
   AddressCommentsRequestSchema,
+  SendChatMessageRequestSchema,
+  CreateChatRequestSchema,
 } from "./schemas";
 import type { z } from "zod";
 
@@ -262,3 +264,41 @@ export interface FileContentResponse {
   /** Whether the file exists on disk */
   exists: boolean;
 }
+
+/**
+ * Request body for POST /api/loops/:id/chat endpoint.
+ * Sends a message to an interactive chat.
+ *
+ * Type is derived from SendChatMessageRequestSchema - the Zod schema is the
+ * single source of truth for both validation and TypeScript types.
+ */
+export type SendChatMessageRequest = z.infer<typeof SendChatMessageRequestSchema>;
+
+/**
+ * Request body for POST /api/loops/chat endpoint.
+ * Creates a new interactive chat.
+ *
+ * Simpler than CreateLoopRequest — chats don't have plan mode,
+ * draft mode, stop patterns, or clearPlanningFolder.
+ *
+ * Type is derived from CreateChatRequestSchema - the Zod schema is the
+ * single source of truth for both validation and TypeScript types.
+ */
+export type CreateChatRequest = z.infer<typeof CreateChatRequestSchema>;
+
+/**
+ * Response from POST /api/loops/:id/chat endpoint.
+ * Returns immediately after injection — does not wait for AI response.
+ * Uses discriminated union for type-safe success/error handling.
+ */
+export type SendChatMessageResponse =
+  | {
+      success: true;
+      /** The loop/chat ID that received the message */
+      loopId: string;
+    }
+  | {
+      success: false;
+      /** Error message describing what went wrong */
+      error: string;
+    };

@@ -64,6 +64,7 @@ function createTestLoop(overrides: {
       activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
       clearPlanningFolder: false,
       planMode: false,
+      mode: "loop",
     },
     state: {
       id: overrides.id,

@@ -4,6 +4,7 @@
  */
 
 import { createLogger } from "../lib/logger";
+import type { Loop, CreateChatRequest, SendChatMessageResponse } from "../types";
 
 const log = createLogger("loopActions");
 
@@ -295,4 +296,41 @@ export async function addressReviewCommentsApi(
     reviewCycle: data.reviewCycle,
     branch: data.branch,
   };
+}
+
+// ─── Chat API functions ───────────────────────────────────────────────────────
+
+/**
+ * Create a new interactive chat via the API.
+ */
+export async function createChatApi(request: CreateChatRequest): Promise<Loop> {
+  return apiCall<Loop>(
+    "/api/loops/chat",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    },
+    "Create chat",
+  );
+}
+
+/**
+ * Send a message to an interactive chat via the API.
+ * Returns immediately after injection — does not wait for AI response.
+ */
+export async function sendChatMessageApi(
+  loopId: string,
+  message: string,
+  model?: { providerID: string; modelID: string },
+): Promise<SendChatMessageResponse> {
+  return apiCall<SendChatMessageResponse>(
+    `/api/loops/${loopId}/chat`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message, model }),
+    },
+    "Send chat message",
+  );
 }

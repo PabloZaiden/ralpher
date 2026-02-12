@@ -32,14 +32,14 @@ describe("LogViewer", () => {
       const { getByText } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} />
       );
-      expect(getByText("No logs yet. Start the loop to see activity.")).toBeInTheDocument();
+      expect(getByText("No logs yet. Waiting for activity.")).toBeInTheDocument();
     });
 
     test("renders empty state when only empty arrays provided", () => {
       const { getByText } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={[]} />
       );
-      expect(getByText("No logs yet. Start the loop to see activity.")).toBeInTheDocument();
+      expect(getByText("No logs yet. Waiting for activity.")).toBeInTheDocument();
     });
   });
 
@@ -298,7 +298,7 @@ describe("LogViewer", () => {
       const { getByText } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={logs} showDebugLogs={false} />
       );
-      expect(getByText("No logs yet. Start the loop to see activity.")).toBeInTheDocument();
+      expect(getByText("No logs yet. Waiting for activity.")).toBeInTheDocument();
     });
   });
 
