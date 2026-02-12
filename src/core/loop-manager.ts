@@ -260,6 +260,74 @@ export class LoopManager {
   }
 
   /**
+   * Create a new interactive chat.
+   *
+   * A chat is a loop with `mode: "chat"` — it reuses the loop infrastructure
+   * (git worktree, backend session, persistence, events) but runs single-turn
+   * iterations without planning prompts or stop-pattern detection.
+   *
+   * The chat is started immediately (worktree + session created) and,
+   * if an initial message is provided in the prompt, the first turn runs
+   * automatically.
+   *
+   * @param options - Same options as createLoop, with chat-specific overrides applied
+   * @returns The created chat (as a Loop with mode: "chat")
+   */
+  async createChat(options: Omit<CreateLoopOptions, "planMode" | "mode">): Promise<Loop> {
+    // Create the loop with chat-specific config overrides
+    const loop = await this.createLoop({
+      ...options,
+      mode: "chat",
+      planMode: false,
+      maxIterations: 1,           // Single turn per iteration
+      clearPlanningFolder: false,  // No planning folder semantics for chat
+    });
+
+    // Start immediately (creates worktree + backend session)
+    await this.startLoop(loop.config.id);
+
+    // Return the updated loop (with git/session state from startLoop)
+    const updatedLoop = await this.getLoop(loop.config.id);
+    return updatedLoop ?? loop;
+  }
+
+  /**
+   * Send a message to an interactive chat.
+   *
+   * Uses the injection pattern: if the AI is currently responding, the session
+   * is aborted and the message is picked up in the next iteration immediately.
+   * If the AI is idle (previous turn completed), a new single-turn iteration
+   * is started.
+   *
+   * This method returns quickly without waiting for the iteration to complete,
+   * same as sendPlanFeedback().
+   *
+   * @param loopId - The chat's loop ID
+   * @param message - The user's message
+   * @param model - Optional model override for this turn
+   */
+  async sendChatMessage(loopId: string, message: string, model?: ModelConfig): Promise<void> {
+    // If engine doesn't exist, attempt to recover it from persisted state.
+    // This handles the case where the server was restarted while a chat was idle.
+    const engine = this.engines.get(loopId) ?? await this.recoverChatEngine(loopId);
+
+    // Verify loop is a chat
+    if (engine.config.mode !== "chat") {
+      throw new Error(`Loop is not a chat (mode: ${engine.config.mode})`);
+    }
+
+    // Verify chat is in a state where messages can be sent
+    const validStates = ["completed", "running", "max_iterations"];
+    if (!validStates.includes(engine.state.status)) {
+      throw new Error(`Cannot send chat message in status: ${engine.state.status}`);
+    }
+
+    // Inject the message (handles both running and idle cases internally).
+    // This returns quickly — the iteration runs asynchronously.
+    await engine.injectChatMessage(message, model);
+  }
+
+  /**
    * Start a loop in plan mode (plan creation phase).
    * Creates a worktree+branch first, then clears .planning in the worktree,
    * and starts the AI session inside the worktree.
@@ -2535,6 +2603,69 @@ ${fileList}
   }
 
   /**
+   * Recover a chat engine that was lost due to server restart.
+   * Loads the loop from persistence, recreates the LoopEngine, reconnects the session,
+   * and starts state persistence. This is used by sendChatMessage() when the in-memory
+   * engine is missing but the loop is persisted in a chat-compatible state.
+   *
+   * Similar to recoverPlanningEngine() but for chat mode loops in completed/max_iterations status.
+   */
+  private async recoverChatEngine(loopId: string): Promise<LoopEngine> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      throw new Error(`Loop not found: ${loopId}`);
+    }
+
+    if (loop.config.mode !== "chat") {
+      throw new Error(`Loop is not a chat (mode: ${loop.config.mode})`);
+    }
+
+    const recoverableStatuses = ["completed", "max_iterations"];
+    if (!recoverableStatuses.includes(loop.state.status)) {
+      throw new Error(`Cannot recover chat engine in status: ${loop.state.status}`);
+    }
+
+    // Recreate the engine — requires an existing worktree
+    const worktreeDir = loop.state.git?.worktreePath;
+    if (!worktreeDir) {
+      throw new Error("Chat has no worktree path — cannot recreate engine for recovery");
+    }
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
+    const git = GitService.withExecutor(executor);
+    const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
+
+    const engine = new LoopEngine({
+      loop,
+      backend,
+      gitService: git,
+      eventEmitter: this.emitter,
+      onPersistState: async (state) => {
+        await updateLoopState(loopId, state);
+      },
+    });
+
+    this.engines.set(loopId, engine);
+
+    // Reconnect to the existing session (or create a new one if none exists).
+    // If this fails, remove the partially-initialized engine to avoid leaving
+    // a broken engine (with no sessionId) cached in the map.
+    try {
+      await engine.reconnectSession();
+    } catch (error) {
+      this.engines.delete(loopId);
+      throw new Error(
+        `Failed to recover chat engine session for loop ${loopId}: ${String(error)}`,
+        { cause: error },
+      );
+    }
+
+    // Start state persistence (chat-aware — won't clean up on completed)
+    this.startStatePersistence(loopId);
+
+    return engine;
+  }
+
+  /**
    * Start periodic state persistence for a running loop.
    */
   private startStatePersistence(loopId: string): void {
@@ -2559,11 +2690,20 @@ ${fileList}
         engine.state.status === "max_iterations"
       ) {
         clearInterval(interval);
-        // Clean up the dedicated backend connection for this loop
-        backendManager.disconnectLoop(loopId).catch((error) => {
-          log.error(`Failed to disconnect loop backend during cleanup: ${String(error)}`);
-        });
-        this.engines.delete(loopId);
+
+        // For chat mode, keep the engine and backend alive when status is
+        // "completed" or "max_iterations" — the user may send another message.
+        // Only fully clean up on terminal states (stopped, failed).
+        const isChatIdle = engine.config.mode === "chat" &&
+          (engine.state.status === "completed" || engine.state.status === "max_iterations");
+
+        if (!isChatIdle) {
+          // Clean up the dedicated backend connection for this loop
+          backendManager.disconnectLoop(loopId).catch((error) => {
+            log.error(`Failed to disconnect loop backend during cleanup: ${String(error)}`);
+          });
+          this.engines.delete(loopId);
+        }
       }
     }, 5000); // Persist every 5 seconds
   }
