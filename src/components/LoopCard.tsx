@@ -16,6 +16,7 @@ import {
 export function LoopCard({
   loop,
   onClick,
+
   onRename,
 }: LoopSummaryProps) {
   const { config, state } = loop;

@@ -589,6 +589,41 @@ export const loopsControlRoutes = {
     },
   },
 
+  "/api/loops/:id/update-branch": {
+    /**
+     * POST /api/loops/:id/update-branch - Update a pushed loop's branch by syncing with the base branch.
+     *
+     * Pulls and merges from the base branch into the working branch, then re-pushes.
+     * Only works for loops in `pushed` status.
+     * If the merge is clean, pushes immediately and the loop remains in `pushed` status.
+     * If there are conflicts, starts a conflict resolution engine and auto-pushes on completion.
+     *
+     * @returns PushResponse with success and sync status
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      log.debug("POST /api/loops/:id/update-branch", { loopId: req.params.id });
+      const result = await loopManager.updateBranch(req.params.id);
+
+      if (!result.success) {
+        log.warn("POST /api/loops/:id/update-branch - Failed", { loopId: req.params.id, error: result.error });
+        if (result.error?.includes("not found")) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        return errorResponse("update_branch_failed", result.error ?? "Unknown error", 400);
+      }
+
+      log.info("POST /api/loops/:id/update-branch - Branch updated", { loopId: req.params.id, remoteBranch: result.remoteBranch, syncStatus: result.syncStatus });
+      const syncStatus = result.syncStatus ?? "already_up_to_date";
+      let response: PushResponse;
+      if (syncStatus === "conflicts_being_resolved") {
+        response = { success: true, syncStatus };
+      } else {
+        response = { success: true, remoteBranch: result.remoteBranch!, syncStatus };
+      }
+      return Response.json(response);
+    },
+  },
+
   "/api/loops/:id/discard": {
     /**
      * POST /api/loops/:id/discard - Discard a loop and delete its git branch.

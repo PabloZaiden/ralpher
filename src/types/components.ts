@@ -20,6 +20,7 @@ export interface LoopSummaryProps {
   loop: Loop;
   /** Callback when the component is clicked */
   onClick?: () => void;
+
   /** Callback when rename button is clicked */
   onRename?: () => void;
 }

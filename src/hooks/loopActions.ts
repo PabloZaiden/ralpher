@@ -143,6 +143,22 @@ export async function pushLoopApi(loopId: string): Promise<PushLoopResult> {
 }
 
 /**
+ * Update a pushed loop's branch by syncing with the base branch and re-pushing.
+ */
+export async function updateBranchApi(loopId: string): Promise<PushLoopResult> {
+  const data = await apiCall<{ remoteBranch?: string; syncStatus?: string }>(
+    `/api/loops/${loopId}/update-branch`,
+    { method: "POST" },
+    "Update branch",
+  );
+  return {
+    success: true,
+    remoteBranch: data.remoteBranch,
+    syncStatus: data.syncStatus as PushLoopResult["syncStatus"],
+  };
+}
+
+/**
  * Discard a loop's changes via the API.
  */
 export async function discardLoopApi(loopId: string): Promise<boolean> {

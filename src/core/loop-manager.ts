@@ -939,7 +939,7 @@ Follow the standard loop execution flow:
 
       // --- Working branch sync ---
       const workingBranchConflictResult = await this.syncWorkingBranch(
-        loopId, loop, git, baseBranch, worktreePath, workingBranch
+        loopId, loop, git, baseBranch, worktreePath, workingBranch, "pushLoop"
       );
       if (workingBranchConflictResult) {
         return workingBranchConflictResult;
@@ -953,6 +953,79 @@ Follow the standard loop execution flow:
       // Always clear the guard
       this.loopsBeingAccepted.delete(loopId);
       log.debug(`[LoopManager] pushLoop: Finished push for loop ${loopId}`);
+    }
+  }
+
+  /**
+   * Update a pushed loop's branch by syncing with the base branch and re-pushing.
+   * This pulls and merges from the base branch into the working branch (same logic
+   * used before pushing), pushes if clean, or triggers conflict resolution if needed.
+   * After a successful update, the loop remains in 'pushed' status.
+   *
+   * Reuses the same sync infrastructure as pushLoop():
+   * - syncWorkingBranch() to pull remote changes on the working branch
+   * - syncBaseBranchAndPush() to merge base branch changes and push
+   * - startConflictResolutionEngine() for conflict resolution (if needed)
+   */
+  async updateBranch(loopId: string): Promise<PushLoopResult> {
+    // Guard against concurrent accept/push operations on the same loop.
+    // Must be set synchronously (before any await) to prevent race conditions.
+    if (this.loopsBeingAccepted.has(loopId)) {
+      log.warn(`[LoopManager] updateBranch: Already processing loop ${loopId}, ignoring duplicate call`);
+      return { success: false, error: "Operation already in progress" };
+    }
+    this.loopsBeingAccepted.add(loopId);
+    log.debug(`[LoopManager] updateBranch: Starting branch update for loop ${loopId}`);
+
+    try {
+      const loop = await this.getLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+
+      // Must be in pushed status
+      if (loop.state.status !== "pushed") {
+        return { success: false, error: `Cannot update branch for loop in status: ${loop.state.status}` };
+      }
+
+      // Must have git state (branch was created and pushed)
+      if (!loop.state.git) {
+        return { success: false, error: "No git branch was created for this loop" };
+      }
+
+      // Prevent update while an engine is already running (e.g., conflict resolution)
+      if (this.engines.has(loopId)) {
+        return { success: false, error: "Loop already has an active engine running" };
+      }
+
+      // Get the appropriate command executor for the current mode
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+      const git = GitService.withExecutor(executor);
+
+      // Determine the base branch to sync with
+      const baseBranch = loop.config.baseBranch ?? loop.state.git.originalBranch;
+      const worktreePath = loop.state.git.worktreePath ?? loop.config.directory;
+      const workingBranch = loop.state.git.workingBranch;
+
+      // --- Ensure merge strategy is configured ---
+      await git.ensureMergeStrategy(worktreePath);
+
+      // --- Working branch sync ---
+      const workingBranchConflictResult = await this.syncWorkingBranch(
+        loopId, loop, git, baseBranch, worktreePath, workingBranch, "updateBranch"
+      );
+      if (workingBranchConflictResult) {
+        return workingBranchConflictResult;
+      }
+
+      // --- Base branch sync + push ---
+      return await this.syncBaseBranchAndPush(loopId, loop, git);
+    } catch (error) {
+      return { success: false, error: String(error) };
+    } finally {
+      // Always clear the guard
+      this.loopsBeingAccepted.delete(loopId);
+      log.debug(`[LoopManager] updateBranch: Finished branch update for loop ${loopId}`);
     }
   }
 
@@ -971,9 +1044,10 @@ Follow the standard loop execution flow:
     git: GitService,
     baseBranch: string,
     worktreePath: string,
-    workingBranch: string
+    workingBranch: string,
+    caller: string
   ): Promise<PushLoopResult | null> {
-    log.debug(`[LoopManager] pushLoop: Fetching origin/${workingBranch} for loop ${loopId}`);
+    log.debug(`[LoopManager] ${caller}: Fetching origin/${workingBranch} for loop ${loopId}`);
     const fetchSuccess = await git.fetchBranch(loop.config.directory, workingBranch);
 
     if (!fetchSuccess) {
@@ -993,7 +1067,7 @@ Follow the standard loop execution flow:
     }
 
     // Remote working branch has diverged — attempt to merge
-    log.debug(`[LoopManager] pushLoop: Merging origin/${workingBranch} into local working branch for loop ${loopId}`);
+    log.debug(`[LoopManager] ${caller}: Merging origin/${workingBranch} into local working branch for loop ${loopId}`);
     const mergeResult = await git.mergeWithConflictDetection(
       worktreePath,
       `origin/${workingBranch}`,
@@ -1001,14 +1075,14 @@ Follow the standard loop execution flow:
     );
 
     if (mergeResult.success) {
-      log.debug(`[LoopManager] pushLoop: Clean merge with origin/${workingBranch}`);
+      log.debug(`[LoopManager] ${caller}: Clean merge with origin/${workingBranch}`);
       return null;
     }
 
     if (mergeResult.hasConflicts) {
       // Conflicts on working branch — start conflict resolution
       const conflictedFiles = mergeResult.conflictedFiles ?? [];
-      log.debug(`[LoopManager] pushLoop: Working branch merge conflicts detected: ${conflictedFiles.join(", ")}`);
+      log.debug(`[LoopManager] ${caller}: Working branch merge conflicts detected: ${conflictedFiles.join(", ")}`);
 
       await git.abortMerge(worktreePath);
 
@@ -1028,7 +1102,7 @@ Follow the standard loop execution flow:
         autoPushOnComplete: true,
         syncPhase: "working_branch",
       };
-      assertValidTransition(loop.state.status, "resolving_conflicts", "pushLoop");
+      assertValidTransition(loop.state.status, "resolving_conflicts", caller);
       loop.state.status = "resolving_conflicts";
       loop.state.completedAt = undefined;
       await updateLoopState(loopId, loop.state);
@@ -1040,7 +1114,7 @@ Follow the standard loop execution flow:
 
     // Non-conflict merge failure
     const errorMsg = mergeResult.stderr || "Unknown merge error";
-    log.error(`[LoopManager] pushLoop: Working branch merge failed for loop ${loopId}: ${errorMsg}`);
+    log.error(`[LoopManager] ${caller}: Working branch merge failed for loop ${loopId}: ${errorMsg}`);
     return {
       success: false,
       error: `Failed to merge origin/${workingBranch}: ${errorMsg}`,

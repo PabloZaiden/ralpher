@@ -17,6 +17,7 @@ import {
 export function LoopRow({
   loop,
   onClick,
+
   onRename,
 }: LoopSummaryProps) {
   const { config, state } = loop;
@@ -128,7 +129,6 @@ export function LoopRow({
               </span>
             </div>
           )}
-
 
         </div>
 

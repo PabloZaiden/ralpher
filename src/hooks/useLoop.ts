@@ -31,6 +31,7 @@ import {
   acceptPlanApi,
   discardPlanApi,
   addressReviewCommentsApi,
+  updateBranchApi,
   type AcceptLoopResult,
   type PushLoopResult,
   type AddressCommentsResult,
@@ -80,6 +81,8 @@ export interface UseLoopResult {
   accept: () => Promise<AcceptLoopResult>;
   /** Push the loop's branch to remote */
   push: () => Promise<PushLoopResult>;
+  /** Update a pushed loop's branch by syncing with the base branch and re-pushing */
+  updateBranch: () => Promise<PushLoopResult>;
   /** Discard the loop's changes */
   discard: () => Promise<boolean>;
   /** Purge the loop (permanently delete - only for merged/pushed/deleted loops) */
@@ -414,6 +417,21 @@ export function useLoop(loopId: string): UseLoopResult {
     }
   }, [loopId, refresh]);
 
+  // Update a pushed loop's branch by syncing with the base branch and re-pushing
+  const updateBranch = useCallback(async (): Promise<PushLoopResult> => {
+    log.debug("Updating branch", { loopId });
+    try {
+      const result = await updateBranchApi(loopId);
+      await refresh();
+      log.info("Branch updated", { loopId, remoteBranch: result.remoteBranch, syncStatus: result.syncStatus });
+      return result;
+    } catch (err) {
+      log.error("Failed to update branch", { loopId, error: String(err) });
+      setError(String(err));
+      return { success: false };
+    }
+  }, [loopId, refresh]);
+
   // Discard the loop's changes
   const discard = useCallback(async (): Promise<boolean> => {
     log.debug("Discarding loop", { loopId });
@@ -705,6 +723,7 @@ export function useLoop(loopId: string): UseLoopResult {
     remove,
     accept,
     push,
+    updateBranch,
     discard,
     purge,
     markMerged,

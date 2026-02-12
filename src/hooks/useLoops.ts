@@ -14,6 +14,7 @@ import {
   deleteLoopApi,
   purgeLoopApi,
   addressReviewCommentsApi,
+  updateBranchApi,
   type AcceptLoopResult,
   type PushLoopResult,
   type AddressCommentsResult,
@@ -45,6 +46,8 @@ export interface UseLoopsResult {
   acceptLoop: (id: string) => Promise<AcceptLoopResult>;
   /** Push a loop's branch to remote */
   pushLoop: (id: string) => Promise<PushLoopResult>;
+  /** Update a pushed loop's branch by syncing with the base branch and re-pushing */
+  updateBranch: (id: string) => Promise<PushLoopResult>;
   /** Discard a loop's changes */
   discardLoop: (id: string) => Promise<boolean>;
   /** Purge a loop (permanently delete - only for merged/pushed/deleted loops) */
@@ -249,6 +252,18 @@ export function useLoops(): UseLoopsResult {
     }
   }, [refreshLoop]);
 
+  // Update a pushed loop's branch by syncing with the base branch and re-pushing
+  const updateBranch = useCallback(async (id: string): Promise<PushLoopResult> => {
+    try {
+      const result = await updateBranchApi(id);
+      await refreshLoop(id);
+      return result;
+    } catch (err) {
+      setError(String(err));
+      return { success: false };
+    }
+  }, [refreshLoop]);
+
   // Discard a loop's changes
   const discardLoop = useCallback(async (id: string): Promise<boolean> => {
     try {
@@ -314,6 +329,7 @@ export function useLoops(): UseLoopsResult {
     deleteLoop,
     acceptLoop,
     pushLoop,
+    updateBranch,
     discardLoop,
     purgeLoop,
     addressReviewComments,

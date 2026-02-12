@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { FileDiff, FileContentResponse, ModelInfo } from "../types";
 import type { ReviewComment, ModelConfig } from "../types/loop";
-import { useLoop, useMarkdownPreference } from "../hooks";
+import { useLoop, useMarkdownPreference, useToast } from "../hooks";
 import { Badge, Button, getStatusBadgeVariant, EditIcon } from "./common";
 import { LogViewer } from "./LogViewer";
 import { TodoViewer } from "./TodoViewer";
@@ -113,6 +113,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     gitChangeCounter,
     accept,
     push,
+    updateBranch,
     remove,
     purge,
     markMerged,
@@ -130,6 +131,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
   // Markdown rendering preference
   const { enabled: markdownEnabled } = useMarkdownPreference();
+  const toast = useToast();
 
   const [activeTab, setActiveTab] = useState<TabId>("log");
   const [planContent, setPlanContent] = useState<FileContentResponse | null>(null);
@@ -1078,6 +1080,36 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                                 <div className="flex-1 min-w-0">
                                   <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Address Comments</div>
                                   <div className="text-xs text-gray-500 dark:text-gray-400">Submit comments for the next review cycle</div>
+                                </div>
+                                <span className="text-gray-400 dark:text-gray-500">→</span>
+                              </button>
+                            )}
+                            {state.status === "pushed" && state.git && (
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const result = await updateBranch();
+                                    if (!result.success) {
+                                      toast.error("Failed to update branch");
+                                      return;
+                                    }
+                                    if (result.syncStatus === "conflicts_being_resolved") {
+                                      toast.info("Conflicts detected — resolving automatically");
+                                    } else {
+                                      toast.success("Branch updated and pushed");
+                                    }
+                                  } catch {
+                                    toast.error("Failed to update branch");
+                                  }
+                                }}
+                                className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
+                              >
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                                  <span className="text-purple-600 dark:text-purple-400 text-sm">⟳</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Update Branch</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">Sync with base branch and push latest changes</div>
                                 </div>
                                 <span className="text-gray-400 dark:text-gray-500">→</span>
                               </button>

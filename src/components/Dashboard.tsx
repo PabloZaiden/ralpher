@@ -24,6 +24,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     error,
     refresh,
     createLoop,
+
     updateLoop,
   } = useLoops();
 
@@ -84,6 +85,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         unassignedStatusGroups={unassignedStatusGroups}
         onSelectLoop={onSelectLoop}
         onEditDraft={modals.handleEditDraft}
+
         onRename={(loopId) => modals.setRenameModal({ open: true, loopId })}
         onOpenWorkspaceSettings={(workspaceId) => modals.setWorkspaceSettingsModal({ open: true, workspaceId })}
         onDeleteWorkspace={deleteWorkspace}
