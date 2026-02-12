@@ -891,7 +891,13 @@ export const loopsControlRoutes = {
      * POST /api/loops/:id/plan/feedback - Send feedback to refine the plan.
      * 
      * Sends user feedback to the AI to refine the plan during planning phase.
+     * If the AI is currently generating, the session is aborted immediately and
+     * the feedback is injected into the next iteration. If the AI is idle (plan
+     * was ready), a new plan iteration is started.
+     * 
      * Increments the feedback round counter. Only works for loops in planning status.
+     * Returns immediately after setting up the injection — does not wait for
+     * the iteration to complete.
      * 
      * Request Body:
      * - feedback (required): User's feedback/comments on the plan

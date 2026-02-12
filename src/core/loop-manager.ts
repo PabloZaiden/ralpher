@@ -391,6 +391,13 @@ export class LoopManager {
 
   /**
    * Send feedback on a plan to refine it.
+   * 
+   * Uses the injection pattern: if the AI is currently generating, the session
+   * is aborted and the feedback is picked up in the next iteration immediately.
+   * If the AI is idle (plan was ready), a new plan iteration is started.
+   * 
+   * This method returns quickly without waiting for the iteration to complete,
+   * similar to how injectPending() works for execution mode.
    */
   async sendPlanFeedback(loopId: string, feedback: string): Promise<void> {
     // If engine doesn't exist, attempt to recover it from persisted state.
@@ -402,11 +409,6 @@ export class LoopManager {
       throw new Error(`Loop is not in planning status: ${engine.state.status}`);
     }
 
-    // Wait for any ongoing iteration to complete before modifying state
-    // This prevents race conditions where feedback resets isPlanReady while
-    // an iteration is still in progress (e.g., during git commit)
-    await engine.waitForLoopIdle();
-
     // Increment feedback rounds and reset isPlanReady
     if (engine.state.planMode) {
       engine.state.planMode.feedbackRounds += 1;
@@ -416,9 +418,6 @@ export class LoopManager {
     // Persist state update
     await updateLoopState(loopId, engine.state);
 
-    // Set the feedback as a pending prompt
-    engine.setPendingPrompt(feedback);
-
     // Emit feedback event
     this.emitter.emit({
       type: "loop.plan.feedback",
@@ -427,13 +426,9 @@ export class LoopManager {
       timestamp: createTimestamp(),
     });
 
-    // Run another plan iteration to process the feedback
-    try {
-      await engine.runPlanIteration();
-    } catch (error) {
-      log.error(`Loop ${loopId} plan feedback iteration failed:`, String(error));
-      throw error;
-    }
+    // Inject feedback: abort current processing or start new iteration.
+    // This returns quickly — the iteration runs asynchronously.
+    await engine.injectPlanFeedback(feedback);
   }
 
   /**

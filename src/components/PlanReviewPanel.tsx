@@ -203,11 +203,16 @@ export function PlanReviewPanel({
         <textarea
           value={feedback}
           onChange={(e) => setFeedback(e.target.value)}
-          placeholder="Enter your feedback on the plan. The AI will update the plan based on your comments."
+          placeholder="Enter your feedback on the plan. The AI will immediately stop and address your feedback."
           className="w-full h-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
           disabled={isSubmitting}
         />
-        <div className="flex justify-end mt-4">
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            {isPlanReady
+              ? "Feedback will start a new plan revision."
+              : "Feedback will interrupt current generation and start a new revision."}
+          </p>
           <Button
             onClick={handleSendFeedback}
             disabled={!feedback.trim() || isSubmitting}

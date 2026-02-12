@@ -567,6 +567,58 @@ export class LoopEngine {
   }
 
   /**
+   * Inject plan feedback immediately, interrupting the current AI processing if active.
+   * 
+   * If the loop is actively running an iteration, this aborts the session and
+   * sets the injection flag so the runLoop() while-loop picks up the feedback
+   * in the next iteration. If the loop is idle (e.g., plan was already ready),
+   * starts a new plan iteration as a fire-and-forget operation.
+   * 
+   * The caller (LoopManager.sendPlanFeedback) is responsible for:
+   * - Incrementing feedbackRounds and resetting isPlanReady before calling this
+   * - Persisting state changes
+   * - Emitting the loop.plan.feedback event
+   * 
+   * @param feedback - The user's feedback message
+   */
+  async injectPlanFeedback(feedback: string): Promise<void> {
+    // Set the feedback as a pending prompt
+    this.updateState({ pendingPrompt: feedback });
+
+    // Emit event for UI update
+    this.emitter.emit({
+      type: "loop.pending.updated",
+      loopId: this.loop.config.id,
+      pendingPrompt: feedback,
+      timestamp: createTimestamp(),
+    });
+
+    if (this.isLoopRunning) {
+      // Loop is actively running an iteration — inject by aborting current processing.
+      // The runLoop() while-loop (line 964-971) detects injectionPending after abort,
+      // resets the flags, and continues to the next iteration which picks up pendingPrompt.
+      this.injectionPending = true;
+
+      if (this.sessionId) {
+        try {
+          this.emitLog("info", "Injecting plan feedback - aborting current AI processing");
+          await this.backend.abortSession(this.sessionId);
+        } catch {
+          // Ignore abort errors - the session may already be complete
+        }
+      }
+    } else {
+      // Loop is idle (plan was ready, or between iterations) — start a new plan iteration.
+      // Fire-and-forget: the plan iteration runs asynchronously and will emit events/update state.
+      // This matches the pattern used by engine.start() and continueExecution() fire-and-forget calls.
+      this.emitLog("info", "Injecting plan feedback - starting new plan iteration");
+      this.runPlanIteration().catch((error) => {
+        this.emitLog("error", `Plan feedback iteration failed: ${String(error)}`);
+      });
+    }
+  }
+
+  /**
    * Continue loop execution after plan acceptance.
    * Used to start the execution phase after a plan has been accepted.
    * The engine must be in running status with a pending prompt set.
@@ -951,6 +1003,16 @@ export class LoopEngine {
         // Delegate outcome handling — returns true if the loop should exit
         const shouldExit = await this.handleIterationOutcome(iterationResult);
         if (shouldExit) {
+          // Check if an injection arrived during outcome handling (e.g., plan feedback
+          // arrived between evaluateOutcome and handlePlanReadyOutcome, while
+          // isLoopRunning was still true). If so, clear the flags and continue
+          // the while loop to process the injected prompt instead of exiting.
+          if (this.injectionPending && this.shouldContinue()) {
+            this.emitLog("debug", "Injection pending during outcome handling - continuing loop to process injected prompt");
+            this.aborted = false;
+            this.injectionPending = false;
+            continue;
+          }
           return;
         }
 
