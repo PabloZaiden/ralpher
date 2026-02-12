@@ -2,10 +2,10 @@
  * Dashboard modal renderings — aggregates all modal components used in the Dashboard.
  */
 
-import type { Loop, UncommittedChangesError, ModelInfo, BranchInfo, Workspace, CreateLoopRequest } from "../types";
+import type { Loop, UncommittedChangesError, ModelInfo, BranchInfo, Workspace, CreateLoopRequest, CreateChatRequest } from "../types";
 import type { WorkspaceExportData, WorkspaceImportResult, CreateWorkspaceRequest } from "../types/workspace";
 import type { CreateLoopFormActionState } from "./CreateLoopForm";
-import type { CreateLoopResult } from "../hooks/useLoops";
+import type { CreateLoopResult, CreateChatResult } from "../hooks/useLoops";
 import type { UseWorkspaceServerSettingsResult } from "../hooks/useWorkspaceServerSettings";
 import { Modal, Button } from "./common";
 import { CreateLoopForm } from "./CreateLoopForm";
@@ -30,10 +30,12 @@ export interface DashboardModalsProps {
   // Create/Edit modal
   showCreateModal: boolean;
   editDraftId: string | null;
+  createMode: "loop" | "chat";
   formActionState: CreateLoopFormActionState | null;
   setFormActionState: (state: CreateLoopFormActionState | null) => void;
   onCloseCreateModal: () => void;
   onCreateLoop: (request: CreateLoopRequest) => Promise<CreateLoopResult>;
+  onCreateChat: (request: CreateChatRequest) => Promise<CreateChatResult>;
   onRefresh: () => Promise<void>;
 
   // Model/branch/workspace data for create form
@@ -96,6 +98,19 @@ export function DashboardModals(props: DashboardModalsProps) {
   const editLoop = props.editDraftId ? props.loops.find((l) => l.config.id === props.editDraftId) : null;
   const isEditing = !!editLoop;
   const isEditingDraft = editLoop?.state.status === "draft";
+  const isChatMode = props.createMode === "chat";
+
+  // Modal titles/descriptions based on mode
+  const modalTitle = isEditing
+    ? "Edit Draft Loop"
+    : isChatMode
+      ? "New Chat"
+      : "Create New Loop";
+  const modalDescription = isEditing
+    ? "Update your draft loop configuration."
+    : isChatMode
+      ? "Start an interactive conversation with your workspace."
+      : "Configure a new Ralph Loop for autonomous AI development.";
 
   // Transform Loop to initialLoopData format
   const initialLoopData = editLoop ? {
@@ -114,17 +129,17 @@ export function DashboardModals(props: DashboardModalsProps) {
 
   return (
     <>
-      {/* Create/Edit loop modal */}
+      {/* Create/Edit modal */}
       <Modal
         isOpen={props.showCreateModal}
         onClose={props.onCloseCreateModal}
-        title={isEditing ? "Edit Draft Loop" : "Create New Loop"}
-        description={isEditing ? "Update your draft loop configuration." : "Configure a new Ralph Loop for autonomous AI development."}
+        title={modalTitle}
+        description={modalDescription}
         size="lg"
         footer={props.formActionState && (
           <>
-            {/* Left side - Save as Draft / Update Draft button */}
-            {(!props.formActionState.isEditing || props.formActionState.isEditingDraft) && (
+            {/* Left side - Save as Draft / Update Draft button — hidden in chat mode */}
+            {!isChatMode && (!props.formActionState.isEditing || props.formActionState.isEditingDraft) && (
               <Button
                 type="button"
                 variant="secondary"
@@ -152,21 +167,27 @@ export function DashboardModals(props: DashboardModalsProps) {
               loading={props.formActionState.isSubmitting}
               disabled={!props.formActionState.canSubmit}
             >
-              {props.formActionState.isEditing
-                ? (props.formActionState.planMode ? "Start Plan" : "Start Loop")
-                : (props.formActionState.planMode ? "Create Plan" : "Create Loop")
+              {isChatMode
+                ? "Start Chat"
+                : props.formActionState.isEditing
+                  ? (props.formActionState.planMode ? "Start Plan" : "Start Loop")
+                  : (props.formActionState.planMode ? "Create Plan" : "Create Loop")
               }
             </Button>
           </>
         )}
       >
         <CreateLoopForm
-          key={isEditing ? editLoop!.config.id : "create-new"}
+          key={isEditing ? editLoop!.config.id : `create-new-${props.createMode}`}
           editLoopId={isEditing ? editLoop!.config.id : undefined}
           initialLoopData={initialLoopData}
           isEditingDraft={isEditingDraft}
           renderActions={props.setFormActionState}
+          mode={props.createMode}
           onSubmit={async (request) => {
+            if (isChatMode) {
+              return await handleCreateChatSubmit(props, request, toast);
+            }
             return await handleCreateLoopSubmit(props, editLoop, request, toast);
           }}
           onCancel={props.onCloseCreateModal}
@@ -361,5 +382,61 @@ async function handleCreateLoopSubmit(
     return true;
   }
 
+  return false;
+}
+
+/** Handles the create chat form submission logic */
+async function handleCreateChatSubmit(
+  props: DashboardModalsProps,
+  request: CreateLoopRequest,
+  toast: { error: (msg: string) => void },
+): Promise<boolean> {
+  // Build a CreateChatRequest from the loop form data
+  const chatRequest: CreateChatRequest = {
+    workspaceId: request.workspaceId!,
+    prompt: request.prompt,
+    model: request.model!,
+  };
+
+  if (request.baseBranch) {
+    chatRequest.baseBranch = request.baseBranch;
+  }
+
+  const result = await props.onCreateChat(chatRequest);
+
+  if (result.startError) {
+    props.setUncommittedModal({
+      open: true,
+      loopId: result.loop?.config.id ?? null,
+      error: result.startError,
+    });
+    return true;
+  }
+
+  if (result.loop) {
+    await props.onRefresh();
+
+    if (request.model) {
+      props.setLastModel(request.model);
+    }
+
+    if (request.workspaceId) {
+      const workspace = props.workspaces.find(w => w.id === request.workspaceId);
+      if (workspace) {
+        try {
+          await fetch("/api/preferences/last-directory", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ directory: workspace.directory }),
+          });
+        } catch {
+          // Ignore errors saving preference
+        }
+      }
+    }
+    return true;
+  }
+
+  toast.error("Failed to create chat");
   return false;
 }

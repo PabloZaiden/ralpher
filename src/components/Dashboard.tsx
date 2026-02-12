@@ -15,15 +15,18 @@ import { DashboardModals } from "./DashboardModals";
 export interface DashboardProps {
   /** Callback when a loop is selected */
   onSelectLoop?: (loopId: string) => void;
+  /** Callback when a chat is selected */
+  onSelectChat?: (chatId: string) => void;
 }
 
-export function Dashboard({ onSelectLoop }: DashboardProps) {
+export function Dashboard({ onSelectLoop, onSelectChat }: DashboardProps) {
   const {
     loops,
     loading,
     error,
     refresh,
     createLoop,
+    createChat,
 
     updateLoop,
   } = useLoops();
@@ -49,6 +52,16 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
   // Loop grouping hook (memoized)
   const { workspaceGroups, unassignedLoops, unassignedStatusGroups } = useLoopGrouping(loops, workspaces);
 
+  // Mode-aware selection handler: routes chats to #/chat/:id, loops to #/loop/:id
+  const handleSelectItem = (loopId: string) => {
+    const loop = loops.find((l) => l.config.id === loopId);
+    if (loop?.config.mode === "chat" && onSelectChat) {
+      onSelectChat(loopId);
+    } else if (onSelectLoop) {
+      onSelectLoop(loopId);
+    }
+  };
+
   // View mode preference hook
   const { viewMode, toggle: toggleViewMode } = useViewModePreference();
 
@@ -72,7 +85,8 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         onToggleViewMode={toggleViewMode}
         onOpenServerSettings={() => modals.setShowServerSettingsModal(true)}
         onOpenCreateWorkspace={() => modals.setShowCreateWorkspaceModal(true)}
-        onOpenCreateLoop={() => modals.setShowCreateModal(true)}
+        onOpenCreateLoop={() => modals.handleOpenCreateLoop()}
+        onOpenCreateChat={() => modals.handleOpenCreateChat()}
       />
 
       <LoopGrid
@@ -83,7 +97,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         workspaceGroups={workspaceGroups}
         unassignedLoops={unassignedLoops}
         unassignedStatusGroups={unassignedStatusGroups}
-        onSelectLoop={onSelectLoop}
+        onSelectLoop={handleSelectItem}
         onEditDraft={modals.handleEditDraft}
 
         onRename={(loopId) => modals.setRenameModal({ open: true, loopId })}
@@ -99,10 +113,12 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         // Create/Edit modal
         showCreateModal={modals.showCreateModal}
         editDraftId={modals.editDraftId}
+        createMode={modals.createMode}
         formActionState={modals.formActionState}
         setFormActionState={modals.setFormActionState}
         onCloseCreateModal={modals.handleCloseCreateModal}
         onCreateLoop={createLoop}
+        onCreateChat={createChat}
         onRefresh={refresh}
         // Model/branch/workspace data
         models={dashboardData.models}

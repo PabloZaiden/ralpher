@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback, type FormEvent } from "react";
-import type { ModelInfo, ModelConfig } from "../types";
+import type { ModelInfo, ModelConfig, LoopConfig } from "../types";
 import { Button } from "./common";
 import { ModelSelector, makeModelKey, parseModelKey, isModelEnabled, getModelDisplayName } from "./ModelSelector";
 import { createLogger } from "../lib/logger";
@@ -17,6 +17,8 @@ import { createLogger } from "../lib/logger";
 const log = createLogger("LoopActionBar");
 
 export interface LoopActionBarProps {
+  /** Mode of the loop: "loop" or "chat" */
+  mode?: LoopConfig["mode"];
   /** Current model configuration (from loop config) */
   currentModel?: ModelConfig;
   /** Pending model that will be used for next iteration */
@@ -36,6 +38,7 @@ export interface LoopActionBarProps {
 }
 
 export function LoopActionBar({
+  mode,
   currentModel,
   pendingModel,
   pendingPrompt,
@@ -48,6 +51,8 @@ export function LoopActionBar({
   const [message, setMessage] = useState("");
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const isChatMode = mode === "chat";
 
   // Build current model key for display
   const currentModelKey = currentModel 
@@ -181,7 +186,7 @@ export function LoopActionBar({
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Send a message to steer the agent..."
+            placeholder={isChatMode ? "Type a message..." : "Send a message to steer the agent..."}
             disabled={disabled || isSubmitting}
             className="flex-1 min-w-0 h-9 text-sm px-3 rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
           />
@@ -194,7 +199,7 @@ export function LoopActionBar({
             loading={isSubmitting}
             className="flex-shrink-0 h-9"
           >
-            Queue
+            {isChatMode ? "Send" : "Queue"}
           </Button>
         </div>
 
@@ -206,7 +211,9 @@ export function LoopActionBar({
         )}
 
         <p className="hidden sm:block mt-2 text-xs text-gray-500 dark:text-gray-400">
-          Message will be sent after current step completes. Model change takes effect on next prompt.
+          {isChatMode
+            ? "Message will be sent immediately. Model change takes effect on next message."
+            : "Message will be sent after current step completes. Model change takes effect on next prompt."}
         </p>
       </form>
     </div>

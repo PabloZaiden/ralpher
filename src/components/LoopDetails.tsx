@@ -27,6 +27,7 @@ import {
   isFinalState,
   isLoopActive,
   canJumpstart,
+  getEntityLabel,
 } from "../utils";
 import { log } from "../lib/logger";
 
@@ -112,6 +113,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     logs,
     todos,
     gitChangeCounter,
+    isChatMode,
     accept,
     push,
     updateBranch,
@@ -120,6 +122,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     markMerged,
     setPending,
     clearPending,
+    sendChatMessage,
     getDiff,
     getPlan,
     getStatusFile,
@@ -437,10 +440,10 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
           </Button>
           <div className="mt-8 text-center">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-              Loop not found
+              Not found
             </h2>
             <p className="mt-2 text-gray-500 dark:text-gray-400">
-              {error || "The requested loop does not exist."}
+              {error || "The requested item does not exist."}
             </p>
           </div>
         </div>
@@ -450,6 +453,12 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
   const { config, state } = loop;
   const isActive = isLoopActive(state.status);
+  const labels = getEntityLabel(config.mode);
+
+  // Filter tabs for chat mode: hide Prompt and Plan tabs
+  const visibleTabs = isChatMode
+    ? tabs.filter((tab) => tab.id !== "prompt" && tab.id !== "plan")
+    : tabs;
 
   return (
     <div className="h-full bg-gray-50 dark:bg-gray-900 flex flex-col overflow-hidden">
@@ -466,8 +475,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
             <button
               onClick={() => setRenameModal(true)}
               className="flex-shrink-0 p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700"
-              aria-label="Rename loop"
-              title="Rename loop"
+              aria-label={`Rename ${labels.singular}`}
+              title={`Rename ${labels.singular}`}
             >
               <EditIcon />
             </button>
@@ -569,7 +578,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                 </svg>
               </div>
               <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-medium text-red-800 dark:text-red-300">Loop Error</h3>
+                <h3 className="text-sm font-medium text-red-800 dark:text-red-300">{labels.capitalized} Error</h3>
                 <p className="mt-1 text-sm text-red-700 dark:text-red-400 break-words">{state.error.message}</p>
                 <div className="mt-2 text-xs text-red-600 dark:text-red-500">
                   <span className="mr-3">Iteration: {state.error.iteration}</span>
@@ -584,7 +593,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
         {/* Full width content area */}
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            {state.status === "planning" ? (
+            {state.status === "planning" && !isChatMode ? (
               <PlanReviewPanel
                 loop={loop}
                 planContent={planContent?.content ?? ""}
@@ -607,7 +616,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
               <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                 {/* Tab navigation */}
                 <div className="flex border-b border-gray-200 dark:border-gray-700 mb-3 overflow-x-auto flex-shrink-0">
-                  {tabs.map((tab) => {
+                  {visibleTabs.map((tab) => {
                     const hasUpdate = tabsWithUpdates.has(tab.id);
                     return (
                       <button
@@ -706,7 +715,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
                   {activeTab === "info" && (
                     <div className="p-4 space-y-4 flex-1 overflow-auto dark-scrollbar">
-                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Loop Information</h3>
+                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{labels.capitalized} Information</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {/* Statistics */}
                         <div className="space-y-2">
@@ -812,14 +821,14 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                       {/* Tip for using action bar */}
                       {isActive && !state.pendingPrompt && !state.pendingModel && (
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Use the action bar at the bottom to send a message or change the model while the loop is running.
+                          Use the action bar at the bottom to send a message or change the model while the {labels.singular} is running.
                         </p>
                       )}
 
                       {/* Info message when loop is not running */}
                       {!isActive && !state.pendingPrompt && !state.pendingModel && (
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Messages can only be queued while the loop is running.
+                          Messages can only be queued while the {labels.singular} is running.
                         </p>
                       )}
                     </div>
@@ -1062,7 +1071,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                               About Review Mode
                             </h3>
                             <p className="text-sm text-gray-600 dark:text-gray-400">
-                              This loop can receive reviewer comments and address them iteratively.
+                              This {labels.singular} can receive reviewer comments and address them iteratively.
                               {loop.state.reviewMode.completionAction === "push"
                                 ? " Pushed loops continue adding commits to the same branch."
                                 : " Merged loops create new review branches for each cycle."}
@@ -1072,10 +1081,10 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                       ) : (
                         <div className="text-center py-8">
                           <p className="text-gray-500 dark:text-gray-400">
-                            This loop does not have review mode enabled.
+                            This {labels.singular} does not have review mode enabled.
                           </p>
                           <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-                            Review mode is automatically enabled when a loop is pushed or merged.
+                            Review mode is automatically enabled when a {labels.singular} is pushed or merged.
                           </p>
                         </div>
                       )}
@@ -1140,8 +1149,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                                 <span className="text-red-600 dark:text-red-400 text-sm">🗑</span>
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Purge Loop</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">Delete this loop and all associated data</div>
+                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Purge {labels.capitalized}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">Delete this {labels.singular} and all associated data</div>
                               </div>
                               <span className="text-gray-400 dark:text-gray-500">→</span>
                             </button>
@@ -1171,8 +1180,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                                 <span className="text-red-600 dark:text-red-400 text-sm">✗</span>
                               </div>
                               <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Delete Loop</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">Cancel and delete this loop</div>
+                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Delete {labels.capitalized}</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">Cancel and delete this {labels.singular}</div>
                               </div>
                               <span className="text-gray-400 dark:text-gray-500">→</span>
                             </button>
@@ -1190,12 +1199,21 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       {/* LoopActionBar for mid-loop messaging (active loops and jumpstartable loops) */}
       {(isActive || canJumpstart(state.status)) && (
         <LoopActionBar
+          mode={config.mode}
           currentModel={config.model}
           pendingModel={state.pendingModel}
           pendingPrompt={state.pendingPrompt}
           models={models}
           modelsLoading={modelsLoading}
           onQueuePending={async (options) => {
+            if (isChatMode) {
+              // In chat mode, send message immediately via chat API
+              if (options.message) {
+                return await sendChatMessage(options.message, options.model);
+              }
+              return false;
+            }
+            // In loop mode, queue for next iteration
             const result = await setPending(options);
             return result.success;
           }}

@@ -11,7 +11,8 @@ import "./index.css";
 
 type Route =
   | { view: "dashboard" }
-  | { view: "loop"; loopId: string };
+  | { view: "loop"; loopId: string }
+  | { view: "chat"; chatId: string };
 
 /**
  * Parse the current URL hash into a route.
@@ -25,6 +26,13 @@ function parseHash(): Route {
       return { view: "loop", loopId };
     }
   }
+
+  if (hash.startsWith("/chat/")) {
+    const chatId = hash.slice(6); // Remove /chat/
+    if (chatId) {
+      return { view: "chat", chatId };
+    }
+  }
   
   return { view: "dashboard" };
 }
@@ -35,8 +43,10 @@ function parseHash(): Route {
 function navigateTo(route: Route) {
   if (route.view === "dashboard") {
     window.location.hash = "/";
-  } else {
+  } else if (route.view === "loop") {
     window.location.hash = `/loop/${route.loopId}`;
+  } else {
+    window.location.hash = `/chat/${route.chatId}`;
   }
 }
 
@@ -58,6 +68,10 @@ export function App() {
     navigateTo({ view: "loop", loopId });
   }, []);
 
+  const handleSelectChat = useCallback((chatId: string) => {
+    navigateTo({ view: "chat", chatId });
+  }, []);
+
   const handleBack = useCallback(() => {
     navigateTo({ view: "dashboard" });
   }, []);
@@ -74,10 +88,22 @@ export function App() {
     );
   }
 
+  if (route.view === "chat") {
+    return (
+      <LogLevelInitializer>
+        <LoopDetails
+          loopId={route.chatId}
+          onBack={handleBack}
+        />
+      </LogLevelInitializer>
+    );
+  }
+
   return (
     <LogLevelInitializer>
       <Dashboard
         onSelectLoop={handleSelectLoop}
+        onSelectChat={handleSelectChat}
       />
     </LogLevelInitializer>
   );
