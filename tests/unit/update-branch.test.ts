@@ -16,10 +16,9 @@ import {
   waitForEvent,
   waitForLoopStatus,
   testModelFields,
+  testWorkspaceId,
 } from "../setup";
 import type { TestContext } from "../setup";
-
-const testWorkspaceId = "test-workspace-id";
 
 /**
  * Helper: set up a bare remote, push the current branch, and return branch name + remote dir.
@@ -30,6 +29,8 @@ async function setupRemote(ctx: TestContext): Promise<{ remoteDir: string; curre
   await Bun.$`git -C ${ctx.workDir} remote add origin ${remoteDir}`.quiet();
   const currentBranch = (await Bun.$`git -C ${ctx.workDir} branch --show-current`.text()).trim();
   await Bun.$`git -C ${ctx.workDir} push -u origin ${currentBranch}`.quiet();
+  // Set bare repo HEAD to the pushed branch so clones work regardless of git defaults
+  await Bun.$`git -C ${remoteDir} symbolic-ref HEAD refs/heads/${currentBranch}`.quiet();
   return { remoteDir, currentBranch };
 }
 
@@ -62,13 +63,14 @@ async function createCompleteAndPushLoop(ctx: TestContext) {
  */
 async function addRemoteCommit(
   remoteDir: string,
+  branch: string,
   files: Record<string, string>,
   message: string,
   dataDir: string,
 ): Promise<void> {
   const otherClone = join(dataDir, "other-clone-" + Date.now());
   try {
-    await Bun.$`git clone ${remoteDir} ${otherClone}`.quiet();
+    await Bun.$`git clone --branch ${branch} ${remoteDir} ${otherClone}`.quiet();
     await Bun.$`git -C ${otherClone} config user.email "other@test.com"`.quiet();
     await Bun.$`git -C ${otherClone} config user.name "Other User"`.quiet();
     for (const [path, content] of Object.entries(files)) {
@@ -128,12 +130,13 @@ describe("Update Branch", () => {
       });
 
       try {
-        const { remoteDir } = await setupRemote(ctx);
+        const { remoteDir, currentBranch } = await setupRemote(ctx);
         const loop = await createCompleteAndPushLoop(ctx);
 
         // Add a non-conflicting commit to the base branch on the remote
         await addRemoteCommit(
           remoteDir,
+          currentBranch,
           { "remote-only.txt": "Remote content\n" },
           "Non-conflicting remote commit",
           ctx.dataDir,
@@ -179,7 +182,7 @@ describe("Update Branch", () => {
       });
 
       try {
-        const { remoteDir } = await setupRemote(ctx);
+        const { remoteDir, currentBranch } = await setupRemote(ctx);
 
         // Create loop
         const loop = await ctx.manager.createLoop({
@@ -210,6 +213,7 @@ describe("Update Branch", () => {
         // Now add a conflicting commit to the base branch on the remote
         await addRemoteCommit(
           remoteDir,
+          currentBranch,
           { "test.txt": "Modified by someone else\n" },
           "Conflicting remote commit to test.txt",
           ctx.dataDir,

@@ -113,7 +113,7 @@ describe("Update Branch User Scenarios", () => {
       // (simulate another developer pushing to the base branch)
       const otherClone = join(ctx.dataDir, "other-clone-" + Date.now());
       try {
-        await Bun.$`git clone ${ctx.remoteDir} ${otherClone}`.quiet();
+        await Bun.$`git clone --branch ${ctx.defaultBranch} ${ctx.remoteDir} ${otherClone}`.quiet();
         await Bun.$`git -C ${otherClone} config user.email "other@test.com"`.quiet();
         await Bun.$`git -C ${otherClone} config user.name "Other Developer"`.quiet();
         await writeFile(join(otherClone, "remote-only.txt"), "New file from other developer\n");

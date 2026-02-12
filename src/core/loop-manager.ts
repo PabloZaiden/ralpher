@@ -984,7 +984,7 @@ Follow the standard loop execution flow:
 
       // --- Working branch sync ---
       const workingBranchConflictResult = await this.syncWorkingBranch(
-        loopId, loop, git, baseBranch, worktreePath, workingBranch
+        loopId, loop, git, baseBranch, worktreePath, workingBranch, "pushLoop"
       );
       if (workingBranchConflictResult) {
         return workingBranchConflictResult;
@@ -1057,7 +1057,7 @@ Follow the standard loop execution flow:
 
       // --- Working branch sync ---
       const workingBranchConflictResult = await this.syncWorkingBranch(
-        loopId, loop, git, baseBranch, worktreePath, workingBranch
+        loopId, loop, git, baseBranch, worktreePath, workingBranch, "updateBranch"
       );
       if (workingBranchConflictResult) {
         return workingBranchConflictResult;
@@ -1089,9 +1089,10 @@ Follow the standard loop execution flow:
     git: GitService,
     baseBranch: string,
     worktreePath: string,
-    workingBranch: string
+    workingBranch: string,
+    caller: string
   ): Promise<PushLoopResult | null> {
-    log.debug(`[LoopManager] pushLoop: Fetching origin/${workingBranch} for loop ${loopId}`);
+    log.debug(`[LoopManager] ${caller}: Fetching origin/${workingBranch} for loop ${loopId}`);
     const fetchSuccess = await git.fetchBranch(loop.config.directory, workingBranch);
 
     if (!fetchSuccess) {
@@ -1111,7 +1112,7 @@ Follow the standard loop execution flow:
     }
 
     // Remote working branch has diverged — attempt to merge
-    log.debug(`[LoopManager] pushLoop: Merging origin/${workingBranch} into local working branch for loop ${loopId}`);
+    log.debug(`[LoopManager] ${caller}: Merging origin/${workingBranch} into local working branch for loop ${loopId}`);
     const mergeResult = await git.mergeWithConflictDetection(
       worktreePath,
       `origin/${workingBranch}`,
@@ -1119,14 +1120,14 @@ Follow the standard loop execution flow:
     );
 
     if (mergeResult.success) {
-      log.debug(`[LoopManager] pushLoop: Clean merge with origin/${workingBranch}`);
+      log.debug(`[LoopManager] ${caller}: Clean merge with origin/${workingBranch}`);
       return null;
     }
 
     if (mergeResult.hasConflicts) {
       // Conflicts on working branch — start conflict resolution
       const conflictedFiles = mergeResult.conflictedFiles ?? [];
-      log.debug(`[LoopManager] pushLoop: Working branch merge conflicts detected: ${conflictedFiles.join(", ")}`);
+      log.debug(`[LoopManager] ${caller}: Working branch merge conflicts detected: ${conflictedFiles.join(", ")}`);
 
       await git.abortMerge(worktreePath);
 
@@ -1146,7 +1147,7 @@ Follow the standard loop execution flow:
         autoPushOnComplete: true,
         syncPhase: "working_branch",
       };
-      assertValidTransition(loop.state.status, "resolving_conflicts", "pushLoop");
+      assertValidTransition(loop.state.status, "resolving_conflicts", caller);
       loop.state.status = "resolving_conflicts";
       loop.state.completedAt = undefined;
       await updateLoopState(loopId, loop.state);
@@ -1158,7 +1159,7 @@ Follow the standard loop execution flow:
 
     // Non-conflict merge failure
     const errorMsg = mergeResult.stderr || "Unknown merge error";
-    log.error(`[LoopManager] pushLoop: Working branch merge failed for loop ${loopId}: ${errorMsg}`);
+    log.error(`[LoopManager] ${caller}: Working branch merge failed for loop ${loopId}: ${errorMsg}`);
     return {
       success: false,
       error: `Failed to merge origin/${workingBranch}: ${errorMsg}`,
