@@ -69,6 +69,8 @@ export interface CreateLoopOptions {
   planMode: boolean;
   /** Save as draft without starting (no git branch or session created) */
   draft?: boolean;
+  /** Mode of operation: "loop" for autonomous loops, "chat" for interactive chat (default: "loop") */
+  mode?: "loop" | "chat";
 }
 
 /**
@@ -219,6 +221,7 @@ export class LoopManager {
       baseBranch: options.baseBranch,
       clearPlanningFolder: options.clearPlanningFolder ?? DEFAULT_LOOP_CONFIG.clearPlanningFolder,
       planMode: options.planMode,
+      mode: options.mode ?? DEFAULT_LOOP_CONFIG.mode,
     };
 
     const state = createInitialState(id);

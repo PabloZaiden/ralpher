@@ -72,6 +72,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "review_mode",
   "todos",
   "git_worktree_path",
+  "mode",
 ]);
 
 /**
@@ -112,6 +113,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     base_branch: config.baseBranch ?? null,
     clear_planning_folder: config.clearPlanningFolder ? 1 : 0,
     plan_mode: config.planMode ? 1 : 0,
+    mode: config.mode ?? "loop",
     // State fields
     status: state.status,
     current_iteration: state.currentIteration,
@@ -203,6 +205,7 @@ function rowToLoop(row: Record<string, unknown>): Loop {
     activityTimeoutSeconds: (row["activity_timeout_seconds"] as number | null) ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
     clearPlanningFolder: row["clear_planning_folder"] === 1,
     planMode: row["plan_mode"] === 1,
+    mode: (row["mode"] as string as LoopConfig["mode"]) ?? "loop",
   };
 
   // Optional config fields

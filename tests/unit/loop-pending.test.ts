@@ -140,6 +140,7 @@ describe("LoopEngine Pending Model", () => {
       activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
       clearPlanningFolder: false,
       planMode: false,
+      mode: "loop",
       ...overrides,
     };
 

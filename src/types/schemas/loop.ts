@@ -39,6 +39,7 @@ export const CreateLoopRequestSchema = z.object({
   clearPlanningFolder: z.boolean().optional(),
   planMode: z.boolean({ error: "planMode is required and must be a boolean (true or false)" }),
   draft: z.boolean().optional(),
+  mode: z.enum(["loop", "chat"]).optional(),
 });
 
 /**
@@ -108,6 +109,16 @@ export const SetPendingRequestSchema = z.object({
  */
 export const StartDraftRequestSchema = z.object({
   planMode: z.boolean({ error: "planMode is required" }),
+});
+
+/**
+ * Schema for sending a chat message - POST /api/loops/:id/chat
+ */
+export const SendChatMessageRequestSchema = z.object({
+  message: z.string().refine((val) => val.trim().length > 0, {
+    message: "message cannot be empty",
+  }),
+  model: ModelConfigSchema.optional(),
 });
 
 

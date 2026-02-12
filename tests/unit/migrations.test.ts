@@ -1251,4 +1251,61 @@ describe("migrations - migrate existing loops to workspaces (migration #11)", ()
     const loop = db.query("SELECT git_worktree_path FROM loops WHERE id = 'loop-wt-2'").get() as { git_worktree_path: string };
     expect(loop.git_worktree_path).toBe("/home/user/project/.ralph-worktrees/loop-wt-2");
   });
+
+  // ==========================================================================
+  // Migration 15: add_mode_column
+  // ==========================================================================
+
+  test("migration 15 adds mode column to loops table", () => {
+    // Verify column doesn't exist before migration 15
+    const columnsBefore = getTableColumns(db, "loops");
+    expect(columnsBefore).not.toContain("mode");
+
+    // Run all migrations
+    runMigrations(db);
+
+    // Verify column now exists
+    const columnsAfter = getTableColumns(db, "loops");
+    expect(columnsAfter).toContain("mode");
+  });
+
+  test("migration 15 is idempotent", () => {
+    // Run migrations twice — should not fail
+    runMigrations(db);
+    runMigrations(db);
+
+    // Column should still exist
+    const columns = getTableColumns(db, "loops");
+    expect(columns).toContain("mode");
+  });
+
+  test("migration 15 defaults existing rows to 'loop'", () => {
+    // Insert a loop before running migrations
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-mode-1', 'Existing Loop', '/home/user/project', 'test', '2026-02-12T10:00:00Z', '2026-02-12T10:00:00Z', 'STOP', 'ralph/', '[Ralph]')
+    `);
+
+    // Run all migrations
+    runMigrations(db);
+
+    // Verify existing row gets default mode 'loop'
+    const loop = db.query("SELECT mode FROM loops WHERE id = 'loop-mode-1'").get() as { mode: string };
+    expect(loop.mode).toBe("loop");
+  });
+
+  test("migration 15 allows setting mode to 'chat'", () => {
+    // Run all migrations
+    runMigrations(db);
+
+    // Insert a chat
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix, mode)
+      VALUES ('chat-1', 'Test Chat', '/home/user/project', 'hello', '2026-02-12T10:00:00Z', '2026-02-12T10:00:00Z', '', 'ralph/', '[Ralph]', 'chat')
+    `);
+
+    // Verify mode is stored
+    const loop = db.query("SELECT mode FROM loops WHERE id = 'chat-1'").get() as { mode: string };
+    expect(loop.mode).toBe("chat");
+  });
 });

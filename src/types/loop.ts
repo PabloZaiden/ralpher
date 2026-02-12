@@ -77,6 +77,9 @@ export interface LoopConfig {
 
   /** Whether to start in plan mode (for drafts, this indicates the intended mode) */
   planMode: boolean;
+
+  /** Mode of operation: "loop" for autonomous loops, "chat" for interactive chat */
+  mode: "loop" | "chat";
 }
 
 /**
@@ -368,6 +371,7 @@ export const DEFAULT_LOOP_CONFIG = {
   activityTimeoutSeconds: 900, // 15 minutes
   clearPlanningFolder: false,
   planMode: true,
+  mode: "loop" as const,
   git: {
     branchPrefix: "ralph/",
     commitPrefix: "[Ralph]",

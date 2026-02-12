@@ -302,6 +302,7 @@ describe("Workspace Persistence", () => {
             activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
             clearPlanningFolder: false,
             planMode: false,
+            mode: "loop",
             workspaceId: workspace.id,
           },
           state: {
@@ -352,6 +353,7 @@ describe("Workspace Persistence", () => {
           activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
           clearPlanningFolder: false,
           planMode: false,
+          mode: "loop",
           workspaceId: workspace.id,
         },
         state: {
