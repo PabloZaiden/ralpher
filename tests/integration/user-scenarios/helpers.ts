@@ -582,8 +582,22 @@ export async function acceptLoopViaAPI(
 export async function pushLoopViaAPI(
   baseUrl: string,
   loopId: string
-): Promise<{ status: number; body: { success: boolean; remoteBranch?: string; error?: string; message?: string } }> {
+): Promise<{ status: number; body: { success: boolean; remoteBranch?: string; syncStatus?: string; error?: string; message?: string } }> {
   const response = await fetch(`${baseUrl}/api/loops/${loopId}/push`, {
+    method: "POST",
+  });
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Update branch (sync with base) for a pushed loop via the API.
+ */
+export async function updateBranchViaAPI(
+  baseUrl: string,
+  loopId: string
+): Promise<{ status: number; body: { success: boolean; remoteBranch?: string; syncStatus?: string; error?: string; message?: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}/update-branch`, {
     method: "POST",
   });
   const body = await response.json();
