@@ -98,14 +98,16 @@ export function WorkspaceSettingsModal({
   const [optimizeSuccess, setOptimizeSuccess] = useState<boolean | null>(null);
   const [wasAlreadyOptimized, setWasAlreadyOptimized] = useState(false);
 
-  // Fetch AGENTS.md status when modal opens with a connected workspace
+  // Fetch AGENTS.md status when modal opens with a workspace
+  // The AGENTS.md API handles connection on-demand via getCommandExecutorAsync(),
+  // so we don't need to gate on status?.connected here.
   const fetchOptimizerStatus = useCallback(async () => {
-    if (isOpen && workspace && status?.connected) {
+    if (isOpen && workspace) {
       setOptimizeSuccess(null);
       setWasAlreadyOptimized(false);
       await optimizer.fetchStatus(workspace.id);
     }
-  }, [isOpen, workspace?.id, status?.connected]);
+  }, [isOpen, workspace?.id]);
 
   useEffect(() => {
     fetchOptimizerStatus();
@@ -223,7 +225,7 @@ export function WorkspaceSettingsModal({
         )}
 
         {/* AGENTS.md Optimization */}
-        {workspace && status?.connected && (
+        {workspace && (
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -238,9 +240,27 @@ export function WorkspaceSettingsModal({
               so Ralpher loops can track their work reliably across iterations.
             </p>
 
+            {/* Loading state during initial fetch (may involve on-demand connection) */}
+            {optimizer.loading && !optimizer.status && (
+              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
+                <LoadingSpinner className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Checking AGENTS.md status...
+                </span>
+              </div>
+            )}
+
             {optimizer.error && (
               <div className="mb-3 p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900">
                 <p className="text-sm text-red-700 dark:text-red-300">{optimizer.error}</p>
+                <button
+                  type="button"
+                  onClick={fetchOptimizerStatus}
+                  disabled={optimizer.loading}
+                  className="mt-2 text-xs font-medium text-red-700 dark:text-red-300 hover:text-red-800 dark:hover:text-red-200 underline disabled:opacity-50"
+                >
+                  Retry
+                </button>
               </div>
             )}
 
@@ -274,14 +294,14 @@ export function WorkspaceSettingsModal({
             )}
 
             <div className="flex gap-2">
-              {(!optimizer.status?.analysis.isOptimized || optimizer.status?.analysis.updateAvailable) && (
+              {(!optimizer.status?.analysis.isOptimized || optimizer.status?.analysis.updateAvailable) && !optimizer.error && (
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   onClick={handleOptimize}
                   loading={optimizer.loading}
-                  disabled={optimizer.loading}
+                  disabled={optimizer.loading || !optimizer.status}
                 >
                   <OptimizeIcon className="w-4 h-4 mr-2" />
                   {optimizer.status?.analysis.updateAvailable && optimizer.status.analysis.isOptimized
@@ -338,6 +358,33 @@ function RefreshIcon({ className }: { className?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Simple loading spinner for async operations.
+ */
+function LoadingSpinner({ className }: { className?: string }) {
+  return (
+    <svg
+      className={`${className ?? ""} animate-spin`}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
       />
     </svg>
   );

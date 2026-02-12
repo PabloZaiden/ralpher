@@ -247,7 +247,7 @@ For more information, read the Bun API docs in `node_modules/bun-types/docs/**.m
 ## APIs
 
 - Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Use `Bun.$` for shell commands instead of execa
+- Use `Bun.$` for shell commands instead of execa (for local server operations only — workspace repository commands must use `CommandExecutor`, see Remote Command Execution above)
 
 ```typescript
 // File operations
@@ -255,8 +255,8 @@ const file = Bun.file("path/to/file");
 const content = await file.text();
 await Bun.write("path/to/file", content);
 
-// Shell commands
-const result = await Bun.$`git status`.text();
+// Shell commands (local server operations only, NOT for workspace repos)
+const result = await Bun.$`ls -la`.text();
 ```
 
 ## Testing
@@ -401,7 +401,7 @@ Beyond the general "avoid duplication" guideline, watch for these specific recur
 
 - **API error/success responses** — use `errorResponse()` and `successResponse()` from `src/api/helpers.ts`. Never create ad-hoc `Response.json({ error: ... })` calls.
 - **Workspace lookup + 404** — use `requireWorkspace(workspaceId)` from `src/api/helpers.ts` instead of repeating the lookup-and-check pattern.
-- **Frontend API calls** — use `apiCall<T>()`, `apiAction()`, and `apiActionWithBody()` from `src/hooks/loopActions.ts` instead of writing raw fetch+check+parse boilerplate.
+- **Frontend API calls** — use the exported action functions from `src/hooks/loopActions.ts` (e.g., `acceptLoopApi`, `pushLoopApi`, `setPendingApi`) instead of writing raw fetch+check+parse boilerplate. These wrap internal helpers (`apiCall`, `apiAction`, `apiActionWithBody`) that are not exported.
 - **Shared UI components** — always check if a reusable component exists (e.g., `ModelSelector`, `ConfirmModal`, `Toast`) before building inline equivalents.
 
 ### Frontend Performance
@@ -505,7 +505,7 @@ If the database gets corrupted or you need a fresh start:
 
 1. **Via UI**: Server Settings modal -> "Reset all settings" button
 2. **Via API**: `POST /api/settings/reset-all`
-3. **Manual**: Delete `data/ralpher.db` and related WAL files, then restart
+3. **Manual**: Delete `data/ralpher.db` and related WAL/SHM files, then restart
 
 This will delete all loops, sessions, and preferences. Use with caution.
 

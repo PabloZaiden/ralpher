@@ -104,7 +104,8 @@ const TRANSITION_TABLE: Record<LoopStatus, ReadonlySet<LoopStatus>> = {
   // → deleted: delete/mark as merged externally
   // → idle: review comments restarting the loop
   // → resolving_conflicts: re-push encountered conflicts
-  pushed: new Set(["deleted", "idle", "resolving_conflicts"]),
+  // → pushed: re-push after branch update (updateBranch)
+  pushed: new Set(["deleted", "idle", "resolving_conflicts", "pushed"]),
 
   // deleted: terminal state, awaiting purge
   deleted: new Set([]),

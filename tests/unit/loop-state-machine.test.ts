@@ -51,7 +51,7 @@ const EXPECTED_TRANSITIONS: Record<LoopStatus, LoopStatus[]> = {
   max_iterations: ["merged", "pushed", "deleted", "resolving_conflicts", "stopped", "planning"],
   resolving_conflicts: ["starting", "stopped", "failed", "pushed", "completed", "max_iterations", "deleted"],
   merged: ["deleted", "idle"],
-  pushed: ["deleted", "idle", "resolving_conflicts"],
+  pushed: ["deleted", "idle", "resolving_conflicts", "pushed"],
   deleted: [],
 };
 
@@ -196,10 +196,12 @@ describe("loop-state-machine", () => {
       }
     });
 
-    test("no status can transition to itself except stopped", () => {
+    test("no status can transition to itself except stopped and pushed", () => {
+      const selfTransitionAllowed = new Set<LoopStatus>(["stopped", "pushed"]);
       for (const status of ALL_STATUSES) {
-        if (status === "stopped") {
-          // stopped → stopped is valid (jumpstart re-enters stopped for restart)
+        if (selfTransitionAllowed.has(status)) {
+          // stopped → stopped: jumpstart re-enters stopped for restart
+          // pushed → pushed: re-push after branch update (updateBranch)
           expect(isValidTransition(status, status)).toBe(true);
         } else {
           expect(isValidTransition(status, status)).toBe(false);

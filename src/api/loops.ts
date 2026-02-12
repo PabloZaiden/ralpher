@@ -207,8 +207,8 @@ export const loopsCrudRoutes = {
 
       // Validate model is enabled if provided
       // All loops (including drafts) require a connected model to ensure valid configurations
-      // NOTE: This is done AFTER preflight checks to avoid backend connection costs
-      // for requests that will be rejected anyway (uncommitted changes, active loop exists)
+      // NOTE: This is done AFTER body validation to avoid backend connection costs
+      // for requests that will be rejected anyway (invalid body, missing fields)
       if (body.model?.providerID && body.model?.modelID) {
         const modelValidation = await isModelEnabled(
           workspaceId,
@@ -332,8 +332,8 @@ export const loopsCrudRoutes = {
     /**
      * PATCH /api/loops/:id - Update a loop's configuration.
      * 
-     * Updates the specified fields of a loop's configuration. Can be used
-     * on any loop regardless of status. Partial updates are supported.
+     * Updates the specified fields of a loop's configuration. Cannot be used
+     * on running or starting loops — stop the loop first. Partial updates are supported.
      * 
      * Updatable fields: name, directory, prompt, model, maxIterations,
      * maxConsecutiveErrors, activityTimeoutSeconds, stopPattern, baseBranch,
@@ -475,7 +475,7 @@ export const loopsControlRoutes = {
      * POST /api/loops/:id/draft/start - Start a draft loop.
      * 
      * Transitions a draft loop to either planning mode or immediate execution.
-     * Performs preflight checks for uncommitted changes before starting.
+     * Each loop operates in its own worktree, so no uncommitted-changes checks are needed.
      * 
      * Request Body:
      * - planMode (required): If true, start in plan mode; if false, start immediately
@@ -529,7 +529,7 @@ export const loopsControlRoutes = {
      * POST /api/loops/:id/accept - Accept and merge a completed loop.
      * 
      * Merges the loop's working branch into the original branch.
-     * Only works for loops in completed/stopped/max_iterations/failed status.
+     * Only works for loops in completed or max_iterations status.
      * After merge, the loop status changes to `merged`.
      * 
      * @returns AcceptResponse with success and mergeCommit SHA
@@ -560,7 +560,7 @@ export const loopsControlRoutes = {
      * POST /api/loops/:id/push - Push a completed loop's branch to remote.
      * 
      * Pushes the loop's working branch to the remote repository for PR workflow.
-     * Only works for loops in completed/stopped/max_iterations/failed status.
+     * Only works for loops in completed or max_iterations status.
      * After push, the loop status changes to `pushed` and can receive review comments.
      * 
      * @returns PushResponse with success and remoteBranch name
@@ -578,6 +578,41 @@ export const loopsControlRoutes = {
       }
 
       log.info("POST /api/loops/:id/push - Loop pushed", { loopId: req.params.id, remoteBranch: result.remoteBranch, syncStatus: result.syncStatus });
+      const syncStatus = result.syncStatus ?? "already_up_to_date";
+      let response: PushResponse;
+      if (syncStatus === "conflicts_being_resolved") {
+        response = { success: true, syncStatus };
+      } else {
+        response = { success: true, remoteBranch: result.remoteBranch!, syncStatus };
+      }
+      return Response.json(response);
+    },
+  },
+
+  "/api/loops/:id/update-branch": {
+    /**
+     * POST /api/loops/:id/update-branch - Update a pushed loop's branch by syncing with the base branch.
+     *
+     * Pulls and merges from the base branch into the working branch, then re-pushes.
+     * Only works for loops in `pushed` status.
+     * If the merge is clean, pushes immediately and the loop remains in `pushed` status.
+     * If there are conflicts, starts a conflict resolution engine and auto-pushes on completion.
+     *
+     * @returns PushResponse with success and sync status
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      log.debug("POST /api/loops/:id/update-branch", { loopId: req.params.id });
+      const result = await loopManager.updateBranch(req.params.id);
+
+      if (!result.success) {
+        log.warn("POST /api/loops/:id/update-branch - Failed", { loopId: req.params.id, error: result.error });
+        if (result.error?.includes("not found")) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        return errorResponse("update_branch_failed", result.error ?? "Unknown error", 400);
+      }
+
+      log.info("POST /api/loops/:id/update-branch - Branch updated", { loopId: req.params.id, remoteBranch: result.remoteBranch, syncStatus: result.syncStatus });
       const syncStatus = result.syncStatus ?? "already_up_to_date";
       let response: PushResponse;
       if (syncStatus === "conflicts_being_resolved") {
@@ -644,13 +679,15 @@ export const loopsControlRoutes = {
 
   "/api/loops/:id/mark-merged": {
     /**
-     * POST /api/loops/:id/mark-merged - Mark a loop as merged and sync with remote.
+     * POST /api/loops/:id/mark-merged - Mark an externally merged loop as deleted.
      * 
-     * Switches the repository back to the original branch, pulls latest changes
-     * from the remote, deletes the working branch, and marks the loop as deleted.
+     * Transitions the loop to `deleted` status, clears reviewMode.addressable,
+     * and disconnects the backend. With worktrees, no branch switching, pulling,
+     * or branch deletion is needed — the worktree isolates everything.
+     * Branch and worktree cleanup happens in purgeLoop().
      * 
      * This is useful when a loop's branch was merged externally (e.g., via GitHub PR)
-     * and the user wants to sync their local environment with the merged changes.
+     * and the user wants to clean up the loop.
      * 
      * Only works for loops in final states (pushed, merged, completed, max_iterations, deleted).
      * 

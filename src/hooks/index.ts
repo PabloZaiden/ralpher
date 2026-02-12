@@ -21,6 +21,7 @@ export { useViewModePreference, type UseViewModePreferenceResult, type Dashboard
 export {
   acceptLoopApi,
   pushLoopApi,
+  updateBranchApi,
   discardLoopApi,
   deleteLoopApi,
   purgeLoopApi,

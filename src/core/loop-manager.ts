@@ -73,8 +73,8 @@ export interface CreateLoopOptions {
 
 /**
  * Options for starting a loop.
- * Note: Previously supported handleUncommitted option has been removed.
- * Loops now fail to start if there are uncommitted changes.
+ * Loops use git worktrees for isolation, so uncommitted changes
+ * in the main repository do not affect loop execution.
  */
 export interface StartLoopOptions {
   // Reserved for future options
@@ -393,53 +393,9 @@ export class LoopManager {
    * Send feedback on a plan to refine it.
    */
   async sendPlanFeedback(loopId: string, feedback: string): Promise<void> {
-    let engine = this.engines.get(loopId);
-    
-    // If engine doesn't exist but loop is in planning status, recreate the engine
-    // This handles the case where the server was restarted while a loop was in planning mode
-    if (!engine) {
-      const loop = await loadLoop(loopId);
-      if (!loop) {
-        throw new Error(`Loop not found: ${loopId}`);
-      }
-      
-      if (loop.state.status !== "planning") {
-        throw new Error("Loop plan mode is not running");
-      }
-      
-      // Recreate the engine for this planning loop
-      const worktreeDir = loop.state.git?.worktreePath;
-      if (!worktreeDir) {
-        throw new Error("Loop has no worktree path - cannot recreate engine for plan feedback");
-      }
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
-      const git = GitService.withExecutor(executor);
-      const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
-      
-      engine = new LoopEngine({
-        loop,
-        backend,
-        gitService: git,
-        eventEmitter: this.emitter,
-        onPersistState: async (state) => {
-          await updateLoopState(loopId, state);
-        },
-      });
-      
-      this.engines.set(loopId, engine);
-      
-      // Need to set up the session for the engine
-      // The engine will reconnect to the existing session if possible
-      try {
-        await engine.reconnectSession();
-      } catch (error) {
-        log.warn(`Failed to reconnect session for plan feedback: ${String(error)}`);
-        // Continue anyway - we'll create a new session
-      }
-      
-      // Start state persistence
-      this.startStatePersistence(loopId);
-    }
+    // If engine doesn't exist, attempt to recover it from persisted state.
+    // This handles the case where the server was restarted while a loop was in planning mode.
+    const engine = this.engines.get(loopId) ?? await this.recoverPlanningEngine(loopId);
 
     // Verify loop is in planning status
     if (engine.state.status !== "planning") {
@@ -485,10 +441,9 @@ export class LoopManager {
    * Reuses the same session from plan creation.
    */
   async acceptPlan(loopId: string): Promise<void> {
-    const engine = this.engines.get(loopId);
-    if (!engine) {
-      throw new Error("Loop plan mode is not running");
-    }
+    // If engine doesn't exist, attempt to recover it from persisted state.
+    // This handles the case where the server was restarted while a loop was in planning mode.
+    const engine = this.engines.get(loopId) ?? await this.recoverPlanningEngine(loopId);
 
     // Verify loop is in planning status
     if (engine.state.status !== "planning") {
@@ -741,7 +696,8 @@ Follow the standard loop execution flow:
 
   /**
    * Start a loop.
-   * Fails with UNCOMMITTED_CHANGES error if the directory has uncommitted changes.
+   * Each loop operates in its own git worktree, so no uncommitted-changes
+   * checks are needed on the main repository checkout.
    */
   async startLoop(loopId: string, _options?: StartLoopOptions): Promise<void> {
     const loop = await loadLoop(loopId);
@@ -983,7 +939,7 @@ Follow the standard loop execution flow:
 
       // --- Working branch sync ---
       const workingBranchConflictResult = await this.syncWorkingBranch(
-        loopId, loop, git, baseBranch, worktreePath, workingBranch
+        loopId, loop, git, baseBranch, worktreePath, workingBranch, "pushLoop"
       );
       if (workingBranchConflictResult) {
         return workingBranchConflictResult;
@@ -997,6 +953,79 @@ Follow the standard loop execution flow:
       // Always clear the guard
       this.loopsBeingAccepted.delete(loopId);
       log.debug(`[LoopManager] pushLoop: Finished push for loop ${loopId}`);
+    }
+  }
+
+  /**
+   * Update a pushed loop's branch by syncing with the base branch and re-pushing.
+   * This pulls and merges from the base branch into the working branch (same logic
+   * used before pushing), pushes if clean, or triggers conflict resolution if needed.
+   * After a successful update, the loop remains in 'pushed' status.
+   *
+   * Reuses the same sync infrastructure as pushLoop():
+   * - syncWorkingBranch() to pull remote changes on the working branch
+   * - syncBaseBranchAndPush() to merge base branch changes and push
+   * - startConflictResolutionEngine() for conflict resolution (if needed)
+   */
+  async updateBranch(loopId: string): Promise<PushLoopResult> {
+    // Guard against concurrent accept/push operations on the same loop.
+    // Must be set synchronously (before any await) to prevent race conditions.
+    if (this.loopsBeingAccepted.has(loopId)) {
+      log.warn(`[LoopManager] updateBranch: Already processing loop ${loopId}, ignoring duplicate call`);
+      return { success: false, error: "Operation already in progress" };
+    }
+    this.loopsBeingAccepted.add(loopId);
+    log.debug(`[LoopManager] updateBranch: Starting branch update for loop ${loopId}`);
+
+    try {
+      const loop = await this.getLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+
+      // Must be in pushed status
+      if (loop.state.status !== "pushed") {
+        return { success: false, error: `Cannot update branch for loop in status: ${loop.state.status}` };
+      }
+
+      // Must have git state (branch was created and pushed)
+      if (!loop.state.git) {
+        return { success: false, error: "No git branch was created for this loop" };
+      }
+
+      // Prevent update while an engine is already running (e.g., conflict resolution)
+      if (this.engines.has(loopId)) {
+        return { success: false, error: "Loop already has an active engine running" };
+      }
+
+      // Get the appropriate command executor for the current mode
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+      const git = GitService.withExecutor(executor);
+
+      // Determine the base branch to sync with
+      const baseBranch = loop.config.baseBranch ?? loop.state.git.originalBranch;
+      const worktreePath = loop.state.git.worktreePath ?? loop.config.directory;
+      const workingBranch = loop.state.git.workingBranch;
+
+      // --- Ensure merge strategy is configured ---
+      await git.ensureMergeStrategy(worktreePath);
+
+      // --- Working branch sync ---
+      const workingBranchConflictResult = await this.syncWorkingBranch(
+        loopId, loop, git, baseBranch, worktreePath, workingBranch, "updateBranch"
+      );
+      if (workingBranchConflictResult) {
+        return workingBranchConflictResult;
+      }
+
+      // --- Base branch sync + push ---
+      return await this.syncBaseBranchAndPush(loopId, loop, git);
+    } catch (error) {
+      return { success: false, error: String(error) };
+    } finally {
+      // Always clear the guard
+      this.loopsBeingAccepted.delete(loopId);
+      log.debug(`[LoopManager] updateBranch: Finished branch update for loop ${loopId}`);
     }
   }
 
@@ -1015,9 +1044,10 @@ Follow the standard loop execution flow:
     git: GitService,
     baseBranch: string,
     worktreePath: string,
-    workingBranch: string
+    workingBranch: string,
+    caller: string
   ): Promise<PushLoopResult | null> {
-    log.debug(`[LoopManager] pushLoop: Fetching origin/${workingBranch} for loop ${loopId}`);
+    log.debug(`[LoopManager] ${caller}: Fetching origin/${workingBranch} for loop ${loopId}`);
     const fetchSuccess = await git.fetchBranch(loop.config.directory, workingBranch);
 
     if (!fetchSuccess) {
@@ -1037,7 +1067,7 @@ Follow the standard loop execution flow:
     }
 
     // Remote working branch has diverged — attempt to merge
-    log.debug(`[LoopManager] pushLoop: Merging origin/${workingBranch} into local working branch for loop ${loopId}`);
+    log.debug(`[LoopManager] ${caller}: Merging origin/${workingBranch} into local working branch for loop ${loopId}`);
     const mergeResult = await git.mergeWithConflictDetection(
       worktreePath,
       `origin/${workingBranch}`,
@@ -1045,14 +1075,14 @@ Follow the standard loop execution flow:
     );
 
     if (mergeResult.success) {
-      log.debug(`[LoopManager] pushLoop: Clean merge with origin/${workingBranch}`);
+      log.debug(`[LoopManager] ${caller}: Clean merge with origin/${workingBranch}`);
       return null;
     }
 
     if (mergeResult.hasConflicts) {
       // Conflicts on working branch — start conflict resolution
       const conflictedFiles = mergeResult.conflictedFiles ?? [];
-      log.debug(`[LoopManager] pushLoop: Working branch merge conflicts detected: ${conflictedFiles.join(", ")}`);
+      log.debug(`[LoopManager] ${caller}: Working branch merge conflicts detected: ${conflictedFiles.join(", ")}`);
 
       await git.abortMerge(worktreePath);
 
@@ -1072,7 +1102,7 @@ Follow the standard loop execution flow:
         autoPushOnComplete: true,
         syncPhase: "working_branch",
       };
-      assertValidTransition(loop.state.status, "resolving_conflicts", "pushLoop");
+      assertValidTransition(loop.state.status, "resolving_conflicts", caller);
       loop.state.status = "resolving_conflicts";
       loop.state.completedAt = undefined;
       await updateLoopState(loopId, loop.state);
@@ -1084,7 +1114,7 @@ Follow the standard loop execution flow:
 
     // Non-conflict merge failure
     const errorMsg = mergeResult.stderr || "Unknown merge error";
-    log.error(`[LoopManager] pushLoop: Working branch merge failed for loop ${loopId}: ${errorMsg}`);
+    log.error(`[LoopManager] ${caller}: Working branch merge failed for loop ${loopId}: ${errorMsg}`);
     return {
       success: false,
       error: `Failed to merge origin/${workingBranch}: ${errorMsg}`,
@@ -1560,10 +1590,12 @@ Follow the standard loop execution flow:
   }
 
   /**
-   * Mark a loop as merged (externally merged via PR).
-   * With worktrees, no checkout/reset operations are needed on the main repo.
+   * Handle an externally merged loop (e.g., merged via PR on GitHub).
+   * Transitions the loop to `deleted` status, clears reviewMode.addressable,
+   * and disconnects the backend. Despite the name, this does NOT set status
+   * to "merged" — it performs final cleanup by marking the loop as deleted.
    * The worktree and branch are preserved until purgeLoop() is called.
-   * 
+   *
    * Only works for loops in final states: pushed, merged, completed, max_iterations, deleted.
    */
   async markMerged(loopId: string): Promise<{ success: boolean; error?: string }> {
@@ -2446,6 +2478,62 @@ ${fileList}
     } catch (error) {
       log.warn(`Failed to clear plan.md: ${String(error)}`);
     }
+  }
+
+  /**
+   * Recover a planning engine that was lost due to server restart.
+   * Loads the loop from persistence, recreates the LoopEngine, reconnects the session,
+   * and starts state persistence. This is used by acceptPlan() and sendPlanFeedback()
+   * when the in-memory engine is missing but the loop is persisted in planning status.
+   */
+  private async recoverPlanningEngine(loopId: string): Promise<LoopEngine> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      throw new Error(`Loop not found: ${loopId}`);
+    }
+
+    if (loop.state.status !== "planning") {
+      throw new Error("Loop plan mode is not running");
+    }
+
+    // Recreate the engine for this planning loop
+    const worktreeDir = loop.state.git?.worktreePath;
+    if (!worktreeDir) {
+      throw new Error("Loop has no worktree path - cannot recreate engine for planning recovery");
+    }
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
+    const git = GitService.withExecutor(executor);
+    const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
+
+    const engine = new LoopEngine({
+      loop,
+      backend,
+      gitService: git,
+      eventEmitter: this.emitter,
+      onPersistState: async (state) => {
+        await updateLoopState(loopId, state);
+      },
+    });
+
+    this.engines.set(loopId, engine);
+
+    // Reconnect to the existing session (or create a new one if none exists).
+    // If this fails, remove the partially-initialized engine to avoid leaving
+    // a broken engine (with no sessionId) cached in the map.
+    try {
+      await engine.reconnectSession();
+    } catch (error) {
+      this.engines.delete(loopId);
+      throw new Error(
+        `Failed to recover planning engine session for loop ${loopId}: ${String(error)}`,
+        { cause: error },
+      );
+    }
+
+    // Start state persistence
+    this.startStatePersistence(loopId);
+
+    return engine;
   }
 
   /**

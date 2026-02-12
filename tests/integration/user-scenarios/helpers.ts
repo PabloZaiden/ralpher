@@ -3,7 +3,7 @@
  * These helpers simulate UI interactions via API calls.
  */
 
-import { mkdtemp, rm, writeFile, mkdir } from "fs/promises";
+import { mkdtemp, rm, writeFile, mkdir, realpath } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { serve, type Server } from "bun";
@@ -303,8 +303,9 @@ export async function setupTestServer(options: SetupServerOptions = {}): Promise
   } = options;
 
   // Create temp directories
-  const dataDir = await mkdtemp(join(tmpdir(), "ralpher-scenario-data-"));
-  const workDir = await mkdtemp(join(tmpdir(), "ralpher-scenario-work-"));
+  // Resolve symlinks (macOS /var → /private/var) to match git's resolved paths
+  const dataDir = await realpath(await mkdtemp(join(tmpdir(), "ralpher-scenario-data-")));
+  const workDir = await realpath(await mkdtemp(join(tmpdir(), "ralpher-scenario-work-")));
 
   // Set env var for persistence
   process.env["RALPHER_DATA_DIR"] = dataDir;
@@ -343,10 +344,12 @@ export async function setupTestServer(options: SetupServerOptions = {}): Promise
   // Create local git remote if requested
   let remoteDir: string | undefined;
   if (withRemote) {
-    remoteDir = await mkdtemp(join(tmpdir(), "ralpher-scenario-remote-"));
+    remoteDir = await realpath(await mkdtemp(join(tmpdir(), "ralpher-scenario-remote-")));
     await Bun.$`git init --bare ${remoteDir}`.quiet();
     await Bun.$`git -C ${workDir} remote add origin ${remoteDir}`.quiet();
     await Bun.$`git -C ${workDir} push -u origin ${defaultBranch}`.quiet();
+    // Set bare repo HEAD to the pushed branch so clones work regardless of git defaults
+    await Bun.$`git -C ${remoteDir} symbolic-ref HEAD refs/heads/${defaultBranch}`.quiet();
   }
 
   // Reset loop manager to clear any stale engines from previous tests
@@ -582,8 +585,22 @@ export async function acceptLoopViaAPI(
 export async function pushLoopViaAPI(
   baseUrl: string,
   loopId: string
-): Promise<{ status: number; body: { success: boolean; remoteBranch?: string; error?: string; message?: string } }> {
+): Promise<{ status: number; body: { success: boolean; remoteBranch?: string; syncStatus?: string; error?: string; message?: string } }> {
   const response = await fetch(`${baseUrl}/api/loops/${loopId}/push`, {
+    method: "POST",
+  });
+  const body = await response.json();
+  return { status: response.status, body };
+}
+
+/**
+ * Update branch (sync with base) for a pushed loop via the API.
+ */
+export async function updateBranchViaAPI(
+  baseUrl: string,
+  loopId: string
+): Promise<{ status: number; body: { success: boolean; remoteBranch?: string; syncStatus?: string; error?: string; message?: string } }> {
+  const response = await fetch(`${baseUrl}/api/loops/${loopId}/update-branch`, {
     method: "POST",
   });
   const body = await response.json();

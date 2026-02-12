@@ -20,14 +20,7 @@ export interface LoopSummaryProps {
   loop: Loop;
   /** Callback when the component is clicked */
   onClick?: () => void;
-  /** Callback when accept button is clicked (merge) */
-  onAccept?: () => void;
-  /** Callback when delete button is clicked */
-  onDelete?: () => void;
-  /** Callback when purge button is clicked */
-  onPurge?: () => void;
-  /** Callback when address comments button is clicked */
-  onAddressComments?: () => void;
+
   /** Callback when rename button is clicked */
   onRename?: () => void;
 }

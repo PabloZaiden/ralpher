@@ -8,11 +8,11 @@ This document describes the REST API for the Ralpher Loop Management System.
 http://localhost:3000/api
 ```
 
-The port can be configured via `RALPHER_PORT` or `PORT` environment variables.
+The port can be configured via the `RALPHER_PORT` environment variable.
 
 ## Authentication
 
-Currently, the API does not require authentication. This is intended for local development and trusted network environments.
+The API itself does not implement authentication. In production deployments, Ralpher runs behind a reverse proxy that enforces authentication and authorization. In local development, no authentication is needed.
 
 ## Response Format
 
@@ -54,9 +54,11 @@ Check if the server is running.
 ```json
 {
   "healthy": true,
-  "version": "1.0.0"
+  "version": "0.0.0-development"
 }
 ```
+
+The `version` field is read from `package.json` at startup and will reflect the actual build version.
 
 ---
 
@@ -104,11 +106,13 @@ Loop names are **automatically generated** from the prompt using AI. The `name` 
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `directory` | string | Yes | Absolute path to working directory |
-| `prompt` | string | Yes | Task prompt/PRD |
-| `model` | object | No | Model selection |
-| `model.providerID` | string | No | Provider ID (e.g., "anthropic") |
-| `model.modelID` | string | No | Model ID (e.g., "claude-sonnet-4-20250514") |
+| `workspaceId` | string | Yes | ID of the workspace to create the loop in |
+| `prompt` | string | Yes | Task prompt/PRD (non-empty) |
+| `model` | object | Yes | Model selection |
+| `model.providerID` | string | Yes | Provider ID (e.g., "anthropic") |
+| `model.modelID` | string | Yes | Model ID (e.g., "claude-sonnet-4-20250514") |
+| `model.variant` | string | No | Model variant (e.g., "thinking") |
+| `planMode` | boolean | Yes | Start in plan creation mode |
 | `maxIterations` | number | No | Maximum iterations (unlimited if not set) |
 | `maxConsecutiveErrors` | number | No | Max errors before failsafe (default: 10) |
 | `activityTimeoutSeconds` | number | No | Seconds without events before treating as error (default: 900, min: 60) |
@@ -116,21 +120,21 @@ Loop names are **automatically generated** from the prompt using AI. The `name` 
 | `git` | object | No | Git configuration |
 | `git.branchPrefix` | string | No | Branch prefix (default: "ralph/") |
 | `git.commitPrefix` | string | No | Commit message prefix (default: "[Ralph]") |
-| `baseBranch` | string | No | Base branch to create the loop from (default: current branch) |
+| `baseBranch` | string | No | Base branch to create the loop from (default: auto-detected default branch) |
 | `clearPlanningFolder` | boolean | No | Clear .planning folder before starting (default: false) |
-| `planMode` | boolean | No | Start in plan creation mode (default: false) |
 | `draft` | boolean | No | Save as draft without starting (default: false) |
 
 **Example Request**
 
 ```json
 {
-  "directory": "/Users/me/projects/myapp",
+  "workspaceId": "ws-abc123",
   "prompt": "Implement a dark mode toggle in the settings page. Use CSS variables for theming.",
   "model": {
     "providerID": "anthropic",
     "modelID": "claude-sonnet-4-20250514"
   },
+  "planMode": false,
   "maxIterations": 10,
   "activityTimeoutSeconds": 300
 }
@@ -151,9 +155,14 @@ Returns the created loop object with status `201 Created`. The response includes
 | Status | Error | Description |
 |--------|-------|-------------|
 | 400 | `validation_error` | Missing or invalid fields |
-| 400 | `invalid_body` | Request body is not valid JSON |
-| 409 | `uncommitted_changes` | Directory has uncommitted changes |
-| 500 | `start_failed` | Loop created but failed to start |
+| 400 | `invalid_json` | Request body is not valid JSON |
+| 400 | `model_not_enabled` | The selected model is not available or not connected |
+| 400 | `provider_not_found` | The specified provider was not found |
+| 400 | `model_not_found` | The specified model was not found on the provider |
+| 404 | `workspace_not_found` | Workspace not found for the given workspaceId |
+| 500 | `start_failed` | Loop created but failed to start (normal mode) |
+| 500 | `start_plan_failed` | Loop created but failed to start plan mode |
+| 500 | `create_failed` | Loop creation failed |
 
 #### GET /api/loops/:id
 
@@ -171,7 +180,7 @@ Returns the loop object.
 
 #### PATCH /api/loops/:id
 
-Update a loop's configuration. Can update any loop regardless of status.
+Update a loop's configuration. Cannot be used on running or starting loops — stop the loop first.
 
 **Request Body**
 
@@ -198,7 +207,11 @@ Returns the updated loop object.
 
 | Status | Error | Description |
 |--------|-------|-------------|
+| 400 | `validation_error` | Invalid fields (e.g., empty name) |
+| 400 | `invalid_json` | Request body is not valid JSON |
 | 404 | `not_found` | Loop not found |
+| 409 | `base_branch_immutable` | Cannot change base branch after loop has started |
+| 500 | `update_failed` | Update operation failed |
 
 #### PUT /api/loops/:id
 
@@ -216,8 +229,12 @@ Returns the updated loop object.
 
 | Status | Error | Description |
 |--------|-------|-------------|
-| 404 | `not_found` | Loop not found |
 | 400 | `not_draft` | Only draft loops can be updated via PUT |
+| 400 | `validation_error` | Invalid fields (e.g., empty name) |
+| 400 | `invalid_json` | Request body is not valid JSON |
+| 404 | `not_found` | Loop not found |
+| 409 | `base_branch_immutable` | Cannot change base branch after loop has started |
+| 500 | `update_failed` | Update operation failed |
 
 #### DELETE /api/loops/:id
 
@@ -263,8 +280,10 @@ Returns the updated loop object.
 |--------|-------|-------------|
 | 404 | `not_found` | Loop not found |
 | 400 | `not_draft` | Loop is not in draft status |
-| 400 | `invalid_body` | Request body must contain planMode boolean |
-| 409 | `uncommitted_changes` | Directory has uncommitted changes |
+| 400 | `validation_error` | Request body must contain planMode boolean |
+| 400 | `invalid_json` | Request body is not valid JSON |
+| 500 | `start_failed` | Failed to start loop (normal mode) |
+| 500 | `start_plan_failed` | Failed to start plan mode |
 
 #### POST /api/loops/:id/accept
 
@@ -292,12 +311,36 @@ Push a completed loop's branch to remote for PR workflow.
 
 **Response**
 
+When the push succeeds normally:
+
 ```json
 {
   "success": true,
-  "remoteBranch": "ralph/my-feature"
+  "remoteBranch": "ralph/my-feature",
+  "syncStatus": "clean"
 }
 ```
+
+When the branch is already up to date with the remote:
+
+```json
+{
+  "success": true,
+  "remoteBranch": "ralph/my-feature",
+  "syncStatus": "already_up_to_date"
+}
+```
+
+When merge conflicts are detected and being resolved (push deferred):
+
+```json
+{
+  "success": true,
+  "syncStatus": "conflicts_being_resolved"
+}
+```
+
+Note: When `syncStatus` is `"conflicts_being_resolved"`, the `remoteBranch` field is absent.
 
 **Errors**
 
@@ -344,9 +387,90 @@ Permanently delete a merged or deleted loop from storage.
 | 404 | `not_found` | Loop not found |
 | 400 | `purge_failed` | Cannot purge (loop not in final state) |
 
+#### POST /api/loops/:id/mark-merged
+
+Mark a loop as externally merged and sync the local environment. Switches the repository back to the original branch, pulls latest changes from the remote, deletes the working branch, and transitions the loop to `deleted` status.
+
+This is useful when a loop's branch was merged externally (e.g., via GitHub PR) and the user wants to sync their local environment with the merged changes.
+
+Only works for loops in final states (pushed, merged, completed, max_iterations, deleted).
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 400 | `mark_merged_failed` | Cannot mark as merged (e.g., loop is still running) |
+
 ---
 
-### Pending Prompt
+### Pending Values
+
+Set or clear pending message and/or model for the next iteration. This is the primary way to interact with running loops.
+
+#### POST /api/loops/:id/pending
+
+Set pending message and/or model for next iteration. By default (`immediate: true`), the current iteration is interrupted and the pending values are applied immediately in a new iteration. Set `immediate: false` to wait for the current iteration to complete naturally.
+
+Works for active loops (running, waiting, planning, starting) and can also jumpstart loops in supported stopped states (completed, stopped, failed, max_iterations).
+
+**Request Body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `message` | string | No | Message to queue for next iteration |
+| `model` | object | No | Model change: `{ providerID, modelID }` |
+| `immediate` | boolean | No | If true (default), interrupt current iteration and apply immediately. If false, wait for current iteration to complete. |
+
+At least one of `message` or `model` must be provided.
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `validation_error` | Neither message nor model provided, or message is empty |
+| 400 | `model_not_enabled` | The selected model is not available |
+| 404 | `not_found` | Loop not found |
+| 409 | `not_running` | Loop is not in an active or jumpstart-eligible state |
+
+#### DELETE /api/loops/:id/pending
+
+Clear all pending values (message and model).
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 409 | `not_running` | Loop is not in an active state |
+
+---
+
+### Pending Prompt (Legacy)
 
 Modify the prompt for the next iteration while a loop is running.
 
@@ -431,11 +555,13 @@ Get the git diff for a loop's changes.
 | Status | Error | Description |
 |--------|-------|-------------|
 | 404 | `not_found` | Loop not found |
-| 400 | `no_git_branch` | No git branch exists for this loop |
+| 400 | `no_git_branch` | No git branch was created for this loop |
+| 400 | `no_worktree` | Loop has no worktree path |
+| 500 | `diff_failed` | Diff operation failed |
 
 #### GET /api/loops/:id/plan
 
-Get the contents of `.planning/plan.md` from the loop's directory.
+Get the contents of `.planning/plan.md` from the loop's worktree directory.
 
 **Response**
 
@@ -446,9 +572,16 @@ Get the contents of `.planning/plan.md` from the loop's directory.
 }
 ```
 
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 400 | `no_worktree` | Loop has no worktree path |
+
 #### GET /api/loops/:id/status-file
 
-Get the contents of `.planning/status.md` from the loop's directory.
+Get the contents of `.planning/status.md` from the loop's worktree directory.
 
 **Response**
 
@@ -458,6 +591,13 @@ Get the contents of `.planning/status.md` from the loop's directory.
   "exists": true
 }
 ```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 400 | `no_worktree` | Loop has no worktree path |
 
 #### GET /api/loops/:id/comments
 
@@ -540,6 +680,7 @@ Accept the plan and start loop execution.
 |--------|-------|-------------|
 | 409 | `not_running` | Loop is not running |
 | 400 | `not_planning` | Loop is not in planning status |
+| 400 | `plan_not_ready` | Plan is not ready yet (still generating) |
 
 #### POST /api/loops/:id/plan/discard
 
@@ -626,13 +767,14 @@ Get the review history for a loop, including past review cycles.
 
 #### GET /api/models
 
-Get available AI models for a directory.
+Get available AI models for a workspace directory.
 
 **Query Parameters**
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `directory` | Yes | Working directory path |
+| `workspaceId` | Yes | Workspace ID for server connection |
 
 **Response**
 
@@ -643,7 +785,8 @@ Get available AI models for a directory.
     "providerName": "Anthropic",
     "modelID": "claude-sonnet-4-20250514",
     "modelName": "Claude Sonnet 4",
-    "connected": true
+    "connected": true,
+    "variants": ["thinking"]
   },
   {
     "providerID": "openai",
@@ -654,6 +797,17 @@ Get available AI models for a directory.
   }
 ]
 ```
+
+The `variants` field is optional and only present when the model supports multiple variants.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `missing_directory` | directory query parameter is required |
+| 400 | `missing_workspace_id` | workspaceId query parameter is required |
+| 404 | `workspace_not_found` | Workspace not found |
+| 500 | `models_failed` | Failed to retrieve models |
 
 ---
 
@@ -727,6 +881,144 @@ Set the last used working directory.
 }
 ```
 
+#### GET /api/preferences/markdown-rendering
+
+Get the markdown rendering preference.
+
+**Response**
+
+```json
+{
+  "enabled": true
+}
+```
+
+Defaults to `true` if not set.
+
+#### PUT /api/preferences/markdown-rendering
+
+Set the markdown rendering preference.
+
+**Request Body**
+
+```json
+{
+  "enabled": false
+}
+```
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `validation_error` | `enabled` must be a boolean |
+| 500 | `save_failed` | Failed to save preference |
+
+#### GET /api/preferences/log-level
+
+Get the server log level preference.
+
+**Response**
+
+```json
+{
+  "level": "info",
+  "defaultLevel": "info",
+  "availableLevels": ["silly", "trace", "debug", "info", "warn", "error", "fatal"],
+  "isFromEnv": false
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `level` | Current active log level |
+| `defaultLevel` | Default log level ("info") |
+| `availableLevels` | All valid log level names |
+| `isFromEnv` | Whether the log level was set via `RALPHER_LOG_LEVEL` environment variable |
+
+#### PUT /api/preferences/log-level
+
+Set the server log level. Takes effect immediately for both frontend and backend logging.
+
+**Request Body**
+
+```json
+{
+  "level": "debug"
+}
+```
+
+Valid levels: `silly`, `trace`, `debug`, `info`, `warn`, `error`, `fatal`.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "level": "debug"
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `validation_error` | Level is required |
+| 400 | `invalid_level` | Invalid log level name |
+| 500 | `save_failed` | Failed to save preference |
+
+#### GET /api/preferences/dashboard-view-mode
+
+Get the dashboard view mode preference.
+
+**Response**
+
+```json
+{
+  "mode": "rows"
+}
+```
+
+Defaults to `"rows"` if not set.
+
+#### PUT /api/preferences/dashboard-view-mode
+
+Set the dashboard view mode preference.
+
+**Request Body**
+
+```json
+{
+  "mode": "cards"
+}
+```
+
+Valid modes: `"rows"` or `"cards"`.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "mode": "cards"
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `validation_error` | Mode must be "rows" or "cards" |
+| 500 | `save_failed` | Failed to save preference |
+
 ---
 
 ### Configuration
@@ -781,6 +1073,313 @@ Check if a directory has a `.planning` folder with files.
   "warning": "The .planning directory does not exist. Ralph Loops work best with planning documents."
 }
 ```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `invalid_request` | Missing `directory` query parameter |
+| 404 | `workspace_not_found` | No workspace found for the given directory |
+| 500 | `check_failed` | Failed to check the planning directory |
+
+---
+
+### Workspaces
+
+Workspaces represent project directories managed by Ralpher. Each workspace has its own server connection settings and can have multiple loops.
+
+#### GET /api/workspaces
+
+List all workspaces.
+
+**Response**
+
+```json
+[
+  {
+    "id": "ws-uuid",
+    "name": "My Project",
+    "directory": "/path/to/project",
+    "serverSettings": { "mode": "spawn", ... },
+    "createdAt": "2026-01-20T10:00:00.000Z",
+    "updatedAt": "2026-01-20T10:00:00.000Z"
+  }
+]
+```
+
+#### POST /api/workspaces
+
+Create a new workspace. Validates that the directory exists on the remote server and is a git repository.
+
+**Request Body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Workspace display name |
+| `directory` | string | Yes | Absolute path to git repository |
+| `serverSettings` | object | No | Server connection settings (defaults to spawn mode) |
+
+**Response**
+
+Returns the created workspace with status `201 Created`.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `validation_error` | Missing or invalid fields |
+| 400 | `validation_failed` | Failed to validate directory on remote server |
+| 400 | `not_git_repo` | Directory is not a git repository |
+| 404 | `directory_not_found` | Directory does not exist on the remote server |
+| 409 | `duplicate_workspace` | A workspace already exists for this directory |
+| 500 | `create_failed` | Workspace creation failed |
+
+#### GET /api/workspaces/:id
+
+Get a specific workspace by ID.
+
+**Response**
+
+Returns the workspace object.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `workspace_not_found` | Workspace not found |
+
+#### PUT /api/workspaces/:id
+
+Update a workspace.
+
+**Request Body**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Update display name |
+| `serverSettings` | object | Update server connection settings |
+
+**Response**
+
+Returns the updated workspace.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `workspace_not_found` | Workspace not found |
+| 500 | `update_failed` | Update operation failed |
+
+#### DELETE /api/workspaces/:id
+
+Delete a workspace.
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `workspace_not_found` | Workspace not found |
+| 400 | `delete_failed` | Cannot delete workspace |
+
+#### GET /api/workspaces/by-directory
+
+Look up a workspace by its directory path.
+
+**Query Parameters**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `directory` | Yes | Directory path to look up |
+
+**Response**
+
+Returns the workspace object.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `missing_parameter` | directory query parameter is required |
+| 404 | `workspace_not_found` | No workspace found for this directory |
+
+#### GET /api/workspaces/export
+
+Export all workspace configurations as JSON for backup or migration.
+
+**Response**
+
+```json
+{
+  "version": 1,
+  "workspaces": [
+    {
+      "name": "My Project",
+      "directory": "/path/to/project",
+      "serverSettings": { "mode": "spawn", ... }
+    }
+  ]
+}
+```
+
+#### POST /api/workspaces/import
+
+Import workspace configurations from JSON. Each workspace's directory is validated on the remote server before creation. Workspaces with existing directories are skipped.
+
+**Request Body**
+
+```json
+{
+  "version": 1,
+  "workspaces": [
+    {
+      "name": "My Project",
+      "directory": "/path/to/project",
+      "serverSettings": { "mode": "spawn", ... }
+    }
+  ]
+}
+```
+
+**Response**
+
+```json
+{
+  "created": 2,
+  "skipped": 1,
+  "failed": 0,
+  "details": [
+    { "name": "Project A", "directory": "/path/a", "status": "created" },
+    { "name": "Project B", "directory": "/path/b", "status": "skipped", "reason": "A workspace already exists for directory: /path/b" },
+    { "name": "Project C", "directory": "/path/c", "status": "created" }
+  ]
+}
+```
+
+---
+
+### AGENTS.md Optimization
+
+Manage the workspace's `AGENTS.md` file, which provides AI coding agent guidelines. Ralpher can append an optimization section to improve agent performance with Ralph Loops.
+
+#### GET /api/workspaces/:id/agents-md
+
+Get the current AGENTS.md content and optimization status for a workspace.
+
+**Response**
+
+```json
+{
+  "content": "# AGENTS.md - AI Coding Agent Guidelines\n...",
+  "fileExists": true,
+  "analysis": {
+    "isOptimized": true,
+    "currentVersion": 1,
+    "updateAvailable": false
+  }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `content` | File contents (empty string if file doesn't exist) |
+| `fileExists` | Whether the AGENTS.md file exists in the workspace |
+| `analysis.isOptimized` | Whether the file already has a Ralpher optimization section |
+| `analysis.currentVersion` | Version of the existing optimization, or `null` |
+| `analysis.updateAvailable` | Whether a newer optimization version is available |
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `workspace_not_found` | Workspace not found |
+| 500 | `read_failed` | Failed to read AGENTS.md |
+
+#### POST /api/workspaces/:id/agents-md/preview
+
+Preview what the optimized AGENTS.md would look like without writing changes.
+
+**Response**
+
+```json
+{
+  "currentContent": "# AGENTS.md\n...",
+  "proposedContent": "# AGENTS.md\n...\n## Agentic Workflow...",
+  "analysis": {
+    "isOptimized": false,
+    "currentVersion": null,
+    "updateAvailable": true
+  },
+  "fileExists": true,
+  "ralpherSection": "## Agentic Workflow — Planning & Progress Tracking\n..."
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `currentContent` | Current file contents (empty string if not found) |
+| `proposedContent` | What the file would look like after optimization |
+| `analysis` | Current optimization state |
+| `fileExists` | Whether the file currently exists |
+| `ralpherSection` | The Ralpher section that would be added or updated |
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `workspace_not_found` | Workspace not found |
+| 500 | `read_failed` | Failed to read AGENTS.md |
+| 500 | `preview_failed` | Failed to generate preview |
+
+#### POST /api/workspaces/:id/agents-md/optimize
+
+Apply the Ralpher optimization to the workspace's AGENTS.md file. If the file already has an optimization section at the current version, returns without changes.
+
+**Response (optimization applied)**
+
+```json
+{
+  "success": true,
+  "alreadyOptimized": false,
+  "content": "# AGENTS.md\n...\n## Agentic Workflow...",
+  "analysis": {
+    "isOptimized": true,
+    "currentVersion": 1,
+    "updateAvailable": false
+  }
+}
+```
+
+**Response (already optimized)**
+
+```json
+{
+  "success": true,
+  "alreadyOptimized": true,
+  "content": "# AGENTS.md\n...",
+  "analysis": {
+    "isOptimized": true,
+    "currentVersion": 1,
+    "updateAvailable": false
+  }
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `workspace_not_found` | Workspace not found |
+| 500 | `read_failed` | Failed to read AGENTS.md |
+| 500 | `write_failed` | Failed to write optimized AGENTS.md |
+| 500 | `optimize_failed` | Failed to optimize AGENTS.md |
 
 ---
 
@@ -918,6 +1517,39 @@ Reset the connection for a specific workspace. Clears connection state so the ne
 |--------|-------|-------------|
 | 404 | `not_found` | Workspace not found |
 
+#### POST /api/server-settings/test
+
+Test a server connection without requiring a workspace. Useful for validating connection settings before creating a workspace.
+
+**Request Body**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `settings` | object | Yes | Server settings to test |
+| `settings.mode` | string | Yes | "spawn" or "connect" |
+| `settings.hostname` | string | No | Hostname for connect mode |
+| `settings.port` | number | No | Port for connect mode |
+| `settings.password` | string | No | Password for Basic auth |
+| `settings.useHttps` | boolean | Yes | Use HTTPS |
+| `settings.allowInsecure` | boolean | Yes | Allow self-signed certificates |
+| `directory` | string | Yes | Directory path to test against |
+
+**Response**
+
+```json
+{
+  "success": true,
+  "message": "Connection successful"
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `validation_error` | Missing or invalid fields |
+| 500 | — | Connection test failed (returns `{ success: false, error: "..." }`) |
+
 #### POST /api/settings/reset-all
 
 Delete database and reinitialize. This is a destructive operation that deletes all loops, workspaces, sessions, and preferences. The database is recreated fresh with all migrations applied.
@@ -928,6 +1560,25 @@ Delete database and reinitialize. This is a destructive operation that deletes a
 {
   "success": true,
   "message": "All settings have been reset. Database recreated."
+}
+```
+
+---
+
+### Server
+
+#### POST /api/server/kill
+
+Terminate the server process. This is a **destructive** operation. In containerized environments (e.g., Kubernetes), this will cause the container to restart, potentially pulling an updated image.
+
+The server sends a success response before scheduling the exit to ensure the client receives confirmation.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "message": "Server is shutting down. The connection will be lost."
 }
 ```
 
@@ -964,6 +1615,32 @@ Get all local branches for a directory.
 |--------|-------|-------------|
 | 400 | `missing_parameter` | directory query parameter is required |
 | 400 | `not_git_repo` | Directory is not a git repository |
+
+#### GET /api/git/default-branch
+
+Get the default branch for a git repository (e.g., "main" or "master").
+
+**Query Parameters**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `directory` | Yes | Directory path to check |
+
+**Response**
+
+```json
+{
+  "defaultBranch": "main"
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `missing_parameter` | directory query parameter is required |
+| 400 | `not_git_repo` | Directory is not a git repository |
+| 500 | `git_error` | Failed to retrieve default branch |
 
 ---
 
@@ -1018,16 +1695,21 @@ Each event is a JSON object with a `type` field:
 | `loop.git.commit` | Git commit made |
 | `loop.completed` | Loop finished successfully |
 | `loop.stopped` | Loop was stopped manually |
+| `loop.session_aborted` | AI session was aborted |
 | `loop.error` | Error occurred |
 | `loop.deleted` | Loop was deleted |
 | `loop.accepted` | Branch was merged |
 | `loop.pushed` | Branch was pushed to remote |
 | `loop.discarded` | Branch was deleted |
+| `loop.sync.started` | Branch sync with base started |
+| `loop.sync.clean` | Branch sync completed cleanly |
+| `loop.sync.conflicts` | Merge conflicts detected during sync |
 | `loop.plan.ready` | Plan is ready for review (planning mode) |
 | `loop.plan.feedback` | Feedback was sent on plan |
 | `loop.plan.accepted` | Plan was accepted, execution starting |
 | `loop.plan.discarded` | Plan was discarded, loop deleted |
 | `loop.todo.updated` | TODO list was updated |
+| `loop.pending.updated` | Pending message/model was updated |
 
 **Keep-Alive**
 
@@ -1097,9 +1779,12 @@ ws.onclose = () => {
 | `stopped` | Manually stopped |
 | `failed` | Error occurred |
 | `max_iterations` | Hit iteration limit |
-| `merged` | Changes merged (final state) |
-| `pushed` | Branch pushed to remote (final state) |
-| `deleted` | Marked for deletion (final state) |
+| `resolving_conflicts` | Resolving merge conflicts with base branch before push |
+| `merged` | Changes merged into original branch |
+| `pushed` | Branch pushed to remote (can receive reviews) |
+| `deleted` | Marked for deletion (terminal state) |
+
+Note: Only `deleted` is a true terminal state (no further transitions possible). `merged` and `pushed` can transition to `idle` (restart) or `deleted`.
 
 ### File Diff Status
 
@@ -1112,13 +1797,17 @@ ws.onclose = () => {
 
 ### Log Levels
 
+Log levels used in `loop.log` events:
+
 | Level | Description |
 |-------|-------------|
 | `agent` | AI agent activity |
+| `user` | User-initiated actions |
 | `info` | General information |
 | `warn` | Warning messages |
 | `error` | Error messages |
 | `debug` | Debug/verbose output |
+| `trace` | Detailed trace output |
 
 ### Review Comment Status
 
@@ -1142,7 +1831,7 @@ ws.onclose = () => {
 |-------|------|-------------|
 | `id` | string | Unique identifier |
 | `content` | string | TODO item description |
-| `status` | string | "pending", "in_progress", or "completed" |
+| `status` | string | "pending", "in_progress", "completed", or "cancelled" |
 | `priority` | string | "high", "medium", or "low" |
 
 ---
@@ -1151,15 +1840,17 @@ ws.onclose = () => {
 
 ### Create a Loop
 
-Loops are automatically started upon creation. The API will reject creation if there are uncommitted changes.
+Loops are automatically started upon creation (unless `draft: true`).
 
 ```bash
 # Create a loop (starts automatically, name is auto-generated)
 curl -X POST http://localhost:3000/api/loops \
   -H "Content-Type: application/json" \
   -d '{
-    "directory": "/path/to/project",
-    "prompt": "Implement JWT-based authentication with login and signup endpoints"
+    "workspaceId": "ws-abc123",
+    "prompt": "Implement JWT-based authentication with login and signup endpoints",
+    "model": { "providerID": "anthropic", "modelID": "claude-sonnet-4-20250514" },
+    "planMode": false
   }'
 
 # Response: {"config":{"id":"abc-123",...},"state":{"status":"running",...}}
@@ -1177,8 +1868,10 @@ Draft loops are saved without starting. You can edit them before starting.
 curl -X POST http://localhost:3000/api/loops \
   -H "Content-Type: application/json" \
   -d '{
-    "directory": "/path/to/project",
+    "workspaceId": "ws-abc123",
     "prompt": "Implement JWT-based authentication",
+    "model": { "providerID": "anthropic", "modelID": "claude-sonnet-4-20250514" },
+    "planMode": false,
     "draft": true
   }'
 
@@ -1206,8 +1899,9 @@ Plan mode lets you review and refine the plan before execution.
 curl -X POST http://localhost:3000/api/loops \
   -H "Content-Type: application/json" \
   -d '{
-    "directory": "/path/to/project",
+    "workspaceId": "ws-abc123",
     "prompt": "Refactor the authentication module to use async/await",
+    "model": { "providerID": "anthropic", "modelID": "claude-sonnet-4-20250514" },
     "planMode": true
   }'
 
@@ -1220,23 +1914,6 @@ curl -X POST http://localhost:3000/api/loops/abc-123/plan/feedback \
 
 # Accept the plan and start execution
 curl -X POST http://localhost:3000/api/loops/abc-123/plan/accept
-```
-
-### Handle Uncommitted Changes
-
-Uncommitted changes are checked at loop creation time:
-
-```bash
-# Try to create a loop with uncommitted changes
-curl -X POST http://localhost:3000/api/loops \
-  -H "Content-Type: application/json" \
-  -d '{
-    "directory": "/path/to/dirty/project",
-    "prompt": "Do something"
-  }'
-# Response: 409 {"error":"uncommitted_changes","changedFiles":["src/foo.ts"]}
-
-# Commit or stash your changes first, then try again
 ```
 
 ### Modify Next Iteration Prompt
@@ -1263,7 +1940,7 @@ After pushing a loop, you can address reviewer comments:
 ```bash
 # Push the loop first
 curl -X POST http://localhost:3000/api/loops/abc-123/push
-# Response: {"success":true,"remoteBranch":"ralph/my-feature"}
+# Response: {"success":true,"remoteBranch":"ralph/my-feature","syncStatus":"clean"}
 
 # Later, address reviewer comments
 curl -X POST http://localhost:3000/api/loops/abc-123/address-comments \
