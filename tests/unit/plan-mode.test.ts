@@ -836,3 +836,118 @@ describe("Plan Mode - Worktree Isolation", () => {
     expect(dirStat.isDirectory()).toBe(true);
   });
 });
+
+describe("Plan Mode - Engine Recovery After Server Restart", () => {
+  let ctx: TestContext;
+
+  beforeEach(async () => {
+    ctx = await setupTestContext({
+      initGit: true,
+      // Responses consumed in order by the shared mock backend:
+      // [0] name generation (createLoop sendPrompt)
+      // [1] plan iteration (startPlanMode subscribeToEvents → PLAN_READY)
+      // [2] feedback iteration or execution (subscribeToEvents)
+      // [3+] additional iterations
+      mockResponses: [
+        "<promise>PLAN_READY</promise>",     // [0] name generation (ignored as name)
+        "<promise>PLAN_READY</promise>",     // [1] initial plan iteration
+        "<promise>PLAN_READY</promise>",     // [2] post-recovery feedback or accept iteration
+        "<promise>COMPLETE</promise>",       // [3] execution after accept
+      ],
+    });
+  });
+
+  afterEach(async () => {
+    await teardownTestContext(ctx);
+  });
+
+  test("acceptPlan recovers engine after server restart", async () => {
+    // Create and start plan mode loop
+    const loop = await ctx.manager.createLoop({
+      ...testModelFields,
+      prompt: "Create a plan",
+      directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
+      maxIterations: 5,
+      planMode: true,
+    });
+    const loopId = loop.config.id;
+
+    // Start plan mode and wait for plan to be ready
+    await ctx.manager.startPlanMode(loopId);
+    await waitForPlanReady(ctx.manager, loopId);
+
+    // Verify plan is ready
+    let loopData = await ctx.manager.getLoop(loopId);
+    expect(loopData!.state.status).toBe("planning");
+    expect(loopData!.state.planMode?.isPlanReady).toBe(true);
+
+    // Simulate server restart: clear all in-memory engines without persisting state
+    ctx.manager.resetForTesting();
+
+    // Verify engine is gone (the loop is still in the DB in planning status)
+    // Now try to accept the plan — this should recover the engine and succeed
+    await ctx.manager.acceptPlan(loopId);
+
+    // Wait for transition from planning to running/completed
+    loopData = await waitForLoopStatus(ctx.manager, loopId, ["running", "completed", "max_iterations", "stopped"]);
+    expect(["running", "completed", "max_iterations", "stopped"]).toContain(loopData!.state.status);
+  });
+
+  test("sendPlanFeedback recovers engine after server restart", async () => {
+    // Create and start plan mode loop
+    const loop = await ctx.manager.createLoop({
+      ...testModelFields,
+      prompt: "Create a plan",
+      directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
+      maxIterations: 5,
+      planMode: true,
+    });
+    const loopId = loop.config.id;
+
+    // Start plan mode and wait for plan to be ready
+    await ctx.manager.startPlanMode(loopId);
+    await waitForPlanReady(ctx.manager, loopId);
+
+    // Verify plan is ready
+    let loopData = await ctx.manager.getLoop(loopId);
+    expect(loopData!.state.status).toBe("planning");
+    expect(loopData!.state.planMode?.isPlanReady).toBe(true);
+
+    // Simulate server restart: clear all in-memory engines without persisting state
+    ctx.manager.resetForTesting();
+
+    // Send feedback — should recover the engine from persisted state
+    await ctx.manager.sendPlanFeedback(loopId, "Add more detail to step 3");
+
+    // After feedback, verify the loop is still in planning mode
+    loopData = await ctx.manager.getLoop(loopId);
+    expect(loopData!.state.status).toBe("planning");
+    expect(loopData!.state.planMode?.feedbackRounds).toBe(1);
+  });
+
+  test("acceptPlan throws for non-existent loop after restart", async () => {
+    // Try to accept a plan for a loop that doesn't exist
+    await expect(ctx.manager.acceptPlan("non-existent-id")).rejects.toThrow("Loop not found");
+  });
+
+  test("acceptPlan throws for loop not in planning status after restart", async () => {
+    // Create a loop but don't start plan mode — it will be in 'idle' status
+    const loop = await ctx.manager.createLoop({
+      ...testModelFields,
+      prompt: "Regular loop",
+      directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
+      maxIterations: 1,
+      planMode: false,
+    });
+    const loopId = loop.config.id;
+
+    // Simulate server restart
+    ctx.manager.resetForTesting();
+
+    // Try to accept — loop is in 'idle' status, not 'planning'
+    await expect(ctx.manager.acceptPlan(loopId)).rejects.toThrow("Loop plan mode is not running");
+  });
+});
