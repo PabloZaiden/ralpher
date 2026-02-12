@@ -393,53 +393,9 @@ export class LoopManager {
    * Send feedback on a plan to refine it.
    */
   async sendPlanFeedback(loopId: string, feedback: string): Promise<void> {
-    let engine = this.engines.get(loopId);
-    
-    // If engine doesn't exist but loop is in planning status, recreate the engine
-    // This handles the case where the server was restarted while a loop was in planning mode
-    if (!engine) {
-      const loop = await loadLoop(loopId);
-      if (!loop) {
-        throw new Error(`Loop not found: ${loopId}`);
-      }
-      
-      if (loop.state.status !== "planning") {
-        throw new Error("Loop plan mode is not running");
-      }
-      
-      // Recreate the engine for this planning loop
-      const worktreeDir = loop.state.git?.worktreePath;
-      if (!worktreeDir) {
-        throw new Error("Loop has no worktree path - cannot recreate engine for plan feedback");
-      }
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
-      const git = GitService.withExecutor(executor);
-      const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
-      
-      engine = new LoopEngine({
-        loop,
-        backend,
-        gitService: git,
-        eventEmitter: this.emitter,
-        onPersistState: async (state) => {
-          await updateLoopState(loopId, state);
-        },
-      });
-      
-      this.engines.set(loopId, engine);
-      
-      // Need to set up the session for the engine
-      // The engine will reconnect to the existing session if possible
-      try {
-        await engine.reconnectSession();
-      } catch (error) {
-        log.warn(`Failed to reconnect session for plan feedback: ${String(error)}`);
-        // Continue anyway - we'll create a new session
-      }
-      
-      // Start state persistence
-      this.startStatePersistence(loopId);
-    }
+    // If engine doesn't exist, attempt to recover it from persisted state.
+    // This handles the case where the server was restarted while a loop was in planning mode.
+    const engine = this.engines.get(loopId) ?? await this.recoverPlanningEngine(loopId);
 
     // Verify loop is in planning status
     if (engine.state.status !== "planning") {
@@ -485,10 +441,9 @@ export class LoopManager {
    * Reuses the same session from plan creation.
    */
   async acceptPlan(loopId: string): Promise<void> {
-    const engine = this.engines.get(loopId);
-    if (!engine) {
-      throw new Error("Loop plan mode is not running");
-    }
+    // If engine doesn't exist, attempt to recover it from persisted state.
+    // This handles the case where the server was restarted while a loop was in planning mode.
+    const engine = this.engines.get(loopId) ?? await this.recoverPlanningEngine(loopId);
 
     // Verify loop is in planning status
     if (engine.state.status !== "planning") {
@@ -2449,6 +2404,62 @@ ${fileList}
     } catch (error) {
       log.warn(`Failed to clear plan.md: ${String(error)}`);
     }
+  }
+
+  /**
+   * Recover a planning engine that was lost due to server restart.
+   * Loads the loop from persistence, recreates the LoopEngine, reconnects the session,
+   * and starts state persistence. This is used by acceptPlan() and sendPlanFeedback()
+   * when the in-memory engine is missing but the loop is persisted in planning status.
+   */
+  private async recoverPlanningEngine(loopId: string): Promise<LoopEngine> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      throw new Error(`Loop not found: ${loopId}`);
+    }
+
+    if (loop.state.status !== "planning") {
+      throw new Error("Loop plan mode is not running");
+    }
+
+    // Recreate the engine for this planning loop
+    const worktreeDir = loop.state.git?.worktreePath;
+    if (!worktreeDir) {
+      throw new Error("Loop has no worktree path - cannot recreate engine for planning recovery");
+    }
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
+    const git = GitService.withExecutor(executor);
+    const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
+
+    const engine = new LoopEngine({
+      loop,
+      backend,
+      gitService: git,
+      eventEmitter: this.emitter,
+      onPersistState: async (state) => {
+        await updateLoopState(loopId, state);
+      },
+    });
+
+    this.engines.set(loopId, engine);
+
+    // Reconnect to the existing session (or create a new one if none exists).
+    // If this fails, remove the partially-initialized engine to avoid leaving
+    // a broken engine (with no sessionId) cached in the map.
+    try {
+      await engine.reconnectSession();
+    } catch (error) {
+      this.engines.delete(loopId);
+      throw new Error(
+        `Failed to recover planning engine session for loop ${loopId}: ${String(error)}`,
+        { cause: error },
+      );
+    }
+
+    // Start state persistence
+    this.startStatePersistence(loopId);
+
+    return engine;
   }
 
   /**
