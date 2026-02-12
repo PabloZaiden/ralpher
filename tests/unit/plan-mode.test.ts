@@ -423,7 +423,7 @@ describe("Plan Mode - State Transitions", () => {
         prompt: "Create a plan",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
-      maxIterations: 1,
+      maxIterations: 5, // Need enough iterations for multiple feedbacks
       planMode: true,
     });
     const loopId = loop.config.id;
@@ -436,11 +436,15 @@ describe("Plan Mode - State Transitions", () => {
     let loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.planMode?.feedbackRounds).toBe(0);
 
-    // Send first feedback (awaits iteration completion)
+    // Send first feedback (returns quickly — injection pattern)
     await ctx.manager.sendPlanFeedback(loopId, "Please add more details");
 
+    // feedbackRounds is incremented synchronously before the async injection
     loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.planMode?.feedbackRounds).toBe(1);
+
+    // Wait for the feedback iteration to complete before sending more feedback
+    await waitForPlanReady(ctx.manager, loopId);
 
     // Send second feedback
     await ctx.manager.sendPlanFeedback(loopId, "Add time estimates");
@@ -929,10 +933,13 @@ describe("Plan Mode - Engine Recovery After Server Restart", () => {
     // Send feedback — should recover the engine from persisted state
     await ctx.manager.sendPlanFeedback(loopId, "Add more detail to step 3");
 
-    // After feedback, verify the loop is still in planning mode
+    // feedbackRounds is incremented synchronously before the async injection
     loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.status).toBe("planning");
     expect(loopData!.state.planMode?.feedbackRounds).toBe(1);
+
+    // Wait for the feedback iteration to complete (engine was recovered and started a new iteration)
+    await waitForPlanReady(ctx.manager, loopId);
   });
 
   test("acceptPlan throws for non-existent loop after restart", async () => {
