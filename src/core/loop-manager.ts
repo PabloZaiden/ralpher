@@ -2443,12 +2443,17 @@ ${fileList}
 
     this.engines.set(loopId, engine);
 
-    // Reconnect to the existing session if possible
+    // Reconnect to the existing session (or create a new one if none exists).
+    // If this fails, remove the partially-initialized engine to avoid leaving
+    // a broken engine (with no sessionId) cached in the map.
     try {
       await engine.reconnectSession();
     } catch (error) {
-      log.warn(`Failed to reconnect session for planning recovery: ${String(error)}`);
-      // Continue anyway - we'll create a new session
+      this.engines.delete(loopId);
+      throw new Error(
+        `Failed to recover planning engine session for loop ${loopId}: ${String(error)}`,
+        { cause: error },
+      );
     }
 
     // Start state persistence

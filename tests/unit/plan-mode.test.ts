@@ -6,7 +6,7 @@
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
 import { mkdir, writeFile, stat } from "fs/promises";
 import { join } from "path";
-import { setupTestContext, teardownTestContext, waitForPlanReady, waitForLoopStatus, testModelFields } from "../setup";
+import { setupTestContext, teardownTestContext, waitForPlanReady, waitForPersistedPlanReady, waitForLoopStatus, testModelFields } from "../setup";
 import type { TestContext } from "../setup";
 import { MockOpenCodeBackend, defaultTestModel } from "../mocks/mock-backend";
 import { backendManager } from "../../src/core/backend-manager";
@@ -844,15 +844,15 @@ describe("Plan Mode - Engine Recovery After Server Restart", () => {
     ctx = await setupTestContext({
       initGit: true,
       // Responses consumed in order by the shared mock backend:
-      // [0] name generation (createLoop sendPrompt)
-      // [1] plan iteration (startPlanMode subscribeToEvents → PLAN_READY)
-      // [2] feedback iteration or execution (subscribeToEvents)
-      // [3+] additional iterations
+      // [0] name generation — createLoop() calls generateName() which uses sendPrompt()
+      // [1] plan iteration — startPlanMode() fires engine.start() which uses subscribeToEvents() → PLAN_READY
+      // [2] post-recovery feedback or accept iteration (subscribeToEvents)
+      // [3] execution after accept (subscribeToEvents)
       mockResponses: [
-        "<promise>PLAN_READY</promise>",     // [0] name generation (ignored as name)
-        "<promise>PLAN_READY</promise>",     // [1] initial plan iteration
-        "<promise>PLAN_READY</promise>",     // [2] post-recovery feedback or accept iteration
-        "<promise>COMPLETE</promise>",       // [3] execution after accept
+        "recovery-loop",                       // [0] name generation via sendPrompt()
+        "<promise>PLAN_READY</promise>",       // [1] initial plan iteration via subscribeToEvents()
+        "<promise>PLAN_READY</promise>",       // [2] post-recovery feedback or accept iteration
+        "<promise>COMPLETE</promise>",         // [3] execution after accept
       ],
     });
   });
@@ -873,16 +873,20 @@ describe("Plan Mode - Engine Recovery After Server Restart", () => {
     });
     const loopId = loop.config.id;
 
-    // Start plan mode and wait for plan to be ready
+    // Start plan mode and wait for plan to be ready (in-memory)
     await ctx.manager.startPlanMode(loopId);
     await waitForPlanReady(ctx.manager, loopId);
 
-    // Verify plan is ready
+    // Verify plan is ready in memory
     let loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.status).toBe("planning");
     expect(loopData!.state.planMode?.isPlanReady).toBe(true);
 
-    // Simulate server restart: clear all in-memory engines without persisting state
+    // Wait for isPlanReady to be persisted to DB before resetting.
+    // This ensures recoverPlanningEngine() (which reads from loadLoop) sees the correct state.
+    await waitForPersistedPlanReady(loopId);
+
+    // Simulate server restart: clear all in-memory engines
     ctx.manager.resetForTesting();
 
     // Verify engine is gone (the loop is still in the DB in planning status)
@@ -906,16 +910,20 @@ describe("Plan Mode - Engine Recovery After Server Restart", () => {
     });
     const loopId = loop.config.id;
 
-    // Start plan mode and wait for plan to be ready
+    // Start plan mode and wait for plan to be ready (in-memory)
     await ctx.manager.startPlanMode(loopId);
     await waitForPlanReady(ctx.manager, loopId);
 
-    // Verify plan is ready
+    // Verify plan is ready in memory
     let loopData = await ctx.manager.getLoop(loopId);
     expect(loopData!.state.status).toBe("planning");
     expect(loopData!.state.planMode?.isPlanReady).toBe(true);
 
-    // Simulate server restart: clear all in-memory engines without persisting state
+    // Wait for isPlanReady to be persisted to DB before resetting.
+    // This ensures recoverPlanningEngine() (which reads from loadLoop) sees the correct state.
+    await waitForPersistedPlanReady(loopId);
+
+    // Simulate server restart: clear all in-memory engines
     ctx.manager.resetForTesting();
 
     // Send feedback — should recover the engine from persisted state

@@ -12,6 +12,7 @@ import { backendManager } from "../src/core/backend-manager";
 import { ensureDataDirectories } from "../src/persistence/database";
 import { closeDatabase } from "../src/persistence/database";
 import { createWorkspace } from "../src/persistence/workspaces";
+import { loadLoop } from "../src/persistence/loops";
 import { TestCommandExecutor } from "./mocks/mock-executor";
 import { MockOpenCodeBackend, defaultTestModel } from "./mocks/mock-backend";
 import type { LoopEvent } from "../src/types/events";
@@ -312,6 +313,31 @@ export async function waitForPlanReady(
   const finalLoop = await manager.getLoop(loopId);
   throw new Error(
     `Plan did not become ready within ${timeoutMs}ms. isPlanReady: ${finalLoop?.state.planMode?.isPlanReady}, status: ${finalLoop?.state.status}`
+  );
+}
+
+/**
+ * Poll until isPlanReady is persisted to the database (via loadLoop).
+ * Unlike waitForPlanReady() which reads in-memory state, this reads directly
+ * from the persistence layer to ensure the plan-ready state has been flushed
+ * to disk. Use this before resetForTesting() to ensure recovery tests can
+ * load the persisted state reliably.
+ */
+export async function waitForPersistedPlanReady(
+  loopId: string,
+  timeoutMs = 10000
+): Promise<import("../src/types").Loop> {
+  const startTime = Date.now();
+  while (Date.now() - startTime < timeoutMs) {
+    const loop = await loadLoop(loopId);
+    if (loop?.state.planMode?.isPlanReady === true) {
+      return loop;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  const finalLoop = await loadLoop(loopId);
+  throw new Error(
+    `Plan isPlanReady not persisted within ${timeoutMs}ms. Persisted isPlanReady: ${finalLoop?.state.planMode?.isPlanReady}, status: ${finalLoop?.state.status}`
   );
 }
 
