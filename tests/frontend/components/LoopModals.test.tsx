@@ -1,6 +1,6 @@
 /**
  * Tests for the LoopModals components (DeleteLoopModal, PurgeLoopModal,
- * MarkMergedModal, UncommittedChangesModal).
+ * MarkMergedModal, UpdateBranchModal, UncommittedChangesModal).
  */
 
 import { test, expect, describe } from "bun:test";
@@ -9,6 +9,7 @@ import {
   DeleteLoopModal,
   PurgeLoopModal,
   MarkMergedModal,
+  UpdateBranchModal,
   UncommittedChangesModal,
 } from "@/components/LoopModals";
 import { renderWithUser } from "../helpers/render";
@@ -177,6 +178,61 @@ describe("MarkMergedModal", () => {
       <MarkMergedModal {...defaultProps()} isOpen={false} />
     );
     expect(queryByText("Mark as Merged")).not.toBeInTheDocument();
+  });
+});
+
+describe("UpdateBranchModal", () => {
+  const defaultProps = () => ({
+    isOpen: true,
+    onClose: mock(),
+    onUpdateBranch: mock(() => Promise.resolve()),
+  });
+
+  test("renders modal title", () => {
+    const { getByRole } = renderWithUser(
+      <UpdateBranchModal {...defaultProps()} />
+    );
+    expect(getByRole("heading", { name: "Update Branch" })).toBeInTheDocument();
+  });
+
+  test("renders confirmation message about syncing branch", () => {
+    const { getByText } = renderWithUser(
+      <UpdateBranchModal {...defaultProps()} />
+    );
+    expect(getByText(/sync your working branch with the latest changes from the base branch/)).toBeInTheDocument();
+  });
+
+  test("renders Update Branch and Cancel buttons", () => {
+    const { getByRole } = renderWithUser(
+      <UpdateBranchModal {...defaultProps()} />
+    );
+    expect(getByRole("button", { name: "Update Branch" })).toBeInTheDocument();
+    expect(getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  test("calls onUpdateBranch when confirm button clicked", async () => {
+    const props = defaultProps();
+    const { getByRole, user } = renderWithUser(
+      <UpdateBranchModal {...props} />
+    );
+    await user.click(getByRole("button", { name: "Update Branch" }));
+    expect(props.onUpdateBranch).toHaveBeenCalled();
+  });
+
+  test("calls onClose when Cancel button clicked", async () => {
+    const props = defaultProps();
+    const { getByRole, user } = renderWithUser(
+      <UpdateBranchModal {...props} />
+    );
+    await user.click(getByRole("button", { name: "Cancel" }));
+    expect(props.onClose).toHaveBeenCalled();
+  });
+
+  test("does not render when isOpen is false", () => {
+    const { queryByText } = renderWithUser(
+      <UpdateBranchModal {...defaultProps()} isOpen={false} />
+    );
+    expect(queryByText("Update Branch")).not.toBeInTheDocument();
   });
 });
 

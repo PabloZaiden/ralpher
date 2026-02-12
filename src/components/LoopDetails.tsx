@@ -16,6 +16,7 @@ import {
   DeleteLoopModal,
   PurgeLoopModal,
   MarkMergedModal,
+  UpdateBranchModal,
   RenameLoopModal,
 } from "./LoopModals";
 import { PlanReviewPanel } from "./PlanReviewPanel";
@@ -166,6 +167,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [markMergedModal, setMarkMergedModal] = useState(false);
   const [addressCommentsModal, setAddressCommentsModal] = useState(false);
   const [renameModal, setRenameModal] = useState(false);
+  const [updateBranchModal, setUpdateBranchModal] = useState(false);
 
   // Models state for LoopActionBar
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -376,6 +378,22 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       onBack?.();
     }
     setPurgeModal(false);
+  }
+
+  // Handle update branch
+  async function handleUpdateBranch() {
+    const result = await updateBranch();
+    if (!result.success) {
+      toast.error("Failed to update branch");
+      setUpdateBranchModal(false);
+      return;
+    }
+    if (result.syncStatus === "conflicts_being_resolved") {
+      toast.info("Conflicts detected — resolving automatically");
+    } else {
+      toast.success("Branch updated and pushed");
+    }
+    setUpdateBranchModal(false);
   }
 
   // Handle mark as merged
@@ -1086,22 +1104,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                             )}
                             {state.status === "pushed" && state.git && (
                               <button
-                                onClick={async () => {
-                                  try {
-                                    const result = await updateBranch();
-                                    if (!result.success) {
-                                      toast.error("Failed to update branch");
-                                      return;
-                                    }
-                                    if (result.syncStatus === "conflicts_being_resolved") {
-                                      toast.info("Conflicts detected — resolving automatically");
-                                    } else {
-                                      toast.success("Branch updated and pushed");
-                                    }
-                                  } catch {
-                                    toast.error("Failed to update branch");
-                                  }
-                                }}
+                                onClick={() => setUpdateBranchModal(true)}
                                 className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
                               >
                                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
@@ -1230,6 +1233,13 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         isOpen={markMergedModal}
         onClose={() => setMarkMergedModal(false)}
         onMarkMerged={handleMarkMerged}
+      />
+
+      {/* Update Branch confirmation modal */}
+      <UpdateBranchModal
+        isOpen={updateBranchModal}
+        onClose={() => setUpdateBranchModal(false)}
+        onUpdateBranch={handleUpdateBranch}
       />
 
       {/* Address Comments modal */}

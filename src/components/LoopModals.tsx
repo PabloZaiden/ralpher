@@ -148,6 +148,54 @@ export function MarkMergedModal({
 }
 
 // ============================================================================
+// Update Branch Modal
+// ============================================================================
+
+export interface UpdateBranchModalProps {
+  /** Whether the modal is open */
+  isOpen: boolean;
+  /** Callback when modal should close */
+  onClose: () => void;
+  /** Callback to update the branch */
+  onUpdateBranch: () => Promise<void>;
+}
+
+/**
+ * Modal for confirming "update branch" action.
+ * Used when a pushed loop's working branch needs to be synced with the base branch
+ * and re-pushed to the remote.
+ */
+export function UpdateBranchModal({
+  isOpen,
+  onClose,
+  onUpdateBranch,
+}: UpdateBranchModalProps) {
+  const [loading, setLoading] = useState(false);
+
+  async function handleConfirm() {
+    setLoading(true);
+    try {
+      await onUpdateBranch();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <ConfirmModal
+      isOpen={isOpen}
+      onClose={onClose}
+      onConfirm={handleConfirm}
+      title="Update Branch"
+      message="This will sync your working branch with the latest changes from the base branch and push the result to the remote. If there are merge conflicts, they will be resolved automatically."
+      confirmLabel="Update Branch"
+      loading={loading}
+      variant="primary"
+    />
+  );
+}
+
+// ============================================================================
 // Uncommitted Changes Modal
 // ============================================================================
 
