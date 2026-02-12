@@ -31,6 +31,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     deleteLoop,
     acceptLoop,
     pushLoop,
+    updateBranch,
     purgeLoop,
     addressReviewComments,
     updateLoop,
@@ -112,6 +113,24 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
     }
   }
 
+  async function handleUpdateBranch(loopId: string) {
+    try {
+      const result = await updateBranch(loopId);
+      if (!result.success) {
+        toast.error("Failed to update branch");
+        return;
+      }
+      if (result.syncStatus === "conflicts_being_resolved") {
+        toast.info("Conflicts detected — resolving automatically");
+      } else {
+        toast.success("Branch updated and pushed");
+      }
+    } catch (error) {
+      log.error("Failed to update branch:", error);
+      toast.error("Failed to update branch");
+    }
+  }
+
   return (
     <div className="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
       <DashboardHeader
@@ -137,6 +156,7 @@ export function Dashboard({ onSelectLoop }: DashboardProps) {
         onDelete={(loopId) => modals.setDeleteModal({ open: true, loopId })}
         onPurge={(loopId) => modals.setPurgeModal({ open: true, loopId })}
         onAddressComments={(loopId) => modals.setAddressCommentsModal({ open: true, loopId })}
+        onUpdateBranch={handleUpdateBranch}
         onRename={(loopId) => modals.setRenameModal({ open: true, loopId })}
         onOpenWorkspaceSettings={(workspaceId) => modals.setWorkspaceSettingsModal({ open: true, workspaceId })}
         onDeleteWorkspace={deleteWorkspace}

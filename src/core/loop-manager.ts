@@ -1001,6 +1001,79 @@ Follow the standard loop execution flow:
   }
 
   /**
+   * Update a pushed loop's branch by syncing with the base branch and re-pushing.
+   * This pulls and merges from the base branch into the working branch (same logic
+   * used before pushing), pushes if clean, or triggers conflict resolution if needed.
+   * After a successful update, the loop remains in 'pushed' status.
+   *
+   * Reuses the same sync infrastructure as pushLoop():
+   * - syncWorkingBranch() to pull remote changes on the working branch
+   * - syncBaseBranchAndPush() to merge base branch changes and push
+   * - startConflictResolutionEngine() for conflict resolution (if needed)
+   */
+  async updateBranch(loopId: string): Promise<PushLoopResult> {
+    // Guard against concurrent accept/push operations on the same loop.
+    // Must be set synchronously (before any await) to prevent race conditions.
+    if (this.loopsBeingAccepted.has(loopId)) {
+      log.warn(`[LoopManager] updateBranch: Already processing loop ${loopId}, ignoring duplicate call`);
+      return { success: false, error: "Operation already in progress" };
+    }
+    this.loopsBeingAccepted.add(loopId);
+    log.debug(`[LoopManager] updateBranch: Starting branch update for loop ${loopId}`);
+
+    try {
+      const loop = await this.getLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
+
+      // Must be in pushed status
+      if (loop.state.status !== "pushed") {
+        return { success: false, error: `Cannot update branch for loop in status: ${loop.state.status}` };
+      }
+
+      // Must have git state (branch was created and pushed)
+      if (!loop.state.git) {
+        return { success: false, error: "No git branch was created for this loop" };
+      }
+
+      // Prevent update while an engine is already running (e.g., conflict resolution)
+      if (this.engines.has(loopId)) {
+        return { success: false, error: "Loop already has an active engine running" };
+      }
+
+      // Get the appropriate command executor for the current mode
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+      const git = GitService.withExecutor(executor);
+
+      // Determine the base branch to sync with
+      const baseBranch = loop.config.baseBranch ?? loop.state.git.originalBranch;
+      const worktreePath = loop.state.git.worktreePath ?? loop.config.directory;
+      const workingBranch = loop.state.git.workingBranch;
+
+      // --- Ensure merge strategy is configured ---
+      await git.ensureMergeStrategy(worktreePath);
+
+      // --- Working branch sync ---
+      const workingBranchConflictResult = await this.syncWorkingBranch(
+        loopId, loop, git, baseBranch, worktreePath, workingBranch
+      );
+      if (workingBranchConflictResult) {
+        return workingBranchConflictResult;
+      }
+
+      // --- Base branch sync + push ---
+      return await this.syncBaseBranchAndPush(loopId, loop, git);
+    } catch (error) {
+      return { success: false, error: String(error) };
+    } finally {
+      // Always clear the guard
+      this.loopsBeingAccepted.delete(loopId);
+      log.debug(`[LoopManager] updateBranch: Finished branch update for loop ${loopId}`);
+    }
+  }
+
+  /**
    * Sync the working branch with its remote counterpart.
    * Before syncing with the base branch, pulls any remote changes on the
    * working branch itself. This handles scenarios where the working branch

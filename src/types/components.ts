@@ -28,6 +28,8 @@ export interface LoopSummaryProps {
   onPurge?: () => void;
   /** Callback when address comments button is clicked */
   onAddressComments?: () => void;
+  /** Callback when update branch button is clicked */
+  onUpdateBranch?: () => void;
   /** Callback when rename button is clicked */
   onRename?: () => void;
 }

@@ -22,6 +22,7 @@ export function LoopCard({
   onDelete,
   onPurge,
   onAddressComments,
+  onUpdateBranch,
   onRename,
 }: LoopSummaryProps) {
   const { config, state } = loop;
@@ -218,6 +219,18 @@ export function LoopCard({
                 }}
               >
                 Address Comments
+              </Button>
+            )}
+            {state.status === "pushed" && state.git && onUpdateBranch && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUpdateBranch();
+                }}
+              >
+                Update Branch
               </Button>
             )}
             {onPurge && (

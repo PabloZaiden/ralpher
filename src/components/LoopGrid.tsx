@@ -27,6 +27,7 @@ export interface LoopGridProps {
   onDelete: (loopId: string) => void;
   onPurge: (loopId: string) => void;
   onAddressComments: (loopId: string) => void;
+  onUpdateBranch: (loopId: string) => void;
   onRename: (loopId: string) => void;
   onOpenWorkspaceSettings: (workspaceId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
@@ -39,6 +40,7 @@ interface LoopActions {
   onDelete?: () => void;
   onPurge?: () => void;
   onAddressComments?: () => void;
+  onUpdateBranch?: () => void;
   onRename?: () => void;
 }
 
@@ -56,6 +58,7 @@ export function LoopGrid({
   onDelete,
   onPurge,
   onAddressComments,
+  onUpdateBranch,
   onRename,
   onOpenWorkspaceSettings,
   onDeleteWorkspace,
@@ -95,6 +98,11 @@ export function LoopGrid({
     // onAddressComments: awaitingFeedback section only
     if (sectionKey === "awaitingFeedback") {
       actions.onAddressComments = () => onAddressComments(loopId);
+    }
+
+    // onUpdateBranch: awaitingFeedback section only (pushed loops)
+    if (sectionKey === "awaitingFeedback") {
+      actions.onUpdateBranch = () => onUpdateBranch(loopId);
     }
 
     return actions;
