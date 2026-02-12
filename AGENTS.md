@@ -520,6 +520,7 @@ When working on tasks, follow this workflow to ensure clarity, goal alignment, a
 - Track the status of each task in `./.planning/status.md`.
 - Make sure that goals are written down in a way that you can properly verify them later.
 - Don't say something is done until you have verified that all goals are met.
+- **Never start implementation before the plan is confirmed.** Present the plan to the user and wait for explicit approval before writing any code. If the plan needs changes, revise and re-confirm before proceeding.
 
 ### Incremental Progress Tracking
 
