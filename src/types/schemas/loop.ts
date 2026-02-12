@@ -112,6 +112,20 @@ export const StartDraftRequestSchema = z.object({
 });
 
 /**
+ * Schema for creating a new chat - POST /api/loops/chat
+ *
+ * Simpler than CreateLoopRequestSchema — chats don't have plan mode,
+ * draft mode, stop patterns, or clearPlanningFolder.
+ */
+export const CreateChatRequestSchema = z.object({
+  workspaceId: z.string().min(1, "workspaceId is required"),
+  prompt: z.string().min(1, "prompt is required and must be a non-empty string"),
+  model: ModelConfigSchema,
+  baseBranch: z.string().optional(),
+  git: GitConfigSchema.optional(),
+});
+
+/**
  * Schema for sending a chat message - POST /api/loops/:id/chat
  */
 export const SendChatMessageRequestSchema = z.object({
