@@ -404,19 +404,36 @@ describe("Events WebSocket API Integration", () => {
       const ws1 = new WebSocket(`${wsUrl}/api/ws`);
       const ws2 = new WebSocket(`${wsUrl}/api/ws`);
 
-      // Wait for both connections
-      await Promise.all([
-        new Promise<void>((resolve) => { ws1.onopen = () => resolve(); }),
-        new Promise<void>((resolve) => { ws2.onopen = () => resolve(); }),
-      ]);
+      // Set up message collectors immediately to avoid race conditions.
+      // The server sends the "connected" message synchronously in the open handler,
+      // so onmessage must be assigned before onopen fires to catch it reliably.
+      const ws1Messages: unknown[] = [];
+      const ws2Messages: unknown[] = [];
+      const ws1Connected = new Promise<void>((resolve) => {
+        ws1.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === "connected") {
+            resolve();
+          } else {
+            ws1Messages.push(data);
+          }
+        };
+      });
+      const ws2Connected = new Promise<void>((resolve) => {
+        ws2.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === "connected") {
+            resolve();
+          } else {
+            ws2Messages.push(data);
+          }
+        };
+      });
 
-      // Skip connection messages
-      await Promise.all([
-        new Promise<void>((resolve) => { ws1.onmessage = () => resolve(); }),
-        new Promise<void>((resolve) => { ws2.onmessage = () => resolve(); }),
-      ]);
+      // Wait for both connections and their "connected" messages
+      await Promise.all([ws1Connected, ws2Connected]);
 
-      // Set up listeners
+      // Set up listeners for the real event
       const received1 = new Promise<unknown>((resolve) => {
         const timeout = setTimeout(() => resolve(null), 1000);
         ws1.onmessage = (event) => {
@@ -458,20 +475,34 @@ describe("Events WebSocket API Integration", () => {
       // A client with no filter
       const unfilteredWs = new WebSocket(`${wsUrl}/api/ws`);
 
-      await Promise.all([
-        new Promise<void>((resolve) => { filteredWs.onopen = () => resolve(); }),
-        new Promise<void>((resolve) => { unfilteredWs.onopen = () => resolve(); }),
-      ]);
-
-      // Skip connection messages
-      await Promise.all([
-        new Promise<void>((resolve) => { filteredWs.onmessage = () => resolve(); }),
-        new Promise<void>((resolve) => { unfilteredWs.onmessage = () => resolve(); }),
-      ]);
-
-      // Collect events
+      // Set up message collectors immediately to avoid race conditions.
       const filteredEvents: unknown[] = [];
       const unfilteredEvents: unknown[] = [];
+      const filteredConnected = new Promise<void>((resolve) => {
+        filteredWs.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === "connected") {
+            resolve();
+          } else {
+            filteredEvents.push(data);
+          }
+        };
+      });
+      const unfilteredConnected = new Promise<void>((resolve) => {
+        unfilteredWs.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          if (data.type === "connected") {
+            resolve();
+          } else {
+            unfilteredEvents.push(data);
+          }
+        };
+      });
+
+      // Wait for both connections and their "connected" messages
+      await Promise.all([filteredConnected, unfilteredConnected]);
+
+      // Set up final event collectors
       filteredWs.onmessage = (event) => {
         filteredEvents.push(JSON.parse(event.data));
       };
