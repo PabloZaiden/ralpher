@@ -98,27 +98,29 @@ export async function initializeDatabase(): Promise<void> {
 /**
  * Create all database tables if they don't exist.
  * Uses a transaction to ensure atomicity of schema creation.
- * 
- * **Schema Duplication Note:**
- * The base schema below includes columns that were originally added by migrations
- * (v1-v9: clear_planning_folder, plan_mode, plan_mode_active, plan_session_id,
- * plan_server_url, plan_feedback_rounds, plan_content, planning_folder_cleared,
- * review_mode, todos, plan_is_ready, pending_model_provider_id, pending_model_model_id).
- * The `review_comments` table and its indexes also appear in both the base schema and
- * migration v6.
- * 
- * This is intentional: fresh databases get the full schema from CREATE TABLE,
- * while existing databases get the same columns via idempotent migrations. Columns
- * from migrations v10+ (workspaces table, workspace_id, server_settings,
- * model_variant, pending_model_variant, git_worktree_path, git_commit_scope)
- * exist only in migrations and are NOT duplicated in the base schema.
- * 
+ *
+ * This is the single source of truth for the database schema. All legacy
+ * migrations (v1-v16) have been removed and their columns are included
+ * directly in the base schema below.
+ *
  * When adding new columns, add them ONLY as migrations (see migrations/index.ts).
- * Do NOT add them to the base schema here to avoid further duplication.
+ * Do NOT add them to the base schema here.
  */
 function createTables(database: Database): void {
   // Wrap all schema creation in a transaction
   const createAllTables = database.transaction(() => {
+    // Workspaces table - groups loops by workspace/directory
+    database.run(`
+      CREATE TABLE IF NOT EXISTS workspaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        directory TEXT UNIQUE NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        server_settings TEXT NOT NULL DEFAULT '{}'
+      )
+    `);
+
     // Loops table - stores both config and state
     database.run(`
       CREATE TABLE IF NOT EXISTS loops (
@@ -131,15 +133,18 @@ function createTables(database: Database): void {
         updated_at TEXT NOT NULL,
         model_provider_id TEXT,
         model_model_id TEXT,
+        model_variant TEXT,
         max_iterations INTEGER,
         max_consecutive_errors INTEGER,
         activity_timeout_seconds INTEGER,
         stop_pattern TEXT NOT NULL,
         git_branch_prefix TEXT NOT NULL,
-        git_commit_prefix TEXT NOT NULL DEFAULT '[Ralph]',
+        git_commit_scope TEXT NOT NULL DEFAULT 'ralph',
         base_branch TEXT,
         clear_planning_folder INTEGER DEFAULT 0,
         plan_mode INTEGER DEFAULT 0,
+        mode TEXT DEFAULT 'loop',
+        workspace_id TEXT REFERENCES workspaces(id),
         -- State fields
         status TEXT NOT NULL DEFAULT 'idle',
         current_iteration INTEGER NOT NULL DEFAULT 0,
@@ -153,6 +158,7 @@ function createTables(database: Database): void {
         error_timestamp TEXT,
         git_original_branch TEXT,
         git_working_branch TEXT,
+        git_worktree_path TEXT,
         git_commits TEXT,
         recent_iterations TEXT,
         logs TEXT,
@@ -162,6 +168,7 @@ function createTables(database: Database): void {
         pending_prompt TEXT,
         pending_model_provider_id TEXT,
         pending_model_model_id TEXT,
+        pending_model_variant TEXT,
         -- Plan mode state
         plan_mode_active INTEGER DEFAULT 0,
         plan_session_id TEXT,
@@ -218,6 +225,16 @@ function createTables(database: Database): void {
       CREATE INDEX IF NOT EXISTS idx_loops_created_at ON loops(created_at DESC)
     `);
 
+    // Create index for workspace lookups
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_workspaces_directory ON workspaces(directory)
+    `);
+
+    // Create index for loops by workspace
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_loops_workspace_id ON loops(workspace_id)
+    `);
+
     // Create indexes for review comments
     database.run(`
       CREATE INDEX IF NOT EXISTS idx_review_comments_loop_id ON review_comments(loop_id)
@@ -266,9 +283,11 @@ export function resetDatabase(): void {
   log.warn("Resetting database - dropping all tables");
   
   // Wrap DROP operations in a transaction
+  // Order matters: drop tables with FK references first
   const dropAllTables = db.transaction(() => {
     db!.run("DROP TABLE IF EXISTS review_comments");
     db!.run("DROP TABLE IF EXISTS loops");
+    db!.run("DROP TABLE IF EXISTS workspaces");
     db!.run("DROP TABLE IF EXISTS sessions");
     db!.run("DROP TABLE IF EXISTS preferences");
     db!.run("DROP TABLE IF EXISTS schema_migrations");
