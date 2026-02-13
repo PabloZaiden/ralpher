@@ -79,27 +79,24 @@ afterEach(() => {
 // ─── Plan mode scenarios ─────────────────────────────────────────────────────
 
 describe("plan mode scenario", () => {
-  test("planning loop shows PlanReviewPanel instead of tabs", async () => {
+  test("planning loop shows unified tab UI with plan tab active", async () => {
     const loop = planningLoop(false);
     setupApi(loop);
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, queryByText } = renderWithUser(<App />);
+    const { getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getByText("Plan Loop")).toBeTruthy();
     });
 
-    // PlanReviewPanel should be showing, not the normal tabs
+    // Unified tab UI should show all tabs including Plan
     await waitFor(() => {
-      // Plan tab header should exist (as part of PlanReviewPanel's own tabs)
       expect(getByText("Plan")).toBeTruthy();
-      expect(getByText("Activity Log")).toBeTruthy();
+      expect(getByText("Log")).toBeTruthy();
+      expect(getByText("Prompt")).toBeTruthy();
+      expect(getByText("Actions")).toBeTruthy();
     });
-
-    // Normal detail tabs should NOT be present
-    expect(queryByText("Prompt")).toBeNull();
-    expect(queryByText("Actions")).toBeNull();
   });
 
   test("plan content appears when plan is ready", async () => {
@@ -107,7 +104,7 @@ describe("plan mode scenario", () => {
     setupApi(loop, "## Step 1\nDo something\n\n## Step 2\nDo more");
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText } = renderWithUser(<App />);
+    const { getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getByText("Plan Loop")).toBeTruthy();
@@ -118,12 +115,21 @@ describe("plan mode scenario", () => {
       expect(getByText(/Step 1/)).toBeTruthy();
     });
 
-    // Accept button should be enabled when isPlanReady is true
-    const acceptBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Accept Plan"),
+    // Switch to Actions tab to find the Accept Plan button
+    const actionsTab = Array.from(document.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Actions",
     );
-    expect(acceptBtn).toBeTruthy();
-    expect(acceptBtn!.disabled).toBe(false);
+    expect(actionsTab).toBeTruthy();
+    await user.click(actionsTab!);
+
+    // Accept button should be enabled when isPlanReady is true
+    await waitFor(() => {
+      const acceptBtn = Array.from(document.querySelectorAll("button")).find(
+        (b) => b.textContent?.includes("Accept Plan"),
+      );
+      expect(acceptBtn).toBeTruthy();
+      expect(acceptBtn!.disabled).toBe(false);
+    });
   });
 
   test("accept plan disabled while AI is still writing", async () => {
@@ -131,7 +137,7 @@ describe("plan mode scenario", () => {
     setupApi(loop, "## Partial plan");
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText } = renderWithUser(<App />);
+    const { getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getByText("Plan Loop")).toBeTruthy();
@@ -142,12 +148,21 @@ describe("plan mode scenario", () => {
       expect(getByText(/Partial plan/)).toBeTruthy();
     });
 
-    // Accept button should be disabled when isPlanReady is false
-    const acceptBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Accept Plan"),
+    // Switch to Actions tab to find the Accept Plan button
+    const actionsTab = Array.from(document.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Actions",
     );
-    expect(acceptBtn).toBeTruthy();
-    expect(acceptBtn!.disabled).toBe(true);
+    expect(actionsTab).toBeTruthy();
+    await user.click(actionsTab!);
+
+    // Accept button should be disabled when isPlanReady is false
+    await waitFor(() => {
+      const acceptBtn = Array.from(document.querySelectorAll("button")).find(
+        (b) => b.textContent?.includes("Accept Plan"),
+      );
+      expect(acceptBtn).toBeTruthy();
+      expect(acceptBtn!.disabled).toBe(true);
+    });
   });
 
   test("send feedback on plan", async () => {
@@ -173,10 +188,11 @@ describe("plan mode scenario", () => {
       expect(getByText(/Initial Plan/)).toBeTruthy();
     });
 
-    // Find and fill the feedback textarea
-    const textarea = document.querySelector("textarea") as HTMLTextAreaElement;
-    expect(textarea).toBeTruthy();
-    await user.type(textarea, "X");
+    // Find the LoopActionBar input (used for feedback in planning mode)
+    const feedbackInput = document.querySelector("input[type='text']") as HTMLInputElement;
+    expect(feedbackInput).toBeTruthy();
+    expect(feedbackInput.placeholder).toContain("feedback");
+    await user.type(feedbackInput, "X");
 
     // Click Send Feedback
     const feedbackBtn = Array.from(document.querySelectorAll("button")).find(
@@ -209,11 +225,23 @@ describe("plan mode scenario", () => {
       expect(getByText(/Final Plan/)).toBeTruthy();
     });
 
+    // Switch to Actions tab to find the Accept Plan button
+    const actionsTab = Array.from(document.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Actions",
+    );
+    expect(actionsTab).toBeTruthy();
+    await user.click(actionsTab!);
+
     // Click Accept Plan & Start Loop
+    await waitFor(() => {
+      const acceptBtn = Array.from(document.querySelectorAll("button")).find(
+        (b) => b.textContent?.includes("Accept Plan"),
+      );
+      expect(acceptBtn).toBeTruthy();
+    });
     const acceptBtn = Array.from(document.querySelectorAll("button")).find(
       (b) => b.textContent?.includes("Accept Plan"),
     );
-    expect(acceptBtn).toBeTruthy();
     await user.click(acceptBtn!);
 
     // API should have been called
@@ -240,11 +268,23 @@ describe("plan mode scenario", () => {
       expect(getByText(/Plan to discard/)).toBeTruthy();
     });
 
-    // Click Discard Plan
-    const discardBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.trim() === "Discard Plan",
+    // Switch to Actions tab to find the Discard Plan button
+    const actionsTab = Array.from(document.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Actions",
     );
-    expect(discardBtn).toBeTruthy();
+    expect(actionsTab).toBeTruthy();
+    await user.click(actionsTab!);
+
+    // Click Discard Plan
+    await waitFor(() => {
+      const discardBtn = Array.from(document.querySelectorAll("button")).find(
+        (b) => b.textContent?.includes("Discard Plan"),
+      );
+      expect(discardBtn).toBeTruthy();
+    });
+    const discardBtn = Array.from(document.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Discard Plan"),
+    );
     await user.click(discardBtn!);
 
     // Confirmation modal should appear

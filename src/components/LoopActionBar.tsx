@@ -19,6 +19,8 @@ const log = createLogger("LoopActionBar");
 export interface LoopActionBarProps {
   /** Mode of the loop: "loop" or "chat" */
   mode?: LoopConfig["mode"];
+  /** Whether the loop is in planning mode */
+  isPlanning?: boolean;
   /** Current model configuration (from loop config) */
   currentModel?: ModelConfig;
   /** Pending model that will be used for next iteration */
@@ -39,6 +41,7 @@ export interface LoopActionBarProps {
 
 export function LoopActionBar({
   mode,
+  isPlanning = false,
   currentModel,
   pendingModel,
   pendingPrompt,
@@ -166,27 +169,29 @@ export function LoopActionBar({
       {/* Action bar form */}
       <form onSubmit={handleSubmit} className="p-3 sm:p-4">
         <div className="flex flex-row gap-2 sm:gap-3">
-          {/* Model selector */}
-          <ModelSelector
-            value={selectedModel}
-            onChange={setSelectedModel}
-            models={models}
-            loading={modelsLoading}
-            disabled={disabled || isSubmitting}
-            showDisconnected={true}
-            currentModelKey={currentModelKey}
-            placeholder={currentModelKey ? getModelDisplayName(models, currentModelKey) : "Select model..."}
-            loadingText="Loading..."
-            emptyText="Select model..."
-            className="min-w-[112px] sm:min-w-[128px] md:w-48 max-w-[120px] sm:max-w-none flex-shrink-0 h-9 text-sm rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-          />
+          {/* Model selector - hidden during planning since model changes are not supported */}
+          {!isPlanning && (
+            <ModelSelector
+              value={selectedModel}
+              onChange={setSelectedModel}
+              models={models}
+              loading={modelsLoading}
+              disabled={disabled || isSubmitting}
+              showDisconnected={true}
+              currentModelKey={currentModelKey}
+              placeholder={currentModelKey ? getModelDisplayName(models, currentModelKey) : "Select model..."}
+              loadingText="Loading..."
+              emptyText="Select model..."
+              className="min-w-[112px] sm:min-w-[128px] md:w-48 max-w-[120px] sm:max-w-none flex-shrink-0 h-9 text-sm rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+            />
+          )}
 
           {/* Message input */}
           <input
             type="text"
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder={isChatMode ? "Type a message..." : "Send a message to steer the agent..."}
+            placeholder={isPlanning ? "Send feedback on the plan..." : isChatMode ? "Type a message..." : "Send a message to steer the agent..."}
             disabled={disabled || isSubmitting}
             className="flex-1 min-w-0 h-9 text-sm px-3 rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
           />
@@ -199,7 +204,7 @@ export function LoopActionBar({
             loading={isSubmitting}
             className="flex-shrink-0 h-9"
           >
-            {isChatMode ? "Send" : "Queue"}
+            {isPlanning ? "Send Feedback" : isChatMode ? "Send" : "Queue"}
           </Button>
         </div>
 
@@ -211,7 +216,9 @@ export function LoopActionBar({
         )}
 
         <p className="hidden sm:block mt-2 text-xs text-gray-500 dark:text-gray-400">
-          {isChatMode
+          {isPlanning
+            ? "Feedback will interrupt current generation and start a new plan revision."
+            : isChatMode
             ? "Message will be sent immediately. Model change takes effect on next message."
             : "Message will be sent after current step completes. Model change takes effect on next prompt."}
         </p>
