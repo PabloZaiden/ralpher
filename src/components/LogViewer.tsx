@@ -431,8 +431,7 @@ export const LogViewer = memo(function LogViewer({
                       </span>
                     )}
                     <div className={`flex-1 min-w-0 ${isReasoning ? "text-gray-400 italic" : getLogLevelColor(log.level)}`}>
-                      {/* Always show message when responseContent exists, so content isn't orphaned */}
-                      {(entry.showHeader || hasResponseContent) && (
+                      {entry.showHeader && (
                         <span className="break-words">{log.message}</span>
                       )}
                       {/* Show responseContent as proper text */}
