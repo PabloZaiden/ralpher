@@ -9,6 +9,7 @@
 import { useEffect, useRef, useMemo, memo } from "react";
 import type { MessageData, ToolCallData, LogLevel } from "../types";
 import { Badge } from "./common";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 
 /**
  * Application log entry for display in the UI.
@@ -39,6 +40,8 @@ export interface LogViewerProps {
   maxHeight?: string;
   /** Whether to show debug logs (default: true) */
   showDebugLogs?: boolean;
+  /** Whether to render assistant messages as markdown (default: false) */
+  markdownEnabled?: boolean;
   /** ID for the root element (for accessibility) */
   id?: string;
 }
@@ -124,6 +127,7 @@ export const LogViewer = memo(function LogViewer({
   autoScroll = true,
   maxHeight,
   showDebugLogs = true,
+  markdownEnabled = false,
   id,
 }: LogViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -200,8 +204,12 @@ export const LogViewer = memo(function LogViewer({
                     >
                       {msg.role}
                     </Badge>
-                    <div className="flex-1 whitespace-pre-wrap break-words min-w-0">
-                      {msg.content}
+                    <div className={`flex-1 min-w-0 ${markdownEnabled && msg.role === "assistant" ? "break-words" : "whitespace-pre-wrap break-words"}`}>
+                      {markdownEnabled && msg.role === "assistant" ? (
+                        <MarkdownRenderer content={msg.content} className="text-sm" />
+                      ) : (
+                        msg.content
+                      )}
                     </div>
                   </div>
                 </div>
@@ -282,9 +290,15 @@ export const LogViewer = memo(function LogViewer({
                       <span className="break-words">{log.message}</span>
                       {/* Show responseContent as proper text */}
                       {hasResponseContent && (
-                        <div className="mt-2 p-2 sm:p-3 bg-gray-800 rounded whitespace-pre-wrap break-words text-gray-200 text-xs leading-relaxed">
-                          {responseContent}
-                        </div>
+                        markdownEnabled ? (
+                          <div className="mt-2 p-2 sm:p-3 bg-gray-800 rounded">
+                            <MarkdownRenderer content={responseContent as string} className="text-xs" />
+                          </div>
+                        ) : (
+                          <div className="mt-2 p-2 sm:p-3 bg-gray-800 rounded whitespace-pre-wrap break-words text-gray-200 text-xs leading-relaxed">
+                            {responseContent}
+                          </div>
+                        )
                       )}
                       {/* Show other details as JSON */}
                       {hasOtherDetails && (
