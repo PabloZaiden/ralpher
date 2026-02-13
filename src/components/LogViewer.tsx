@@ -46,6 +46,8 @@ export interface LogViewerProps {
   showTools?: boolean;
   /** Whether to render assistant messages as markdown (default: false) */
   markdownEnabled?: boolean;
+  /** Whether the loop is actively working (shows a spinner at the bottom). Default: false */
+  isActive?: boolean;
   /** ID for the root element (for accessibility) */
   id?: string;
 }
@@ -134,6 +136,7 @@ export const LogViewer = memo(function LogViewer({
   showReasoning = false,
   showTools = false,
   markdownEnabled = false,
+  isActive = false,
   id,
 }: LogViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -148,7 +151,7 @@ export const LogViewer = memo(function LogViewer({
         }
       });
     }
-  }, [messages, toolCalls, logs, autoScroll, showSystemInfo, showReasoning, showTools, markdownEnabled]);
+  }, [messages, toolCalls, logs, autoScroll, showSystemInfo, showReasoning, showTools, markdownEnabled, isActive]);
 
   // Combine and sort entries by timestamp (memoized to avoid rebuilding on every render)
   const entries = useMemo(() => {
@@ -237,7 +240,14 @@ export const LogViewer = memo(function LogViewer({
     >
       {isEmpty ? (
         <div className="flex items-center justify-center h-32 text-gray-500 text-xs sm:text-sm">
-          No logs yet. Waiting for activity.
+          {isActive ? (
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
+              <span>Working...</span>
+            </div>
+          ) : (
+            "No logs yet. Waiting for activity."
+          )}
         </div>
       ) : (
         <div className="p-2 sm:p-4 space-y-2 sm:space-y-3">
@@ -371,6 +381,12 @@ export const LogViewer = memo(function LogViewer({
               );
             }
           })}
+          {isActive && (
+            <div className="flex items-center gap-2 text-gray-500 text-xs py-2" data-testid="working-indicator">
+              <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-blue-500 border-t-transparent" />
+              <span>Working...</span>
+            </div>
+          )}
         </div>
       )}
     </div>

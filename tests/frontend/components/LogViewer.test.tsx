@@ -738,4 +738,67 @@ describe("LogViewer", () => {
       }
     });
   });
+
+  describe("working indicator (isActive)", () => {
+    test("shows 'Working...' spinner when isActive=true and entries exist", () => {
+      const msg = createMessageData({ role: "user", content: "Hello" });
+      const { getByTestId, getByText } = renderWithUser(
+        <LogViewer messages={[msg]} toolCalls={[]} isActive={true} />
+      );
+      const indicator = getByTestId("working-indicator");
+      expect(indicator).toBeInTheDocument();
+      expect(getByText("Working...")).toBeInTheDocument();
+    });
+
+    test("shows 'Working...' spinner in empty state when isActive=true", () => {
+      const { getByText, queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} isActive={true} />
+      );
+      expect(getByText("Working...")).toBeInTheDocument();
+      expect(queryByText("No logs yet. Waiting for activity.")).not.toBeInTheDocument();
+    });
+
+    test("does not show spinner when isActive=false (default)", () => {
+      const msg = createMessageData({ role: "user", content: "Hello" });
+      const { queryByTestId } = renderWithUser(
+        <LogViewer messages={[msg]} toolCalls={[]} />
+      );
+      expect(queryByTestId("working-indicator")).not.toBeInTheDocument();
+    });
+
+    test("shows 'No logs yet' when isActive=false and no entries", () => {
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} isActive={false} />
+      );
+      expect(getByText("No logs yet. Waiting for activity.")).toBeInTheDocument();
+    });
+
+    test("shows spinner after all entries when isActive=true with mixed content", () => {
+      const messages = [createMessageData({ content: "User msg", role: "user" })];
+      const logs = [createLogEntry({
+        level: "agent",
+        message: "AI generating response...",
+        details: { logKind: "response", responseContent: "Responding..." },
+      })];
+
+      const { getByTestId, getByText } = renderWithUser(
+        <LogViewer messages={messages} toolCalls={[]} logs={logs} isActive={true} />
+      );
+
+      expect(getByText("User msg")).toBeInTheDocument();
+      expect(getByText("AI generating response...")).toBeInTheDocument();
+      const indicator = getByTestId("working-indicator");
+      expect(indicator).toBeInTheDocument();
+    });
+
+    test("spinner contains an animated spinner element", () => {
+      const msg = createMessageData({ role: "user", content: "Hello" });
+      const { getByTestId } = renderWithUser(
+        <LogViewer messages={[msg]} toolCalls={[]} isActive={true} />
+      );
+      const indicator = getByTestId("working-indicator");
+      const spinner = indicator.querySelector(".animate-spin");
+      expect(spinner).not.toBeNull();
+    });
+  });
 });
