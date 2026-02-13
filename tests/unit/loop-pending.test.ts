@@ -14,7 +14,7 @@ import {
 import { SimpleEventEmitter } from "../../src/core/event-emitter";
 import type { Loop, LoopConfig, LoopState } from "../../src/types/loop";
 import { DEFAULT_LOOP_CONFIG } from "../../src/types/loop";
-import type { LoopEvent } from "../../src/types/events";
+import type { LoopEvent, LoopMessageEvent } from "../../src/types/events";
 import type {
   AgentSession,
   AgentResponse,
@@ -462,7 +462,7 @@ describe("LoopEngine Pending Model", () => {
     });
   });
 
-  test("pending message is logged as 'user' level when consumed", async () => {
+  test("pending message is persisted as user message when consumed", async () => {
     const loop = createTestLoop({ prompt: "Original prompt" });
     const engine = new LoopEngine({
       loop,
@@ -480,21 +480,21 @@ describe("LoopEngine Pending Model", () => {
     // Wait for completion
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // Verify a log event with level "user" was emitted containing the message
-    const userLogEvents = emittedEvents.filter(
-      (e) => e.type === "loop.log" && e.level === "user"
+    // Verify a loop.message event with role "user" was emitted containing the message
+    const userMessageEvents = emittedEvents.filter(
+      (e): e is LoopMessageEvent => e.type === "loop.message" && e.message.role === "user"
     );
-    expect(userLogEvents.length).toBe(1);
-    expect(userLogEvents[0]).toMatchObject({
-      type: "loop.log",
-      loopId: "test-loop-1",
-      level: "user",
-      message: "User injected message for testing",
-    });
+    expect(userMessageEvents.length).toBeGreaterThanOrEqual(1);
+    const userMsg = userMessageEvents.find(
+      (e) => e.message.content === "User injected message for testing"
+    );
+    expect(userMsg).toBeDefined();
+    expect(userMsg!.message.role).toBe("user");
 
-    // Verify the message is also persisted in the loop state logs
-    const userLogs = loop.state.logs?.filter((log) => log.level === "user");
-    expect(userLogs?.length).toBe(1);
-    expect(userLogs?.[0]?.message).toBe("User injected message for testing");
+    // Verify the message is also persisted in the loop state messages array
+    const userMessages = loop.state.messages?.filter((msg) => msg.role === "user");
+    expect(userMessages?.length).toBeGreaterThanOrEqual(1);
+    const persistedMsg = userMessages?.find((msg) => msg.content === "User injected message for testing");
+    expect(persistedMsg).toBeDefined();
   });
 });
