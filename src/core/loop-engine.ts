@@ -1711,6 +1711,41 @@ export class LoopEngine {
   }
 
   /**
+   * Emit a user message so it appears in the conversation thread.
+   * Persists the message with role "user" in loop.state.messages and
+   * emits a loop.message event for real-time WebSocket delivery.
+   *
+   * Uses a deterministic ID so that retries of the same iteration
+   * (after transient errors) do not create duplicate messages —
+   * persistMessage() deduplicates by ID.
+   *
+   * @param content - The user message content to log
+   * @param idSuffix - Optional suffix for the deterministic message ID.
+   *                   Defaults to the current iteration number.
+   */
+  private emitUserMessage(content: string, idSuffix?: string): void {
+    const suffix = idSuffix ?? `iter-${this.loop.state.currentIteration}`;
+    const messageData: MessageData = {
+      id: `user-msg-${this.config.id}-${suffix}`,
+      role: "user",
+      content,
+      timestamp: createTimestamp(),
+    };
+    this.persistMessage(messageData);
+    this.emit({
+      type: "loop.message",
+      loopId: this.config.id,
+      iteration: this.loop.state.currentIteration,
+      message: messageData,
+      timestamp: createTimestamp(),
+    });
+    // Also log to server console for observability
+    const loopPrefix = `[Loop:${this.config.name}]`;
+    const preview = content.length > 100 ? content.slice(0, 100) + "..." : content;
+    log.info(`${loopPrefix} [user] ${preview}`);
+  }
+
+  /**
    * Handle a tool start event.
    * Resets streaming log tracking, records the tool call, and emits the event.
    */
@@ -1952,7 +1987,9 @@ export class LoopEngine {
     const feedbackRounds = this.loop.state.planMode!.feedbackRounds;
     
     if (feedbackRounds === 0) {
-      // Initial plan creation
+      // Initial plan creation — log the user's goal as a conversation message
+      this.emitUserMessage(this.config.prompt, "initial-goal");
+
       const errorContext = this.buildErrorContext();
       const text = `- Goal: ${this.config.prompt}
 ${errorContext}
@@ -1981,9 +2018,9 @@ ${errorContext}
     // Plan feedback prompt (uses pending prompt set by sendPlanFeedback)
     const feedback = this.loop.state.pendingPrompt ?? "Please refine the plan based on feedback.";
     
-    // Log the user's plan feedback so it appears in the conversation logs
+    // Log the user's plan feedback so it appears in the conversation thread
     if (this.loop.state.pendingPrompt) {
-      this.emitLog("user", this.loop.state.pendingPrompt);
+      this.emitUserMessage(this.loop.state.pendingPrompt, `plan-feedback-${feedbackRounds}`);
     }
     
     const errorContext = this.buildErrorContext();
@@ -2018,10 +2055,10 @@ When the updated plan is ready, end your response with:
   private buildChatPrompt(model: ModelConfig | undefined): PromptInput {
     const userMessage = this.loop.state.pendingPrompt;
 
-    // Log the user's chat message so it appears in the conversation logs
-    if (userMessage) {
-      this.emitLog("user", userMessage);
-    }
+    // Log the user's chat message so it appears in the conversation thread.
+    // For the first message, pendingPrompt is undefined — use config.prompt instead.
+    const messageToLog = userMessage ?? this.config.prompt;
+    this.emitUserMessage(messageToLog);
 
     // Clear the pending prompt after consumption
     this.updateState({ pendingPrompt: undefined });
@@ -2052,10 +2089,11 @@ When the updated plan is ready, end your response with:
     // Get the pending user message if any (new message injected by the user)
     const userMessage = this.loop.state.pendingPrompt;
     
-    // Clear the pending prompt after consumption (it's a one-time override)
+    // Log the user's content as a conversation message.
+    // On the first iteration (no pending prompt), log the original goal.
+    // On subsequent iterations with an injected message, log that message.
     if (userMessage) {
-      // Log the user's injected message so it appears in the conversation logs
-      this.emitLog("user", userMessage);
+      this.emitUserMessage(userMessage);
       this.emitLog("info", "User injected a new message", {
         originalGoal: this.config.prompt.slice(0, 50) + (this.config.prompt.length > 50 ? "..." : ""),
         userMessage: userMessage.slice(0, 50) + (userMessage.length > 50 ? "..." : ""),
@@ -2064,6 +2102,9 @@ When the updated plan is ready, end your response with:
       this.updateState({
         pendingPrompt: undefined,
       });
+    } else if (this.loop.state.currentIteration <= 1) {
+      // First iteration: log the original goal as a user message
+      this.emitUserMessage(this.config.prompt, "initial-goal");
     }
 
     // Build the prompt with original goal always present, and user message as an addition
