@@ -145,7 +145,9 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
-  const [showDebugLogs, setShowDebugLogs] = useState(false);
+  const [showSystemInfo, setShowSystemInfo] = useState(false);
+  const [showReasoning, setShowReasoning] = useState(false);
+  const [showTools, setShowTools] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
 
   // Collapse/expand state for Logs and TODOs sections
@@ -662,9 +664,12 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                               messages={messages}
                               toolCalls={toolCalls}
                               logs={logs}
-                              showDebugLogs={showDebugLogs}
+                              showSystemInfo={showSystemInfo}
+                              showReasoning={showReasoning}
+                              showTools={showTools}
                               autoScroll={autoScroll}
                               markdownEnabled={markdownEnabled}
+                              isActive={isActive}
                             />
                           )}
                         </div>
@@ -688,17 +693,35 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                         </div>
                       </div>
                       
-                      {/* Debug logs and autoscroll toggles at the bottom */}
+                      {/* Log filter and autoscroll toggles at the bottom */}
                       <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
                         <div className="flex flex-wrap items-center gap-4">
                           <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
                             <input
                               type="checkbox"
-                              checked={showDebugLogs}
-                              onChange={(e) => setShowDebugLogs(e.target.checked)}
+                              checked={showSystemInfo}
+                              onChange={(e) => setShowSystemInfo(e.target.checked)}
                               className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
                             />
-                            <span>Show debug logs</span>
+                            <span>Show system info</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={showReasoning}
+                              onChange={(e) => setShowReasoning(e.target.checked)}
+                              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                            />
+                            <span>Show reasoning</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={showTools}
+                              onChange={(e) => setShowTools(e.target.checked)}
+                              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                            />
+                            <span>Show tools</span>
                           </label>
                           <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
                             <input

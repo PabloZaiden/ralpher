@@ -231,8 +231,8 @@ describe("dashboard management scenario", () => {
     // Should show Addressable badge
     expect(getByText("Addressable")).toBeTruthy();
 
-    // Should show "Address Comments" button on card
-    expect(getByText("Address Comments")).toBeTruthy();
+    // Note: Address Comments button was removed from dashboard cards/rows in PR #125.
+    // Address comments is now only accessible from LoopDetails Actions tab.
   });
 
   test("version number is displayed in header", async () => {
@@ -252,22 +252,9 @@ describe("dashboard management scenario", () => {
     });
   });
 
-  test("connection status indicator shows connected state", async () => {
-    setupBaseApi();
-    api.get("/api/loops", () => []);
-    api.get("/api/workspaces", () => []);
-
-    const { getByText } = renderWithUser(<App />);
-
-    await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-    });
-
-    // WebSocket status text appears
-    await waitFor(() => {
-      expect(getByText("Connected")).toBeTruthy();
-    });
-  });
+  // Note: "connection status indicator shows connected state" test was removed because
+  // the "Connected" text indicator was removed from the Dashboard in PR #118.
+  // WebSocket connection status is no longer displayed as a text label.
 
   test("empty workspaces section shows workspaces with no loops", async () => {
     setupBaseApi();

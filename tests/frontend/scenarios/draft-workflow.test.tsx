@@ -81,7 +81,7 @@ afterEach(() => {
 // ─── Draft workflow scenarios ────────────────────────────────────────────────
 
 describe("draft workflow scenario", () => {
-  test("draft loop appears in Drafts section with Edit button", async () => {
+  test("draft loop appears in Drafts section with Draft badge", async () => {
     setupBaseApi();
     const draft = draftLoop();
     api.get("/api/loops", () => [draft]);
@@ -98,12 +98,9 @@ describe("draft workflow scenario", () => {
 
     // Should show Draft badge (getStatusLabel returns "Draft")
     expect(getByText("Draft")).toBeTruthy();
-
-    // Should show Edit button (not "Accept")
-    expect(getByText("Edit")).toBeTruthy();
   });
 
-  test("clicking Edit on draft card opens edit modal", async () => {
+  test("clicking draft loop row opens edit modal", async () => {
     setupBaseApi();
     const draft = draftLoop();
     api.get("/api/loops", () => [draft]);
@@ -115,8 +112,8 @@ describe("draft workflow scenario", () => {
       expect(getByText("My Draft")).toBeTruthy();
     });
 
-    // Click Edit on the card
-    await user.click(getByText("Edit"));
+    // Click on the draft loop name (opens edit modal, not loop details)
+    await user.click(getByText("My Draft"));
 
     // Edit Draft Loop modal opens
     await waitFor(() => {
@@ -136,8 +133,8 @@ describe("draft workflow scenario", () => {
       expect(getByText("My Draft")).toBeTruthy();
     });
 
-    // Open edit modal
-    await user.click(getByText("Edit"));
+    // Open edit modal by clicking the draft loop row
+    await user.click(getByText("My Draft"));
 
     await waitFor(() => {
       expect(getByRole("heading", { name: "Edit Draft Loop" })).toBeTruthy();
@@ -171,8 +168,8 @@ describe("draft workflow scenario", () => {
       expect(getByText("My Draft")).toBeTruthy();
     });
 
-    // Open edit modal
-    await user.click(getByText("Edit"));
+    // Open edit modal by clicking the draft loop row
+    await user.click(getByText("My Draft"));
 
     await waitFor(() => {
       expect(getByRole("heading", { name: "Edit Draft Loop" })).toBeTruthy();
@@ -199,47 +196,9 @@ describe("draft workflow scenario", () => {
     });
   });
 
-  test("delete draft from dashboard card", async () => {
-    setupBaseApi();
-    const draft = draftLoop();
-    api.get("/api/loops", () => [draft]);
-    api.get("/api/workspaces", () => [WORKSPACE]);
-    api.delete("/api/loops/:id", () => ({ success: true }));
-
-    const { getByText, user } = renderWithUser(<App />);
-
-    await waitFor(() => {
-      expect(getByText("My Draft")).toBeTruthy();
-    });
-
-    // The draft card shows a Delete button (ghost/red)
-    const deleteBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.trim() === "Delete",
-    );
-    expect(deleteBtn).toBeTruthy();
-    await user.click(deleteBtn!);
-
-    // Delete confirmation modal should appear
-    await waitFor(() => {
-      expect(getByText(/Are you sure/i)).toBeTruthy();
-    });
-
-    // Confirm delete - find the Delete button inside the modal footer
-    // The modal's confirm button is a danger-variant button, distinct from the card's ghost "Delete"
-    const allDeleteBtns = Array.from(document.querySelectorAll("button")).filter(
-      (b) => b.textContent?.trim() === "Delete",
-    );
-    // The last "Delete" button is the one in the confirmation modal
-    const confirmBtn = allDeleteBtns[allDeleteBtns.length - 1];
-    expect(confirmBtn).toBeTruthy();
-    await user.click(confirmBtn!);
-
-    // API should be called
-    await waitFor(() => {
-      const calls = api.calls("/api/loops/:id", "DELETE");
-      expect(calls.length).toBeGreaterThan(0);
-    });
-  });
+  // Note: "Delete draft from dashboard card" test was removed because
+  // Delete buttons were removed from dashboard cards/rows in PR #125.
+  // Drafts can now only be deleted from LoopDetails Actions tab.
 
   test("save as draft from create loop form", async () => {
     setupBaseApi();

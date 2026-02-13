@@ -38,10 +38,16 @@ export interface LogViewerProps {
   autoScroll?: boolean;
   /** Maximum height */
   maxHeight?: string;
-  /** Whether to show debug logs (default: true) */
-  showDebugLogs?: boolean;
+  /** Whether to show system information logs (info, warn, error, debug, trace, system agent messages). Default: false */
+  showSystemInfo?: boolean;
+  /** Whether to show reasoning entries ("AI reasoning..." logs). Default: false */
+  showReasoning?: boolean;
+  /** Whether to show tool-related entries (tool calls and "AI calling tool" logs). Default: false */
+  showTools?: boolean;
   /** Whether to render assistant messages as markdown (default: false) */
   markdownEnabled?: boolean;
+  /** Whether the loop is actively working (shows a spinner at the bottom). Default: false */
+  isActive?: boolean;
   /** ID for the root element (for accessibility) */
   id?: string;
 }
@@ -126,8 +132,11 @@ export const LogViewer = memo(function LogViewer({
   logs = [],
   autoScroll = true,
   maxHeight,
-  showDebugLogs = true,
+  showSystemInfo = false,
+  showReasoning = false,
+  showTools = false,
   markdownEnabled = false,
+  isActive = false,
   id,
 }: LogViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -142,7 +151,7 @@ export const LogViewer = memo(function LogViewer({
         }
       });
     }
-  }, [messages, toolCalls, logs, autoScroll, showDebugLogs, markdownEnabled]);
+  }, [messages, toolCalls, logs, autoScroll, showSystemInfo, showReasoning, showTools, markdownEnabled, isActive]);
 
   // Combine and sort entries by timestamp (memoized to avoid rebuilding on every render)
   const entries = useMemo(() => {
@@ -152,19 +161,65 @@ export const LogViewer = memo(function LogViewer({
       | { type: "log"; data: LogEntry; timestamp: string }
     > = [];
 
+    // Messages (user/assistant) are always shown
     messages.forEach((msg) => {
       result.push({ type: "message", data: msg, timestamp: msg.timestamp });
     });
 
-    toolCalls.forEach((tool) => {
-      result.push({ type: "tool", data: tool, timestamp: tool.timestamp });
-    });
+    // Tool call entries: only shown if showTools is enabled
+    if (showTools) {
+      toolCalls.forEach((tool) => {
+        result.push({ type: "tool", data: tool, timestamp: tool.timestamp });
+      });
+    }
 
     logs.forEach((logEntry) => {
-      // Filter out debug logs if showDebugLogs is false
-      if (!showDebugLogs && logEntry.level === "debug") {
+      const logKind = logEntry.details?.["logKind"] as string | undefined;
+
+      // Reasoning entries: only shown if showReasoning is enabled
+      if (logKind === "reasoning" || (!logKind && logEntry.message === "AI reasoning...")) {
+        if (!showReasoning) return;
+        result.push({ type: "log", data: logEntry, timestamp: logEntry.timestamp });
         return;
       }
+
+      // Tool-related log entries: only shown if showTools is enabled
+      if (logKind === "tool" || (!logKind && logEntry.message.startsWith("AI calling tool:"))) {
+        if (!showTools) return;
+        result.push({ type: "log", data: logEntry, timestamp: logEntry.timestamp });
+        return;
+      }
+
+      // Response streaming entries ("AI generating response..."): always shown
+      if (logKind === "response" || (!logKind && logEntry.message === "AI generating response...")) {
+        result.push({ type: "log", data: logEntry, timestamp: logEntry.timestamp });
+        return;
+      }
+
+      // System agent messages (e.g., "AI started/finished generating response"): shown if showSystemInfo
+      if (logKind === "system") {
+        if (!showSystemInfo) return;
+        result.push({ type: "log", data: logEntry, timestamp: logEntry.timestamp });
+        return;
+      }
+
+      // Non-agent levels (info, warn, error, debug, trace): shown if showSystemInfo
+      if (logEntry.level !== "agent" && logEntry.level !== "user") {
+        if (!showSystemInfo) return;
+        result.push({ type: "log", data: logEntry, timestamp: logEntry.timestamp });
+        return;
+      }
+
+      // Remaining agent/user entries without logKind (backward compatibility):
+      // Use heuristics for old entries that don't have logKind
+      if (logEntry.level === "agent" && !logKind) {
+        // Old system-like messages
+        if (logEntry.message.startsWith("AI started") || logEntry.message.startsWith("AI finished")) {
+          if (!showSystemInfo) return;
+        }
+      }
+
+      // Default: show the entry (user-level entries, and any unclassified agent entries)
       result.push({ type: "log", data: logEntry, timestamp: logEntry.timestamp });
     });
 
@@ -172,7 +227,7 @@ export const LogViewer = memo(function LogViewer({
     result.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     return result;
-  }, [messages, toolCalls, logs, showDebugLogs]);
+  }, [messages, toolCalls, logs, showSystemInfo, showReasoning, showTools]);
 
   const isEmpty = entries.length === 0;
 
@@ -185,7 +240,14 @@ export const LogViewer = memo(function LogViewer({
     >
       {isEmpty ? (
         <div className="flex items-center justify-center h-32 text-gray-500 text-xs sm:text-sm">
-          No logs yet. Waiting for activity.
+          {isActive ? (
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
+              <span>Working...</span>
+            </div>
+          ) : (
+            "No logs yet. Waiting for activity."
+          )}
         </div>
       ) : (
         <div className="p-2 sm:p-4 space-y-2 sm:space-y-3">
@@ -263,19 +325,21 @@ export const LogViewer = memo(function LogViewer({
             } else {
               // Log entry
               const log = entry.data;
+              const logKind = log.details?.["logKind"] as string | undefined;
+              const isReasoning = logKind === "reasoning" || (!logKind && log.message === "AI reasoning...");
               // Check if this is an AI response log with responseContent
               const responseContent = log.details?.["responseContent"];
               const hasResponseContent = typeof responseContent === "string" && responseContent.length > 0;
-              // Filter out responseContent from details for separate display
+              // Filter out responseContent and logKind from details for separate display
               const otherDetails = log.details
                 ? Object.fromEntries(
-                    Object.entries(log.details).filter(([key]) => key !== "responseContent")
+                    Object.entries(log.details).filter(([key]) => key !== "responseContent" && key !== "logKind")
                   )
                 : undefined;
               const hasOtherDetails = otherDetails && Object.keys(otherDetails).length > 0;
 
               return (
-                <div key={`log-${log.id}-${index}`} className="group">
+                <div key={`log-${log.id}-${index}`} className={`group ${isReasoning ? "opacity-60" : ""}`}>
                   <div className="flex items-start gap-2 sm:gap-3">
                     <span className="text-gray-500 flex-shrink-0 text-xs hidden sm:inline">
                       {formatTime(log.timestamp)}
@@ -286,16 +350,16 @@ export const LogViewer = memo(function LogViewer({
                     >
                       {log.level.toUpperCase()}
                     </Badge>
-                    <div className={`flex-1 min-w-0 ${getLogLevelColor(log.level)}`}>
+                    <div className={`flex-1 min-w-0 ${isReasoning ? "text-gray-400 italic" : getLogLevelColor(log.level)}`}>
                       <span className="break-words">{log.message}</span>
                       {/* Show responseContent as proper text */}
                       {hasResponseContent && (
                         markdownEnabled ? (
-                          <div className="mt-2 p-2 sm:p-3 bg-gray-800 rounded">
-                            <MarkdownRenderer content={responseContent as string} className="text-xs" />
+                          <div className={`mt-2 p-2 sm:p-3 bg-gray-800 rounded ${isReasoning ? "italic" : ""}`}>
+                            <MarkdownRenderer content={responseContent as string} className="text-xs" dimmed={isReasoning} />
                           </div>
                         ) : (
-                          <div className="mt-2 p-2 sm:p-3 bg-gray-800 rounded whitespace-pre-wrap break-words text-gray-200 text-xs leading-relaxed">
+                          <div className={`mt-2 p-2 sm:p-3 bg-gray-800 rounded whitespace-pre-wrap break-words text-xs leading-relaxed ${isReasoning ? "text-gray-400 italic" : "text-gray-200"}`}>
                             {responseContent}
                           </div>
                         )
@@ -317,6 +381,12 @@ export const LogViewer = memo(function LogViewer({
               );
             }
           })}
+          {isActive && (
+            <div className="flex items-center gap-2 text-gray-500 text-xs py-2" data-testid="working-indicator">
+              <div className="animate-spin rounded-full h-3.5 w-3.5 border-2 border-blue-500 border-t-transparent" />
+              <span>Working...</span>
+            </div>
+          )}
         </div>
       )}
     </div>

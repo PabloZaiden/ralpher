@@ -89,7 +89,7 @@ afterEach(() => {
 // ─── Review comments scenarios ───────────────────────────────────────────────
 
 describe("review comments scenario", () => {
-  test("pushed addressable loop shows Address Comments button on dashboard", async () => {
+  test("pushed addressable loop shows Addressable badge on dashboard", async () => {
     const loop = pushedAddressableLoop(0);
     setupApi(loop);
 
@@ -99,12 +99,13 @@ describe("review comments scenario", () => {
       expect(getByText("Pushed Loop")).toBeTruthy();
     });
 
-    // Addressable badge and Address Comments button should be visible
+    // Addressable badge should be visible on the dashboard row
     expect(getByText("Addressable")).toBeTruthy();
-    expect(getByText("Address Comments")).toBeTruthy();
+    // Note: Address Comments button was removed from dashboard cards/rows in PR #125.
+    // Address comments is now only accessible from LoopDetails Actions tab.
   });
 
-  test("address comments from dashboard: opens modal and submits", async () => {
+  test("address comments from dashboard: navigate to details then submit", async () => {
     const loop = pushedAddressableLoop(1);
     setupApi(loop);
     api.post("/api/loops/:id/address-comments", () => ({ success: true }));
@@ -115,8 +116,29 @@ describe("review comments scenario", () => {
       expect(getByText("Pushed Loop")).toBeTruthy();
     });
 
-    // Click Address Comments on the card
-    await user.click(getByText("Address Comments"));
+    // Click on the loop row to navigate to LoopDetails
+    await user.click(getByText("Pushed Loop"));
+
+    // Wait for loop details
+    await waitFor(() => {
+      expect(getByText("← Back")).toBeTruthy();
+    });
+
+    // Go to Actions tab
+    await user.click(getByText("Actions"));
+
+    // Find and click Address Comments button in the Actions tab
+    await waitFor(() => {
+      const addressBtn = Array.from(document.querySelectorAll("button")).find(
+        (b) => b.textContent?.includes("Address Comments") && b.textContent?.includes("Submit comments"),
+      );
+      expect(addressBtn).toBeTruthy();
+    });
+
+    const addressBtn = Array.from(document.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Address Comments") && b.textContent?.includes("Submit comments"),
+    );
+    await user.click(addressBtn!);
 
     // AddressCommentsModal opens
     await waitFor(() => {
@@ -124,11 +146,10 @@ describe("review comments scenario", () => {
     });
 
     // Description shows loop name and review cycle
-    // Use getAllByText since "Pushed Loop" appears in both the card title and modal description
-    const pushedLoopTexts = Array.from(document.querySelectorAll("*")).filter(
+    const reviewCycleTexts = Array.from(document.querySelectorAll("*")).filter(
       (el) => el.textContent?.includes("Pushed Loop") && el.textContent?.includes("Review Cycle 2"),
     );
-    expect(pushedLoopTexts.length).toBeGreaterThan(0);
+    expect(reviewCycleTexts.length).toBeGreaterThan(0);
 
     // Fill in comments
     const textarea = document.querySelector("#reviewer-comments") as HTMLTextAreaElement;
@@ -200,7 +221,7 @@ describe("review comments scenario", () => {
     });
   });
 
-  test("merged addressable loop also shows Address Comments", async () => {
+  test("merged addressable loop shows Addressable badge", async () => {
     const loop = mergedAddressableLoop(2);
     setupApi(loop);
 
@@ -213,10 +234,10 @@ describe("review comments scenario", () => {
     // Should be in Awaiting Feedback section
     expect(getByText(/Awaiting Feedback \(1\)/)).toBeTruthy();
     expect(getByText("Addressable")).toBeTruthy();
-    expect(getByText("Address Comments")).toBeTruthy();
+    // Note: Address Comments button was removed from dashboard cards/rows in PR #125.
   });
 
-  test("review cycle counter is shown on loop card", async () => {
+  test("review cycle counter is shown on loop row", async () => {
     const loop = pushedAddressableLoop(3);
     setupApi(loop);
 
@@ -226,23 +247,41 @@ describe("review comments scenario", () => {
       expect(getByText("Pushed Loop")).toBeTruthy();
     });
 
-    // Review cycle displayed on the card
-    expect(getByText(/Review Cycle: 3/)).toBeTruthy();
+    // Review cycle displayed on the row (LoopRow uses "RC:{n}" format)
+    expect(getByText(/RC:3/)).toBeTruthy();
   });
 
   test("submit comments is disabled when textarea is empty", async () => {
     const loop = pushedAddressableLoop(0);
     setupApi(loop);
 
+    // Navigate directly to loop details
+    window.location.hash = `/loop/${LOOP_ID}`;
     const { getByText, user } = renderWithUser(<App />);
 
+    // Wait for loop details
     await waitFor(() => {
       expect(getByText("Pushed Loop")).toBeTruthy();
+      expect(getByText("← Back")).toBeTruthy();
     });
 
-    // Open Address Comments modal
-    await user.click(getByText("Address Comments"));
+    // Go to Actions tab
+    await user.click(getByText("Actions"));
 
+    // Find and click Address Comments button
+    await waitFor(() => {
+      const addressBtn = Array.from(document.querySelectorAll("button")).find(
+        (b) => b.textContent?.includes("Address Comments") && b.textContent?.includes("Submit comments"),
+      );
+      expect(addressBtn).toBeTruthy();
+    });
+
+    const addressBtn = Array.from(document.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Address Comments") && b.textContent?.includes("Submit comments"),
+    );
+    await user.click(addressBtn!);
+
+    // AddressCommentsModal opens
     await waitFor(() => {
       expect(getByText("Address Reviewer Comments")).toBeTruthy();
     });

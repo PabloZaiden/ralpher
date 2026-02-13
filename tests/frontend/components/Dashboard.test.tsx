@@ -92,17 +92,8 @@ describe("header rendering", () => {
 });
 
 // ─── Connection status ──────────────────────────────────────────────────────
-
-describe("connection status", () => {
-  test("shows Connected when WebSocket is open", async () => {
-    const { getByText } = renderWithUser(<Dashboard />);
-
-    // WebSocket auto-opens in mock, so useLoops should report "open"
-    await waitFor(() => {
-      expect(getByText("Connected")).toBeTruthy();
-    });
-  });
-});
+// Connection status indicator was removed from the Dashboard in a prior refactor.
+// Connection status is now shown only in workspace-level settings.
 
 // ─── Empty state ────────────────────────────────────────────────────────────
 
@@ -348,144 +339,17 @@ describe("create loop modal", () => {
 });
 
 // ─── Delete loop modal ──────────────────────────────────────────────────────
-
-describe("delete loop modal", () => {
-  test("opens delete modal when delete action is triggered on loop card", async () => {
-    const workspace = createWorkspace({ id: "ws-1", name: "Project" });
-    const loop = createLoopWithStatus("completed", {
-      config: { id: "l1", name: "Delete Me", workspaceId: "ws-1" },
-    });
-
-    api.get("/api/loops", () => [loop]);
-    api.get("/api/workspaces", () => [workspace]);
-    api.delete("/api/loops/:id", () => ({ success: true }));
-
-    const { getByText, user } = renderWithUser(<Dashboard />);
-
-    await waitFor(() => {
-      expect(getByText("Delete Me")).toBeTruthy();
-    });
-
-    // LoopCard renders a Delete button for completed loops
-    const deleteButtons = document.querySelectorAll('button');
-    const deleteBtn = Array.from(deleteButtons).find(b => b.textContent === 'Delete');
-    expect(deleteBtn).toBeTruthy();
-
-    await user.click(deleteBtn!);
-
-    await waitFor(() => {
-      expect(getByText("Delete Loop")).toBeTruthy();
-    });
-  });
-});
+// Delete/Accept/Purge/Address Comments action buttons were removed from dashboard
+// cards in a prior refactor. These actions are now available only in LoopDetails.
 
 // ─── Accept loop modal ──────────────────────────────────────────────────────
-
-describe("accept loop modal", () => {
-  test("opens accept modal when accept action is triggered on completed loop", async () => {
-    const workspace = createWorkspace({ id: "ws-1", name: "Project" });
-    const loop = createLoopWithStatus("completed", {
-      config: { id: "l1", name: "Accept Me", workspaceId: "ws-1" },
-    });
-
-    api.get("/api/loops", () => [loop]);
-    api.get("/api/workspaces", () => [workspace]);
-
-    const { getByText, user } = renderWithUser(<Dashboard />);
-
-    await waitFor(() => {
-      expect(getByText("Accept Me")).toBeTruthy();
-    });
-
-    // LoopCard renders an "Accept" button for completed loops
-    const buttons = document.querySelectorAll('button');
-    const acceptBtn = Array.from(buttons).find(b => b.textContent === 'Accept');
-    expect(acceptBtn).toBeTruthy();
-
-    await user.click(acceptBtn!);
-
-    await waitFor(() => {
-      // AcceptLoopModal shows "Finalize Loop" heading
-      expect(getByText("Finalize Loop")).toBeTruthy();
-    });
-  });
-});
+// Accept action was removed from dashboard cards (now in LoopDetails).
 
 // ─── Purge loop modal ───────────────────────────────────────────────────────
-
-describe("purge loop modal", () => {
-  test("opens purge modal for archived loops", async () => {
-    const workspace = createWorkspace({ id: "ws-1", name: "Project" });
-    const loop = createLoopWithStatus("merged", {
-      config: { id: "l1", name: "Purge Me", workspaceId: "ws-1" },
-    });
-
-    api.get("/api/loops", () => [loop]);
-    api.get("/api/workspaces", () => [workspace]);
-
-    const { getByText, user } = renderWithUser(<Dashboard />);
-
-    // Archived section is collapsed by default, expand it first
-    await waitFor(() => {
-      expect(getByText(/Archived\s*\(/)).toBeTruthy();
-    });
-    await user.click(getByText(/Archived\s*\(/));
-
-    await waitFor(() => {
-      expect(getByText("Purge Me")).toBeTruthy();
-    });
-
-    // LoopCard renders a "Purge" button for archived loops
-    const buttons = document.querySelectorAll('button');
-    const purgeBtn = Array.from(buttons).find(b => b.textContent === 'Purge');
-    expect(purgeBtn).toBeTruthy();
-
-    await user.click(purgeBtn!);
-
-    await waitFor(() => {
-      expect(getByText("Purge Loop")).toBeTruthy();
-    });
-  });
-});
+// Purge action was removed from dashboard cards (now in LoopDetails).
 
 // ─── Address comments modal ─────────────────────────────────────────────────
-
-describe("address comments modal", () => {
-  test("opens address comments modal for awaiting feedback loops", async () => {
-    const workspace = createWorkspace({ id: "ws-1", name: "Project" });
-    const loop = createLoopWithStatus("pushed", {
-      config: { id: "l1", name: "Comment Loop", workspaceId: "ws-1" },
-      state: {
-        reviewMode: {
-          addressable: true,
-          completionAction: "push",
-          reviewCycles: 1,
-          reviewBranches: [],
-        },
-      },
-    });
-
-    api.get("/api/loops", () => [loop]);
-    api.get("/api/workspaces", () => [workspace]);
-
-    const { getByText, user } = renderWithUser(<Dashboard />);
-
-    await waitFor(() => {
-      expect(getByText("Comment Loop")).toBeTruthy();
-    });
-
-    // LoopCard renders "Address Comments" button for addressable loops
-    const buttons = document.querySelectorAll('button');
-    const addressBtn = Array.from(buttons).find(b => b.textContent?.includes('Address Comments'));
-    expect(addressBtn).toBeTruthy();
-
-    await user.click(addressBtn!);
-
-    await waitFor(() => {
-      expect(getByText("Address Reviewer Comments")).toBeTruthy();
-    });
-  });
-});
+// Address comments action was removed from dashboard cards (now in LoopDetails).
 
 // ─── Rename loop modal ──────────────────────────────────────────────────────
 
@@ -645,41 +509,8 @@ describe("multiple status groups in same workspace", () => {
 });
 
 // ─── Edit draft flow ────────────────────────────────────────────────────────
-
-describe("edit draft flow", () => {
-  test("opens edit modal with 'Edit Draft Loop' title when draft loop is clicked", async () => {
-    const workspace = createWorkspace({ id: "ws-1", name: "Project" });
-    const draft = createLoopWithStatus("draft", {
-      config: {
-        id: "draft-1",
-        name: "My Draft",
-        workspaceId: "ws-1",
-        prompt: "Do something",
-      },
-    });
-
-    api.get("/api/loops", () => [draft]);
-    api.get("/api/workspaces", () => [workspace]);
-
-    const { getByText, user } = renderWithUser(<Dashboard />);
-
-    await waitFor(() => {
-      expect(getByText("My Draft")).toBeTruthy();
-    });
-
-    // Clicking a draft card opens the edit form
-    // Draft cards have an "Edit" button
-    const buttons = document.querySelectorAll('button');
-    const editBtn = Array.from(buttons).find(b => b.textContent === 'Edit');
-    expect(editBtn).toBeTruthy();
-
-    await user.click(editBtn!);
-
-    await waitFor(() => {
-      expect(getByText("Edit Draft Loop")).toBeTruthy();
-    });
-  });
-});
+// Edit button was removed from dashboard cards. Drafts are edited by clicking
+// the card itself, which triggers onEditDraft via LoopGrid.
 
 // ─── Workspace settings modal ───────────────────────────────────────────────
 

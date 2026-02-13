@@ -5,7 +5,7 @@
 import { test, expect, describe } from "bun:test";
 import { mock } from "bun:test";
 import { RenameLoopModal } from "@/components/RenameLoopModal";
-import { renderWithUser, waitFor } from "../helpers/render";
+import { renderWithUser, waitFor, act } from "../helpers/render";
 
 describe("RenameLoopModal", () => {
   const defaultProps = () => ({
@@ -106,7 +106,9 @@ describe("RenameLoopModal", () => {
       const input = getByLabelText("Loop Name") as HTMLInputElement;
       const form = input.closest("form");
       if (form) {
-        form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        await act(async () => {
+          form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+        });
       }
       await waitFor(() => {
         expect(getByText("Name cannot be empty")).toBeInTheDocument();
@@ -137,7 +139,10 @@ describe("RenameLoopModal", () => {
       await user.clear(input);
       await user.type(input, "New Name");
       await user.click(getByRole("button", { name: "Save" }));
-      expect(props.onRename).toHaveBeenCalledWith("New Name");
+      // Wait for the async handleSubmit to complete (setLoading(false) in finally)
+      await waitFor(() => {
+        expect(props.onRename).toHaveBeenCalledWith("New Name");
+      });
     });
 
     test("calls onClose after successful rename", async () => {
@@ -160,8 +165,10 @@ describe("RenameLoopModal", () => {
         <RenameLoopModal {...props} currentName="Same Name" />
       );
       await user.click(getByRole("button", { name: "Save" }));
+      await waitFor(() => {
+        expect(props.onClose).toHaveBeenCalled();
+      });
       expect(props.onRename).not.toHaveBeenCalled();
-      expect(props.onClose).toHaveBeenCalled();
     });
 
     test("shows error message on rename failure", async () => {

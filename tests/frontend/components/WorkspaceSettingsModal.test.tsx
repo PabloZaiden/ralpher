@@ -98,14 +98,17 @@ describe("WorkspaceSettingsModal AGENTS.md optimization", () => {
     test("loading message disappears after successful fetch", async () => {
       api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
 
-      const { queryByText } = renderWithUser(
+      const { getByText, queryByText } = renderWithUser(
         <WorkspaceSettingsModal {...defaultProps()} />
       );
 
-      // Wait for the fetch to complete
+      // Wait for the status text to appear (indicates loading is done)
       await waitFor(() => {
-        expect(queryByText("Checking AGENTS.md status...")).not.toBeInTheDocument();
+        expect(getByText("AGENTS.md exists but is not optimized for Ralpher.")).toBeInTheDocument();
       });
+
+      // Loading message should be gone
+      expect(queryByText("Checking AGENTS.md status...")).toBeNull();
     });
   });
 
