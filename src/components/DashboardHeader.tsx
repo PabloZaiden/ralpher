@@ -52,7 +52,7 @@ export function DashboardHeader({
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {/* View mode toggle */}
-            <div className="flex items-center rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="flex items-center rounded-md sm:border sm:border-gray-200 sm:dark:border-gray-700 overflow-hidden">
               <button
                 type="button"
                 onClick={viewMode === "rows" ? undefined : onToggleViewMode}
