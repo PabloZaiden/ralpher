@@ -146,7 +146,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [showSystemInfo, setShowSystemInfo] = useState(false);
-  const [showReasoning, setShowReasoning] = useState(false);
+  const [showReasoning, setShowReasoning] = useState(true);
   const [showTools, setShowTools] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
 

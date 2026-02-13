@@ -400,8 +400,40 @@ describe("PlanReviewPanel", () => {
       );
 
       await user.click(getByText("Activity Log"));
-      // LogViewer shows "Working..." because PlanReviewPanel passes isActive (always true during planning)
+      // LogViewer shows "No logs yet" because there's no activity and plan is ready (isActive=false)
+      expect(getByText("No logs yet. Waiting for activity.")).toBeInTheDocument();
+    });
+
+    test("shows Working... spinner when plan is not ready", async () => {
+      const { getByText, user } = renderWithUser(
+        <PlanReviewPanel
+          {...defaultProps({
+            isPlanReady: false,
+            messages: [],
+            toolCalls: [],
+            logs: [],
+          })}
+        />
+      );
+
+      await user.click(getByText("Activity Log"));
       expect(getByText("Working...")).toBeInTheDocument();
+    });
+
+    test("does not show Working... spinner when plan is ready", async () => {
+      const { getByText, queryByText, user } = renderWithUser(
+        <PlanReviewPanel
+          {...defaultProps({
+            isPlanReady: true,
+            messages: [],
+            toolCalls: [],
+            logs: [],
+          })}
+        />
+      );
+
+      await user.click(getByText("Activity Log"));
+      expect(queryByText("Working...")).not.toBeInTheDocument();
     });
   });
 });

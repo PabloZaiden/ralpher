@@ -40,7 +40,7 @@ export interface LogViewerProps {
   maxHeight?: string;
   /** Whether to show system information logs (info, warn, error, debug, trace, system agent messages). Default: false */
   showSystemInfo?: boolean;
-  /** Whether to show reasoning entries ("AI reasoning..." logs). Default: false */
+  /** Whether to show reasoning entries ("AI reasoning..." logs). Default: true */
   showReasoning?: boolean;
   /** Whether to show tool-related entries (tool calls and "AI calling tool" logs). Default: false */
   showTools?: boolean;
@@ -133,7 +133,7 @@ export const LogViewer = memo(function LogViewer({
   autoScroll = true,
   maxHeight,
   showSystemInfo = false,
-  showReasoning = false,
+  showReasoning = true,
   showTools = false,
   markdownEnabled = false,
   isActive = false,
