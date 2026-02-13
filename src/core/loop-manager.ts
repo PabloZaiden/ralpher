@@ -59,8 +59,8 @@ export interface CreateLoopOptions {
   stopPattern?: string;
   /** Git branch prefix (default: "ralph/") */
   gitBranchPrefix?: string;
-  /** Git commit prefix (default: "[Ralph]") */
-  gitCommitPrefix?: string;
+  /** Git commit scope for conventional commits (default: "ralph") */
+  gitCommitScope?: string;
   /** Base branch to create the loop from (default: current branch) */
   baseBranch?: string;
   /** Clear the .planning folder contents before starting (default: false) */
@@ -216,7 +216,7 @@ export class LoopManager {
       stopPattern: options.stopPattern ?? DEFAULT_LOOP_CONFIG.stopPattern,
       git: {
         branchPrefix: options.gitBranchPrefix ?? DEFAULT_LOOP_CONFIG.git.branchPrefix,
-        commitPrefix: options.gitCommitPrefix ?? DEFAULT_LOOP_CONFIG.git.commitPrefix,
+        commitScope: options.gitCommitScope ?? DEFAULT_LOOP_CONFIG.git.commitScope,
       },
       baseBranch: options.baseBranch,
       clearPlanningFolder: options.clearPlanningFolder ?? DEFAULT_LOOP_CONFIG.clearPlanningFolder,

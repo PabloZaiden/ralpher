@@ -90,7 +90,7 @@ async function applyLoopUpdates(
     if (body.git !== undefined) {
       updates.git = {
         branchPrefix: body.git.branchPrefix ?? currentLoop.config.git.branchPrefix,
-        commitPrefix: body.git.commitPrefix ?? currentLoop.config.git.commitPrefix,
+        commitScope: body.git.commitScope ?? currentLoop.config.git.commitScope,
       };
     }
 
@@ -165,7 +165,7 @@ export const loopsCrudRoutes = {
      * - maxConsecutiveErrors: Max identical errors before failsafe (default: 10)
      * - activityTimeoutSeconds: Seconds without events before error (default: 900, min: 60)
      * - stopPattern: Regex for completion detection
-     * - git: { branchPrefix, commitPrefix } for git integration
+     * - git: { branchPrefix, commitScope } for git integration
      * - baseBranch: Base branch to create loop from
      * - clearPlanningFolder: Clear .planning folder before starting
      * - planMode: Start in plan creation mode
@@ -264,7 +264,7 @@ export const loopsCrudRoutes = {
           activityTimeoutSeconds: body.activityTimeoutSeconds,
           stopPattern: body.stopPattern,
           gitBranchPrefix: body.git?.branchPrefix,
-          gitCommitPrefix: body.git?.commitPrefix,
+          gitCommitScope: body.git?.commitScope,
           baseBranch: effectiveBaseBranch,
           clearPlanningFolder: body.clearPlanningFolder,
           planMode: body.planMode,
@@ -1312,7 +1312,7 @@ export const loopsChatRoutes = {
      * - prompt (required): Initial message to send to the AI
      * - model: { providerID, modelID, variant } for AI model selection
      * - baseBranch: Base branch to create chat from
-     * - git: { branchPrefix, commitPrefix } for git integration
+     * - git: { branchPrefix, commitScope } for git integration
      *
      * Errors:
      * - 400: Validation error or invalid JSON body
@@ -1381,7 +1381,7 @@ export const loopsChatRoutes = {
           modelID: body.model?.modelID,
           modelVariant: body.model?.variant,
           gitBranchPrefix: body.git?.branchPrefix,
-          gitCommitPrefix: body.git?.commitPrefix,
+          gitCommitScope: body.git?.commitScope,
           baseBranch: effectiveBaseBranch,
         });
 

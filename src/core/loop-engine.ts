@@ -14,6 +14,7 @@ import type {
   ModelConfig,
 } from "../types/loop";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
+import { formatConventionalCommit, normalizeAiCommitMessage } from "./conventional-commits";
 import type {
   LoopEvent,
   MessageData,
@@ -804,7 +805,7 @@ export class LoopEngine {
         try {
           const commitInfo = await this.git.commit(
             this.workingDirectory,
-            `${this.config.git.commitPrefix} Clear .planning folder for fresh start`,
+            formatConventionalCommit("chore", this.config.git.commitScope, "clear .planning folder for fresh start"),
             { expectedBranch: this.loop.state.git?.workingBranch }
           );
           this.emitLog("info", `Committed .planning folder cleanup`, {
@@ -2172,7 +2173,7 @@ ${userMessageSection}${errorContext}
     } catch (err) {
       // Fallback to generic message if generation fails
       this.emitLog("warn", `Failed to generate commit message: ${String(err)}, using fallback`);
-      message = `${this.config.git.commitPrefix} Iteration ${iteration}`;
+      message = formatConventionalCommit("chore", this.config.git.commitScope, `iteration ${iteration}`);
     }
 
     try {
@@ -2220,24 +2221,27 @@ ${userMessageSection}${errorContext}
 
   /**
    * Generate a meaningful commit message based on the changes.
-   * Uses opencode to summarize what was done.
+   * Uses opencode to summarize what was done, then normalizes the output
+   * into a valid conventional commit message with the configured scope.
    */
   private async generateCommitMessage(iteration: number, responseContent: string): Promise<string> {
+    const scope = this.config.git.commitScope;
+
     if (!this.sessionId) {
-      return `${this.config.git.commitPrefix} Iteration ${iteration}`;
+      return formatConventionalCommit("chore", scope, `iteration ${iteration}`);
     }
 
     // Get the list of changed files
     const changedFiles = await this.git.getChangedFiles(this.workingDirectory);
     if (changedFiles.length === 0) {
-      return `${this.config.git.commitPrefix} Iteration ${iteration}`;
+      return formatConventionalCommit("chore", scope, `iteration ${iteration}`);
     }
 
-    // Ask opencode to generate a commit message
+    // Ask opencode to generate a commit message in conventional commit format
     const prompt: PromptInput = {
       parts: [{
         type: "text",
-        text: `Generate a concise git commit message (max 72 characters for the first line) for the following changes. Do not include any explanation, just output the commit message directly.
+        text: `Generate a concise git commit message following the Conventional Commits format for the following changes. Do not include any explanation, just output the commit message directly.
 
 Changed files:
 ${changedFiles.map(f => `- ${f}`).join("\n")}
@@ -2245,11 +2249,21 @@ ${changedFiles.map(f => `- ${f}`).join("\n")}
 Summary of work done this iteration:
 ${responseContent.slice(0, 500)}...
 
-The commit message should:
-1. Start with a verb (Add, Fix, Update, Refactor, etc.)
-2. Be specific about what changed
-3. First line max 72 characters
-4. Optionally include a blank line and more details
+The commit message MUST follow the Conventional Commits format:
+  type: description
+
+Valid types: feat, fix, refactor, docs, style, test, build, ci, chore, perf, revert
+- feat: a new feature
+- fix: a bug fix
+- refactor: code restructuring without behavior change
+- docs: documentation changes
+- chore: maintenance tasks
+
+Rules:
+1. Use the format "type: description" (do NOT include a scope — it will be added automatically)
+2. First line max 72 characters
+3. Be specific about what changed
+4. Optionally include a blank line followed by more details
 
 Output ONLY the commit message, nothing else.`
       }],
@@ -2261,14 +2275,7 @@ Output ONLY the commit message, nothing else.`
       
       // Validate the message isn't too long or empty
       if (generatedMessage && generatedMessage.length > 0 && generatedMessage.length < 500) {
-        // Prepend the commit prefix
-        const firstLine = generatedMessage.split("\n")[0] ?? generatedMessage;
-        const rest = generatedMessage.split("\n").slice(1).join("\n");
-        
-        if (rest) {
-          return `${this.config.git.commitPrefix} ${firstLine}\n${rest}`;
-        }
-        return `${this.config.git.commitPrefix} ${firstLine}`;
+        return normalizeAiCommitMessage(generatedMessage, scope);
       }
     } catch (err) {
       log.warn(`Failed to generate commit message via AI: ${String(err)}`);
@@ -2277,7 +2284,7 @@ Output ONLY the commit message, nothing else.`
     // Fallback: generate a simple message based on changed files
     const fileList = changedFiles.slice(0, 3).join(", ");
     const moreFiles = changedFiles.length > 3 ? ` (+${changedFiles.length - 3} more)` : "";
-    return `${this.config.git.commitPrefix} Iteration ${iteration}: ${fileList}${moreFiles}`;
+    return formatConventionalCommit("chore", scope, `iteration ${iteration} - ${fileList}${moreFiles}`);
   }
 
   /**

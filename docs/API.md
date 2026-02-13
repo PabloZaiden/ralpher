@@ -83,7 +83,7 @@ List all loops.
       "stopPattern": "<promise>COMPLETE</promise>$",
       "git": {
         "branchPrefix": "ralph/",
-        "commitPrefix": "[Ralph]"
+        "commitScope": "ralph"
       }
     },
     "state": {
@@ -119,7 +119,7 @@ Loop names are **automatically generated** from the prompt using AI. The `name` 
 | `stopPattern` | string | No | Completion regex (default: `<promise>COMPLETE</promise>$`) |
 | `git` | object | No | Git configuration |
 | `git.branchPrefix` | string | No | Branch prefix (default: "ralph/") |
-| `git.commitPrefix` | string | No | Commit message prefix (default: "[Ralph]") |
+| `git.commitScope` | string | No | Conventional commit scope (default: "ralph"). Used in commit messages as `type(scope): description`. The deprecated `git.commitPrefix` is still accepted and automatically converted (e.g., `"[Ralph]"` becomes `"ralph"`). |
 | `baseBranch` | string | No | Base branch to create the loop from (default: auto-detected default branch) |
 | `clearPlanningFolder` | boolean | No | Clear .planning folder before starting (default: false) |
 | `draft` | boolean | No | Save as draft without starting (default: false) |
@@ -1824,6 +1824,21 @@ Log levels used in `loop.log` events:
 | `complete` | Stop pattern matched, loop complete |
 | `error` | Error occurred during iteration |
 | `plan_ready` | Plan created and ready for review (planning mode) |
+
+### Commit Message Format
+
+Ralpher generates commit messages following the [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) specification:
+
+```
+type(scope): description
+```
+
+The `scope` is configured via `git.commitScope` (default: `"ralph"`). Valid types: `feat`, `fix`, `refactor`, `docs`, `style`, `test`, `build`, `ci`, `chore`, `perf`, `revert`.
+
+Examples:
+- `feat(ralph): add JWT authentication endpoint`
+- `fix(ralph): handle token expiration edge case`
+- `chore(ralph): iteration 3 - auth.ts, tests.ts`
 
 ### TODO Item
 

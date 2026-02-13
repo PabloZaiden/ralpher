@@ -91,8 +91,17 @@ export interface LoopConfig {
 export interface GitConfig {
   /** Branch name prefix. Default: "ralph/" (e.g., "ralph/add-auth") */
   branchPrefix: string;
-  /** Commit message prefix. Default: "[Ralph]" (e.g., "[Ralph] Add auth endpoint") */
-  commitPrefix: string;
+  /**
+   * Conventional commit scope. Default: "ralph".
+   *
+   * Inserted as the scope in conventional commit messages:
+   * `type(scope): description` (e.g., `feat(ralph): add auth endpoint`).
+   *
+   * Set to an empty string to omit the scope entirely.
+   *
+   * @deprecated The old `commitPrefix` field (e.g., "[Ralph]") is no longer used.
+   */
+  commitScope: string;
 }
 
 /**
@@ -374,7 +383,7 @@ export const DEFAULT_LOOP_CONFIG = {
   mode: "loop" as const,
   git: {
     branchPrefix: "ralph/",
-    commitPrefix: "[Ralph]",
+    commitScope: "ralph",
   },
 } as const;
 

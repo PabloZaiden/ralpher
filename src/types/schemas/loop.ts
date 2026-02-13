@@ -13,10 +13,36 @@ import { ModelConfigSchema } from "./model";
 /**
  * Schema for GitConfig - git integration settings.
  * Used as a partial in CreateLoopRequest and UpdateLoopRequest.
+ *
+ * Accepts `commitScope` (preferred) or `commitPrefix` (deprecated alias).
+ * If both are provided, `commitScope` takes precedence.
  */
 export const GitConfigSchema = z.object({
   branchPrefix: z.string().optional(),
+  commitScope: z.string().optional(),
+  /** @deprecated Use `commitScope` instead. */
   commitPrefix: z.string().optional(),
+}).transform((val) => {
+  // Map deprecated commitPrefix to commitScope if commitScope is not set
+  if (val.commitPrefix !== undefined && val.commitScope === undefined) {
+    // Strip brackets and lowercase: "[Ralph]" -> "ralph"
+    const cleaned = val.commitPrefix
+      .replace(/^\[/, "")
+      .replace(/\]$/, "")
+      .trim()
+      .toLowerCase();
+    return {
+      branchPrefix: val.branchPrefix,
+      commitScope: cleaned || undefined,
+    };
+  }
+  // Drop the deprecated field from the output
+  // Trim commitScope and map empty/whitespace-only to undefined
+  const trimmedScope = val.commitScope?.trim();
+  return {
+    branchPrefix: val.branchPrefix,
+    commitScope: trimmedScope || undefined,
+  };
 });
 
 /**
