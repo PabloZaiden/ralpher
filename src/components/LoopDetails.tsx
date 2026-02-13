@@ -664,6 +664,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                               logs={logs}
                               showDebugLogs={showDebugLogs}
                               autoScroll={autoScroll}
+                              markdownEnabled={markdownEnabled}
                             />
                           )}
                         </div>

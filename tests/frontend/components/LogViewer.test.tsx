@@ -389,4 +389,97 @@ describe("LogViewer", () => {
       expect(getByText("Processing complete")).toBeInTheDocument();
     });
   });
+
+  describe("markdown rendering", () => {
+    test("renders assistant message as plain text when markdownEnabled is not set", () => {
+      const msg = createMessageData({ role: "assistant", content: "**bold text**" });
+      const { container } = renderWithUser(
+        <LogViewer messages={[msg]} toolCalls={[]} />
+      );
+      // Should render raw markdown text, not HTML bold
+      expect(container.textContent).toContain("**bold text**");
+      expect(container.querySelector("strong")).toBeNull();
+    });
+
+    test("renders assistant message as plain text when markdownEnabled is false", () => {
+      const msg = createMessageData({ role: "assistant", content: "**bold text**" });
+      const { container } = renderWithUser(
+        <LogViewer messages={[msg]} toolCalls={[]} markdownEnabled={false} />
+      );
+      expect(container.textContent).toContain("**bold text**");
+      expect(container.querySelector("strong")).toBeNull();
+    });
+
+    test("renders assistant message as markdown when markdownEnabled is true", () => {
+      const msg = createMessageData({ role: "assistant", content: "**bold text**" });
+      const { container } = renderWithUser(
+        <LogViewer messages={[msg]} toolCalls={[]} markdownEnabled={true} />
+      );
+      // Should render as formatted HTML with <strong>
+      const strong = container.querySelector("strong");
+      expect(strong).not.toBeNull();
+      expect(strong?.textContent).toBe("bold text");
+    });
+
+    test("renders user message as plain text even when markdownEnabled is true", () => {
+      const msg = createMessageData({ role: "user", content: "**not bold**" });
+      const { container } = renderWithUser(
+        <LogViewer messages={[msg]} toolCalls={[]} markdownEnabled={true} />
+      );
+      // User messages should always be plain text
+      expect(container.textContent).toContain("**not bold**");
+      expect(container.querySelector("strong")).toBeNull();
+    });
+
+    test("renders responseContent as markdown when markdownEnabled is true", () => {
+      const log = createLogEntry({
+        details: { responseContent: "**bold response**" },
+      });
+      const { container } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} markdownEnabled={true} />
+      );
+      const strong = container.querySelector("strong");
+      expect(strong).not.toBeNull();
+      expect(strong?.textContent).toBe("bold response");
+    });
+
+    test("renders responseContent as plain text when markdownEnabled is false", () => {
+      const log = createLogEntry({
+        details: { responseContent: "**bold response**" },
+      });
+      const { container } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} markdownEnabled={false} />
+      );
+      expect(container.textContent).toContain("**bold response**");
+      expect(container.querySelector("strong")).toBeNull();
+    });
+
+    test("renders markdown code blocks in assistant messages", () => {
+      const msg = createMessageData({
+        role: "assistant",
+        content: "Here is code:\n\n```js\nconsole.log('hello');\n```",
+      });
+      const { container } = renderWithUser(
+        <LogViewer messages={[msg]} toolCalls={[]} markdownEnabled={true} />
+      );
+      // Should render a <pre> element for the code block
+      const pre = container.querySelector("pre");
+      expect(pre).not.toBeNull();
+      expect(pre?.textContent).toContain("console.log('hello');");
+    });
+
+    test("renders markdown lists in assistant messages", () => {
+      const msg = createMessageData({
+        role: "assistant",
+        content: "Steps:\n\n- First item\n- Second item\n- Third item",
+      });
+      const { container } = renderWithUser(
+        <LogViewer messages={[msg]} toolCalls={[]} markdownEnabled={true} />
+      );
+      // Should render <li> elements
+      const listItems = container.querySelectorAll("li");
+      expect(listItems.length).toBe(3);
+      expect(listItems[0]?.textContent).toBe("First item");
+    });
+  });
 });

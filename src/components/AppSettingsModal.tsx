@@ -175,7 +175,7 @@ export function AppSettingsModal({
                   Render Markdown
                 </span>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  When enabled, markdown content (plan, status) is rendered as formatted HTML.
+                  When enabled, markdown content (plan, status, assistant messages) is rendered as formatted HTML.
                   When disabled, raw markdown text is shown.
                 </p>
               </div>

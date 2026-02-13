@@ -191,6 +191,7 @@ export function PlanReviewPanel({
             toolCalls={toolCalls}
             logs={logs}
             maxHeight="500px"
+            markdownEnabled={markdownEnabled}
           />
         )}
       </div>
