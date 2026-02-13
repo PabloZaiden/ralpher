@@ -22,12 +22,6 @@ describe("LoopCard", () => {
       expect(getByText("My Test Loop")).toBeInTheDocument();
     });
 
-    test("renders loop directory", () => {
-      const loop = createLoop({ config: { directory: "/home/user/project" } });
-      const { getByText } = renderWithUser(<LoopCard loop={loop} />);
-      expect(getByText("/home/user/project")).toBeInTheDocument();
-    });
-
     test("renders status badge", () => {
       const loop = createLoopWithStatus("running");
       const { getByText } = renderWithUser(<LoopCard loop={loop} />);

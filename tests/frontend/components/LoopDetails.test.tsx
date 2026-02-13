@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockApi } from "../helpers/mock-api";
+import { createMockApi, MockApiError } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor } from "../helpers/render";
 import {
@@ -99,7 +99,7 @@ describe("loading state", () => {
 describe("loop not found", () => {
   test("shows loop not found when API returns error", async () => {
     api.get("/api/loops/:id", () => {
-      throw { status: 404, body: { error: "not_found" } };
+      throw new MockApiError(404, { error: "not_found" });
     });
     api.get("/api/models", () => []);
     api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
@@ -108,13 +108,15 @@ describe("loop not found", () => {
     const { getByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
 
     await waitFor(() => {
-      expect(getByText("Loop not found")).toBeTruthy();
+      expect(getByText("Not found")).toBeTruthy();
     });
+    // The error detail is shown in the paragraph below
+    expect(getByText("Loop not found")).toBeTruthy();
   });
 
   test("shows back button in not found state", async () => {
     api.get("/api/loops/:id", () => {
-      throw { status: 404, body: { error: "not_found" } };
+      throw new MockApiError(404, { error: "not_found" });
     });
     api.get("/api/models", () => []);
     api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
@@ -126,7 +128,7 @@ describe("loop not found", () => {
     );
 
     await waitFor(() => {
-      expect(getByText("Loop not found")).toBeTruthy();
+      expect(getByText("Not found")).toBeTruthy();
     });
 
     // Back button should also be present

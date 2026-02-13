@@ -400,8 +400,8 @@ describe("PlanReviewPanel", () => {
       );
 
       await user.click(getByText("Activity Log"));
-      // LogViewer should show its empty state
-      expect(getByText("No logs yet. Waiting for activity.")).toBeInTheDocument();
+      // LogViewer shows "Working..." because PlanReviewPanel passes isActive (always true during planning)
+      expect(getByText("Working...")).toBeInTheDocument();
     });
   });
 });

@@ -6,7 +6,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { createMockApi } from "../helpers/mock-api";
+import { createMockApi, MockApiError } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor } from "../helpers/render";
 import {
@@ -120,16 +120,19 @@ describe("error handling scenario", () => {
     setupBaseApi();
 
     api.get("/api/loops", () => []);
-    api.get("/api/loops/:id", () => null);
+    api.get("/api/loops/:id", () => {
+      throw new MockApiError(404, { error: "not_found", message: "Loop not found" });
+    });
     api.get("/api/workspaces", () => [WORKSPACE]);
 
     window.location.hash = "/loop/nonexistent-loop";
     const { getByText } = renderWithUser(<App />);
 
-    // Should show loop not found
+    // Should show "Not found" heading with "Loop not found" error text
     await waitFor(() => {
-      expect(getByText("Loop not found")).toBeTruthy();
+      expect(getByText("Not found")).toBeTruthy();
     });
+    expect(getByText("Loop not found")).toBeTruthy();
   });
 
   test("create loop with 409 uncommitted changes shows conflict modal", async () => {
