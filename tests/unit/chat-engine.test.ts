@@ -533,7 +533,7 @@ describe("LoopEngine - Chat Mode", () => {
     expect(secondPrompt?.model?.modelID).toBe("gpt-4o");
   }, 10000);
 
-  test("chat mode emits user log for injected chat message", async () => {
+  test("chat mode emits user message for injected chat message", async () => {
     const loop = createChatLoop({ prompt: "Initial message" });
     // Set pendingPrompt to simulate an injected follow-up message
     loop.state.pendingPrompt = "What is TypeScript?";
@@ -548,11 +548,13 @@ describe("LoopEngine - Chat Mode", () => {
 
     await engine.start();
 
-    // Check that a user-level log was emitted with the chat message
-    const logEvents = emittedEvents.filter(
-      (e) => e.type === "loop.log" && "level" in e && e.level === "user"
+    // Check that a loop.message event with role "user" was emitted
+    const userMessageEvents = emittedEvents.filter(
+      (e) => e.type === "loop.message" && "message" in e && e.message.role === "user"
     );
-    expect(logEvents.length).toBeGreaterThanOrEqual(1);
+    expect(userMessageEvents.length).toBeGreaterThanOrEqual(1);
+    const userMsg = userMessageEvents[0] as { message: { role: string; content: string } };
+    expect(userMsg.message.content).toBe("What is TypeScript?");
   });
 
   test("loop mode still auto-iterates normally (regression check)", async () => {
