@@ -22,6 +22,7 @@ import {
 import { LoopActionBar } from "./LoopActionBar";
 import {
   getStatusLabel,
+  getPlanningStatusLabel,
   canAccept,
   isFinalState,
   isLoopActive,
@@ -500,6 +501,10 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const isPlanning = state.status === "planning" && !isChatMode;
   const isPlanReady = loop.state.planMode?.isPlanReady ?? false;
   const feedbackRounds = loop.state.planMode?.feedbackRounds ?? 0;
+  // Planning-active: AI is generating/revising the plan (not yet ready for review)
+  const isPlanningActive = isPlanning && !isPlanReady;
+  // Log panel should show spinner during both regular activity and active planning
+  const isLogActive = isActive || isPlanningActive;
 
   // Filter tabs for chat mode: hide Prompt and Plan tabs
   const visibleTabs = isChatMode
@@ -526,13 +531,25 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
             >
               <EditIcon />
             </button>
-            <Badge variant={getStatusBadgeVariant(state.status)} size="sm">
-              {getStatusLabel(state.status, state.syncState)}
+            <Badge variant={isPlanning ? (isPlanReady ? "plan_ready" : "planning") : getStatusBadgeVariant(state.status)} size="sm">
+              {isPlanning ? getPlanningStatusLabel(isPlanReady) : getStatusLabel(state.status, state.syncState)}
             </Badge>
-            {isActive && (
+            {/* Activity dot: pulsing blue for running, pulsing cyan for planning, static amber for plan ready */}
+            {isActive && !isPlanning && (
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+              </span>
+            )}
+            {isPlanningActive && (
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500" />
+              </span>
+            )}
+            {isPlanReady && (
+              <span className="relative flex h-2 w-2">
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
               </span>
             )}
             <span className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate hidden sm:inline">
@@ -702,7 +719,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                               showTools={showTools}
                               autoScroll={autoScroll}
                               markdownEnabled={markdownEnabled}
-                              isActive={isActive}
+                              isActive={isLogActive}
                             />
                           )}
                         </div>
