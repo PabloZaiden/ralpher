@@ -372,14 +372,27 @@ describe("LogViewer", () => {
   });
 
   describe("reasoning filtering", () => {
-    test("hides reasoning entries by default (showReasoning=false)", () => {
+    test("shows reasoning entries by default (showReasoning defaults to true)", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI reasoning...",
+        details: { logKind: "reasoning", responseContent: "thinking about it" },
+      });
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(getByText("AI reasoning...")).toBeInTheDocument();
+      expect(getByText("thinking about it")).toBeInTheDocument();
+    });
+
+    test("hides reasoning entries when showReasoning=false", () => {
       const log = createLogEntry({
         level: "agent",
         message: "AI reasoning...",
         details: { logKind: "reasoning", responseContent: "thinking about it" },
       });
       const { queryByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showReasoning={false} />
       );
       expect(queryByText("AI reasoning...")).not.toBeInTheDocument();
     });
@@ -397,14 +410,26 @@ describe("LogViewer", () => {
       expect(getByText("thinking about it")).toBeInTheDocument();
     });
 
-    test("backward compat: identifies reasoning by message text when no logKind", () => {
+    test("backward compat: shows old reasoning by default when no logKind", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI reasoning...",
+        details: { responseContent: "old reasoning content" },
+      });
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(getByText("AI reasoning...")).toBeInTheDocument();
+    });
+
+    test("backward compat: hides old reasoning when showReasoning=false", () => {
       const log = createLogEntry({
         level: "agent",
         message: "AI reasoning...",
         details: { responseContent: "old reasoning content" },
       });
       const { queryByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showReasoning={false} />
       );
       expect(queryByText("AI reasoning...")).not.toBeInTheDocument();
     });
