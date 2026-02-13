@@ -103,6 +103,58 @@ function getLogLevelColor(level: LogLevel): string {
 }
 
 /**
+ * Base type for a display entry before showHeader annotation.
+ */
+type EntryBase =
+  | { type: "message"; data: MessageData; timestamp: string }
+  | { type: "tool"; data: ToolCallData; timestamp: string }
+  | { type: "log"; data: LogEntry; timestamp: string };
+
+/**
+ * Display entry with showHeader flag for chat-style grouping.
+ * When consecutive visible entries share the same actor+action,
+ * only the first entry in the group has showHeader=true.
+ */
+export type DisplayEntry = EntryBase & { showHeader: boolean };
+
+/**
+ * Derive a grouping key for an entry. Two consecutive entries belong to
+ * the same visual group (and thus collapse their headers) when their
+ * keys are equal.
+ *
+ * - Messages group by role: "message|user", "message|assistant"
+ * - Tool calls group by tool name: "tool|Write", "tool|Read"
+ * - Log entries group by level + message: "log|agent|AI generating response..."
+ */
+export function getEntryGroupKey(entry: EntryBase): string {
+  switch (entry.type) {
+    case "message":
+      return `message|${entry.data.role}`;
+    case "tool":
+      return `tool|${entry.data.name}`;
+    case "log":
+      return `log|${entry.data.level}|${entry.data.message}`;
+  }
+}
+
+/**
+ * Annotate a sorted array of entries with showHeader flags.
+ * The first entry always shows its header. Subsequent entries only show
+ * their header when their group key differs from the previous entry.
+ *
+ * Group keys are precomputed in a single pass to avoid redundant
+ * string concatenations — each entry's key is computed exactly once.
+ */
+export function annotateShowHeader(sorted: EntryBase[]): DisplayEntry[] {
+  // Precompute all group keys in one pass so each key is calculated exactly once
+  const keys = sorted.map(getEntryGroupKey);
+  return sorted.map((entry, i) => ({
+    ...entry,
+    showHeader: i === 0 || keys[i] !== keys[i - 1],
+  }));
+}
+
+/**
  * Get the badge variant for a log level.
  */
 function getLogLevelBadge(level: LogLevel): "default" | "info" | "success" | "warning" | "error" {
@@ -153,13 +205,9 @@ export const LogViewer = memo(function LogViewer({
     }
   }, [messages, toolCalls, logs, autoScroll, showSystemInfo, showReasoning, showTools, markdownEnabled, isActive]);
 
-  // Combine and sort entries by timestamp (memoized to avoid rebuilding on every render)
+  // Combine, sort, and annotate entries with showHeader for chat-style grouping
   const entries = useMemo(() => {
-    const result: Array<
-      | { type: "message"; data: MessageData; timestamp: string }
-      | { type: "tool"; data: ToolCallData; timestamp: string }
-      | { type: "log"; data: LogEntry; timestamp: string }
-    > = [];
+    const result: EntryBase[] = [];
 
     // Messages (user/assistant) are always shown
     messages.forEach((msg) => {
@@ -226,7 +274,8 @@ export const LogViewer = memo(function LogViewer({
     // Sort by timestamp
     result.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-    return result;
+    // Annotate with showHeader for chat-style consecutive grouping
+    return annotateShowHeader(result);
   }, [messages, toolCalls, logs, showSystemInfo, showReasoning, showTools]);
 
   const isEmpty = entries.length === 0;
@@ -250,22 +299,39 @@ export const LogViewer = memo(function LogViewer({
           )}
         </div>
       ) : (
-        <div className="p-2 sm:p-4 space-y-2 sm:space-y-3">
+        <div className="p-2 sm:p-4">
           {entries.map((entry, index) => {
+            // Chat-style spacing: tighter within a group, normal between groups
+            const spacingClass = index === 0
+              ? ""
+              : entry.showHeader
+                ? "mt-2 sm:mt-3"  // Normal spacing at group boundary
+                : "mt-0.5";       // Tight spacing within a group
             if (entry.type === "message") {
               const msg = entry.data;
               return (
-                <div key={`msg-${msg.id}-${index}`} className="group">
+                <div key={`msg-${msg.id}-${index}`} className={`group ${spacingClass}`}>
                   <div className="flex items-start gap-2 sm:gap-3">
-                    <span className="text-gray-500 flex-shrink-0 text-xs hidden sm:inline">
+                    <span className={`text-gray-500 flex-shrink-0 text-xs hidden sm:inline ${!entry.showHeader ? "invisible" : ""}`}>
                       {formatTime(msg.timestamp)}
                     </span>
-                    <Badge
-                      variant={msg.role === "user" ? "info" : "success"}
-                      size="sm"
-                    >
-                      {msg.role}
-                    </Badge>
+                    {entry.showHeader ? (
+                      <Badge
+                        variant={msg.role === "user" ? "info" : "success"}
+                        size="sm"
+                      >
+                        {msg.role}
+                      </Badge>
+                    ) : (
+                      <span className="invisible">
+                        <Badge
+                          variant={msg.role === "user" ? "info" : "success"}
+                          size="sm"
+                        >
+                          {msg.role}
+                        </Badge>
+                      </span>
+                    )}
                     <div className={`flex-1 min-w-0 ${markdownEnabled && msg.role === "assistant" ? "break-words" : "whitespace-pre-wrap break-words"}`}>
                       {markdownEnabled && msg.role === "assistant" ? (
                         <MarkdownRenderer content={msg.content} className="text-sm" />
@@ -279,12 +345,12 @@ export const LogViewer = memo(function LogViewer({
             } else if (entry.type === "tool") {
               const tool = entry.data;
               return (
-                <div key={`tool-${tool.id}-${index}`} className="group">
+                <div key={`tool-${tool.id}-${index}`} className={`group ${spacingClass}`}>
                   <div className="flex items-start gap-2 sm:gap-3">
-                    <span className="text-gray-500 flex-shrink-0 text-xs hidden sm:inline">
+                    <span className={`text-gray-500 flex-shrink-0 text-xs hidden sm:inline ${!entry.showHeader ? "invisible" : ""}`}>
                       {formatTime(entry.timestamp)}
                     </span>
-                    <span className={`flex-shrink-0 ${getToolStatusColor(tool.status)}`}>
+                    <span className={`flex-shrink-0 ${getToolStatusColor(tool.status)} ${!entry.showHeader ? "invisible" : ""}`}>
                       {tool.status === "running" && (
                         <span className="inline-block animate-spin mr-1">
                           ⟳
@@ -295,7 +361,10 @@ export const LogViewer = memo(function LogViewer({
                       {tool.status === "pending" && "○ "}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <span className="text-yellow-400 break-all">{tool.name}</span>
+                      {/* Always show tool name when input/output exists, so details aren't orphaned */}
+                      {(entry.showHeader || tool.input != null || tool.output != null) && (
+                        <span className="text-yellow-400 break-all">{tool.name}</span>
+                      )}
                       {tool.input != null && (
                         <details className="mt-1">
                           <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
@@ -339,19 +408,33 @@ export const LogViewer = memo(function LogViewer({
               const hasOtherDetails = otherDetails && Object.keys(otherDetails).length > 0;
 
               return (
-                <div key={`log-${log.id}-${index}`} className={`group ${isReasoning ? "opacity-60" : ""}`}>
+                <div key={`log-${log.id}-${index}`} className={`group ${isReasoning ? "opacity-60" : ""} ${spacingClass}`}>
                   <div className="flex items-start gap-2 sm:gap-3">
-                    <span className="text-gray-500 flex-shrink-0 text-xs hidden sm:inline">
+                    <span className={`text-gray-500 flex-shrink-0 text-xs hidden sm:inline ${!entry.showHeader ? "invisible" : ""}`}>
                       {formatTime(log.timestamp)}
                     </span>
-                    <Badge
-                      variant={getLogLevelBadge(log.level)}
-                      size="sm"
-                    >
-                      {log.level.toUpperCase()}
-                    </Badge>
+                    {entry.showHeader ? (
+                      <Badge
+                        variant={getLogLevelBadge(log.level)}
+                        size="sm"
+                      >
+                        {log.level.toUpperCase()}
+                      </Badge>
+                    ) : (
+                      <span className="invisible">
+                        <Badge
+                          variant={getLogLevelBadge(log.level)}
+                          size="sm"
+                        >
+                          {log.level.toUpperCase()}
+                        </Badge>
+                      </span>
+                    )}
                     <div className={`flex-1 min-w-0 ${isReasoning ? "text-gray-400 italic" : getLogLevelColor(log.level)}`}>
-                      <span className="break-words">{log.message}</span>
+                      {/* Always show message when responseContent exists, so content isn't orphaned */}
+                      {(entry.showHeader || hasResponseContent) && (
+                        <span className="break-words">{log.message}</span>
+                      )}
                       {/* Show responseContent as proper text */}
                       {hasResponseContent && (
                         markdownEnabled ? (
