@@ -517,6 +517,43 @@ export const migrations: Migration[] = [
       }
     },
   },
+
+  // Migration 16: Rename git_commit_prefix to git_commit_scope (conventional commits)
+  {
+    version: 16,
+    name: "rename_commit_prefix_to_scope",
+    up: (db) => {
+      if (!tableExists(db, "loops")) {
+        log.debug("loops table does not exist, skipping migration 16");
+        return;
+      }
+
+      const columns = getTableColumns(db, "loops");
+
+      // Already migrated (fresh DB or migration already ran)
+      if (columns.includes("git_commit_scope")) {
+        return;
+      }
+
+      // Add the new column
+      db.run("ALTER TABLE loops ADD COLUMN git_commit_scope TEXT NOT NULL DEFAULT 'ralph'");
+
+      // Migrate data from old column: strip brackets and lowercase
+      // "[Ralph]" -> "ralph", "[CustomPrefix]" -> "customprefix"
+      if (columns.includes("git_commit_prefix")) {
+        db.run(`
+          UPDATE loops
+          SET git_commit_scope = LOWER(TRIM(
+            REPLACE(REPLACE(git_commit_prefix, '[', ''), ']', '')
+          ))
+          WHERE git_commit_prefix IS NOT NULL AND git_commit_prefix != ''
+        `);
+        log.info("Migrated git_commit_prefix values to git_commit_scope");
+      }
+
+      log.info("Added git_commit_scope column to loops table");
+    },
+  },
 ];
 
 /**

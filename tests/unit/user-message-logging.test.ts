@@ -129,7 +129,7 @@ describe("User Message Logging", () => {
       workspaceId: "test-workspace-id",
       model: { providerID: "test-provider", modelID: "test-model" },
       stopPattern: "<promise>COMPLETE</promise>$",
-      git: { branchPrefix: "ralph/", commitPrefix: "[Ralph]" },
+      git: { branchPrefix: "ralph/", commitScope: "ralph" },
       maxIterations: 1,
       maxConsecutiveErrors: 10,
       activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,

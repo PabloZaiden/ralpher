@@ -156,18 +156,18 @@ describe("Git Workflow", () => {
       expect(Array.isArray(finalLoop!.state.git!.commits)).toBe(true);
     });
 
-    test("uses custom commit prefix", async () => {
+    test("uses custom commit scope", async () => {
       const loop = await ctx.manager.createLoop({
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
         planMode: false,
-        gitCommitPrefix: "[CustomPrefix]",
+        gitCommitScope: "custom",
         workspaceId: testWorkspaceId,
       });
 
       // Verify the config is set correctly
-      expect(loop.config.git.commitPrefix).toBe("[CustomPrefix]");
+      expect(loop.config.git.commitScope).toBe("custom");
     });
   });
 

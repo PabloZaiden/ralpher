@@ -1308,4 +1308,76 @@ describe("migrations - migrate existing loops to workspaces (migration #11)", ()
     const loop = db.query("SELECT mode FROM loops WHERE id = 'chat-1'").get() as { mode: string };
     expect(loop.mode).toBe("chat");
   });
+
+  // ==========================================================================
+  // Migration 16: rename_commit_prefix_to_scope
+  // ==========================================================================
+
+  test("migration 16 adds git_commit_scope column", () => {
+    // Verify column doesn't exist before migration 16
+    const columnsBefore = getTableColumns(db, "loops");
+    expect(columnsBefore).not.toContain("git_commit_scope");
+
+    // Run all migrations
+    runMigrations(db);
+
+    // Verify column now exists
+    const columnsAfter = getTableColumns(db, "loops");
+    expect(columnsAfter).toContain("git_commit_scope");
+  });
+
+  test("migration 16 is idempotent", () => {
+    // Run migrations twice — should not fail
+    runMigrations(db);
+    runMigrations(db);
+
+    // Column should still exist
+    const columns = getTableColumns(db, "loops");
+    expect(columns).toContain("git_commit_scope");
+  });
+
+  test("migration 16 migrates [Ralph] prefix to 'ralph' scope", () => {
+    // Insert a loop with old-style commit prefix before running migrations
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-scope-1', 'Test Loop', '/home/user/project', 'test', '2026-02-13T10:00:00Z', '2026-02-13T10:00:00Z', 'STOP', 'ralph/', '[Ralph]')
+    `);
+
+    // Run all migrations
+    runMigrations(db);
+
+    // Verify the scope was migrated: "[Ralph]" -> "ralph"
+    const loop = db.query("SELECT git_commit_scope FROM loops WHERE id = 'loop-scope-1'").get() as { git_commit_scope: string };
+    expect(loop.git_commit_scope).toBe("ralph");
+  });
+
+  test("migration 16 migrates custom prefix to lowercase scope", () => {
+    // Insert a loop with custom prefix
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-scope-2', 'Custom Loop', '/home/user/project', 'test', '2026-02-13T10:00:00Z', '2026-02-13T10:00:00Z', 'STOP', 'ralph/', '[CustomPrefix]')
+    `);
+
+    // Run all migrations
+    runMigrations(db);
+
+    // Verify: "[CustomPrefix]" -> "customprefix"
+    const loop = db.query("SELECT git_commit_scope FROM loops WHERE id = 'loop-scope-2'").get() as { git_commit_scope: string };
+    expect(loop.git_commit_scope).toBe("customprefix");
+  });
+
+  test("migration 16 defaults new rows to 'ralph'", () => {
+    // Run all migrations first
+    runMigrations(db);
+
+    // Insert a new loop without specifying git_commit_scope
+    db.run(`
+      INSERT INTO loops (id, name, directory, prompt, created_at, updated_at, stop_pattern, git_branch_prefix, git_commit_prefix)
+      VALUES ('loop-scope-3', 'New Loop', '/home/user/project', 'test', '2026-02-13T10:00:00Z', '2026-02-13T10:00:00Z', 'STOP', 'ralph/', '[Ralph]')
+    `);
+
+    // Verify default scope is 'ralph'
+    const loop = db.query("SELECT git_commit_scope FROM loops WHERE id = 'loop-scope-3'").get() as { git_commit_scope: string };
+    expect(loop.git_commit_scope).toBe("ralph");
+  });
 });

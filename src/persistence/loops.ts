@@ -36,7 +36,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "activity_timeout_seconds",
   "stop_pattern",
   "git_branch_prefix",
-  "git_commit_prefix",
+  "git_commit_scope",
   "base_branch",
   "clear_planning_folder",
   "plan_mode",
@@ -109,7 +109,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     activity_timeout_seconds: config.activityTimeoutSeconds ?? null,
     stop_pattern: config.stopPattern,
     git_branch_prefix: config.git.branchPrefix,
-    git_commit_prefix: config.git.commitPrefix,
+    git_commit_scope: config.git.commitScope,
     base_branch: config.baseBranch ?? null,
     clear_planning_folder: config.clearPlanningFolder ? 1 : 0,
     plan_mode: config.planMode ? 1 : 0,
@@ -196,7 +196,7 @@ function rowToLoop(row: Record<string, unknown>): Loop {
     stopPattern: row["stop_pattern"] as string,
     git: {
       branchPrefix: row["git_branch_prefix"] as string,
-      commitPrefix: row["git_commit_prefix"] as string,
+      commitScope: (row["git_commit_scope"] as string | null) ?? DEFAULT_LOOP_CONFIG.git.commitScope,
     },
     model,
     // Mandatory fields with defaults for backward compatibility with old data

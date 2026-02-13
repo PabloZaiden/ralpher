@@ -136,7 +136,7 @@ function createTables(database: Database): void {
         activity_timeout_seconds INTEGER,
         stop_pattern TEXT NOT NULL,
         git_branch_prefix TEXT NOT NULL,
-        git_commit_prefix TEXT NOT NULL,
+        git_commit_scope TEXT NOT NULL DEFAULT 'ralph',
         base_branch TEXT,
         clear_planning_folder INTEGER DEFAULT 0,
         plan_mode INTEGER DEFAULT 0,
