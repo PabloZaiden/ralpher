@@ -872,6 +872,192 @@ describe("planning mode", () => {
       expect(getByText("Planning")).toBeTruthy();
     });
   });
+
+  test("shows Plan Ready badge when plan is ready for review", async () => {
+    const loop = createLoopWithStatus("planning", {
+      config: { id: LOOP_ID, name: "Plan Ready Loop" },
+      state: {
+        planMode: {
+          active: true,
+          feedbackRounds: 0,
+          planningFolderCleared: false,
+          isPlanReady: true,
+        },
+      },
+    });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: true, content: "# Ready Plan" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Plan Ready")).toBeTruthy();
+    });
+  });
+
+  test("shows spinner in log panel when planning with isPlanReady=false", async () => {
+    // When status is "planning" and isPlanReady is false, the LogViewer
+    // should receive isActive=true so it shows the "Working..." spinner
+    const loop = createLoopWithStatus("planning", {
+      config: { id: LOOP_ID, name: "Active Planning Loop" },
+    });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Active Planning Loop")).toBeTruthy();
+    });
+
+    // Switch to Log tab (planning mode defaults to Plan tab)
+    await user.click(getByText("Log"));
+
+    // The LogViewer should show the spinner since isPlanReady is false
+    await waitFor(() => {
+      expect(getByText("Working...")).toBeTruthy();
+    });
+  });
+
+  test("does not show spinner in log panel when planning with isPlanReady=true", async () => {
+    // When status is "planning" and isPlanReady is true, the LogViewer
+    // should receive isActive=false so it shows "No logs yet. Waiting for activity."
+    const loop = createLoopWithStatus("planning", {
+      config: { id: LOOP_ID, name: "Plan Ready No Spinner" },
+      state: {
+        planMode: {
+          active: true,
+          feedbackRounds: 0,
+          planningFolderCleared: false,
+          isPlanReady: true,
+        },
+      },
+    });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: true, content: "# Plan" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByText, queryByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Plan Ready No Spinner")).toBeTruthy();
+    });
+
+    // Switch to Log tab
+    await user.click(getByText("Log"));
+
+    // The LogViewer should NOT show the spinner since isPlanReady is true
+    await waitFor(() => {
+      expect(getByText("No logs yet. Waiting for activity.")).toBeTruthy();
+    });
+    expect(queryByText("Working...")).toBeNull();
+  });
+
+  test("shows pulsing cyan activity indicator when planning with isPlanReady=false", async () => {
+    const loop = createLoopWithStatus("planning", {
+      config: { id: LOOP_ID, name: "Cyan Indicator Loop" },
+    });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByText, container } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Cyan Indicator Loop")).toBeTruthy();
+    });
+
+    // Should have a pulsing cyan indicator (animate-ping + bg-cyan-400)
+    const header = container.querySelector("header");
+    expect(header).toBeTruthy();
+    const cyanPinger = header!.querySelector(".animate-ping.bg-cyan-400");
+    expect(cyanPinger).toBeTruthy();
+
+    // Should NOT have a blue pulsing indicator (that's for running state)
+    const bluePinger = header!.querySelector(".animate-ping.bg-blue-400");
+    expect(bluePinger).toBeNull();
+  });
+
+  test("shows static amber activity indicator when planning with isPlanReady=true", async () => {
+    const loop = createLoopWithStatus("planning", {
+      config: { id: LOOP_ID, name: "Amber Indicator Loop" },
+      state: {
+        planMode: {
+          active: true,
+          feedbackRounds: 0,
+          planningFolderCleared: false,
+          isPlanReady: true,
+        },
+      },
+    });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: true, content: "# Plan" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByText, container } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Amber Indicator Loop")).toBeTruthy();
+    });
+
+    // Should have a static amber dot (bg-amber-500 without animate-ping)
+    const header = container.querySelector("header");
+    expect(header).toBeTruthy();
+    const amberDot = header!.querySelector(".bg-amber-500");
+    expect(amberDot).toBeTruthy();
+
+    // Should NOT have any animate-ping element (amber dot is static)
+    const pinger = header!.querySelector(".animate-ping");
+    expect(pinger).toBeNull();
+  });
+
+  test("running loop shows pulsing blue indicator, not planning indicators", async () => {
+    setupDefaultApi();
+    const { getByText, container } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Test Loop")).toBeTruthy();
+    });
+
+    // Should have a pulsing blue indicator
+    const header = container.querySelector("header");
+    expect(header).toBeTruthy();
+    const bluePinger = header!.querySelector(".animate-ping.bg-blue-400");
+    expect(bluePinger).toBeTruthy();
+
+    // Should NOT have cyan or amber indicators
+    const cyanPinger = header!.querySelector(".animate-ping.bg-cyan-400");
+    expect(cyanPinger).toBeNull();
+    const amberDot = header!.querySelector(".bg-amber-500");
+    expect(amberDot).toBeNull();
+  });
 });
 
 // ─── LoopActionBar ───────────────────────────────────────────────────────────
