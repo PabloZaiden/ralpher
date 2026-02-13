@@ -453,12 +453,14 @@ Common fixes:
 
 ## Database Migrations
 
-The project uses a migration system to evolve the database schema over time while maintaining backward compatibility with existing databases.
+The project uses a migration system to evolve the database schema over time. The complete current schema is defined in `src/persistence/database.ts` as the base schema. Migrations are used only for schema changes added after the base schema was established.
+
+**Note:** Legacy migrations (v1-v16) were removed in a clean-cut reset. Databases created before this reset must be recreated (delete `data/ralpher.db` and restart).
 
 ### How Migrations Work
 
 1. Migrations are defined in `src/persistence/migrations/index.ts`
-2. Each migration has a `version` (sequential integer), `name`, and `up` function
+2. Each migration has a `version` (sequential integer starting from 1), `name`, and `up` function
 3. The `schema_migrations` table tracks which migrations have been applied
 4. Migrations run automatically during database initialization
 5. Migrations are idempotent - they check if changes already exist before applying
@@ -471,7 +473,7 @@ When you need to add a new column, table, or modify the schema:
 
 ```typescript
 {
-  version: 2, // Next sequential number
+  version: 1, // Next sequential number starting from 1
   name: "add_new_column",
   up: (db) => {
     // Check if column already exists (for idempotency)
@@ -487,17 +489,15 @@ When you need to add a new column, table, or modify the schema:
 2. **Do NOT modify the base schema** in `src/persistence/database.ts`. New columns/tables should only be added via migrations to ensure existing databases are properly upgraded.
 
 3. **Add a test** in `tests/unit/migrations.test.ts` to verify:
-   - The migration applies correctly to old databases (without the new column)
+   - The migration applies correctly to databases without the new column
    - The migration is idempotent (doesn't fail if run twice)
-   - The migration handles fresh databases (where column might already exist)
 
 ### Migration Guidelines
 
-- **Never modify existing migrations** - only add new ones
 - **Always check if changes already exist** before applying (idempotent)
-- **Use sequential version numbers** - check the last migration's version
+- **Use sequential version numbers** starting from 1
 - **Use descriptive snake_case names** - e.g., `add_user_preferences`
-- **Test with both old and new databases**
+- **Test migrations thoroughly**
 
 ### Resetting the Database
 
