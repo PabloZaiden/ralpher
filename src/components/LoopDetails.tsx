@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import type { FileDiff, FileContentResponse, ModelInfo } from "../types";
 import type { ReviewComment, ModelConfig } from "../types/loop";
 import { useLoop, useMarkdownPreference, useToast } from "../hooks";
-import { Badge, Button, getStatusBadgeVariant, EditIcon } from "./common";
+import { Badge, Button, ConfirmModal, getStatusBadgeVariant, EditIcon } from "./common";
 import { LogViewer } from "./LogViewer";
 import { TodoViewer } from "./TodoViewer";
 import { MarkdownRenderer } from "./MarkdownRenderer";
@@ -20,7 +20,6 @@ import {
   RenameLoopModal,
 } from "./LoopModals";
 import { LoopActionBar } from "./LoopActionBar";
-import { ConfirmModal } from "./common";
 import {
   getStatusLabel,
   canAccept,
@@ -358,6 +357,11 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     }
   }, [loop?.state.reviewMode?.reviewCycles, loop?.state.status, activeTab, fetchReviewComments]);
 
+  // Reset initialTabSet when loopId changes so a new planning loop can auto-switch to Plan tab
+  useEffect(() => {
+    initialTabSet.current = false;
+  }, [loopId]);
+
   // Default to "plan" tab when in planning mode on initial load
   const isCurrentlyPlanning = loop?.state.status === "planning" && !isChatMode;
   useEffect(() => {
@@ -452,11 +456,14 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     setPlanActionSubmitting(true);
     try {
       await discardPlan();
-      if (onBack) onBack();
     } finally {
+      // Clean up local state before navigating away to avoid
+      // setState on unmounted component if onBack() triggers unmount
       setPlanActionSubmitting(false);
       setDiscardPlanModal(false);
     }
+    // Navigate after state cleanup so we don't setState on an unmounted component
+    onBack?.();
   }
 
   if (loading && !loop) {

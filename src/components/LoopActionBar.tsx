@@ -169,20 +169,22 @@ export function LoopActionBar({
       {/* Action bar form */}
       <form onSubmit={handleSubmit} className="p-3 sm:p-4">
         <div className="flex flex-row gap-2 sm:gap-3">
-          {/* Model selector */}
-          <ModelSelector
-            value={selectedModel}
-            onChange={setSelectedModel}
-            models={models}
-            loading={modelsLoading}
-            disabled={disabled || isSubmitting}
-            showDisconnected={true}
-            currentModelKey={currentModelKey}
-            placeholder={currentModelKey ? getModelDisplayName(models, currentModelKey) : "Select model..."}
-            loadingText="Loading..."
-            emptyText="Select model..."
-            className="min-w-[112px] sm:min-w-[128px] md:w-48 max-w-[120px] sm:max-w-none flex-shrink-0 h-9 text-sm rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
-          />
+          {/* Model selector - hidden during planning since model changes are not supported */}
+          {!isPlanning && (
+            <ModelSelector
+              value={selectedModel}
+              onChange={setSelectedModel}
+              models={models}
+              loading={modelsLoading}
+              disabled={disabled || isSubmitting}
+              showDisconnected={true}
+              currentModelKey={currentModelKey}
+              placeholder={currentModelKey ? getModelDisplayName(models, currentModelKey) : "Select model..."}
+              loadingText="Loading..."
+              emptyText="Select model..."
+              className="min-w-[112px] sm:min-w-[128px] md:w-48 max-w-[120px] sm:max-w-none flex-shrink-0 h-9 text-sm rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+            />
+          )}
 
           {/* Message input */}
           <input
