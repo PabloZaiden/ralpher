@@ -23,11 +23,11 @@ import { GitService } from "./git-service";
 import { log } from "./logger";
 
 /**
- * Timeout (in ms) for validating a remote directory during workspace import/creation.
- * This bounds the connection + directory check to prevent indefinite hangs when
- * the remote server is unreachable.
+ * Default timeout (in ms) for remote connection operations (validation, test connections,
+ * workspace connections). This bounds network operations to prevent indefinite hangs
+ * when the remote server is unreachable.
  */
-const VALIDATION_TIMEOUT_MS = 15_000;
+const DEFAULT_CONNECTION_TIMEOUT_MS = 15_000;
 
 /**
  * Factory function type for creating command executors.
@@ -136,6 +136,8 @@ class BackendManager {
   private testBackend: Backend | null = null;
   /** Test settings (when isTestBackend is true) */
   private testSettings: ServerSettings = getDefaultServerSettings();
+  /** Overridable connection timeout (ms) for testing. Defaults to DEFAULT_CONNECTION_TIMEOUT_MS. */
+  private connectionTimeoutMs: number = DEFAULT_CONNECTION_TIMEOUT_MS;
 
   /**
    * Initialize the backend manager.
@@ -192,8 +194,23 @@ class BackendManager {
 
     const config = buildConnectionConfig(settings, directory);
 
+    // Use a timeout + AbortController to prevent indefinite hangs when the
+    // remote server is unreachable (connectToExisting disables Bun's request timeout).
+    const abortController = new AbortController();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
     try {
-      await state.backend.connect(config);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Connection timed out after ${this.connectionTimeoutMs}ms`)),
+          this.connectionTimeoutMs,
+        );
+      });
+
+      await Promise.race([
+        state.backend.connect(config, abortController.signal),
+        timeoutPromise,
+      ]);
       
       // Determine the correct protocol for the server URL
       const port = settings.port ?? 4096;
@@ -211,6 +228,7 @@ class BackendManager {
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
+      abortController.abort();
       state.connectionError = String(error);
       this.emitEvent({
         type: "server.error",
@@ -219,6 +237,8 @@ class BackendManager {
         timestamp: new Date().toISOString(),
       });
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -356,6 +376,8 @@ class BackendManager {
   /**
    * Test connection with provided settings (without updating workspace settings).
    * Returns true if connection succeeds, false otherwise.
+   * Uses a timeout + AbortController to prevent indefinite hangs when the
+   * remote server is unreachable.
    */
   async testConnection(
     settings: ServerSettings,
@@ -363,15 +385,35 @@ class BackendManager {
   ): Promise<{ success: boolean; error?: string }> {
     // Create a temporary backend for testing
     const testBackend = new OpenCodeBackend();
-
     const config = buildConnectionConfig(settings, directory);
+    const abortController = new AbortController();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      await testBackend.connect(config);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Connection timed out after ${this.connectionTimeoutMs}ms`)),
+          this.connectionTimeoutMs,
+        );
+      });
+
+      await Promise.race([
+        testBackend.connect(config, abortController.signal),
+        timeoutPromise,
+      ]);
+
       await testBackend.disconnect();
       return { success: true };
     } catch (error) {
+      abortController.abort();
+      try {
+        await testBackend.disconnect();
+      } catch {
+        // Ignore disconnect errors during cleanup
+      }
       return { success: false, error: String(error) };
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -422,8 +464,8 @@ class BackendManager {
     try {
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(
-          () => reject(new Error(`Connection timed out after ${VALIDATION_TIMEOUT_MS}ms`)),
-          VALIDATION_TIMEOUT_MS,
+          () => reject(new Error(`Connection timed out after ${this.connectionTimeoutMs}ms`)),
+          this.connectionTimeoutMs,
         );
       });
 
@@ -782,6 +824,14 @@ class BackendManager {
   }
 
   /**
+   * Override the connection timeout (for testing).
+   * Allows tests to use a much shorter timeout to avoid long wall-clock waits.
+   */
+  setConnectionTimeoutForTesting(timeoutMs: number): void {
+    this.connectionTimeoutMs = timeoutMs;
+  }
+
+  /**
    * Reset the backend manager (for testing).
    * Clears all connections and resets initialization state.
    */
@@ -793,6 +843,7 @@ class BackendManager {
     this.isTestBackend = false;
     this.testBackend = null;
     this.testSettings = getDefaultServerSettings();
+    this.connectionTimeoutMs = DEFAULT_CONNECTION_TIMEOUT_MS;
   }
 
   /**
