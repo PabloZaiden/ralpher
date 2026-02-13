@@ -110,8 +110,8 @@ export async function initializeDatabase(): Promise<void> {
  * This is intentional: fresh databases get the full schema from CREATE TABLE,
  * while existing databases get the same columns via idempotent migrations. Columns
  * from migrations v10+ (workspaces table, workspace_id, server_settings,
- * model_variant, pending_model_variant, git_worktree_path) exist only in migrations
- * and are NOT duplicated in the base schema.
+ * model_variant, pending_model_variant, git_worktree_path, git_commit_scope)
+ * exist only in migrations and are NOT duplicated in the base schema.
  * 
  * When adding new columns, add them ONLY as migrations (see migrations/index.ts).
  * Do NOT add them to the base schema here to avoid further duplication.
@@ -136,7 +136,7 @@ function createTables(database: Database): void {
         activity_timeout_seconds INTEGER,
         stop_pattern TEXT NOT NULL,
         git_branch_prefix TEXT NOT NULL,
-        git_commit_scope TEXT NOT NULL DEFAULT 'ralph',
+        git_commit_prefix TEXT NOT NULL DEFAULT '[Ralph]',
         base_branch TEXT,
         clear_planning_folder INTEGER DEFAULT 0,
         plan_mode INTEGER DEFAULT 0,

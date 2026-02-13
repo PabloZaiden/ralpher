@@ -37,9 +37,11 @@ export const GitConfigSchema = z.object({
     };
   }
   // Drop the deprecated field from the output
+  // Trim commitScope and map empty/whitespace-only to undefined
+  const trimmedScope = val.commitScope?.trim();
   return {
     branchPrefix: val.branchPrefix,
-    commitScope: val.commitScope,
+    commitScope: trimmedScope || undefined,
   };
 });
 

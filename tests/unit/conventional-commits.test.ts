@@ -223,3 +223,50 @@ describe("normalizeAiCommitMessage", () => {
     }
   });
 });
+
+describe("GitConfigSchema commitScope sanitization", () => {
+  // Import the schema for validation tests
+  const { GitConfigSchema } = require("../../src/types/schemas/loop");
+
+  test("passes through valid commitScope", () => {
+    const result = GitConfigSchema.parse({ commitScope: "ralph" });
+    expect(result.commitScope).toBe("ralph");
+  });
+
+  test("trims whitespace from commitScope", () => {
+    const result = GitConfigSchema.parse({ commitScope: "  ralph  " });
+    expect(result.commitScope).toBe("ralph");
+  });
+
+  test("maps whitespace-only commitScope to undefined", () => {
+    const result = GitConfigSchema.parse({ commitScope: "   " });
+    expect(result.commitScope).toBeUndefined();
+  });
+
+  test("maps empty string commitScope to undefined", () => {
+    const result = GitConfigSchema.parse({ commitScope: "" });
+    expect(result.commitScope).toBeUndefined();
+  });
+
+  test("passes through undefined commitScope as undefined", () => {
+    const result = GitConfigSchema.parse({});
+    expect(result.commitScope).toBeUndefined();
+  });
+
+  test("cleans deprecated commitPrefix and converts to commitScope", () => {
+    const result = GitConfigSchema.parse({ commitPrefix: "[Ralph]" });
+    expect(result.commitScope).toBe("ralph");
+    // commitPrefix should not be in the output
+    expect(result).not.toHaveProperty("commitPrefix");
+  });
+
+  test("maps whitespace-only deprecated commitPrefix to undefined", () => {
+    const result = GitConfigSchema.parse({ commitPrefix: "  " });
+    expect(result.commitScope).toBeUndefined();
+  });
+
+  test("commitScope takes precedence over commitPrefix", () => {
+    const result = GitConfigSchema.parse({ commitScope: "custom", commitPrefix: "[Ralph]" });
+    expect(result.commitScope).toBe("custom");
+  });
+});
