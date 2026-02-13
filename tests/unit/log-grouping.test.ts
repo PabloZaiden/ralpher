@@ -267,4 +267,23 @@ describe("annotateShowHeader", () => {
     // Same log type as first, but after a break, so shows header again
     expect(result[2]!.showHeader).toBe(true);
   });
+
+  test("large list: precomputed keys produce correct grouping", () => {
+    // Simulate a large log list with alternating groups
+    const entries = Array.from({ length: 1000 }, (_, i) => {
+      const groupIndex = Math.floor(i / 10); // groups of 10
+      return makeLog({
+        level: "agent",
+        message: `msg-${groupIndex}`,
+        timestamp: new Date(Date.now() + i * 1000).toISOString(),
+      });
+    });
+    const result = annotateShowHeader(entries);
+
+    expect(result).toHaveLength(1000);
+    for (let i = 0; i < result.length; i++) {
+      const isGroupStart = i % 10 === 0;
+      expect(result[i]!.showHeader).toBe(isGroupStart);
+    }
+  });
 });

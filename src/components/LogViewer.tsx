@@ -141,11 +141,16 @@ export function getEntryGroupKey(entry: EntryBase): string {
  * Annotate a sorted array of entries with showHeader flags.
  * The first entry always shows its header. Subsequent entries only show
  * their header when their group key differs from the previous entry.
+ *
+ * Group keys are precomputed in a single pass to avoid redundant
+ * string concatenations — each entry's key is computed exactly once.
  */
 export function annotateShowHeader(sorted: EntryBase[]): DisplayEntry[] {
+  // Precompute all group keys in one pass so each key is calculated exactly once
+  const keys = sorted.map(getEntryGroupKey);
   return sorted.map((entry, i) => ({
     ...entry,
-    showHeader: i === 0 || getEntryGroupKey(entry) !== getEntryGroupKey(sorted[i - 1]!),
+    showHeader: i === 0 || keys[i] !== keys[i - 1],
   }));
 }
 
@@ -356,7 +361,8 @@ export const LogViewer = memo(function LogViewer({
                       {tool.status === "pending" && "○ "}
                     </span>
                     <div className="flex-1 min-w-0">
-                      {entry.showHeader && (
+                      {/* Always show tool name when input/output exists, so details aren't orphaned */}
+                      {(entry.showHeader || tool.input != null || tool.output != null) && (
                         <span className="text-yellow-400 break-all">{tool.name}</span>
                       )}
                       {tool.input != null && (
@@ -425,17 +431,18 @@ export const LogViewer = memo(function LogViewer({
                       </span>
                     )}
                     <div className={`flex-1 min-w-0 ${isReasoning ? "text-gray-400 italic" : getLogLevelColor(log.level)}`}>
-                      {entry.showHeader && (
+                      {/* Always show message when responseContent exists, so content isn't orphaned */}
+                      {(entry.showHeader || hasResponseContent) && (
                         <span className="break-words">{log.message}</span>
                       )}
                       {/* Show responseContent as proper text */}
                       {hasResponseContent && (
                         markdownEnabled ? (
-                          <div className={`${entry.showHeader ? "mt-2" : ""} p-2 sm:p-3 bg-gray-800 rounded ${isReasoning ? "italic" : ""}`}>
+                          <div className={`mt-2 p-2 sm:p-3 bg-gray-800 rounded ${isReasoning ? "italic" : ""}`}>
                             <MarkdownRenderer content={responseContent as string} className="text-xs" dimmed={isReasoning} />
                           </div>
                         ) : (
-                          <div className={`${entry.showHeader ? "mt-2" : ""} p-2 sm:p-3 bg-gray-800 rounded whitespace-pre-wrap break-words text-xs leading-relaxed ${isReasoning ? "text-gray-400 italic" : "text-gray-200"}`}>
+                          <div className={`mt-2 p-2 sm:p-3 bg-gray-800 rounded whitespace-pre-wrap break-words text-xs leading-relaxed ${isReasoning ? "text-gray-400 italic" : "text-gray-200"}`}>
                             {responseContent}
                           </div>
                         )
