@@ -310,8 +310,9 @@ describe("tab navigation", () => {
     });
 
     // Log tab button should have active styling (border-blue-500)
-    const logTab = getByText("Log");
-    expect(logTab.className).toContain("border-blue-500");
+    const logTab = getByText("Log").closest("button");
+    expect(logTab).toBeTruthy();
+    expect(logTab!.className).toContain("border-blue-500");
   });
 
   test("can switch to Info tab", async () => {
@@ -825,7 +826,7 @@ describe("rename modal", () => {
 // ─── Planning mode ───────────────────────────────────────────────────────────
 
 describe("planning mode", () => {
-  test("shows PlanReviewPanel instead of tabs when in planning status", async () => {
+  test("shows unified tab UI with plan tab active when in planning status", async () => {
     const loop = createLoopWithStatus("planning", {
       config: { id: LOOP_ID, name: "Planning Loop" },
     });
@@ -838,19 +839,18 @@ describe("planning mode", () => {
     api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
     api.get("/api/preferences/log-level", () => ({ level: "info" }));
 
-    const { getByText, queryByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+    const { getByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
 
     await waitFor(() => {
       expect(getByText("Planning Loop")).toBeTruthy();
     });
 
-    // PlanReviewPanel should be visible
+    // All tabs should be visible in the unified UI
     await waitFor(() => {
-      expect(getByText("Planning")).toBeTruthy();
+      expect(getByText("Plan")).toBeTruthy();
+      expect(getByText("Actions")).toBeTruthy();
+      expect(getByText("Log")).toBeTruthy();
     });
-
-    // Tab navigation should NOT be visible
-    expect(queryByText("Actions")).toBeNull();
   });
 
   test("shows Planning status badge for planning loop", async () => {

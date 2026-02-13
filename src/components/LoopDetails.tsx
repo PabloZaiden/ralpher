@@ -19,8 +19,8 @@ import {
   UpdateBranchModal,
   RenameLoopModal,
 } from "./LoopModals";
-import { PlanReviewPanel } from "./PlanReviewPanel";
 import { LoopActionBar } from "./LoopActionBar";
+import { ConfirmModal } from "./common";
 import {
   getStatusLabel,
   canAccept,
@@ -164,6 +164,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const prevPlanContent = useRef<string | null>(null);
   const prevStatusContent = useRef<string | null>(null);
   const prevActionsState = useRef<string | null>(null);
+  const initialTabSet = useRef(false);
 
   // Modals
   const [deleteModal, setDeleteModal] = useState(false);
@@ -173,6 +174,8 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [addressCommentsModal, setAddressCommentsModal] = useState(false);
   const [renameModal, setRenameModal] = useState(false);
   const [updateBranchModal, setUpdateBranchModal] = useState(false);
+  const [discardPlanModal, setDiscardPlanModal] = useState(false);
+  const [planActionSubmitting, setPlanActionSubmitting] = useState(false);
 
   // Models state for LoopActionBar
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -293,13 +296,14 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     const isFinal = isFinalState(loop.state.status);
     const hasAddressable = loop.state.reviewMode?.addressable ?? false;
     const hasAccept = canAccept(loop.state.status) && !!loop.state.git;
-    const currentActionsState = `${isFinal}-${hasAddressable}-${hasAccept}-${loop.state.status}`;
+    const planReady = loop.state.planMode?.isPlanReady ?? false;
+    const currentActionsState = `${isFinal}-${hasAddressable}-${hasAccept}-${loop.state.status}-${planReady}`;
     
     if (prevActionsState.current !== null && currentActionsState !== prevActionsState.current && activeTab !== "actions") {
       setTabsWithUpdates((prev) => new Set(prev).add("actions"));
     }
     prevActionsState.current = currentActionsState;
-  }, [loop?.state.status, loop?.state.reviewMode?.addressable, loop?.state.git, activeTab, loop]);
+  }, [loop?.state.status, loop?.state.reviewMode?.addressable, loop?.state.git, loop?.state.planMode?.isPlanReady, activeTab, loop]);
 
   // Load content when tab changes
   useEffect(() => {
@@ -330,8 +334,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   }, [activeTab, getPlan, getStatusFile, getDiff, fetchReviewComments]);
 
   // Load plan content when in planning mode
-  // This is needed because the tab-based loading above only works when the "plan" tab is selected,
-  // but in planning mode we show PlanReviewPanel instead of tabs
+  // This ensures plan content stays fresh during planning regardless of which tab is active
   useEffect(() => {
     async function loadPlanForPlanningMode() {
       if (loop?.state.status === "planning") {
@@ -354,6 +357,15 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
       fetchReviewComments();
     }
   }, [loop?.state.reviewMode?.reviewCycles, loop?.state.status, activeTab, fetchReviewComments]);
+
+  // Default to "plan" tab when in planning mode on initial load
+  const isCurrentlyPlanning = loop?.state.status === "planning" && !isChatMode;
+  useEffect(() => {
+    if (isCurrentlyPlanning && !initialTabSet.current) {
+      setActiveTab("plan");
+      initialTabSet.current = true;
+    }
+  }, [isCurrentlyPlanning]);
 
   // Handle delete
   async function handleDelete() {
@@ -425,6 +437,28 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     }
   }
 
+  // Handle accept plan
+  async function handleAcceptPlan() {
+    setPlanActionSubmitting(true);
+    try {
+      await acceptPlan();
+    } finally {
+      setPlanActionSubmitting(false);
+    }
+  }
+
+  // Handle discard plan
+  async function handleDiscardPlan() {
+    setPlanActionSubmitting(true);
+    try {
+      await discardPlan();
+      if (onBack) onBack();
+    } finally {
+      setPlanActionSubmitting(false);
+      setDiscardPlanModal(false);
+    }
+  }
+
   if (loading && !loop) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -456,6 +490,9 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const { config, state } = loop;
   const isActive = isLoopActive(state.status);
   const labels = getEntityLabel(config.mode);
+  const isPlanning = state.status === "planning" && !isChatMode;
+  const isPlanReady = loop.state.planMode?.isPlanReady ?? false;
+  const feedbackRounds = loop.state.planMode?.feedbackRounds ?? 0;
 
   // Filter tabs for chat mode: hide Prompt and Plan tabs
   const visibleTabs = isChatMode
@@ -595,31 +632,12 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
         {/* Full width content area */}
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-            {state.status === "planning" && !isChatMode ? (
-              <PlanReviewPanel
-                loop={loop}
-                planContent={planContent?.content ?? ""}
-                isPlanReady={loop.state.planMode?.isPlanReady ?? false}
-                onSendFeedback={async (feedback) => {
-                  await sendPlanFeedback(feedback);
-                }}
-                onAcceptPlan={async () => {
-                  await acceptPlan();
-                }}
-                onDiscardPlan={async () => {
-                  await discardPlan();
-                  if (onBack) onBack();
-                }}
-                messages={messages}
-                toolCalls={toolCalls}
-                logs={logs}
-              />
-            ) : (
               <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                 {/* Tab navigation */}
                 <div className="flex border-b border-gray-200 dark:border-gray-700 mb-3 overflow-x-auto flex-shrink-0">
                   {visibleTabs.map((tab) => {
                     const hasUpdate = tabsWithUpdates.has(tab.id);
+                    const showPlanWritingIndicator = tab.id === "plan" && isPlanning && !isPlanReady && activeTab !== "plan";
                     return (
                       <button
                         key={tab.id}
@@ -630,8 +648,16 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                             : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                         }`}
                       >
-                        {tab.label}
-                        {hasUpdate && activeTab !== tab.id && (
+                        <span className="flex items-center gap-1.5">
+                          {tab.label}
+                          {showPlanWritingIndicator && (
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500" />
+                            </span>
+                          )}
+                        </span>
+                        {hasUpdate && !showPlanWritingIndicator && activeTab !== tab.id && (
                           <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-blue-500" />
                         )}
                       </button>
@@ -860,9 +886,37 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
 
                   {activeTab === "plan" && (
                     <div className="p-4 flex-1 overflow-auto dark-scrollbar">
-                      {loadingContent ? (
+                      {/* Feedback rounds counter (planning mode only) */}
+                      {isPlanning && feedbackRounds > 0 && (
+                        <div className="mb-3 flex items-center text-sm text-gray-600 dark:text-gray-400">
+                          Feedback rounds: {feedbackRounds}
+                        </div>
+                      )}
+
+                      {loadingContent && !isPlanning ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
+                        </div>
+                      ) : isPlanning && !planContent?.exists ? (
+                        /* Waiting for AI to generate plan (no content yet) */
+                        <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400 py-8 justify-center">
+                          <span className="relative flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500" />
+                          </span>
+                          <span>Waiting for AI to generate plan...</span>
+                        </div>
+                      ) : isPlanning && planContent?.exists && !isPlanReady ? (
+                        /* Plan content exists but AI is still writing */
+                        <div className="relative">
+                          <MarkdownRenderer content={planContent.content} dimmed rawMode={!markdownEnabled} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
+                          <div className="absolute top-4 right-4 flex items-center gap-3 text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 px-3 py-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
+                            <span className="relative flex h-3 w-3">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500" />
+                            </span>
+                            <span className="text-sm font-medium">AI is still writing...</span>
+                          </div>
                         </div>
                       ) : planContent?.exists ? (
                         <MarkdownRenderer content={planContent.content} rawMode={!markdownEnabled} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
@@ -1118,7 +1172,44 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   {activeTab === "actions" && (
                     <div className="p-4 flex-1 overflow-auto dark-scrollbar">
                       <div className="max-w-md space-y-2">
-                        {isFinalState(state.status) ? (
+                        {isPlanning ? (
+                          <>
+                            <button
+                              onClick={handleAcceptPlan}
+                              disabled={planActionSubmitting || !isPlanReady || !planContent?.content?.trim()}
+                              className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                <span className="text-green-600 dark:text-green-400 text-sm">✓</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                  {planActionSubmitting ? "Accepting..." : "Accept Plan & Start Loop"}
+                                </div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  {isPlanReady
+                                    ? "Accept the plan and begin loop execution"
+                                    : "Waiting for AI to finish writing the plan..."}
+                                </div>
+                              </div>
+                              <span className="text-gray-400 dark:text-gray-500">→</span>
+                            </button>
+                            <button
+                              onClick={() => setDiscardPlanModal(true)}
+                              disabled={planActionSubmitting}
+                              className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                                <span className="text-red-600 dark:text-red-400 text-sm">✗</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Discard Plan</div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">Discard this plan and delete the loop</div>
+                              </div>
+                              <span className="text-gray-400 dark:text-gray-500">→</span>
+                            </button>
+                          </>
+                        ) : isFinalState(state.status) ? (
                           <>
                             {state.reviewMode?.addressable && state.status !== "deleted" && (
                               <button
@@ -1216,20 +1307,28 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                   )}
                 </div>
               </div>
-            )}
         </div>
       </main>
 
-      {/* LoopActionBar for mid-loop messaging (active loops and jumpstartable loops) */}
-      {(isActive || canJumpstart(state.status)) && (
+      {/* LoopActionBar for mid-loop messaging (active loops, jumpstartable loops, and planning mode) */}
+      {(isActive || isPlanning || canJumpstart(state.status)) && (
         <LoopActionBar
           mode={config.mode}
+          isPlanning={isPlanning}
           currentModel={config.model}
           pendingModel={state.pendingModel}
           pendingPrompt={state.pendingPrompt}
           models={models}
           modelsLoading={modelsLoading}
           onQueuePending={async (options) => {
+            if (isPlanning) {
+              // In planning mode, send feedback on the plan
+              if (options.message) {
+                await sendPlanFeedback(options.message);
+                return true;
+              }
+              return false;
+            }
             if (isChatMode) {
               // In chat mode, send message immediately via chat API
               if (options.message) {
@@ -1301,6 +1400,19 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         onRename={async (newName) => {
           await update({ name: newName });
         }}
+      />
+
+      {/* Discard Plan confirmation modal */}
+      <ConfirmModal
+        isOpen={discardPlanModal}
+        onClose={() => setDiscardPlanModal(false)}
+        onConfirm={handleDiscardPlan}
+        title="Discard Plan?"
+        message="Are you sure you want to discard this plan? This will delete the loop and all planning work will be lost."
+        confirmLabel={planActionSubmitting ? "Discarding..." : "Discard"}
+        cancelLabel="Cancel"
+        loading={planActionSubmitting}
+        variant="danger"
       />
     </div>
   );
