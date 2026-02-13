@@ -739,6 +739,11 @@ export class OpenCodeBackend implements Backend {
           // Reasoning content (AI thinking/chain of thought)
           // The SDK may send delta or full text updates
           if (event.properties.delta) {
+            // Track length so the text-only fallback below computes
+            // the correct slice if the SDK switches mid-stream.
+            const partId = part.id;
+            const currentLength = reasoningTextLength.get(partId) ?? 0;
+            reasoningTextLength.set(partId, currentLength + event.properties.delta.length);
             return {
               type: "reasoning.delta",
               content: event.properties.delta,
