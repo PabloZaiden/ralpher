@@ -1844,4 +1844,199 @@ describe("StopPatternDetector", () => {
       expect(stoppedEvents.length).toBe(0);
     });
   });
+
+  // ==========================================================================
+  // Reasoning delta accumulation tests
+  // ==========================================================================
+
+  describe("reasoning delta accumulation", () => {
+    /**
+     * Creates a mock backend that yields a custom event sequence.
+     * The events factory receives a push function and must call end() when done.
+     */
+    function createEventSequenceBackend(
+      eventFactory: (push: (event: AgentEvent) => void, end: () => void) => void,
+    ): LoopBackend {
+      let promptSent = false;
+      const baseMock = createMockBackend([]);
+      return {
+        ...baseMock,
+        async sendPromptAsync(): Promise<void> {
+          promptSent = true;
+        },
+        async subscribeToEvents(): Promise<EventStream<AgentEvent>> {
+          const { stream, push, end } = createEventStream<AgentEvent>();
+          (async () => {
+            let attempts = 0;
+            while (!promptSent && attempts < 100) {
+              await new Promise((resolve) => setTimeout(resolve, 10));
+              attempts++;
+            }
+            promptSent = false;
+            eventFactory(push, end);
+          })();
+          return stream;
+        },
+      };
+    }
+
+    test("accumulates reasoning deltas into a single log entry without duplication", async () => {
+      const loop = createTestLoop({ maxIterations: 1 });
+      const backend = createEventSequenceBackend((push, end) => {
+        push({ type: "message.start", messageId: "msg-1" });
+        push({ type: "reasoning.delta", content: "Let me " });
+        push({ type: "reasoning.delta", content: "think about " });
+        push({ type: "reasoning.delta", content: "this." });
+        push({ type: "message.delta", content: "Here is my response." });
+        push({ type: "message.complete", content: "Here is my response." });
+        end();
+      });
+
+      const engine = new LoopEngine({
+        loop,
+        backend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      // Find reasoning log events
+      const logEvents = emittedEvents.filter(
+        (e) => e.type === "loop.log" && (e as { details?: Record<string, unknown> }).details?.["logKind"] === "reasoning",
+      );
+
+      // All reasoning deltas should update the SAME log entry (same ID)
+      const logIds = new Set(logEvents.map((e) => (e as { id: string }).id));
+      expect(logIds.size).toBe(1);
+
+      // The final log event should have the fully accumulated content
+      const lastReasoningLog = logEvents[logEvents.length - 1] as {
+        details?: Record<string, unknown>;
+      };
+      expect(lastReasoningLog.details?.["responseContent"]).toBe("Let me think about this.");
+    });
+
+    test("starts fresh reasoning log after message.complete", async () => {
+      // Use 2 iterations: first completes, second triggers new reasoning
+      const loop = createTestLoop({ maxIterations: 2 });
+      let iteration = 0;
+      const backend = createEventSequenceBackend((push, end) => {
+        iteration++;
+        if (iteration === 1) {
+          push({ type: "message.start", messageId: "msg-1" });
+          push({ type: "reasoning.delta", content: "First thinking" });
+          push({ type: "message.delta", content: "First response." });
+          push({ type: "message.complete", content: "First response." });
+        } else {
+          push({ type: "message.start", messageId: "msg-2" });
+          push({ type: "reasoning.delta", content: "Second thinking" });
+          push({ type: "message.delta", content: "<promise>COMPLETE</promise>" });
+          push({ type: "message.complete", content: "<promise>COMPLETE</promise>" });
+        }
+        end();
+      });
+
+      const engine = new LoopEngine({
+        loop,
+        backend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      // Collect all reasoning log events
+      const logEvents = emittedEvents.filter(
+        (e) => e.type === "loop.log" && (e as { details?: Record<string, unknown> }).details?.["logKind"] === "reasoning",
+      );
+
+      // Should have events from two separate reasoning blocks (different IDs)
+      const logIds = new Set(logEvents.map((e) => (e as { id: string }).id));
+      expect(logIds.size).toBe(2);
+
+      // Each block should have its own content (not merged/duplicated)
+      const contents = [...logIds].map((id) => {
+        const events = logEvents.filter((e) => (e as { id: string }).id === id);
+        const last = events[events.length - 1] as { details?: Record<string, unknown> };
+        return last.details?.["responseContent"];
+      });
+      expect(contents).toContain("First thinking");
+      expect(contents).toContain("Second thinking");
+    });
+
+    test("starts fresh reasoning log after tool.start", async () => {
+      const loop = createTestLoop({ maxIterations: 1 });
+      const backend = createEventSequenceBackend((push, end) => {
+        push({ type: "message.start", messageId: "msg-1" });
+        push({ type: "reasoning.delta", content: "Before tool" });
+        push({ type: "tool.start", toolName: "bash", input: { command: "ls" } });
+        push({ type: "tool.complete", toolName: "bash", output: "file.txt" });
+        push({ type: "reasoning.delta", content: "After tool" });
+        push({ type: "message.delta", content: "<promise>COMPLETE</promise>" });
+        push({ type: "message.complete", content: "<promise>COMPLETE</promise>" });
+        end();
+      });
+
+      const engine = new LoopEngine({
+        loop,
+        backend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      // Collect all reasoning log events
+      const logEvents = emittedEvents.filter(
+        (e) => e.type === "loop.log" && (e as { details?: Record<string, unknown> }).details?.["logKind"] === "reasoning",
+      );
+
+      // Should have two separate reasoning blocks (tool.start resets reasoning tracking)
+      const logIds = new Set(logEvents.map((e) => (e as { id: string }).id));
+      expect(logIds.size).toBe(2);
+
+      // Each block should have its own content
+      const contents = [...logIds].map((id) => {
+        const events = logEvents.filter((e) => (e as { id: string }).id === id);
+        const last = events[events.length - 1] as { details?: Record<string, unknown> };
+        return last.details?.["responseContent"];
+      });
+      expect(contents).toContain("Before tool");
+      expect(contents).toContain("After tool");
+    });
+
+    test("message.start resets reasoning tracking for next message", async () => {
+      const loop = createTestLoop({ maxIterations: 1 });
+      const backend = createEventSequenceBackend((push, end) => {
+        push({ type: "message.start", messageId: "msg-1" });
+        push({ type: "reasoning.delta", content: "Reasoning block A" });
+        push({ type: "message.delta", content: "Response text" });
+        push({ type: "message.complete", content: "Response text" });
+        end();
+      });
+
+      const engine = new LoopEngine({
+        loop,
+        backend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      // Find reasoning logs
+      const logEvents = emittedEvents.filter(
+        (e) => e.type === "loop.log" && (e as { details?: Record<string, unknown> }).details?.["logKind"] === "reasoning",
+      );
+
+      // All reasoning deltas within one message should have the same log ID
+      const logIds = new Set(logEvents.map((e) => (e as { id: string }).id));
+      expect(logIds.size).toBe(1);
+
+      // Content should be exactly the deltas, no duplication
+      const lastLog = logEvents[logEvents.length - 1] as { details?: Record<string, unknown> };
+      expect(lastLog.details?.["responseContent"]).toBe("Reasoning block A");
+    });
+  });
 });

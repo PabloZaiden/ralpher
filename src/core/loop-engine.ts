@@ -1581,6 +1581,8 @@ export class LoopEngine {
         ctx.messageCount++;
         ctx.currentResponseLogId = null;
         ctx.currentResponseLogContent = "";
+        ctx.currentReasoningLogId = null;
+        ctx.currentReasoningLogContent = "";
         this.emitLog("agent", "AI started generating response", { logKind: "system" });
         break;
 

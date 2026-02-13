@@ -462,6 +462,143 @@ describe("translateEvent: message.part.updated (reasoning)", () => {
 });
 
 // ==========================================================================
+// translateEvent — reasoning: mixed delta/text duplication bug
+// ==========================================================================
+
+describe("translateEvent: reasoning delta/text-only mixed events (duplication bug)", () => {
+  test("does not duplicate content when SDK switches from delta to text-only events", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+    const emitted: string[] = [];
+
+    // Step 1: Send reasoning events WITH delta (Branch A)
+    const r1 = backend.translateEvent(
+      {
+        type: "message.part.updated",
+        properties: {
+          part: { sessionID: "test-session", type: "reasoning", id: "reason-1", text: "Hello" },
+          delta: "Hello",
+        },
+      },
+      ctx
+    );
+    expect(r1).toEqual({ type: "reasoning.delta", content: "Hello" });
+    emitted.push((r1 as { content: string }).content);
+
+    const r2 = backend.translateEvent(
+      {
+        type: "message.part.updated",
+        properties: {
+          part: { sessionID: "test-session", type: "reasoning", id: "reason-1", text: "Hello, world" },
+          delta: ", world",
+        },
+      },
+      ctx
+    );
+    expect(r2).toEqual({ type: "reasoning.delta", content: ", world" });
+    emitted.push((r2 as { content: string }).content);
+
+    // Step 2: SDK switches to text-only (no delta) — Branch B
+    // The full text is "Hello, world!" — the new content is just "!"
+    const r3 = backend.translateEvent(
+      {
+        type: "message.part.updated",
+        properties: {
+          part: { sessionID: "test-session", type: "reasoning", id: "reason-1", text: "Hello, world!" },
+          // No delta property — forces Branch B
+        },
+      },
+      ctx
+    );
+    expect(r3).toEqual({ type: "reasoning.delta", content: "!" });
+    emitted.push((r3 as { content: string }).content);
+
+    // Step 3: Verify concatenated content has NO duplication
+    const fullContent = emitted.join("");
+    expect(fullContent).toBe("Hello, world!");
+  });
+
+  test("tracks length correctly across multiple delta-then-text switches", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+    const emitted: string[] = [];
+
+    // Delta event
+    const r1 = backend.translateEvent(
+      {
+        type: "message.part.updated",
+        properties: {
+          part: { sessionID: "test-session", type: "reasoning", id: "r-2", text: "A" },
+          delta: "A",
+        },
+      },
+      ctx
+    );
+    emitted.push((r1 as { content: string }).content);
+
+    // Text-only event (should only emit "B")
+    const r2 = backend.translateEvent(
+      {
+        type: "message.part.updated",
+        properties: {
+          part: { sessionID: "test-session", type: "reasoning", id: "r-2", text: "AB" },
+        },
+      },
+      ctx
+    );
+    emitted.push((r2 as { content: string }).content);
+
+    // Back to delta
+    const r3 = backend.translateEvent(
+      {
+        type: "message.part.updated",
+        properties: {
+          part: { sessionID: "test-session", type: "reasoning", id: "r-2", text: "ABC" },
+          delta: "C",
+        },
+      },
+      ctx
+    );
+    emitted.push((r3 as { content: string }).content);
+
+    // Text-only again (should only emit "D")
+    const r4 = backend.translateEvent(
+      {
+        type: "message.part.updated",
+        properties: {
+          part: { sessionID: "test-session", type: "reasoning", id: "r-2", text: "ABCD" },
+        },
+      },
+      ctx
+    );
+    emitted.push((r4 as { content: string }).content);
+
+    const fullContent = emitted.join("");
+    expect(fullContent).toBe("ABCD");
+  });
+
+  test("reasoningTextLength is updated even when delta property is present", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+
+    // Send delta event
+    backend.translateEvent(
+      {
+        type: "message.part.updated",
+        properties: {
+          part: { sessionID: "test-session", type: "reasoning", id: "r-3", text: "Hello" },
+          delta: "Hello",
+        },
+      },
+      ctx
+    );
+
+    // Verify reasoningTextLength was updated
+    expect(ctx.reasoningTextLength.get("r-3")).toBe(5);
+  });
+});
+
+// ==========================================================================
 // translateEvent — message.part.updated (step-start / step-finish)
 // ==========================================================================
 
