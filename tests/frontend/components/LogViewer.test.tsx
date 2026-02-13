@@ -73,13 +73,25 @@ describe("LogViewer", () => {
       expect(getByText("First message")).toBeInTheDocument();
       expect(getByText("Second message")).toBeInTheDocument();
     });
+
+    test("messages are always shown regardless of filter settings", () => {
+      const msgs: MessageData[] = [
+        createMessageData({ role: "user", content: "User msg" }),
+        createMessageData({ role: "assistant", content: "Assistant msg" }),
+      ];
+      const { getByText } = renderWithUser(
+        <LogViewer messages={msgs} toolCalls={[]} showSystemInfo={false} showReasoning={false} showTools={false} />
+      );
+      expect(getByText("User msg")).toBeInTheDocument();
+      expect(getByText("Assistant msg")).toBeInTheDocument();
+    });
   });
 
   describe("tool call rendering", () => {
     test("renders a completed tool call with check mark", () => {
       const tool = createToolCallData({ name: "Write", status: "completed" });
       const { getByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[tool]} />
+        <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       expect(getByText("Write")).toBeInTheDocument();
       expect(getByText("✓")).toBeInTheDocument();
@@ -88,7 +100,7 @@ describe("LogViewer", () => {
     test("renders a failed tool call with X mark", () => {
       const tool = createToolCallData({ name: "Read", status: "failed" });
       const { getByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[tool]} />
+        <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       expect(getByText("Read")).toBeInTheDocument();
       expect(getByText("✗")).toBeInTheDocument();
@@ -97,7 +109,7 @@ describe("LogViewer", () => {
     test("renders a pending tool call with circle", () => {
       const tool = createToolCallData({ name: "Bash", status: "pending" });
       const { getByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[tool]} />
+        <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       expect(getByText("Bash")).toBeInTheDocument();
       expect(getByText("○")).toBeInTheDocument();
@@ -106,7 +118,7 @@ describe("LogViewer", () => {
     test("renders a running tool call with spinner", () => {
       const tool = createToolCallData({ name: "Glob", status: "running" });
       const { getByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[tool]} />
+        <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       expect(getByText("Glob")).toBeInTheDocument();
       expect(getByText("⟳")).toBeInTheDocument();
@@ -118,7 +130,7 @@ describe("LogViewer", () => {
         input: { filePath: "/src/test.ts", content: "hello" },
       });
       const { getByText, user } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[tool]} />
+        <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       // Input should be in a details/summary element
       const inputSummary = getByText("Input");
@@ -133,7 +145,7 @@ describe("LogViewer", () => {
         output: "file contents here",
       });
       const { getByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[tool]} />
+        <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       expect(getByText("Output")).toBeInTheDocument();
       expect(getByText("file contents here")).toBeInTheDocument();
@@ -145,7 +157,7 @@ describe("LogViewer", () => {
         output: { exitCode: 0, stdout: "ok" },
       });
       const { container } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[tool]} />
+        <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       // JSON stringified output should be in the pre element
       const preElements = container.querySelectorAll("pre");
@@ -158,7 +170,7 @@ describe("LogViewer", () => {
     test("does not render Input details when input is null", () => {
       const tool = createToolCallData({ name: "Write", input: null });
       const { queryByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[tool]} />
+        <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       expect(queryByText("Input")).not.toBeInTheDocument();
     });
@@ -166,44 +178,52 @@ describe("LogViewer", () => {
     test("does not render Output details when output is null", () => {
       const tool = createToolCallData({ name: "Write", output: undefined });
       const { queryByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[tool]} />
+        <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       expect(queryByText("Output")).not.toBeInTheDocument();
+    });
+
+    test("hides tool calls when showTools is false (default)", () => {
+      const tool = createToolCallData({ name: "Write", status: "completed" });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[tool]} />
+      );
+      expect(queryByText("Write")).not.toBeInTheDocument();
     });
   });
 
   describe("log entry rendering", () => {
-    test("renders an info log with INFO badge", () => {
+    test("renders an info log with INFO badge when showSystemInfo is true", () => {
       const log = createLogEntry({ level: "info", message: "Server started" });
       const { getByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showSystemInfo={true} />
       );
       expect(getByText("INFO")).toBeInTheDocument();
       expect(getByText("Server started")).toBeInTheDocument();
     });
 
-    test("renders a warn log with WARN badge", () => {
+    test("renders a warn log with WARN badge when showSystemInfo is true", () => {
       const log = createLogEntry({ level: "warn", message: "Rate limit approaching" });
       const { getByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showSystemInfo={true} />
       );
       expect(getByText("WARN")).toBeInTheDocument();
       expect(getByText("Rate limit approaching")).toBeInTheDocument();
     });
 
-    test("renders an error log with ERROR badge", () => {
+    test("renders an error log with ERROR badge when showSystemInfo is true", () => {
       const log = createLogEntry({ level: "error", message: "Connection failed" });
       const { getByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showSystemInfo={true} />
       );
       expect(getByText("ERROR")).toBeInTheDocument();
       expect(getByText("Connection failed")).toBeInTheDocument();
     });
 
-    test("renders a debug log with DEBUG badge", () => {
+    test("renders a debug log with DEBUG badge when showSystemInfo is true", () => {
       const log = createLogEntry({ level: "debug", message: "Debug info" });
       const { getByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showSystemInfo={true} />
       );
       expect(getByText("DEBUG")).toBeInTheDocument();
       expect(getByText("Debug info")).toBeInTheDocument();
@@ -220,6 +240,7 @@ describe("LogViewer", () => {
 
     test("renders log details in collapsible section", () => {
       const log = createLogEntry({
+        level: "agent",
         details: { key: "value", count: 42 },
       });
       const { getByText } = renderWithUser(
@@ -229,7 +250,7 @@ describe("LogViewer", () => {
     });
 
     test("does not render Details when log has no details", () => {
-      const log = createLogEntry({ details: undefined });
+      const log = createLogEntry({ level: "agent", details: undefined });
       const { queryByText } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
       );
@@ -238,20 +259,23 @@ describe("LogViewer", () => {
 
     test("renders responseContent as text block, not in Details", () => {
       const log = createLogEntry({
-        details: { responseContent: "AI response text here" },
+        level: "agent",
+        details: { logKind: "response", responseContent: "AI response text here" },
       });
       const { getByText, queryByText } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
       );
       // responseContent should be rendered as text
       expect(getByText("AI response text here")).toBeInTheDocument();
-      // Should NOT show Details since responseContent is the only detail
+      // Should NOT show Details since responseContent and logKind are filtered out
       expect(queryByText("Details")).not.toBeInTheDocument();
     });
 
     test("renders responseContent and other details separately", () => {
       const log = createLogEntry({
+        level: "agent",
         details: {
+          logKind: "response",
           responseContent: "AI response",
           otherKey: "otherValue",
         },
@@ -266,39 +290,250 @@ describe("LogViewer", () => {
     });
   });
 
-  describe("debug log filtering", () => {
-    test("shows debug logs by default (showDebugLogs=true)", () => {
+  describe("system info filtering", () => {
+    test("hides info/warn/error/debug/trace logs by default (showSystemInfo=false)", () => {
       const logs = [
-        createLogEntry({ level: "debug", message: "Debug message" }),
-        createLogEntry({ level: "info", message: "Info message" }),
+        createLogEntry({ level: "info", message: "Info msg" }),
+        createLogEntry({ level: "warn", message: "Warn msg" }),
+        createLogEntry({ level: "error", message: "Error msg" }),
+        createLogEntry({ level: "debug", message: "Debug msg" }),
       ];
-      const { getByText } = renderWithUser(
+      const { queryByText } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={logs} />
       );
-      expect(getByText("Debug message")).toBeInTheDocument();
-      expect(getByText("Info message")).toBeInTheDocument();
+      expect(queryByText("Info msg")).not.toBeInTheDocument();
+      expect(queryByText("Warn msg")).not.toBeInTheDocument();
+      expect(queryByText("Error msg")).not.toBeInTheDocument();
+      expect(queryByText("Debug msg")).not.toBeInTheDocument();
     });
 
-    test("hides debug logs when showDebugLogs=false", () => {
+    test("shows all logs when showSystemInfo=true", () => {
       const logs = [
-        createLogEntry({ level: "debug", message: "Debug message" }),
-        createLogEntry({ level: "info", message: "Info message" }),
+        createLogEntry({ level: "info", message: "Info msg" }),
+        createLogEntry({ level: "warn", message: "Warn msg" }),
+        createLogEntry({ level: "error", message: "Error msg" }),
+        createLogEntry({ level: "debug", message: "Debug msg" }),
       ];
-      const { queryByText, getByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[]} logs={logs} showDebugLogs={false} />
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={logs} showSystemInfo={true} />
       );
-      expect(queryByText("Debug message")).not.toBeInTheDocument();
-      expect(getByText("Info message")).toBeInTheDocument();
+      expect(getByText("Info msg")).toBeInTheDocument();
+      expect(getByText("Warn msg")).toBeInTheDocument();
+      expect(getByText("Error msg")).toBeInTheDocument();
+      expect(getByText("Debug msg")).toBeInTheDocument();
     });
 
-    test("shows empty state when only debug logs exist and showDebugLogs=false", () => {
+    test("hides system agent logs (logKind=system) by default", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI started generating response",
+        details: { logKind: "system" },
+      });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(queryByText("AI started generating response")).not.toBeInTheDocument();
+    });
+
+    test("shows system agent logs when showSystemInfo=true", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI started generating response",
+        details: { logKind: "system" },
+      });
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showSystemInfo={true} />
+      );
+      expect(getByText("AI started generating response")).toBeInTheDocument();
+    });
+
+    test("shows empty state when only system logs exist and showSystemInfo=false", () => {
       const logs = [
         createLogEntry({ level: "debug", message: "Debug only" }),
       ];
       const { getByText } = renderWithUser(
-        <LogViewer messages={[]} toolCalls={[]} logs={logs} showDebugLogs={false} />
+        <LogViewer messages={[]} toolCalls={[]} logs={logs} />
       );
       expect(getByText("No logs yet. Waiting for activity.")).toBeInTheDocument();
+    });
+
+    test("backward compat: hides old agent entries matching system patterns when showSystemInfo=false", () => {
+      // Old entries without logKind that match system patterns
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI started generating response",
+        // No logKind in details
+      });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(queryByText("AI started generating response")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("reasoning filtering", () => {
+    test("hides reasoning entries by default (showReasoning=false)", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI reasoning...",
+        details: { logKind: "reasoning", responseContent: "thinking about it" },
+      });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(queryByText("AI reasoning...")).not.toBeInTheDocument();
+    });
+
+    test("shows reasoning entries when showReasoning=true", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI reasoning...",
+        details: { logKind: "reasoning", responseContent: "thinking about it" },
+      });
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showReasoning={true} />
+      );
+      expect(getByText("AI reasoning...")).toBeInTheDocument();
+      expect(getByText("thinking about it")).toBeInTheDocument();
+    });
+
+    test("backward compat: identifies reasoning by message text when no logKind", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI reasoning...",
+        details: { responseContent: "old reasoning content" },
+      });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(queryByText("AI reasoning...")).not.toBeInTheDocument();
+    });
+
+    test("backward compat: shows old reasoning when showReasoning=true", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI reasoning...",
+        details: { responseContent: "old reasoning content" },
+      });
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showReasoning={true} />
+      );
+      expect(getByText("AI reasoning...")).toBeInTheDocument();
+    });
+  });
+
+  describe("reasoning styling", () => {
+    test("renders reasoning entries with italic and dimmed styling", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI reasoning...",
+        details: { logKind: "reasoning", responseContent: "thinking" },
+      });
+      const { container } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showReasoning={true} />
+      );
+      const group = container.querySelector(".group");
+      expect(group).not.toBeNull();
+      // Should have opacity-60 on the group
+      expect(group?.className).toContain("opacity-60");
+      // The text container should have italic class
+      const textDiv = group?.querySelector(".italic");
+      expect(textDiv).not.toBeNull();
+    });
+
+    test("does not apply reasoning styling to response entries", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI generating response...",
+        details: { logKind: "response", responseContent: "hello world" },
+      });
+      const { container } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      const group = container.querySelector(".group");
+      expect(group).not.toBeNull();
+      // Should NOT have opacity-60
+      expect(group?.className).not.toContain("opacity-60");
+    });
+  });
+
+  describe("tools filtering", () => {
+    test("hides tool call entries by default (showTools=false)", () => {
+      const tool = createToolCallData({ name: "Write", status: "completed" });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[tool]} />
+      );
+      expect(queryByText("Write")).not.toBeInTheDocument();
+    });
+
+    test("shows tool call entries when showTools=true", () => {
+      const tool = createToolCallData({ name: "Write", status: "completed" });
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
+      );
+      expect(getByText("Write")).toBeInTheDocument();
+    });
+
+    test("hides tool-related agent logs by default (showTools=false)", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI calling tool: Write",
+        details: { logKind: "tool" },
+      });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(queryByText("AI calling tool: Write")).not.toBeInTheDocument();
+    });
+
+    test("shows tool-related agent logs when showTools=true", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI calling tool: Write",
+        details: { logKind: "tool" },
+      });
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showTools={true} />
+      );
+      expect(getByText("AI calling tool: Write")).toBeInTheDocument();
+    });
+
+    test("backward compat: identifies tool logs by message text when no logKind", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI calling tool: Bash",
+      });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(queryByText("AI calling tool: Bash")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("response entries always shown", () => {
+    test("response entries (logKind=response) are always shown", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI generating response...",
+        details: { logKind: "response", responseContent: "Hello world" },
+      });
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(getByText("AI generating response...")).toBeInTheDocument();
+      expect(getByText("Hello world")).toBeInTheDocument();
+    });
+
+    test("backward compat: response entries without logKind are always shown", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI generating response...",
+        details: { responseContent: "Hello world" },
+      });
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(getByText("AI generating response...")).toBeInTheDocument();
     });
   });
 
@@ -313,12 +548,13 @@ describe("LogViewer", () => {
         timestamp: "2026-01-01T00:00:01.000Z",
       });
       const log = createLogEntry({
+        level: "agent",
         message: "Third entry",
         timestamp: "2026-01-01T00:00:03.000Z",
       });
 
       const { container } = renderWithUser(
-        <LogViewer messages={[msg]} toolCalls={[tool]} logs={[log]} />
+        <LogViewer messages={[msg]} toolCalls={[tool]} logs={[log]} showTools={true} />
       );
 
       // Get all rendered entry groups
@@ -381,7 +617,7 @@ describe("LogViewer", () => {
       const logs = [createLogEntry({ level: "info", message: "Processing complete" })];
 
       const { getByText } = renderWithUser(
-        <LogViewer messages={messages} toolCalls={toolCalls} logs={logs} />
+        <LogViewer messages={messages} toolCalls={toolCalls} logs={logs} showTools={true} showSystemInfo={true} />
       );
 
       expect(getByText("Hello from user")).toBeInTheDocument();
@@ -433,7 +669,8 @@ describe("LogViewer", () => {
 
     test("renders responseContent as markdown when markdownEnabled is true", () => {
       const log = createLogEntry({
-        details: { responseContent: "**bold response**" },
+        level: "agent",
+        details: { logKind: "response", responseContent: "**bold response**" },
       });
       const { container } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={[log]} markdownEnabled={true} />
@@ -445,7 +682,8 @@ describe("LogViewer", () => {
 
     test("renders responseContent as plain text when markdownEnabled is false", () => {
       const log = createLogEntry({
-        details: { responseContent: "**bold response**" },
+        level: "agent",
+        details: { logKind: "response", responseContent: "**bold response**" },
       });
       const { container } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={[log]} markdownEnabled={false} />
@@ -480,6 +718,24 @@ describe("LogViewer", () => {
       const listItems = container.querySelectorAll("li");
       expect(listItems.length).toBe(3);
       expect(listItems[0]?.textContent).toBe("First item");
+    });
+  });
+
+  describe("logKind filtering does not show logKind in Details", () => {
+    test("logKind is not shown in the Details section", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI generating response...",
+        details: { logKind: "response", responseContent: "content", extra: "value" },
+      });
+      const { container } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      // The Details section should not contain logKind
+      const preElements = container.querySelectorAll("pre");
+      for (const pre of Array.from(preElements)) {
+        expect(pre.textContent).not.toContain("logKind");
+      }
     });
   });
 });

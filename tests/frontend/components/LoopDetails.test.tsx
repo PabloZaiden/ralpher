@@ -957,12 +957,14 @@ describe("log tab", () => {
     expect(getByText("TODOs")).toBeTruthy();
   });
 
-  test("shows debug logs toggle", async () => {
+  test("shows log filter checkboxes", async () => {
     setupDefaultApi();
     const { getByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
 
     await waitFor(() => {
-      expect(getByText("Show debug logs")).toBeTruthy();
+      expect(getByText("Show system info")).toBeTruthy();
+      expect(getByText("Show reasoning")).toBeTruthy();
+      expect(getByText("Show tools")).toBeTruthy();
     });
   });
 

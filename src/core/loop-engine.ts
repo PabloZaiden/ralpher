@@ -1580,7 +1580,7 @@ export class LoopEngine {
         ctx.messageCount++;
         ctx.currentResponseLogId = null;
         ctx.currentResponseLogContent = "";
-        this.emitLog("agent", "AI started generating response");
+        this.emitLog("agent", "AI started generating response", { logKind: "system" });
         break;
 
       case "message.delta":
@@ -1667,17 +1667,17 @@ export class LoopEngine {
       ctx.currentResponseLogContent += content;
       const logMsg = "AI generating response...";
       if (ctx.currentResponseLogId) {
-        this.emitLog("agent", logMsg, { responseContent: ctx.currentResponseLogContent }, ctx.currentResponseLogId, "trace");
+        this.emitLog("agent", logMsg, { logKind: "response", responseContent: ctx.currentResponseLogContent }, ctx.currentResponseLogId, "trace");
       } else {
-        ctx.currentResponseLogId = this.emitLog("agent", logMsg, { responseContent: ctx.currentResponseLogContent }, undefined, "trace");
+        ctx.currentResponseLogId = this.emitLog("agent", logMsg, { logKind: "response", responseContent: ctx.currentResponseLogContent }, undefined, "trace");
       }
     } else {
       ctx.currentReasoningLogContent += content;
       const logMsg = "AI reasoning...";
       if (ctx.currentReasoningLogId) {
-        this.emitLog("agent", logMsg, { responseContent: ctx.currentReasoningLogContent }, ctx.currentReasoningLogId, "trace");
+        this.emitLog("agent", logMsg, { logKind: "reasoning", responseContent: ctx.currentReasoningLogContent }, ctx.currentReasoningLogId, "trace");
       } else {
-        ctx.currentReasoningLogId = this.emitLog("agent", logMsg, { responseContent: ctx.currentReasoningLogContent }, undefined, "trace");
+        ctx.currentReasoningLogId = this.emitLog("agent", logMsg, { logKind: "reasoning", responseContent: ctx.currentReasoningLogContent }, undefined, "trace");
       }
     }
   }
@@ -1692,6 +1692,7 @@ export class LoopEngine {
     ctx.currentReasoningLogId = null;
     ctx.currentReasoningLogContent = "";
     this.emitLog("agent", "AI finished generating response", {
+      logKind: "system",
       responseLength: ctx.responseContent.length,
     });
     const messageData: MessageData = {
@@ -1757,7 +1758,7 @@ export class LoopEngine {
     const toolId = `tool-${ctx.iteration}-${event.toolName}-${ctx.toolCallCount}`;
     ctx.toolCalls.set(event.toolName, { id: toolId, name: event.toolName, input: event.input });
     ctx.toolCallCount++;
-    this.emitLog("agent", `AI calling tool: ${event.toolName}`);
+    this.emitLog("agent", `AI calling tool: ${event.toolName}`, { logKind: "tool" });
     const timestamp = createTimestamp();
     const toolCallData: ToolCallData = {
       id: toolId,
