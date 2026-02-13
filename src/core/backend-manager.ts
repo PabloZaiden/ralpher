@@ -23,6 +23,13 @@ import { GitService } from "./git-service";
 import { log } from "./logger";
 
 /**
+ * Timeout (in ms) for validating a remote directory during workspace import/creation.
+ * This bounds the connection + directory check to prevent indefinite hangs when
+ * the remote server is unreachable.
+ */
+const VALIDATION_TIMEOUT_MS = 15_000;
+
+/**
  * Factory function type for creating command executors.
  */
 export type CommandExecutorFactory = (directory: string) => CommandExecutor;
@@ -403,55 +410,94 @@ class BackendManager {
     const tempBackend = new OpenCodeBackend();
     const config = buildConnectionConfig(settings, directory);
 
+    // AbortController to cancel in-flight fetch requests on timeout.
+    // This ensures the underlying TCP connection is properly cleaned up
+    // rather than leaving orphaned requests running in the background.
+    const abortController = new AbortController();
+
+    // Race the entire validation against a timeout to prevent indefinite hangs
+    // when the remote server is unreachable. The custom fetch in connectToExisting()
+    // disables Bun's request timeout, so without this guard the request hangs forever.
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
-      // Connect to the server
-      await tempBackend.connect(config);
-      
-      // Get connection info and client
-      const connectionInfo = tempBackend.getConnectionInfo();
-      const client = tempBackend.getSdkClient() as OpencodeClient | null;
-      
-      if (!connectionInfo || !client) {
-        await tempBackend.disconnect();
-        return { success: false, error: "Failed to get connection info" };
-      }
-      
-      // Create a command executor
-      const executor = new CommandExecutorImpl({
-        client,
-        directory,
-        baseUrl: connectionInfo.baseUrl,
-        authHeaders: connectionInfo.authHeaders,
-        allowInsecure: connectionInfo.allowInsecure,
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Connection timed out after ${VALIDATION_TIMEOUT_MS}ms`)),
+          VALIDATION_TIMEOUT_MS,
+        );
       });
-      
-      // First check if directory exists to provide clearer error messages
-      const directoryExists = await executor.directoryExists(directory);
-      if (!directoryExists) {
-        log.debug("Directory does not exist on remote server", { directory });
-        await tempBackend.disconnect();
-        return { success: true, directoryExists: false, isGitRepo: false };
-      }
-      
-      // Use GitService to check if it's a git repository (consistent with rest of codebase)
-      const git = GitService.withExecutor(executor);
-      const isGitRepo = await git.isGitRepo(directory);
-      
-      log.debug("Remote directory validation result", { directory, directoryExists: true, isGitRepo });
-      
-      // Disconnect
-      await tempBackend.disconnect();
-      
-      return { success: true, directoryExists: true, isGitRepo };
+
+      const result = await Promise.race([
+        this.performRemoteValidation(tempBackend, config, directory, abortController.signal),
+        timeoutPromise,
+      ]);
+
+      return result;
     } catch (error) {
       log.error("Failed to validate remote directory", { directory, error: String(error) });
+      // Abort any in-flight fetch requests before disconnecting
+      abortController.abort();
       try {
         await tempBackend.disconnect();
       } catch {
-        // Ignore disconnect errors
+        // Ignore disconnect errors during cleanup
       }
       return { success: false, error: String(error) };
+    } finally {
+      clearTimeout(timeoutId);
     }
+  }
+
+  /**
+   * Perform the actual remote directory validation: connect, check directory, check git, disconnect.
+   * Extracted so it can be raced against a timeout in validateRemoteDirectory().
+   */
+  private async performRemoteValidation(
+    tempBackend: OpenCodeBackend,
+    config: BackendConnectionConfig,
+    directory: string,
+    signal: AbortSignal,
+  ): Promise<{ success: boolean; isGitRepo?: boolean; directoryExists?: boolean; error?: string }> {
+    // Connect to the server, passing the abort signal so in-flight fetch
+    // requests can be cancelled if the validation times out
+    await tempBackend.connect(config, signal);
+
+    // Get connection info and client
+    const connectionInfo = tempBackend.getConnectionInfo();
+    const client = tempBackend.getSdkClient() as OpencodeClient | null;
+
+    if (!connectionInfo || !client) {
+      await tempBackend.disconnect();
+      return { success: false, error: "Failed to get connection info" };
+    }
+
+    // Create a command executor
+    const executor = new CommandExecutorImpl({
+      client,
+      directory,
+      baseUrl: connectionInfo.baseUrl,
+      authHeaders: connectionInfo.authHeaders,
+      allowInsecure: connectionInfo.allowInsecure,
+    });
+
+    // First check if directory exists to provide clearer error messages
+    const directoryExists = await executor.directoryExists(directory);
+    if (!directoryExists) {
+      log.debug("Directory does not exist on remote server", { directory });
+      await tempBackend.disconnect();
+      return { success: true, directoryExists: false, isGitRepo: false };
+    }
+
+    // Use GitService to check if it's a git repository (consistent with rest of codebase)
+    const git = GitService.withExecutor(executor);
+    const isGitRepo = await git.isGitRepo(directory);
+
+    log.debug("Remote directory validation result", { directory, directoryExists: true, isGitRepo });
+
+    // Disconnect
+    await tempBackend.disconnect();
+
+    return { success: true, directoryExists: true, isGitRepo };
   }
 
   /**

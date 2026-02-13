@@ -76,7 +76,7 @@ export class OpenCodeBackend implements Backend {
    * For spawn mode, this spawns a new local server.
    * For connect mode, this verifies the connection.
    */
-  async connect(config: BackendConnectionConfig): Promise<void> {
+  async connect(config: BackendConnectionConfig, signal?: AbortSignal): Promise<void> {
     if (this.connected) {
       throw new Error("Already connected. Call disconnect() first.");
     }
@@ -93,7 +93,7 @@ export class OpenCodeBackend implements Backend {
       }
       await this.connectSpawn(config);
     } else {
-      await this.connectToExisting(config);
+      await this.connectToExisting(config, signal);
     }
 
     this.connected = true;
@@ -125,7 +125,8 @@ export class OpenCodeBackend implements Backend {
    * Supports both HTTP and HTTPS, with optional self-signed certificate support.
    */
   private async connectToExisting(
-    config: BackendConnectionConfig
+    config: BackendConnectionConfig,
+    signal?: AbortSignal,
   ): Promise<void> {
     const hostname = config.hostname ?? "127.0.0.1";
     const port = config.port ?? 4096;
@@ -151,16 +152,21 @@ export class OpenCodeBackend implements Backend {
       // @ts-expect-error - Bun extends Request with timeout property
       req.timeout = false;
       
+      // Build fetch options, propagating the abort signal if provided so that
+      // callers (e.g., validateRemoteDirectory) can cancel in-flight requests.
+      const fetchOptions: RequestInit & { tls?: { rejectUnauthorized: boolean } } = {};
+      if (signal) {
+        fetchOptions.signal = signal;
+      }
+
       // For HTTPS with self-signed certificates, use Bun's tls option
       if (useHttps && config.allowInsecure) {
-        return fetch(req, {
-          tls: {
-            rejectUnauthorized: false,
-          },
-        } as RequestInit);
+        fetchOptions.tls = { rejectUnauthorized: false };
       }
-      
-      return fetch(req);
+
+      return Object.keys(fetchOptions).length > 0
+        ? fetch(req, fetchOptions as RequestInit)
+        : fetch(req);
     };
 
     // Build client config with optional Basic auth and custom fetch
