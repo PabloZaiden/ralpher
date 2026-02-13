@@ -15,7 +15,7 @@ import {
 import { SimpleEventEmitter } from "../../src/core/event-emitter";
 import type { Loop, LoopConfig, LoopState } from "../../src/types/loop";
 import { DEFAULT_LOOP_CONFIG } from "../../src/types/loop";
-import type { LoopEvent } from "../../src/types/events";
+import type { LoopEvent, LoopMessageEvent } from "../../src/types/events";
 import type {
   AgentSession,
   AgentEvent,
@@ -550,11 +550,10 @@ describe("LoopEngine - Chat Mode", () => {
 
     // Check that a loop.message event with role "user" was emitted
     const userMessageEvents = emittedEvents.filter(
-      (e) => e.type === "loop.message" && "message" in e && e.message.role === "user"
+      (e): e is LoopMessageEvent => e.type === "loop.message" && e.message.role === "user"
     );
     expect(userMessageEvents.length).toBeGreaterThanOrEqual(1);
-    const userMsg = userMessageEvents[0] as { message: { role: string; content: string } };
-    expect(userMsg.message.content).toBe("What is TypeScript?");
+    expect(userMessageEvents[0]!.message.content).toBe("What is TypeScript?");
   });
 
   test("loop mode still auto-iterates normally (regression check)", async () => {

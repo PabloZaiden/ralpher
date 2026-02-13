@@ -14,7 +14,7 @@ import {
 import { SimpleEventEmitter } from "../../src/core/event-emitter";
 import type { Loop, LoopConfig, LoopState } from "../../src/types/loop";
 import { DEFAULT_LOOP_CONFIG } from "../../src/types/loop";
-import type { LoopEvent } from "../../src/types/events";
+import type { LoopEvent, LoopMessageEvent } from "../../src/types/events";
 import type {
   AgentSession,
   AgentResponse,
@@ -482,12 +482,12 @@ describe("LoopEngine Pending Model", () => {
 
     // Verify a loop.message event with role "user" was emitted containing the message
     const userMessageEvents = emittedEvents.filter(
-      (e) => e.type === "loop.message" && "message" in e && (e as { message: { role: string } }).message.role === "user"
+      (e): e is LoopMessageEvent => e.type === "loop.message" && e.message.role === "user"
     );
     expect(userMessageEvents.length).toBeGreaterThanOrEqual(1);
     const userMsg = userMessageEvents.find(
-      (e) => (e as { message: { content: string } }).message.content === "User injected message for testing"
-    ) as { message: { role: string; content: string } } | undefined;
+      (e) => e.message.content === "User injected message for testing"
+    );
     expect(userMsg).toBeDefined();
     expect(userMsg!.message.role).toBe("user");
 
