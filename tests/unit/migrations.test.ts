@@ -94,7 +94,7 @@ describe("migration infrastructure", () => {
       expect(columns).toContain("name");
     });
 
-    test("returns empty array for an existing table with no rows", () => {
+    test("returns column names even when table has no rows", () => {
       db.run("CREATE TABLE loops (id TEXT PRIMARY KEY)");
       const columns = getTableColumns(db, "loops");
       expect(columns).toEqual(["id"]);

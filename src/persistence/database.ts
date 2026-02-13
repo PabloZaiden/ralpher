@@ -282,8 +282,10 @@ export function resetDatabase(): void {
   
   log.warn("Resetting database - dropping all tables");
   
-  // Wrap DROP operations in a transaction
-  // Order matters: drop tables with FK references first
+  // Wrap DROP operations in a transaction.
+  // FK dependency order: review_comments → loops → workspaces.
+  // review_comments references loops(id), loops references workspaces(id),
+  // so we must drop in reverse dependency order to satisfy FK constraints.
   const dropAllTables = db.transaction(() => {
     db!.run("DROP TABLE IF EXISTS review_comments");
     db!.run("DROP TABLE IF EXISTS loops");
