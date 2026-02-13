@@ -826,4 +826,120 @@ describe("LogViewer", () => {
       expect(spinner).not.toBeNull();
     });
   });
+
+  describe("action text deduplication", () => {
+    test("consecutive same-group log entries hide action text for continuation entries", () => {
+      const logs = [
+        createLogEntry({
+          id: "log-1",
+          level: "agent",
+          message: "AI generating response...",
+          details: { logKind: "response", responseContent: "First response" },
+          timestamp: "2026-01-01T00:00:01.000Z",
+        }),
+        createLogEntry({
+          id: "log-2",
+          level: "agent",
+          message: "AI generating response...",
+          details: { logKind: "response", responseContent: "Second response" },
+          timestamp: "2026-01-01T00:00:02.000Z",
+        }),
+      ];
+      const { container } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={logs} />
+      );
+
+      // Both responseContent blocks should be visible
+      expect(container.textContent).toContain("First response");
+      expect(container.textContent).toContain("Second response");
+
+      // The action text "AI generating response..." should appear exactly once
+      const allText = container.textContent ?? "";
+      const actionOccurrences = allText.split("AI generating response...").length - 1;
+      expect(actionOccurrences).toBe(1);
+    });
+
+    test("first entry in group always shows action text", () => {
+      const logs = [
+        createLogEntry({
+          level: "agent",
+          message: "AI generating response...",
+          details: { logKind: "response", responseContent: "Some content" },
+        }),
+      ];
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={logs} />
+      );
+
+      // Single entry should show both action text and content
+      expect(getByText("AI generating response...")).toBeInTheDocument();
+      expect(getByText("Some content")).toBeInTheDocument();
+    });
+
+    test("different group entries each show their own action text", () => {
+      const logs = [
+        createLogEntry({
+          id: "log-1",
+          level: "agent",
+          message: "AI generating response...",
+          details: { logKind: "response", responseContent: "Response content" },
+          timestamp: "2026-01-01T00:00:01.000Z",
+        }),
+        createLogEntry({
+          id: "log-2",
+          level: "agent",
+          message: "AI reasoning...",
+          details: { logKind: "reasoning", responseContent: "Reasoning content" },
+          timestamp: "2026-01-01T00:00:02.000Z",
+        }),
+      ];
+      const { getByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={logs} />
+      );
+
+      // Different groups — both action texts should be visible
+      expect(getByText("AI generating response...")).toBeInTheDocument();
+      expect(getByText("AI reasoning...")).toBeInTheDocument();
+      expect(getByText("Response content")).toBeInTheDocument();
+      expect(getByText("Reasoning content")).toBeInTheDocument();
+    });
+
+    test("group broken by different entry type re-shows action text", () => {
+      const logs = [
+        createLogEntry({
+          id: "log-1",
+          level: "agent",
+          message: "AI generating response...",
+          details: { logKind: "response", responseContent: "First response" },
+          timestamp: "2026-01-01T00:00:01.000Z",
+        }),
+        createLogEntry({
+          id: "log-3",
+          level: "agent",
+          message: "AI generating response...",
+          details: { logKind: "response", responseContent: "Third response" },
+          timestamp: "2026-01-01T00:00:03.000Z",
+        }),
+      ];
+      const messages = [
+        createMessageData({
+          role: "user",
+          content: "User interruption",
+          timestamp: "2026-01-01T00:00:02.000Z",
+        }),
+      ];
+      const { container, getByText } = renderWithUser(
+        <LogViewer messages={messages} toolCalls={[]} logs={logs} />
+      );
+
+      // The user message breaks the group, so action text should appear twice
+      expect(getByText("User interruption")).toBeInTheDocument();
+      expect(getByText("First response")).toBeInTheDocument();
+      expect(getByText("Third response")).toBeInTheDocument();
+
+      const allText = container.textContent ?? "";
+      const actionOccurrences = allText.split("AI generating response...").length - 1;
+      expect(actionOccurrences).toBe(2);
+    });
+  });
 });
