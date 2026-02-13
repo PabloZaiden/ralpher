@@ -142,7 +142,7 @@ export const LogViewer = memo(function LogViewer({
         }
       });
     }
-  }, [messages, toolCalls, logs, autoScroll, showDebugLogs]);
+  }, [messages, toolCalls, logs, autoScroll, showDebugLogs, markdownEnabled]);
 
   // Combine and sort entries by timestamp (memoized to avoid rebuilding on every render)
   const entries = useMemo(() => {
