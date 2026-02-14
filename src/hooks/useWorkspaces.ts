@@ -3,7 +3,7 @@
  * Provides CRUD operations for workspaces and fetches workspace list.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Workspace, CreateWorkspaceRequest, WorkspaceImportResult, WorkspaceExportData } from "../types/workspace";
 import { log } from "../lib/logger";
 
@@ -41,6 +41,10 @@ export function useWorkspaces(): UseWorkspacesResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // AbortController for cancelling in-flight import requests on unmount.
+  // Import can take a while when validating many workspaces against remote servers.
+  const importAbortRef = useRef<AbortController | null>(null);
 
   // Fetch all workspaces
   const fetchWorkspaces = useCallback(async () => {
@@ -183,6 +187,11 @@ export function useWorkspaces(): UseWorkspacesResult {
 
   // Import workspace configs
   const importConfig = useCallback(async (data: WorkspaceExportData): Promise<WorkspaceImportResult | null> => {
+    // Abort any previous in-flight import request
+    importAbortRef.current?.abort();
+    const controller = new AbortController();
+    importAbortRef.current = controller;
+
     try {
       setSaving(true);
       setError(null);
@@ -190,7 +199,10 @@ export function useWorkspaces(): UseWorkspacesResult {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
+        signal: controller.signal,
       });
+
+      if (controller.signal.aborted) return null;
 
       if (!response.ok) {
         const errorData = await response.json() as { message?: string };
@@ -202,6 +214,8 @@ export function useWorkspaces(): UseWorkspacesResult {
       await fetchWorkspaces();
       return result;
     } catch (err) {
+      // Don't set error state if the request was intentionally aborted
+      if (controller.signal.aborted) return null;
       setError(String(err));
       return null;
     } finally {
@@ -213,6 +227,13 @@ export function useWorkspaces(): UseWorkspacesResult {
   useEffect(() => {
     fetchWorkspaces();
   }, [fetchWorkspaces]);
+
+  // Cleanup: abort any in-flight import request on unmount
+  useEffect(() => {
+    return () => {
+      importAbortRef.current?.abort();
+    };
+  }, []);
 
   return {
     workspaces,

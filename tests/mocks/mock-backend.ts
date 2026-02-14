@@ -86,7 +86,7 @@ export class MockOpenCodeBackend implements Backend {
   // Core Backend methods (used by LoopEngine)
   // ============================================
 
-  async connect(config: BackendConnectionConfig): Promise<void> {
+  async connect(config: BackendConnectionConfig, _signal?: AbortSignal): Promise<void> {
     this.connected = true;
     this.directory = config.directory;
   }
@@ -281,7 +281,7 @@ export class NeverCompletingMockBackend implements Backend {
     this.models = options.models ?? [defaultTestModel];
   }
 
-  async connect(config: BackendConnectionConfig): Promise<void> {
+  async connect(config: BackendConnectionConfig, _signal?: AbortSignal): Promise<void> {
     this.connected = true;
     this.directory = config.directory;
   }
@@ -405,7 +405,7 @@ export class PlanModeMockBackend implements Backend {
     return "<promise>COMPLETE</promise>";
   }
 
-  async connect(config: BackendConnectionConfig): Promise<void> {
+  async connect(config: BackendConnectionConfig, _signal?: AbortSignal): Promise<void> {
     this.connected = true;
     this.directory = config.directory;
   }

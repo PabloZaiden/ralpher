@@ -173,8 +173,8 @@ export interface Backend {
   // Core methods (used by LoopEngine)
   // ============================================
 
-  /** Connect to the backend server */
-  connect(config: BackendConnectionConfig): Promise<void>;
+  /** Connect to the backend server. Optional signal allows aborting the connection attempt. */
+  connect(config: BackendConnectionConfig, signal?: AbortSignal): Promise<void>;
 
   /** Disconnect from the backend server */
   disconnect(): Promise<void>;

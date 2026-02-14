@@ -126,7 +126,7 @@ export class ConfigurableMockBackend implements LoopBackend {
     }
   }
 
-  async connect(config: BackendConnectionConfig): Promise<void> {
+  async connect(config: BackendConnectionConfig, _signal?: AbortSignal): Promise<void> {
     this.connected = true;
     this.directory = config.directory;
   }

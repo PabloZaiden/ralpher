@@ -23,6 +23,13 @@ import { GitService } from "./git-service";
 import { log } from "./logger";
 
 /**
+ * Default timeout (in ms) for remote connection operations (validation, test connections,
+ * workspace connections). This bounds network operations to prevent indefinite hangs
+ * when the remote server is unreachable.
+ */
+const DEFAULT_CONNECTION_TIMEOUT_MS = 15_000;
+
+/**
  * Factory function type for creating command executors.
  */
 export type CommandExecutorFactory = (directory: string) => CommandExecutor;
@@ -129,6 +136,8 @@ class BackendManager {
   private testBackend: Backend | null = null;
   /** Test settings (when isTestBackend is true) */
   private testSettings: ServerSettings = getDefaultServerSettings();
+  /** Overridable connection timeout (ms) for testing. Defaults to DEFAULT_CONNECTION_TIMEOUT_MS. */
+  private connectionTimeoutMs: number = DEFAULT_CONNECTION_TIMEOUT_MS;
 
   /**
    * Initialize the backend manager.
@@ -185,8 +194,23 @@ class BackendManager {
 
     const config = buildConnectionConfig(settings, directory);
 
+    // Use a timeout + AbortController to prevent indefinite hangs when the
+    // remote server is unreachable (connectToExisting disables Bun's request timeout).
+    const abortController = new AbortController();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
     try {
-      await state.backend.connect(config);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Connection timed out after ${this.connectionTimeoutMs}ms`)),
+          this.connectionTimeoutMs,
+        );
+      });
+
+      await Promise.race([
+        state.backend.connect(config, abortController.signal),
+        timeoutPromise,
+      ]);
       
       // Determine the correct protocol for the server URL
       const port = settings.port ?? 4096;
@@ -204,6 +228,7 @@ class BackendManager {
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
+      abortController.abort();
       state.connectionError = String(error);
       this.emitEvent({
         type: "server.error",
@@ -212,6 +237,8 @@ class BackendManager {
         timestamp: new Date().toISOString(),
       });
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -349,6 +376,8 @@ class BackendManager {
   /**
    * Test connection with provided settings (without updating workspace settings).
    * Returns true if connection succeeds, false otherwise.
+   * Uses a timeout + AbortController to prevent indefinite hangs when the
+   * remote server is unreachable.
    */
   async testConnection(
     settings: ServerSettings,
@@ -356,15 +385,35 @@ class BackendManager {
   ): Promise<{ success: boolean; error?: string }> {
     // Create a temporary backend for testing
     const testBackend = new OpenCodeBackend();
-
     const config = buildConnectionConfig(settings, directory);
+    const abortController = new AbortController();
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
     try {
-      await testBackend.connect(config);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Connection timed out after ${this.connectionTimeoutMs}ms`)),
+          this.connectionTimeoutMs,
+        );
+      });
+
+      await Promise.race([
+        testBackend.connect(config, abortController.signal),
+        timeoutPromise,
+      ]);
+
       await testBackend.disconnect();
       return { success: true };
     } catch (error) {
+      abortController.abort();
+      try {
+        await testBackend.disconnect();
+      } catch {
+        // Ignore disconnect errors during cleanup
+      }
       return { success: false, error: String(error) };
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
@@ -403,55 +452,94 @@ class BackendManager {
     const tempBackend = new OpenCodeBackend();
     const config = buildConnectionConfig(settings, directory);
 
+    // AbortController to cancel in-flight fetch requests on timeout.
+    // This ensures the underlying TCP connection is properly cleaned up
+    // rather than leaving orphaned requests running in the background.
+    const abortController = new AbortController();
+
+    // Race the entire validation against a timeout to prevent indefinite hangs
+    // when the remote server is unreachable. The custom fetch in connectToExisting()
+    // disables Bun's request timeout, so without this guard the request hangs forever.
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
-      // Connect to the server
-      await tempBackend.connect(config);
-      
-      // Get connection info and client
-      const connectionInfo = tempBackend.getConnectionInfo();
-      const client = tempBackend.getSdkClient() as OpencodeClient | null;
-      
-      if (!connectionInfo || !client) {
-        await tempBackend.disconnect();
-        return { success: false, error: "Failed to get connection info" };
-      }
-      
-      // Create a command executor
-      const executor = new CommandExecutorImpl({
-        client,
-        directory,
-        baseUrl: connectionInfo.baseUrl,
-        authHeaders: connectionInfo.authHeaders,
-        allowInsecure: connectionInfo.allowInsecure,
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Connection timed out after ${this.connectionTimeoutMs}ms`)),
+          this.connectionTimeoutMs,
+        );
       });
-      
-      // First check if directory exists to provide clearer error messages
-      const directoryExists = await executor.directoryExists(directory);
-      if (!directoryExists) {
-        log.debug("Directory does not exist on remote server", { directory });
-        await tempBackend.disconnect();
-        return { success: true, directoryExists: false, isGitRepo: false };
-      }
-      
-      // Use GitService to check if it's a git repository (consistent with rest of codebase)
-      const git = GitService.withExecutor(executor);
-      const isGitRepo = await git.isGitRepo(directory);
-      
-      log.debug("Remote directory validation result", { directory, directoryExists: true, isGitRepo });
-      
-      // Disconnect
-      await tempBackend.disconnect();
-      
-      return { success: true, directoryExists: true, isGitRepo };
+
+      const result = await Promise.race([
+        this.performRemoteValidation(tempBackend, config, directory, abortController.signal),
+        timeoutPromise,
+      ]);
+
+      return result;
     } catch (error) {
       log.error("Failed to validate remote directory", { directory, error: String(error) });
+      // Abort any in-flight fetch requests before disconnecting
+      abortController.abort();
       try {
         await tempBackend.disconnect();
       } catch {
-        // Ignore disconnect errors
+        // Ignore disconnect errors during cleanup
       }
       return { success: false, error: String(error) };
+    } finally {
+      clearTimeout(timeoutId);
     }
+  }
+
+  /**
+   * Perform the actual remote directory validation: connect, check directory, check git, disconnect.
+   * Extracted so it can be raced against a timeout in validateRemoteDirectory().
+   */
+  private async performRemoteValidation(
+    tempBackend: OpenCodeBackend,
+    config: BackendConnectionConfig,
+    directory: string,
+    signal: AbortSignal,
+  ): Promise<{ success: boolean; isGitRepo?: boolean; directoryExists?: boolean; error?: string }> {
+    // Connect to the server, passing the abort signal so in-flight fetch
+    // requests can be cancelled if the validation times out
+    await tempBackend.connect(config, signal);
+
+    // Get connection info and client
+    const connectionInfo = tempBackend.getConnectionInfo();
+    const client = tempBackend.getSdkClient() as OpencodeClient | null;
+
+    if (!connectionInfo || !client) {
+      await tempBackend.disconnect();
+      return { success: false, error: "Failed to get connection info" };
+    }
+
+    // Create a command executor
+    const executor = new CommandExecutorImpl({
+      client,
+      directory,
+      baseUrl: connectionInfo.baseUrl,
+      authHeaders: connectionInfo.authHeaders,
+      allowInsecure: connectionInfo.allowInsecure,
+    });
+
+    // First check if directory exists to provide clearer error messages
+    const directoryExists = await executor.directoryExists(directory);
+    if (!directoryExists) {
+      log.debug("Directory does not exist on remote server", { directory });
+      await tempBackend.disconnect();
+      return { success: true, directoryExists: false, isGitRepo: false };
+    }
+
+    // Use GitService to check if it's a git repository (consistent with rest of codebase)
+    const git = GitService.withExecutor(executor);
+    const isGitRepo = await git.isGitRepo(directory);
+
+    log.debug("Remote directory validation result", { directory, directoryExists: true, isGitRepo });
+
+    // Disconnect
+    await tempBackend.disconnect();
+
+    return { success: true, directoryExists: true, isGitRepo };
   }
 
   /**
@@ -736,6 +824,14 @@ class BackendManager {
   }
 
   /**
+   * Override the connection timeout (for testing).
+   * Allows tests to use a much shorter timeout to avoid long wall-clock waits.
+   */
+  setConnectionTimeoutForTesting(timeoutMs: number): void {
+    this.connectionTimeoutMs = timeoutMs;
+  }
+
+  /**
    * Reset the backend manager (for testing).
    * Clears all connections and resets initialization state.
    */
@@ -747,6 +843,7 @@ class BackendManager {
     this.isTestBackend = false;
     this.testBackend = null;
     this.testSettings = getDefaultServerSettings();
+    this.connectionTimeoutMs = DEFAULT_CONNECTION_TIMEOUT_MS;
   }
 
   /**
