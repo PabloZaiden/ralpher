@@ -1140,7 +1140,7 @@ describe("StopPatternDetector", () => {
       
       // Check that debug log was emitted about missing directory
       const debugLogs = emittedEvents.filter(
-        (e) => e.type === "loop.log" && e.message.includes("does not exist")
+        (e) => e.type === "loop.log" && e.message === ".planning directory does not exist, skipping clear"
       );
       expect(debugLogs.length).toBe(1);
     }, 10000);
@@ -1177,7 +1177,7 @@ describe("StopPatternDetector", () => {
       // Git doesn't track empty directories, so the worktree won't have the .planning dir.
       // clearPlanningFolder should report it as "does not exist" rather than "already empty".
       const debugLogs = emittedEvents.filter(
-        (e) => e.type === "loop.log" && e.message.includes("does not exist")
+        (e) => e.type === "loop.log" && e.message === ".planning directory does not exist, skipping clear"
       );
       expect(debugLogs.length).toBe(1);
     }, 10000);
