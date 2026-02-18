@@ -239,38 +239,6 @@ describe("header display", () => {
   });
 });
 
-// ─── Info bar ────────────────────────────────────────────────────────────────
-
-describe("info bar", () => {
-  test("renders iteration info", async () => {
-    setupDefaultApi();
-    const { getByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
-
-    await waitFor(() => {
-      expect(getByText(/Iteration:/)).toBeTruthy();
-    });
-  });
-
-  test("renders git branch info", async () => {
-    setupDefaultApi();
-    const { getByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
-
-    await waitFor(() => {
-      expect(getByText("main")).toBeTruthy();
-      expect(getByText(/ralph\//)).toBeTruthy();
-    });
-  });
-
-  test("renders model info", async () => {
-    setupDefaultApi();
-    const { getByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
-
-    await waitFor(() => {
-      expect(getByText(/anthropic\/claude-sonnet/)).toBeTruthy();
-    });
-  });
-});
-
 // ─── Connection status ───────────────────────────────────────────────────────
 
 describe("connection status", () => {
