@@ -1507,6 +1507,10 @@ export class LoopEngine {
       textPreview: prompt.parts[0]?.text?.slice(0, 200) ?? "",
     });
 
+    // Log the exact prompt text to the log viewer at debug level
+    const fullPromptText = prompt.parts.map((p) => p.text).join("\n---\n");
+    this.emitLog("debug", `[Prompt] ${fullPromptText}`);
+
     // Send prompt and collect response
     if (!this.sessionId) {
       throw new Error("No session ID");

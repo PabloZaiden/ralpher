@@ -20,6 +20,7 @@ type PrivateBackend = {
       emittedMessageStarts: Set<string>;
       toolPartStatus: Map<string, string>;
       reasoningTextLength: Map<string, number>;
+      partTypes: Map<string, string>;
       client: unknown;
       directory: string;
     }
@@ -53,6 +54,7 @@ function createContext(sessionId = "test-session") {
     emittedMessageStarts: new Set<string>(),
     toolPartStatus: new Map<string, string>(),
     reasoningTextLength: new Map<string, number>(),
+    partTypes: new Map<string, string>(),
     client: {} as unknown,
     directory: "/tmp/test",
   };
@@ -157,32 +159,12 @@ describe("translateEvent: message.updated", () => {
 
 // ==========================================================================
 // translateEvent — message.part.updated (text)
+// In SDK 1.2.x, text deltas arrive via message.part.delta events.
+// message.part.updated for text parts only tracks the part type.
 // ==========================================================================
 
 describe("translateEvent: message.part.updated (text)", () => {
-  test("emits message.delta for text part with delta", () => {
-    const backend = getBackend();
-    const ctx = createContext();
-
-    const result = backend.translateEvent(
-      {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            sessionID: "test-session",
-            type: "text",
-            id: "part-1",
-          },
-          delta: "Hello, world!",
-        },
-      },
-      ctx
-    );
-
-    expect(result).toEqual({ type: "message.delta", content: "Hello, world!" });
-  });
-
-  test("returns null for text part without delta", () => {
+  test("returns null for text part (deltas come via message.part.delta)", () => {
     const backend = getBackend();
     const ctx = createContext();
 
@@ -201,6 +183,8 @@ describe("translateEvent: message.part.updated (text)", () => {
     );
 
     expect(result).toBeNull();
+    // Part type should be tracked for message.part.delta routing
+    expect(ctx.partTypes.get("part-1")).toBe("text");
   });
 
   test("returns null for different session ID", () => {
@@ -216,7 +200,6 @@ describe("translateEvent: message.part.updated (text)", () => {
             type: "text",
             id: "part-1",
           },
-          delta: "some text",
         },
       },
       ctx
@@ -387,10 +370,13 @@ describe("translateEvent: message.part.updated (tool)", () => {
 
 // ==========================================================================
 // translateEvent — message.part.updated (reasoning)
+// In SDK 1.2.x, reasoning deltas primarily arrive via message.part.delta.
+// message.part.updated has a fallback: if the full text is longer than tracked,
+// it emits the new content as a reasoning.delta.
 // ==========================================================================
 
 describe("translateEvent: message.part.updated (reasoning)", () => {
-  test("emits reasoning.delta with delta content", () => {
+  test("emits reasoning.delta from full text when text has new content", () => {
     const backend = getBackend();
     const ctx = createContext();
 
@@ -402,17 +388,18 @@ describe("translateEvent: message.part.updated (reasoning)", () => {
             sessionID: "test-session",
             type: "reasoning",
             id: "reason-1",
+            text: "Let me think...",
           },
-          delta: "Let me think...",
         },
       },
       ctx
     );
 
     expect(result).toEqual({ type: "reasoning.delta", content: "Let me think..." });
+    expect(ctx.reasoningTextLength.get("reason-1")).toBe(15);
   });
 
-  test("emits reasoning.delta computed from full text when no delta", () => {
+  test("emits reasoning.delta computed from full text minus tracked length", () => {
     const backend = getBackend();
     const ctx = createContext();
     // Simulate we already saw 5 chars
@@ -459,25 +446,50 @@ describe("translateEvent: message.part.updated (reasoning)", () => {
 
     expect(result).toBeNull();
   });
+
+  test("returns null for reasoning part without text", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+
+    const result = backend.translateEvent(
+      {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            sessionID: "test-session",
+            type: "reasoning",
+            id: "reason-1",
+          },
+        },
+      },
+      ctx
+    );
+
+    expect(result).toBeNull();
+    // Part type should still be tracked
+    expect(ctx.partTypes.get("reason-1")).toBe("reasoning");
+  });
 });
 
 // ==========================================================================
-// translateEvent — reasoning: mixed delta/text duplication bug
+// translateEvent — reasoning: incremental text tracking
+// In SDK 1.2.x, reasoning deltas come via message.part.delta.
+// message.part.updated only has the full accumulated text.
+// These tests verify the fallback deduplication logic.
 // ==========================================================================
 
-describe("translateEvent: reasoning delta/text-only mixed events (duplication bug)", () => {
-  test("does not duplicate content when SDK switches from delta to text-only events", () => {
+describe("translateEvent: reasoning incremental text tracking", () => {
+  test("does not duplicate content when receiving incremental text updates", () => {
     const backend = getBackend();
     const ctx = createContext();
     const emitted: string[] = [];
 
-    // Step 1: Send reasoning events WITH delta (Branch A)
+    // Step 1: First text update
     const r1 = backend.translateEvent(
       {
         type: "message.part.updated",
         properties: {
           part: { sessionID: "test-session", type: "reasoning", id: "reason-1", text: "Hello" },
-          delta: "Hello",
         },
       },
       ctx
@@ -485,12 +497,12 @@ describe("translateEvent: reasoning delta/text-only mixed events (duplication bu
     expect(r1).toEqual({ type: "reasoning.delta", content: "Hello" });
     emitted.push((r1 as { content: string }).content);
 
+    // Step 2: More text accumulated
     const r2 = backend.translateEvent(
       {
         type: "message.part.updated",
         properties: {
           part: { sessionID: "test-session", type: "reasoning", id: "reason-1", text: "Hello, world" },
-          delta: ", world",
         },
       },
       ctx
@@ -498,14 +510,12 @@ describe("translateEvent: reasoning delta/text-only mixed events (duplication bu
     expect(r2).toEqual({ type: "reasoning.delta", content: ", world" });
     emitted.push((r2 as { content: string }).content);
 
-    // Step 2: SDK switches to text-only (no delta) — Branch B
-    // The full text is "Hello, world!" — the new content is just "!"
+    // Step 3: Final text update
     const r3 = backend.translateEvent(
       {
         type: "message.part.updated",
         properties: {
           part: { sessionID: "test-session", type: "reasoning", id: "reason-1", text: "Hello, world!" },
-          // No delta property — forces Branch B
         },
       },
       ctx
@@ -513,30 +523,29 @@ describe("translateEvent: reasoning delta/text-only mixed events (duplication bu
     expect(r3).toEqual({ type: "reasoning.delta", content: "!" });
     emitted.push((r3 as { content: string }).content);
 
-    // Step 3: Verify concatenated content has NO duplication
+    // Verify concatenated content has NO duplication
     const fullContent = emitted.join("");
     expect(fullContent).toBe("Hello, world!");
   });
 
-  test("tracks length correctly across multiple delta-then-text switches", () => {
+  test("tracks length correctly across multiple incremental updates", () => {
     const backend = getBackend();
     const ctx = createContext();
     const emitted: string[] = [];
 
-    // Delta event
+    // First update
     const r1 = backend.translateEvent(
       {
         type: "message.part.updated",
         properties: {
           part: { sessionID: "test-session", type: "reasoning", id: "r-2", text: "A" },
-          delta: "A",
         },
       },
       ctx
     );
     emitted.push((r1 as { content: string }).content);
 
-    // Text-only event (should only emit "B")
+    // Second update
     const r2 = backend.translateEvent(
       {
         type: "message.part.updated",
@@ -548,20 +557,19 @@ describe("translateEvent: reasoning delta/text-only mixed events (duplication bu
     );
     emitted.push((r2 as { content: string }).content);
 
-    // Back to delta
+    // Third update
     const r3 = backend.translateEvent(
       {
         type: "message.part.updated",
         properties: {
           part: { sessionID: "test-session", type: "reasoning", id: "r-2", text: "ABC" },
-          delta: "C",
         },
       },
       ctx
     );
     emitted.push((r3 as { content: string }).content);
 
-    // Text-only again (should only emit "D")
+    // Fourth update
     const r4 = backend.translateEvent(
       {
         type: "message.part.updated",
@@ -577,17 +585,16 @@ describe("translateEvent: reasoning delta/text-only mixed events (duplication bu
     expect(fullContent).toBe("ABCD");
   });
 
-  test("reasoningTextLength is updated even when delta property is present", () => {
+  test("reasoningTextLength is updated on text updates", () => {
     const backend = getBackend();
     const ctx = createContext();
 
-    // Send delta event
+    // Send text update
     backend.translateEvent(
       {
         type: "message.part.updated",
         properties: {
           part: { sessionID: "test-session", type: "reasoning", id: "r-3", text: "Hello" },
-          delta: "Hello",
         },
       },
       ctx
@@ -643,6 +650,179 @@ describe("translateEvent: message.part.updated (step events)", () => {
     );
 
     expect(result).toBeNull();
+  });
+});
+
+// ==========================================================================
+// translateEvent — message.part.delta (SDK 1.2.x)
+// ==========================================================================
+
+describe("translateEvent: message.part.delta", () => {
+  test("emits message.delta for text field", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+    // Register a text part first
+    ctx.partTypes.set("part-1", "text");
+
+    const result = backend.translateEvent(
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "test-session",
+          partID: "part-1",
+          field: "text",
+          delta: "Hello, world!",
+        },
+      },
+      ctx
+    );
+
+    expect(result).toEqual({ type: "message.delta", content: "Hello, world!" });
+  });
+
+  test("emits reasoning.delta for reasoning field", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+    ctx.partTypes.set("part-2", "reasoning");
+
+    const result = backend.translateEvent(
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "test-session",
+          partID: "part-2",
+          field: "reasoning",
+          delta: "Let me think...",
+        },
+      },
+      ctx
+    );
+
+    expect(result).toEqual({ type: "reasoning.delta", content: "Let me think..." });
+  });
+
+  test("routes by field name when part type is unknown", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+    // No partTypes entry for this part
+
+    const result = backend.translateEvent(
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "test-session",
+          partID: "unknown-part",
+          field: "text",
+          delta: "Some text",
+        },
+      },
+      ctx
+    );
+
+    expect(result).toEqual({ type: "message.delta", content: "Some text" });
+  });
+
+  test("returns null for different session ID", () => {
+    const backend = getBackend();
+    const ctx = createContext("my-session");
+
+    const result = backend.translateEvent(
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "other-session",
+          partID: "part-1",
+          field: "text",
+          delta: "ignored",
+        },
+      },
+      ctx
+    );
+
+    expect(result).toBeNull();
+  });
+
+  test("updates reasoning text length tracking", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+    ctx.partTypes.set("r-1", "reasoning");
+
+    // First delta
+    backend.translateEvent(
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "test-session",
+          partID: "r-1",
+          field: "reasoning",
+          delta: "Hello",
+        },
+      },
+      ctx
+    );
+    expect(ctx.reasoningTextLength.get("r-1")).toBe(5);
+
+    // Second delta
+    backend.translateEvent(
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "test-session",
+          partID: "r-1",
+          field: "reasoning",
+          delta: ", world!",
+        },
+      },
+      ctx
+    );
+    expect(ctx.reasoningTextLength.get("r-1")).toBe(13);
+  });
+
+  test("partType takes precedence over conflicting field (reasoning part with text field)", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+    // Part is tracked as reasoning
+    ctx.partTypes.set("part-conflict", "reasoning");
+
+    const result = backend.translateEvent(
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "test-session",
+          partID: "part-conflict",
+          field: "text", // field says text, but partType says reasoning
+          delta: "Reasoning content",
+        },
+      },
+      ctx
+    );
+
+    // Should route as reasoning.delta because partType takes precedence
+    expect(result).toEqual({ type: "reasoning.delta", content: "Reasoning content" });
+    expect(ctx.reasoningTextLength.get("part-conflict")).toBe(17);
+  });
+
+  test("partType takes precedence over conflicting field (text part with reasoning field)", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+    // Part is tracked as text
+    ctx.partTypes.set("part-conflict-2", "text");
+
+    const result = backend.translateEvent(
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "test-session",
+          partID: "part-conflict-2",
+          field: "reasoning", // field says reasoning, but partType says text
+          delta: "Text content",
+        },
+      },
+      ctx
+    );
+
+    // Should route as message.delta because partType takes precedence
+    expect(result).toEqual({ type: "message.delta", content: "Text content" });
   });
 });
 
@@ -1038,8 +1218,8 @@ describe("translateEvent: todo.updated", () => {
         properties: {
           sessionID: "test-session",
           todos: [
-            { content: "Fix bug", status: "in_progress", priority: "high", id: "todo-1" },
-            { content: "Write tests", status: "pending", priority: "medium", id: "todo-2" },
+            { content: "Fix bug", status: "in_progress", priority: "high" },
+            { content: "Write tests", status: "pending", priority: "medium" },
           ],
         },
       },
@@ -1050,8 +1230,8 @@ describe("translateEvent: todo.updated", () => {
       type: "todo.updated",
       sessionId: "test-session",
       todos: [
-        { content: "Fix bug", status: "in_progress", priority: "high", id: "todo-1" },
-        { content: "Write tests", status: "pending", priority: "medium", id: "todo-2" },
+        { content: "Fix bug", status: "in_progress", priority: "high", id: "todo-0" },
+        { content: "Write tests", status: "pending", priority: "medium", id: "todo-1" },
       ],
     });
   });
@@ -1284,12 +1464,27 @@ describe("translateEvent: full message flow", () => {
     );
     expect(start).toEqual({ type: "message.start", messageId: "msg-1" });
 
-    // 2. Text deltas
-    const delta1 = backend.translateEvent(
+    // 2. Text part registered via message.part.updated (no delta emitted in 1.2.x)
+    const partUpdated = backend.translateEvent(
       {
         type: "message.part.updated",
         properties: {
           part: { sessionID: "test-session", type: "text", id: "p-1" },
+        },
+      },
+      ctx
+    );
+    expect(partUpdated).toBeNull();
+    expect(ctx.partTypes.get("p-1")).toBe("text");
+
+    // 2b. Text deltas arrive via message.part.delta (SDK 1.2.x)
+    const delta1 = backend.translateEvent(
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "test-session",
+          partID: "p-1",
+          field: "text",
           delta: "Let me ",
         },
       },
@@ -1299,9 +1494,11 @@ describe("translateEvent: full message flow", () => {
 
     const delta2 = backend.translateEvent(
       {
-        type: "message.part.updated",
+        type: "message.part.delta",
         properties: {
-          part: { sessionID: "test-session", type: "text", id: "p-1" },
+          sessionID: "test-session",
+          partID: "p-1",
+          field: "text",
           delta: "run a command.",
         },
       },

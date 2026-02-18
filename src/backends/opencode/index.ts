@@ -49,6 +49,8 @@ interface TranslateEventContext {
   toolPartStatus: Map<string, string>;
   /** Map of reasoning part IDs to their last known text length */
   reasoningTextLength: Map<string, number>;
+  /** Map of part IDs to their type (text, reasoning, tool, etc.) for delta routing */
+  partTypes: Map<string, string>;
   /** OpenCode client for API calls */
   client: OpencodeClient;
   /** Directory for session queries */
@@ -519,6 +521,7 @@ export class OpenCodeBackend implements Backend {
     const emittedMessageStarts = new Set<string>();
     const toolPartStatus = new Map<string, string>();
     const reasoningTextLength = new Map<string, number>();
+    const partTypes = new Map<string, string>();
     // Track whether we've seen a message.start in this subscription.
     // This guard prevents stale `session.idle` events from causing phantom iterations.
     let hasMessageStart = false;
@@ -552,6 +555,7 @@ export class OpenCodeBackend implements Backend {
               emittedMessageStarts,
               toolPartStatus,
               reasoningTextLength,
+              partTypes,
               client,
               directory: self.directory,
             }
@@ -681,7 +685,7 @@ export class OpenCodeBackend implements Backend {
     event: OpenCodeEvent,
     ctx: TranslateEventContext
   ): AgentEvent | null {
-    const { sessionId, subId, emittedMessageStarts, toolPartStatus, reasoningTextLength, client, directory } = ctx;
+    const { sessionId, subId, emittedMessageStarts, toolPartStatus, reasoningTextLength, partTypes, client, directory } = ctx;
     switch (event.type) {
       case "message.updated": {
         const msg = event.properties.info;
@@ -720,42 +724,25 @@ export class OpenCodeBackend implements Backend {
           partSessionId: part.sessionID,
           targetSessionId: sessionId,
           partType: part.type,
-          hasDelta: !!event.properties.delta,
-          deltaLength: event.properties.delta?.length ?? 0,
         });
         if (part.sessionID !== sessionId) {
           log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - session ID mismatch`);
           return null;
         }
 
+        // Track the part type so message.part.delta can route correctly
+        partTypes.set(part.id, part.type);
+
         if (part.type === "text") {
-          // Text deltas are always unique (each delta is new content)
-          if (event.properties.delta) {
-            log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - emitting message.delta`, {
-              deltaLength: event.properties.delta.length,
-            });
-            return {
-              type: "message.delta",
-              content: event.properties.delta,
-            };
-          } else {
-            log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - text part has no delta, returning null`);
-          }
+          // In SDK 1.2.x, text deltas arrive via message.part.delta events.
+          // message.part.updated only carries the full accumulated text.
+          // We use message.part.delta for streaming, so nothing to emit here.
+          log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - text part (deltas via message.part.delta)`);
         } else if (part.type === "reasoning") {
-          // Reasoning content (AI thinking/chain of thought)
-          // The SDK may send delta or full text updates
-          if (event.properties.delta) {
-            // Track length so the text-only fallback below computes
-            // the correct slice if the SDK switches mid-stream.
-            const partId = part.id;
-            const currentLength = reasoningTextLength.get(partId) ?? 0;
-            reasoningTextLength.set(partId, currentLength + event.properties.delta.length);
-            return {
-              type: "reasoning.delta",
-              content: event.properties.delta,
-            };
-          } else if (part.text) {
-            // No delta, but we have full text - compute the new content
+          // In SDK 1.2.x, reasoning deltas arrive via message.part.delta events.
+          // Fallback: if we have full text and our tracked length is behind,
+          // emit the new content (handles cases where delta events are missed).
+          if (part.text) {
             const partId = part.id;
             const prevLength = reasoningTextLength.get(partId) ?? 0;
             const newContent = part.text.slice(prevLength);
@@ -818,6 +805,56 @@ export class OpenCodeBackend implements Backend {
           // The step-finish contains token usage but no content
           return null;
         }
+        return null;
+      }
+
+      case "message.part.delta": {
+        // SDK 1.2.x sends text/reasoning deltas as separate message.part.delta events
+        const { sessionID, partID, field, delta } = event.properties;
+        log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.delta`, {
+          partSessionId: sessionID,
+          targetSessionId: sessionId,
+          partID,
+          field,
+          deltaLength: delta.length,
+        });
+        if (sessionID !== sessionId) {
+          log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.delta - session ID mismatch`);
+          return null;
+        }
+
+        // Determine the part type from our tracking map.
+        // Prefer the tracked partType (set when message.part.updated registered the part)
+        // over the delta's field property, to avoid misrouting when they disagree.
+        const partType = partTypes.get(partID);
+        const resolvedType = partType ?? field;
+
+        if (resolvedType === "text") {
+          // Text content delta
+          log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.delta - emitting message.delta`, {
+            deltaLength: delta.length,
+          });
+          return {
+            type: "message.delta",
+            content: delta,
+          };
+        } else if (resolvedType === "reasoning") {
+          // Reasoning content delta
+          const currentLength = reasoningTextLength.get(partID) ?? 0;
+          reasoningTextLength.set(partID, currentLength + delta.length);
+          return {
+            type: "reasoning.delta",
+            content: delta,
+          };
+        }
+
+        // Unknown part type for delta - log and skip
+        log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.part.delta - unknown part type`, {
+          partID,
+          field,
+          partType,
+          resolvedType,
+        });
         return null;
       }
 
@@ -930,11 +967,11 @@ export class OpenCodeBackend implements Backend {
         return {
           type: "todo.updated",
           sessionId: props.sessionID,
-          todos: (props.todos ?? []).map((todo) => ({
+          todos: (props.todos ?? []).map((todo, index) => ({
             content: todo.content,
             status: todo.status as "pending" | "in_progress" | "completed" | "cancelled",
             priority: todo.priority as "high" | "medium" | "low",
-            id: todo.id,
+            id: `todo-${index}`,
           })),
         };
       }
