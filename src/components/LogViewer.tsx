@@ -28,7 +28,7 @@ export interface LogEntry {
 }
 
 export interface LogViewerProps {
-  /** Messages to display */
+  /** Messages to display (only user messages are rendered; assistant messages are filtered out) */
   messages: MessageData[];
   /** Tool calls to display */
   toolCalls: ToolCallData[];
@@ -44,7 +44,7 @@ export interface LogViewerProps {
   showReasoning?: boolean;
   /** Whether to show tool-related entries (tool calls and "AI calling tool" logs). Default: false */
   showTools?: boolean;
-  /** Whether to render assistant messages as markdown (default: false) */
+  /** Whether to render response log content as markdown (default: false) */
   markdownEnabled?: boolean;
   /** Whether the loop is actively working (shows a spinner at the bottom). Default: false */
   isActive?: boolean;
@@ -122,7 +122,7 @@ export type DisplayEntry = EntryBase & { showHeader: boolean };
  * the same visual group (and thus collapse their headers) when their
  * keys are equal.
  *
- * - Messages group by role: "message|user", "message|assistant"
+ * - Messages group by role: "message|user" (assistant messages are filtered out before grouping)
  * - Tool calls group by tool name: "tool|Write", "tool|Read"
  * - Log entries group by level + message: "log|agent|AI generating response..."
  */
@@ -209,9 +209,12 @@ export const LogViewer = memo(function LogViewer({
   const entries = useMemo(() => {
     const result: EntryBase[] = [];
 
-    // Messages (user/assistant) are always shown
+    // User messages are always shown; assistant messages are filtered out because
+    // their content is already displayed via AGENT response log entries (logKind: "response")
     messages.forEach((msg) => {
-      result.push({ type: "message", data: msg, timestamp: msg.timestamp });
+      if (msg.role === "user") {
+        result.push({ type: "message", data: msg, timestamp: msg.timestamp });
+      }
     });
 
     // Tool call entries: only shown if showTools is enabled
@@ -317,7 +320,7 @@ export const LogViewer = memo(function LogViewer({
                     </span>
                     {entry.showHeader ? (
                       <Badge
-                        variant={msg.role === "user" ? "info" : "success"}
+                        variant="info"
                         size="sm"
                       >
                         {msg.role}
@@ -325,19 +328,15 @@ export const LogViewer = memo(function LogViewer({
                     ) : (
                       <span className="invisible">
                         <Badge
-                          variant={msg.role === "user" ? "info" : "success"}
+                          variant="info"
                           size="sm"
                         >
                           {msg.role}
                         </Badge>
                       </span>
                     )}
-                    <div className={`flex-1 min-w-0 ${markdownEnabled && msg.role === "assistant" ? "break-words" : "whitespace-pre-wrap break-words"}`}>
-                      {markdownEnabled && msg.role === "assistant" ? (
-                        <MarkdownRenderer content={msg.content} className="text-sm" />
-                      ) : (
-                        msg.content
-                      )}
+                    <div className="flex-1 min-w-0 whitespace-pre-wrap break-words">
+                      {msg.content}
                     </div>
                   </div>
                 </div>
