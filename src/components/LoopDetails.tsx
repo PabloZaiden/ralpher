@@ -576,53 +576,6 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
         </div>
       </header>
 
-      {/* Compact info bar with Stats and Git - hidden on mobile, shown in Info tab instead */}
-      <div className="hidden sm:block bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 sm:px-6 lg:px-8 py-1.5 flex-shrink-0">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-          {/* Statistics */}
-          <span className="text-gray-500 dark:text-gray-400">
-            Iteration: <span className="font-medium text-gray-900 dark:text-gray-100">{state.currentIteration}{config.maxIterations ? ` / ${config.maxIterations}` : ""}</span>
-          </span>
-          <span className="text-gray-500 dark:text-gray-400">
-            Started: <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.startedAt)}</span>
-          </span>
-          <span className="text-gray-500 dark:text-gray-400">
-            Last: <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.lastActivityAt)}</span>
-          </span>
-          {state.completedAt && (
-            <span className="text-gray-500 dark:text-gray-400">
-              Completed: <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.completedAt)}</span>
-            </span>
-          )}
-          
-          {/* Git info - no pipe separator */}
-          {state.git && (
-            <>
-              <span className="text-gray-500 dark:text-gray-400">
-                Branch: <span className="font-mono font-medium text-gray-900 dark:text-gray-100">{state.git.originalBranch}</span>
-                <span className="text-gray-400 dark:text-gray-500"> → </span>
-                <span className="font-mono font-medium text-gray-900 dark:text-gray-100">{state.git.workingBranch}</span>
-              </span>
-              <span className="text-gray-500 dark:text-gray-400">
-                Commits: <span className="font-medium text-gray-900 dark:text-gray-100">{state.git.commits.length}</span>
-              </span>
-            </>
-          )}
-
-          {/* Model info */}
-          <span className="text-gray-500 dark:text-gray-400">
-            Model: <span className="font-medium text-gray-900 dark:text-gray-100">
-              {formatModelDisplay(config.model)}
-            </span>
-            {state.pendingModel && (
-              <span className="ml-1 text-yellow-600 dark:text-yellow-400">
-                → {formatModelDisplay(state.pendingModel)}
-              </span>
-            )}
-          </span>
-        </div>
-      </div>
-
       <main className="px-4 sm:px-6 lg:px-8 py-3 flex flex-col flex-1 min-h-0 overflow-hidden">
         {/* Error display - from hook */}
         {error && (
