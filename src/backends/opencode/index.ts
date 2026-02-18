@@ -823,10 +823,13 @@ export class OpenCodeBackend implements Backend {
           return null;
         }
 
-        // Determine the part type from our tracking map
+        // Determine the part type from our tracking map.
+        // Prefer the tracked partType (set when message.part.updated registered the part)
+        // over the delta's field property, to avoid misrouting when they disagree.
         const partType = partTypes.get(partID);
+        const resolvedType = partType ?? field;
 
-        if (partType === "text" || field === "text") {
+        if (resolvedType === "text") {
           // Text content delta
           log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.delta - emitting message.delta`, {
             deltaLength: delta.length,
@@ -835,7 +838,7 @@ export class OpenCodeBackend implements Backend {
             type: "message.delta",
             content: delta,
           };
-        } else if (partType === "reasoning" || field === "reasoning") {
+        } else if (resolvedType === "reasoning") {
           // Reasoning content delta
           const currentLength = reasoningTextLength.get(partID) ?? 0;
           reasoningTextLength.set(partID, currentLength + delta.length);
@@ -850,6 +853,7 @@ export class OpenCodeBackend implements Backend {
           partID,
           field,
           partType,
+          resolvedType,
         });
         return null;
       }

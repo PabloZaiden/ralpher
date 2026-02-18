@@ -777,6 +777,53 @@ describe("translateEvent: message.part.delta", () => {
     );
     expect(ctx.reasoningTextLength.get("r-1")).toBe(13);
   });
+
+  test("partType takes precedence over conflicting field (reasoning part with text field)", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+    // Part is tracked as reasoning
+    ctx.partTypes.set("part-conflict", "reasoning");
+
+    const result = backend.translateEvent(
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "test-session",
+          partID: "part-conflict",
+          field: "text", // field says text, but partType says reasoning
+          delta: "Reasoning content",
+        },
+      },
+      ctx
+    );
+
+    // Should route as reasoning.delta because partType takes precedence
+    expect(result).toEqual({ type: "reasoning.delta", content: "Reasoning content" });
+    expect(ctx.reasoningTextLength.get("part-conflict")).toBe(17);
+  });
+
+  test("partType takes precedence over conflicting field (text part with reasoning field)", () => {
+    const backend = getBackend();
+    const ctx = createContext();
+    // Part is tracked as text
+    ctx.partTypes.set("part-conflict-2", "text");
+
+    const result = backend.translateEvent(
+      {
+        type: "message.part.delta",
+        properties: {
+          sessionID: "test-session",
+          partID: "part-conflict-2",
+          field: "reasoning", // field says reasoning, but partType says text
+          delta: "Text content",
+        },
+      },
+      ctx
+    );
+
+    // Should route as message.delta because partType takes precedence
+    expect(result).toEqual({ type: "message.delta", content: "Text content" });
+  });
 });
 
 // ==========================================================================
