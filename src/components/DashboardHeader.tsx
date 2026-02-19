@@ -2,8 +2,10 @@
  * Dashboard header component with title, settings, and action buttons.
  */
 
+import { useMemo } from "react";
 import type { DashboardViewMode } from "../types/preferences";
-import { Button, GridIcon, ListIcon } from "./common";
+import { ActionMenu, Button, GridIcon, ListIcon } from "./common";
+import type { ActionMenuItem } from "./common";
 
 export interface DashboardHeaderProps {
   version: string | null;
@@ -24,39 +26,51 @@ export function DashboardHeader({
   onOpenCreateLoop,
   onOpenCreateChat,
 }: DashboardHeaderProps) {
+  // Memoize action menu items to avoid re-creating on every render
+  const actionMenuItems: ActionMenuItem[] = useMemo(
+    () => [
+      { label: "New Workspace", onClick: onOpenCreateWorkspace },
+      { label: "New Chat", onClick: onOpenCreateChat },
+      { label: "New Loop", onClick: onOpenCreateLoop },
+    ],
+    [onOpenCreateWorkspace, onOpenCreateChat, onOpenCreateLoop],
+  );
+
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 safe-area-top">
       <div className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-4">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
-                Ralpher
-              </h1>
-              {version && (
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  v{version}
-                </p>
-              )}
-            </div>
+        <div className="flex items-center justify-between gap-2 sm:gap-3">
+          {/* Left: Title + version */}
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">
+              Ralpher
+            </h1>
+            {version && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                v{version}
+              </p>
+            )}
+          </div>
+
+          {/* Right: All controls */}
+          <div className="flex items-center gap-2 flex-shrink-0">
             {/* App Settings Button */}
             <button
               type="button"
               onClick={onOpenServerSettings}
-              className="flex items-center gap-2 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              className="flex items-center justify-center gap-2 min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 sm:px-3 sm:py-1.5 text-xs sm:text-sm rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
               title="App Settings"
             >
               <span className="text-gray-500 dark:text-gray-400 font-medium hidden sm:inline">Settings</span>
               <GearIcon />
             </button>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+
             {/* View mode toggle */}
-            <div className="flex items-center rounded-md sm:border sm:border-gray-200 sm:dark:border-gray-700 overflow-hidden">
+            <div className="flex items-center rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
               <button
                 type="button"
                 onClick={viewMode === "rows" ? undefined : onToggleViewMode}
-                className={`p-1.5 sm:p-2 transition-colors ${
+                className={`min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 sm:p-2 transition-colors ${
                   viewMode === "rows"
                     ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
                     : "bg-white text-gray-500 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
@@ -69,7 +83,7 @@ export function DashboardHeader({
               <button
                 type="button"
                 onClick={viewMode === "cards" ? undefined : onToggleViewMode}
-                className={`p-1.5 sm:p-2 transition-colors ${
+                className={`min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 sm:p-2 transition-colors ${
                   viewMode === "cards"
                     ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
                     : "bg-white text-gray-500 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
@@ -80,8 +94,14 @@ export function DashboardHeader({
                 <GridIcon size="h-4 w-4" />
               </button>
             </div>
-            {/* Button group: always side-by-side */}
-            <div className="flex gap-2">
+
+            {/* Mobile: "+" action menu (visible below sm breakpoint) */}
+            <div className="sm:hidden">
+              <ActionMenu items={actionMenuItems} ariaLabel="Create new item" />
+            </div>
+
+            {/* Desktop: full action buttons (visible at sm+ breakpoint) */}
+            <div className="hidden sm:flex gap-2">
               <Button
                 variant="secondary"
                 onClick={onOpenCreateWorkspace}
