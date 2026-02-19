@@ -53,37 +53,40 @@ describe("LogViewer", () => {
       expect(getByText("Hello world")).toBeInTheDocument();
     });
 
-    test("renders an assistant message with success badge", () => {
+    test("filters out assistant messages from display", () => {
       const msg = createMessageData({ role: "assistant", content: "I can help with that" });
-      const { getByText } = renderWithUser(
+      const { queryByText } = renderWithUser(
         <LogViewer messages={[msg]} toolCalls={[]} />
       );
-      expect(getByText("assistant")).toBeInTheDocument();
-      expect(getByText("I can help with that")).toBeInTheDocument();
+      // Assistant messages are filtered out (their content is shown via AGENT response logs)
+      expect(queryByText("assistant")).not.toBeInTheDocument();
+      expect(queryByText("I can help with that")).not.toBeInTheDocument();
     });
 
-    test("renders multiple messages", () => {
+    test("renders only user messages, filters out assistant messages", () => {
       const msgs: MessageData[] = [
         createMessageData({ role: "user", content: "First message" }),
         createMessageData({ role: "assistant", content: "Second message" }),
       ];
-      const { getByText } = renderWithUser(
+      const { getByText, queryByText } = renderWithUser(
         <LogViewer messages={msgs} toolCalls={[]} />
       );
       expect(getByText("First message")).toBeInTheDocument();
-      expect(getByText("Second message")).toBeInTheDocument();
+      // Assistant message is filtered out
+      expect(queryByText("Second message")).not.toBeInTheDocument();
     });
 
-    test("messages are always shown regardless of filter settings", () => {
+    test("user messages are always shown regardless of filter settings", () => {
       const msgs: MessageData[] = [
         createMessageData({ role: "user", content: "User msg" }),
         createMessageData({ role: "assistant", content: "Assistant msg" }),
       ];
-      const { getByText } = renderWithUser(
+      const { getByText, queryByText } = renderWithUser(
         <LogViewer messages={msgs} toolCalls={[]} showSystemInfo={false} showReasoning={false} showTools={false} />
       );
       expect(getByText("User msg")).toBeInTheDocument();
-      expect(getByText("Assistant msg")).toBeInTheDocument();
+      // Assistant messages are always filtered out
+      expect(queryByText("Assistant msg")).not.toBeInTheDocument();
     });
   });
 
@@ -565,6 +568,7 @@ describe("LogViewer", () => {
   describe("chronological sorting", () => {
     test("sorts entries by timestamp across all types", () => {
       const msg = createMessageData({
+        role: "user",
         content: "Second entry",
         timestamp: "2026-01-01T00:00:02.000Z",
       });
@@ -652,34 +656,23 @@ describe("LogViewer", () => {
   });
 
   describe("markdown rendering", () => {
-    test("renders assistant message as plain text when markdownEnabled is not set", () => {
+    test("assistant messages are filtered out even when markdownEnabled is not set", () => {
       const msg = createMessageData({ role: "assistant", content: "**bold text**" });
       const { container } = renderWithUser(
         <LogViewer messages={[msg]} toolCalls={[]} />
       );
-      // Should render raw markdown text, not HTML bold
-      expect(container.textContent).toContain("**bold text**");
-      expect(container.querySelector("strong")).toBeNull();
+      // Assistant messages are filtered out entirely
+      expect(container.textContent).not.toContain("**bold text**");
     });
 
-    test("renders assistant message as plain text when markdownEnabled is false", () => {
-      const msg = createMessageData({ role: "assistant", content: "**bold text**" });
-      const { container } = renderWithUser(
-        <LogViewer messages={[msg]} toolCalls={[]} markdownEnabled={false} />
-      );
-      expect(container.textContent).toContain("**bold text**");
-      expect(container.querySelector("strong")).toBeNull();
-    });
-
-    test("renders assistant message as markdown when markdownEnabled is true", () => {
+    test("assistant messages are filtered out even when markdownEnabled is true", () => {
       const msg = createMessageData({ role: "assistant", content: "**bold text**" });
       const { container } = renderWithUser(
         <LogViewer messages={[msg]} toolCalls={[]} markdownEnabled={true} />
       );
-      // Should render as formatted HTML with <strong>
-      const strong = container.querySelector("strong");
-      expect(strong).not.toBeNull();
-      expect(strong?.textContent).toBe("bold text");
+      // Assistant messages are filtered out entirely
+      expect(container.querySelector("strong")).toBeNull();
+      expect(container.textContent).not.toContain("bold text");
     });
 
     test("renders user message as plain text even when markdownEnabled is true", () => {
@@ -717,13 +710,13 @@ describe("LogViewer", () => {
       expect(container.querySelector("strong")).toBeNull();
     });
 
-    test("renders markdown code blocks in assistant messages", () => {
-      const msg = createMessageData({
-        role: "assistant",
-        content: "Here is code:\n\n```js\nconsole.log('hello');\n```",
+    test("renders markdown code blocks in responseContent logs", () => {
+      const log = createLogEntry({
+        level: "agent",
+        details: { logKind: "response", responseContent: "Here is code:\n\n```js\nconsole.log('hello');\n```" },
       });
       const { container } = renderWithUser(
-        <LogViewer messages={[msg]} toolCalls={[]} markdownEnabled={true} />
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} markdownEnabled={true} />
       );
       // Should render a <pre> element for the code block
       const pre = container.querySelector("pre");
@@ -731,13 +724,13 @@ describe("LogViewer", () => {
       expect(pre?.textContent).toContain("console.log('hello');");
     });
 
-    test("renders markdown lists in assistant messages", () => {
-      const msg = createMessageData({
-        role: "assistant",
-        content: "Steps:\n\n- First item\n- Second item\n- Third item",
+    test("renders markdown lists in responseContent logs", () => {
+      const log = createLogEntry({
+        level: "agent",
+        details: { logKind: "response", responseContent: "Steps:\n\n- First item\n- Second item\n- Third item" },
       });
       const { container } = renderWithUser(
-        <LogViewer messages={[msg]} toolCalls={[]} markdownEnabled={true} />
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} markdownEnabled={true} />
       );
       // Should render <li> elements
       const listItems = container.querySelectorAll("li");
