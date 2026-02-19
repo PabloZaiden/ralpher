@@ -9,3 +9,4 @@ export { Modal, ConfirmModal, type ModalProps, type ConfirmModalProps } from "./
 export { EditIcon, GearIcon, GridIcon, ListIcon, type IconProps } from "./Icons";
 export { CollapsibleSection, type CollapsibleSectionProps } from "./CollapsibleSection";
 export { ToastProvider } from "./Toast";
+export { ActionMenu, type ActionMenuProps, type ActionMenuItem } from "./ActionMenu";
