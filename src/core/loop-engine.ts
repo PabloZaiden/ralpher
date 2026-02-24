@@ -969,16 +969,21 @@ export class LoopEngine {
     
     // Get workspace-specific server settings (uses test settings in test mode)
     const settings = await backendManager.getWorkspaceSettings(this.config.workspaceId);
-    log.trace("[LoopEngine] setupSession: Got settings", { mode: settings.mode, workspaceId: this.config.workspaceId });
+    log.trace("[LoopEngine] setupSession: Got settings", {
+      provider: settings.agent.provider,
+      transport: settings.agent.transport,
+      workspaceId: this.config.workspaceId,
+    });
     
     // Connect to backend if not already connected
     const isConnected = this.backend.isConnected();
     log.trace("[LoopEngine] setupSession: Backend connected?", { isConnected });
     if (!isConnected) {
       this.emitLog("info", "Backend not connected, establishing connection...", {
-        mode: settings.mode,
-        hostname: settings.hostname,
-        port: settings.port,
+        provider: settings.agent.provider,
+        transport: settings.agent.transport,
+        hostname: settings.agent.hostname,
+        port: settings.agent.port,
       });
       log.trace("[LoopEngine] setupSession: About to call backend.connect");
       await this.backend.connect(buildConnectionConfig(settings, this.workingDirectory));
@@ -1000,10 +1005,11 @@ export class LoopEngine {
     this.sessionId = session.id;
     this.emitLog("info", `AI session created`, { sessionId: session.id });
 
-    // Store session info - use hostname for connect mode, undefined for spawn mode
-    const protocol = settings.useHttps ? "https" : "http";
-    const serverUrl = settings.mode === "connect" && settings.hostname
-      ? `${protocol}://${settings.hostname}:${settings.port ?? 4096}`
+    // Store session info for remote transports.
+    const connectionConfig = buildConnectionConfig(settings, this.workingDirectory);
+    const protocol = connectionConfig.useHttps ? "https" : "http";
+    const serverUrl = connectionConfig.mode === "connect" && connectionConfig.hostname
+      ? `${protocol}://${connectionConfig.hostname}:${connectionConfig.port ?? 4096}`
       : undefined;
 
     log.trace("[LoopEngine] setupSession: About to update state");
@@ -1044,9 +1050,10 @@ export class LoopEngine {
       
       if (!isConnected) {
         this.emitLog("info", "Reconnecting to backend...", {
-          mode: settings.mode,
-          hostname: settings.hostname,
-          port: settings.port,
+          provider: settings.agent.provider,
+          transport: settings.agent.transport,
+          hostname: settings.agent.hostname,
+          port: settings.agent.port,
         });
         await this.backend.connect(buildConnectionConfig(settings, this.workingDirectory));
         this.emitLog("info", "Backend connection re-established");

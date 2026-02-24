@@ -109,11 +109,17 @@ describe("validateRemoteDirectory timeout", () => {
     // Without the timeout fix, this would hang indefinitely.
     const result = await backendManager.validateRemoteDirectory(
       {
-        mode: "connect",
-        hostname: "127.0.0.1",
-        port,
-        useHttps: false,
-        allowInsecure: false,
+        agent: {
+          provider: "opencode",
+          transport: "tcp",
+          hostname: "127.0.0.1",
+          port,
+          useHttps: false,
+          allowInsecure: false,
+        },
+        execution: {
+          provider: "local",
+        },
       },
       "/some/directory",
     );
@@ -129,11 +135,17 @@ describe("validateRemoteDirectory timeout", () => {
 
     const result = await backendManager.validateRemoteDirectory(
       {
-        mode: "connect",
-        hostname: "127.0.0.1",
-        port: closedPort,
-        useHttps: false,
-        allowInsecure: false,
+        agent: {
+          provider: "opencode",
+          transport: "tcp",
+          hostname: "127.0.0.1",
+          port: closedPort,
+          useHttps: false,
+          allowInsecure: false,
+        },
+        execution: {
+          provider: "local",
+        },
       },
       "/some/directory",
     );

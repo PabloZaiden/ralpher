@@ -88,7 +88,12 @@ export function WorkspaceSettingsModal({
 
   // Handle server settings change
   function handleServerSettingsChange(settings: ServerSettings, isValid: boolean) {
-    log.trace("Server settings changed", { mode: settings.mode, isValid });
+    log.trace("Server settings changed", {
+      provider: settings.agent.provider,
+      transport: settings.agent.transport,
+      executionProvider: settings.execution.provider,
+      isValid,
+    });
     setServerSettings(settings);
     setIsServerSettingsValid(isValid);
   }
@@ -199,24 +204,35 @@ export function WorkspaceSettingsModal({
         {/* Connection Status */}
         <div className="flex items-center gap-2 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
           <span className="text-sm text-gray-600 dark:text-gray-400">Connection Status:</span>
-          {status?.connected ? (
+          {status?.agent.connected && status?.execution.connected ? (
             <Badge variant="success">Connected</Badge>
           ) : status?.error ? (
             <Badge variant="error">Error</Badge>
           ) : (
             <Badge variant="warning">Idle</Badge>
           )}
-          {status?.error && (
-            <span className="text-xs text-red-600 dark:text-red-400 truncate flex-1">
-              {status.error}
+          {status?.agent.connected !== undefined && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              agent: {status.agent.connected ? "ok" : "down"}
+            </span>
+          )}
+          {status?.execution.connected !== undefined && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              exec: {status.execution.connected ? "ok" : "down"}
             </span>
           )}
         </div>
 
+        {status?.error && (
+          <div className="text-xs text-red-600 dark:text-red-400 break-words -mt-3">
+            {status.error}
+          </div>
+        )}
+
         {/* Server Settings Form (shared component) */}
-        {serverSettings && (
+        {serverSettings && workspace && (
           <ServerSettingsForm
-            initialSettings={serverSettings}
+            initialSettings={workspace.serverSettings}
             onChange={handleServerSettingsChange}
             onTest={onTest}
             testing={testing}

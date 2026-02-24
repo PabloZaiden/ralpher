@@ -808,56 +808,6 @@ export class OpenCodeBackend implements Backend {
         return null;
       }
 
-      case "message.part.delta": {
-        // SDK 1.2.x sends text/reasoning deltas as separate message.part.delta events
-        const { sessionID, partID, field, delta } = event.properties;
-        log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.delta`, {
-          partSessionId: sessionID,
-          targetSessionId: sessionId,
-          partID,
-          field,
-          deltaLength: delta.length,
-        });
-        if (sessionID !== sessionId) {
-          log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.delta - session ID mismatch`);
-          return null;
-        }
-
-        // Determine the part type from our tracking map.
-        // Prefer the tracked partType (set when message.part.updated registered the part)
-        // over the delta's field property, to avoid misrouting when they disagree.
-        const partType = partTypes.get(partID);
-        const resolvedType = partType ?? field;
-
-        if (resolvedType === "text") {
-          // Text content delta
-          log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.delta - emitting message.delta`, {
-            deltaLength: delta.length,
-          });
-          return {
-            type: "message.delta",
-            content: delta,
-          };
-        } else if (resolvedType === "reasoning") {
-          // Reasoning content delta
-          const currentLength = reasoningTextLength.get(partID) ?? 0;
-          reasoningTextLength.set(partID, currentLength + delta.length);
-          return {
-            type: "reasoning.delta",
-            content: delta,
-          };
-        }
-
-        // Unknown part type for delta - log and skip
-        log.debug(`[OpenCodeBackend:${subId}] translateEvent: message.part.delta - unknown part type`, {
-          partID,
-          field,
-          partType,
-          resolvedType,
-        });
-        return null;
-      }
-
       case "session.idle": {
         if (event.properties.sessionID !== sessionId) {
           log.trace(`[OpenCodeBackend:${subId}] translateEvent: session.idle - session ID mismatch`);
@@ -977,6 +927,42 @@ export class OpenCodeBackend implements Backend {
       }
 
       default:
+        if ((event as { type: string }).type === "message.part.delta") {
+          type MessagePartDeltaEvent = {
+            type: "message.part.delta";
+            properties: {
+              sessionID: string;
+              partID: string;
+              field: string;
+              delta: string;
+            };
+          };
+
+          const deltaEvent = event as unknown as MessagePartDeltaEvent;
+          const { sessionID, partID, field, delta } = deltaEvent.properties;
+          if (sessionID !== sessionId) {
+            return null;
+          }
+
+          const partType = partTypes.get(partID);
+          const resolvedType = partType ?? field;
+          if (resolvedType === "text") {
+            return {
+              type: "message.delta",
+              content: delta,
+            };
+          }
+          if (resolvedType === "reasoning") {
+            const currentLength = reasoningTextLength.get(partID) ?? 0;
+            reasoningTextLength.set(partID, currentLength + delta.length);
+            return {
+              type: "reasoning.delta",
+              content: delta,
+            };
+          }
+          return null;
+        }
+
         // Log unhandled event types for debugging
         log.debug(`[OpenCodeBackend:${subId}] translateEvent: Unhandled event type`, { type: event.type });
         return null;

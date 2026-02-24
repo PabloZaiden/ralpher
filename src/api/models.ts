@@ -11,7 +11,6 @@
  */
 
 import { backendManager, buildConnectionConfig } from "../core/backend-manager";
-import { OpenCodeBackend } from "../backends/opencode";
 import { getWorkspace } from "../persistence/workspaces";
 import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled, getLogLevelPreference, setLogLevelPreference, DEFAULT_LOG_LEVEL, getDashboardViewMode, setDashboardViewMode } from "../persistence/preferences";
 import { getDefaultServerSettings } from "../types/settings";
@@ -94,7 +93,7 @@ export async function isModelEnabled(
           };
         }
         
-        const tempBackend = new OpenCodeBackend();
+        const tempBackend = backendManager.createBackend(workspace.serverSettings);
         try {
           await tempBackend.connect(buildConnectionConfig(workspace.serverSettings, directory));
           models = await tempBackend.getModels(directory);
@@ -189,7 +188,7 @@ export const modelsRoutes = {
 
       // Create a temporary backend to get models (don't reuse the global one)
       // This avoids interfering with any running loops
-      const backend = new OpenCodeBackend();
+      const backend = backendManager.createBackend(workspace.serverSettings);
       
       try {
         // Connect using workspace-specific settings

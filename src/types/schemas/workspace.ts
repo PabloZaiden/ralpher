@@ -10,28 +10,57 @@
 import { z } from "zod";
 
 /**
- * Schema for ServerMode enum.
+ * Agent provider options.
  */
-export const ServerModeSchema = z.enum(["spawn", "connect"]);
+export const AgentProviderSchema = z.enum(["opencode", "copilot"]);
 
 /**
- * Schema for ServerSettings - server connection configuration.
- *
- * This schema is the single source of truth. The ServerSettings type is inferred from it.
- * - mode: Connection mode ("spawn" for local, "connect" for remote)
- * - hostname: Hostname for connect mode (optional)
- * - port: Port for connect mode (optional)
- * - password: Password for connect mode (optional)
- * - useHttps: Whether to use HTTPS for connect mode
- * - allowInsecure: Whether to allow insecure connections (self-signed certs)
+ * Agent transport options.
  */
-export const ServerSettingsSchema = z.object({
-  mode: ServerModeSchema,
+export const AgentTransportSchema = z.enum(["stdio", "tcp", "ssh-stdio"]);
+
+/**
+ * Execution provider options.
+ */
+export const ExecutionProviderSchema = z.enum(["local", "ssh"]);
+
+/**
+ * Schema for the agent channel settings.
+ */
+export const AgentSettingsSchema = z.object({
+  provider: AgentProviderSchema,
+  transport: AgentTransportSchema,
   hostname: z.string().optional(),
   port: z.number().optional(),
   password: z.string().optional(),
   useHttps: z.boolean(),
   allowInsecure: z.boolean(),
+  command: z.string().optional(),
+  args: z.array(z.string()).optional(),
+});
+
+/**
+ * Schema for the deterministic execution channel settings.
+ */
+export const ExecutionSettingsSchema = z.object({
+  provider: ExecutionProviderSchema,
+  host: z.string().optional(),
+  port: z.number().optional(),
+  user: z.string().optional(),
+  workspaceRoot: z.string().optional(),
+});
+
+/**
+ * Schema for workspace server settings.
+ *
+ * This schema is the single source of truth. The ServerSettings type is inferred from it.
+ * The settings are split into two channels:
+ * - agent: ACP-compatible agent runtime settings
+ * - execution: deterministic command/file execution settings
+ */
+export const ServerSettingsSchema = z.object({
+  agent: AgentSettingsSchema,
+  execution: ExecutionSettingsSchema,
 });
 
 /**
@@ -95,6 +124,11 @@ export const WorkspaceImportRequestSchema = WorkspaceExportSchema;
  * ServerSettings type - inferred from ServerSettingsSchema.
  * This is the single source of truth for server connection configuration.
  */
+export type AgentProvider = z.infer<typeof AgentProviderSchema>;
+export type AgentTransport = z.infer<typeof AgentTransportSchema>;
+export type ExecutionProvider = z.infer<typeof ExecutionProviderSchema>;
+export type AgentSettings = z.infer<typeof AgentSettingsSchema>;
+export type ExecutionSettings = z.infer<typeof ExecutionSettingsSchema>;
 export type ServerSettings = z.infer<typeof ServerSettingsSchema>;
 
 export type WorkspaceConfig = z.infer<typeof WorkspaceConfigSchema>;

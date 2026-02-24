@@ -35,20 +35,54 @@ function workspaceToRow(workspace: Workspace): Record<string, unknown> {
  * Parse server settings from database, with fallback to defaults.
  */
 function parseServerSettings(jsonString: string | null): ServerSettings {
+  const defaults = getDefaultServerSettings();
   if (!jsonString) {
-    return getDefaultServerSettings();
+    return defaults;
   }
   try {
-    const parsed = JSON.parse(jsonString);
-    const defaults = getDefaultServerSettings();
+    const parsed = JSON.parse(jsonString) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return defaults;
+    }
+
+    const parsedRecord = parsed as Record<string, unknown>;
+
+    // Legacy shape support for existing persisted rows:
+    // { mode, hostname, port, password, useHttps, allowInsecure }
+    if (typeof parsedRecord["mode"] === "string") {
+      const mode = parsedRecord["mode"] === "connect" ? "tcp" : "stdio";
+      return {
+        agent: {
+          provider: "opencode",
+          transport: mode,
+          hostname: typeof parsedRecord["hostname"] === "string" ? parsedRecord["hostname"] : defaults.agent.hostname,
+          port: typeof parsedRecord["port"] === "number" ? parsedRecord["port"] : defaults.agent.port,
+          password: typeof parsedRecord["password"] === "string" ? parsedRecord["password"] : undefined,
+          useHttps: typeof parsedRecord["useHttps"] === "boolean" ? parsedRecord["useHttps"] : defaults.agent.useHttps,
+          allowInsecure:
+            typeof parsedRecord["allowInsecure"] === "boolean"
+              ? parsedRecord["allowInsecure"]
+              : defaults.agent.allowInsecure,
+        },
+        execution: defaults.execution,
+      };
+    }
+
+    const partial = parsedRecord as Partial<ServerSettings>;
     return {
-      ...defaults,
-      ...parsed,
-      useHttps: parsed.useHttps ?? defaults.useHttps,
-      allowInsecure: parsed.allowInsecure ?? defaults.allowInsecure,
+      agent: {
+        ...defaults.agent,
+        ...(partial.agent ?? {}),
+        useHttps: partial.agent?.useHttps ?? defaults.agent.useHttps,
+        allowInsecure: partial.agent?.allowInsecure ?? defaults.agent.allowInsecure,
+      },
+      execution: {
+        ...defaults.execution,
+        ...(partial.execution ?? {}),
+      },
     };
   } catch {
-    return getDefaultServerSettings();
+    return defaults;
   }
 }
 

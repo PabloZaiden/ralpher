@@ -23,6 +23,11 @@ import { GitService } from "./git-service";
 import { log } from "./logger";
 
 /**
+ * Agent transports that require an explicit remote endpoint.
+ */
+const REMOTE_AGENT_TRANSPORTS = new Set(["tcp", "ssh-stdio"]);
+
+/**
  * Default timeout (in ms) for remote connection operations (validation, test connections,
  * workspace connections). This bounds network operations to prevent indefinite hangs
  * when the remote server is unreachable.
@@ -107,15 +112,27 @@ interface LoopConnectionState {
  * @returns A complete BackendConnectionConfig
  */
 export function buildConnectionConfig(settings: ServerSettings, directory: string): BackendConnectionConfig {
+  const remoteTransport = REMOTE_AGENT_TRANSPORTS.has(settings.agent.transport);
   return {
-    mode: settings.mode,
-    hostname: settings.hostname,
-    port: settings.port,
-    password: settings.password,
-    useHttps: settings.useHttps,
-    allowInsecure: settings.allowInsecure,
+    mode: remoteTransport ? "connect" : "spawn",
+    hostname: remoteTransport ? settings.agent.hostname : undefined,
+    port: remoteTransport ? settings.agent.port : undefined,
+    password: remoteTransport ? settings.agent.password : undefined,
+    useHttps: remoteTransport ? settings.agent.useHttps : false,
+    allowInsecure: remoteTransport ? settings.agent.allowInsecure : false,
     directory,
   };
+}
+
+/**
+ * Build a displayable server URL for agent transports that expose host/port.
+ */
+function buildAgentServerUrl(settings: ServerSettings): string | undefined {
+  if (!REMOTE_AGENT_TRANSPORTS.has(settings.agent.transport) || !settings.agent.hostname) {
+    return undefined;
+  }
+  const protocol = settings.agent.useHttps ? "https" : "http";
+  return `${protocol}://${settings.agent.hostname}:${settings.agent.port ?? 4096}`;
 }
 
 /**
@@ -138,6 +155,30 @@ class BackendManager {
   private testSettings: ServerSettings = getDefaultServerSettings();
   /** Overridable connection timeout (ms) for testing. Defaults to DEFAULT_CONNECTION_TIMEOUT_MS. */
   private connectionTimeoutMs: number = DEFAULT_CONNECTION_TIMEOUT_MS;
+
+  /**
+   * Create a backend instance for the configured agent provider.
+   */
+  private createBackendForSettings(settings: ServerSettings): Backend {
+    switch (settings.agent.provider) {
+      case "opencode":
+      case "copilot":
+        // Both providers use the same backend implementation for now.
+        return new OpenCodeBackend();
+      default:
+        return new OpenCodeBackend();
+    }
+  }
+
+  /**
+   * Static capabilities exposed to the status endpoint.
+   */
+  private getAgentCapabilities(settings: ServerSettings): string[] {
+    if (settings.agent.provider === "opencode") {
+      return ["createSession", "sendPromptAsync", "abortSession", "subscribeToEvents", "models"];
+    }
+    return ["createSession", "sendPromptAsync", "abortSession", "subscribeToEvents"];
+  }
 
   /**
    * Initialize the backend manager.
@@ -175,13 +216,16 @@ class BackendManager {
     // Create new connection state if it doesn't exist
     if (!state) {
       state = {
-        backend: new OpenCodeBackend(),
+        backend: this.createBackendForSettings(settings),
         settings,
         connectionError: null,
       };
       this.connections.set(workspaceId, state);
     } else {
       // Update settings from workspace (in case they changed)
+      if (state.settings.agent.provider !== settings.agent.provider) {
+        state.backend = this.createBackendForSettings(settings);
+      }
       state.settings = settings;
     }
 
@@ -212,19 +256,11 @@ class BackendManager {
         timeoutPromise,
       ]);
       
-      // Determine the correct protocol for the server URL
-      const port = settings.port ?? 4096;
-      const useHttps = settings.useHttps ?? false;
-      const protocol = useHttps ? "https" : "http";
-      
       this.emitEvent({
         type: "server.connected",
         workspaceId,
-        mode: settings.mode,
-        serverUrl:
-          settings.mode === "connect"
-            ? `${protocol}://${settings.hostname}:${port}`
-            : undefined,
+        mode: config.mode,
+        serverUrl: buildAgentServerUrl(settings),
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
@@ -270,7 +306,7 @@ class BackendManager {
     this.emitEvent({
       type: "server.connected",
       workspaceId,
-      mode: state.settings.mode,
+      mode: buildConnectionConfig(state.settings, directory).mode,
       timestamp: new Date().toISOString(),
     });
   }
@@ -384,7 +420,7 @@ class BackendManager {
     directory: string
   ): Promise<{ success: boolean; error?: string }> {
     // Create a temporary backend for testing
-    const testBackend = new OpenCodeBackend();
+    const testBackend = this.createBackendForSettings(settings);
     const config = buildConnectionConfig(settings, directory);
     const abortController = new AbortController();
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -429,7 +465,12 @@ class BackendManager {
     settings: ServerSettings,
     directory: string
   ): Promise<{ success: boolean; isGitRepo?: boolean; directoryExists?: boolean; error?: string }> {
-    log.debug("Validating remote directory", { directory, mode: settings.mode });
+    log.debug("Validating remote directory", {
+      directory,
+      provider: settings.agent.provider,
+      transport: settings.agent.transport,
+      executionProvider: settings.execution.provider,
+    });
     
     // In test mode, use the test executor factory if available
     if (this.testExecutorFactory) {
@@ -449,7 +490,7 @@ class BackendManager {
     }
     
     // Create a temporary backend for validation
-    const tempBackend = new OpenCodeBackend();
+    const tempBackend = this.createBackendForSettings(settings);
     const config = buildConnectionConfig(settings, directory);
 
     // AbortController to cancel in-flight fetch requests on timeout.
@@ -495,7 +536,7 @@ class BackendManager {
    * Extracted so it can be raced against a timeout in validateRemoteDirectory().
    */
   private async performRemoteValidation(
-    tempBackend: OpenCodeBackend,
+    tempBackend: Backend,
     config: BackendConnectionConfig,
     directory: string,
     signal: AbortSignal,
@@ -545,30 +586,52 @@ class BackendManager {
   /**
    * Get connection status for a specific workspace.
    */
-  getWorkspaceStatus(workspaceId: string): ConnectionStatus {
+  async getWorkspaceStatus(workspaceId: string): Promise<ConnectionStatus> {
+    const workspace = await getWorkspace(workspaceId);
+    const settings = workspace?.serverSettings ?? getDefaultServerSettings();
     const state = this.connections.get(workspaceId);
-    
-    if (!state) {
+    const agentStatus = {
+      connected: state?.backend.isConnected() ?? false,
+      provider: settings.agent.provider,
+      transport: settings.agent.transport,
+      capabilities: this.getAgentCapabilities(settings),
+      serverUrl: buildAgentServerUrl(settings),
+      error: state?.connectionError ?? undefined,
+    };
+
+    const executionStatus: ConnectionStatus["execution"] = {
+      connected: false,
+      provider: settings.execution.provider,
+    };
+
+    if (!workspace) {
+      executionStatus.error = "Workspace not found";
       return {
-        connected: false,
-        mode: "spawn",
-        error: undefined,
+        agent: agentStatus,
+        execution: executionStatus,
+        error: executionStatus.error,
       };
     }
 
-    const connected = state.backend.isConnected();
-    const port = state.settings.port ?? 4096;
-    const useHttps = state.settings.useHttps ?? false;
-    const protocol = useHttps ? "https" : "http";
+    try {
+      const executor = await this.getCommandExecutorAsync(workspaceId, workspace.directory);
+      const directoryExists = await executor.directoryExists(workspace.directory);
+      let isGitRepo = false;
+      if (directoryExists) {
+        const git = GitService.withExecutor(executor);
+        isGitRepo = await git.isGitRepo(workspace.directory);
+      }
+      executionStatus.connected = true;
+      executionStatus.directoryExists = directoryExists;
+      executionStatus.isGitRepo = isGitRepo;
+    } catch (error) {
+      executionStatus.error = String(error);
+    }
 
     return {
-      connected,
-      mode: state.settings.mode,
-      serverUrl:
-        state.settings.mode === "connect" && state.settings.hostname
-          ? `${protocol}://${state.settings.hostname}:${port}`
-          : undefined,
-      error: state.connectionError ?? undefined,
+      agent: agentStatus,
+      execution: executionStatus,
+      error: agentStatus.error ?? executionStatus.error,
     };
   }
 
@@ -615,10 +678,11 @@ class BackendManager {
     }
     
     // Create a new backend on demand
-    const backend = new OpenCodeBackend();
+    const defaultSettings = getDefaultServerSettings();
+    const backend = this.createBackendForSettings(defaultSettings);
     this.connections.set(workspaceId, {
       backend,
-      settings: getDefaultServerSettings(),
+      settings: defaultSettings,
       connectionError: null,
     });
     return backend;
@@ -650,7 +714,8 @@ class BackendManager {
     }
 
     // Create a new dedicated backend for this loop
-    const backend = new OpenCodeBackend();
+    const settings = this.connections.get(workspaceId)?.settings ?? getDefaultServerSettings();
+    const backend = this.createBackendForSettings(settings);
     this.loopConnections.set(loopId, {
       backend,
       workspaceId,
@@ -791,6 +856,13 @@ class BackendManager {
       return this.testBackend;
     }
     return null;
+  }
+
+  /**
+   * Create a new backend instance for ad-hoc operations (e.g. model discovery).
+   */
+  createBackend(settings: ServerSettings): Backend {
+    return this.createBackendForSettings(settings);
   }
 
   /**

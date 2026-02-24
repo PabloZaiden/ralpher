@@ -38,12 +38,59 @@ export function createModelConfig(overrides?: Partial<ModelConfig>): ModelConfig
 // Server Settings
 // ============================================
 
-export function createServerSettings(overrides?: Partial<ServerSettings>): ServerSettings {
+type LegacyServerSettingsOverrides = {
+  mode?: "spawn" | "connect";
+  hostname?: string;
+  port?: number;
+  password?: string;
+  useHttps?: boolean;
+  allowInsecure?: boolean;
+};
+
+export function createServerSettings(
+  overrides?: Partial<ServerSettings> & LegacyServerSettingsOverrides
+): ServerSettings {
+  const defaults: ServerSettings = {
+    agent: {
+      provider: "opencode",
+      transport: "stdio",
+      useHttps: false,
+      allowInsecure: false,
+    },
+    execution: {
+      provider: "local",
+      workspaceRoot: "",
+    },
+  };
+
+  if (!overrides) {
+    return defaults;
+  }
+
+  const legacyTransport =
+    overrides.mode === "connect" ? "tcp" : overrides.mode === "spawn" ? "stdio" : undefined;
+  const legacyAgent = {
+    transport: legacyTransport,
+    hostname: overrides.hostname,
+    port: overrides.port,
+    password: overrides.password,
+    useHttps: overrides.useHttps,
+    allowInsecure: overrides.allowInsecure,
+  };
+
   return {
-    mode: "spawn",
-    useHttps: false,
-    allowInsecure: false,
-    ...overrides,
+    agent: {
+      ...defaults.agent,
+      ...legacyAgent,
+      ...(overrides.agent ?? {}),
+      transport: overrides.agent?.transport ?? legacyTransport ?? defaults.agent.transport,
+      useHttps: overrides.agent?.useHttps ?? legacyAgent.useHttps ?? defaults.agent.useHttps,
+      allowInsecure: overrides.agent?.allowInsecure ?? legacyAgent.allowInsecure ?? defaults.agent.allowInsecure,
+    },
+    execution: {
+      ...defaults.execution,
+      ...(overrides.execution ?? {}),
+    },
   };
 }
 

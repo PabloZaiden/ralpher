@@ -217,7 +217,9 @@ export const workspacesRoutes = {
         log.debug("Validating workspace directory on remote server", { 
           directory: trimmedDirectory, 
           name: trimmedName,
-          serverMode: serverSettings.mode 
+          agentProvider: serverSettings.agent.provider,
+          agentTransport: serverSettings.agent.transport,
+          executionProvider: serverSettings.execution.provider,
         });
         
         const validation = await backendManager.validateRemoteDirectory(serverSettings, trimmedDirectory);
@@ -426,7 +428,7 @@ export const workspacesRoutes = {
         const result = await requireWorkspace(id);
         if (result instanceof Response) return result;
 
-        const status = backendManager.getWorkspaceStatus(id);
+        const status = await backendManager.getWorkspaceStatus(id);
         return Response.json(status);
       } catch (error) {
         log.error("Failed to get workspace connection status:", String(error));
@@ -454,13 +456,13 @@ export const workspacesRoutes = {
           const bodyText = await req.text();
           if (bodyText.trim()) {
             const bodyJson = JSON.parse(bodyText);
-            // Only use the body if it has a mode (meaning it's a valid ServerSettings object)
-            if (bodyJson && bodyJson.mode) {
+            // Only use the body if it looks like a full ServerSettings object.
+            if (bodyJson && bodyJson.agent && bodyJson.execution) {
               const result = ServerSettingsSchema.safeParse(bodyJson);
               if (result.success) {
                 settings = result.data;
               }
-              // If validation fails, just use current settings (backward compatible)
+              // If validation fails, use current settings.
             }
           }
         } catch {

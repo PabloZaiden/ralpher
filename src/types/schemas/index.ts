@@ -28,7 +28,11 @@ export {
 
 // Workspace schemas
 export {
-  ServerModeSchema,
+  AgentProviderSchema,
+  AgentTransportSchema,
+  ExecutionProviderSchema,
+  AgentSettingsSchema,
+  ExecutionSettingsSchema,
   ServerSettingsSchema,
   CreateWorkspaceRequestSchema,
   UpdateWorkspaceRequestSchema,
@@ -36,6 +40,11 @@ export {
   WorkspaceConfigSchema,
   WorkspaceExportSchema,
   WorkspaceImportRequestSchema,
+  type AgentProvider,
+  type AgentTransport,
+  type ExecutionProvider,
+  type AgentSettings,
+  type ExecutionSettings,
   type ServerSettings,
   type WorkspaceConfig,
   type WorkspaceExportData,

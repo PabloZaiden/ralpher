@@ -8,7 +8,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { createMockApi, MockApiError } from "../helpers/mock-api";
-import { createWorkspace } from "../helpers/factories";
+import { createWorkspace, createServerSettings } from "../helpers/factories";
 import { useWorkspaces } from "@/hooks/useWorkspaces";
 
 const api = createMockApi();
@@ -398,7 +398,7 @@ describe("exportConfig", () => {
         {
           name: "WS 1",
           directory: "/workspaces/ws1",
-          serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
+          serverSettings: createServerSettings({ mode: "spawn", useHttps: false, allowInsecure: false }),
         },
       ],
     };
@@ -457,7 +457,13 @@ describe("importConfig", () => {
         {
           name: "Imported WS",
           directory: "/workspaces/imported",
-          serverSettings: { mode: "connect" as const, hostname: "host.com", port: 3000, useHttps: true, allowInsecure: false },
+          serverSettings: createServerSettings({
+            mode: "connect",
+            hostname: "host.com",
+            port: 3000,
+            useHttps: true,
+            allowInsecure: false,
+          }),
         },
       ],
     };
@@ -521,7 +527,11 @@ describe("importConfig", () => {
         version: 1,
         exportedAt: "2026-02-10T12:00:00.000Z",
         workspaces: [
-          { name: "WS 2", directory: "/workspaces/ws2", serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false } },
+          {
+            name: "WS 2",
+            directory: "/workspaces/ws2",
+            serverSettings: createServerSettings({ mode: "spawn", useHttps: false, allowInsecure: false }),
+          },
         ],
       });
     });

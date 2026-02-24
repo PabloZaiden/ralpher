@@ -85,7 +85,17 @@ describe("workspace management scenario", () => {
       id: "ws-new",
       name: "New Project",
       directory: "/workspaces/new-project",
-      serverSettings: { mode: "spawn", useHttps: false, allowInsecure: false },
+      serverSettings: {
+        agent: {
+          provider: "opencode",
+          transport: "stdio",
+          useHttps: false,
+          allowInsecure: false,
+        },
+        execution: {
+          provider: "local",
+        },
+      },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }));
