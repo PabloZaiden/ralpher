@@ -465,7 +465,7 @@ export class GitService {
       throw this.gitError("Failed to check git status", result, ["status", "--porcelain"]);
     }
     const hasChanges = result.stdout.trim().length > 0;
-    // Debug logging for troubleshooting PTY output parsing
+    // Debug logging for troubleshooting command output parsing
     log.trace(`[GitService] hasUncommittedChanges: ${hasChanges}`);
     log.trace(`[GitService]   stdout length: ${result.stdout.length}`);
     log.trace(`[GitService]   stdout trimmed length: ${result.stdout.trim().length}`);
@@ -1072,7 +1072,7 @@ export class GitService {
     ]);
     
     // Build a map of file path -> status
-    // Normalize line endings from PTY (may have \r\n)
+    // Normalize command output line endings (may have \r\n)
     const statusMap = new Map<string, string>();
     if (statusResult.success) {
       const statusLines = statusResult.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
@@ -1087,7 +1087,7 @@ export class GitService {
       }
     }
 
-    // Normalize line endings from PTY (may have \r\n)
+    // Normalize command output line endings (may have \r\n)
     const lines = result.stdout.replace(/\r\n/g, "\n").trim().split("\n").filter(Boolean);
     const diffs: FileDiff[] = [];
 
@@ -1189,7 +1189,7 @@ export class GitService {
       return diffs;
     }
 
-    // Normalize line endings from PTY (may have \r\n) to \n
+    // Normalize command output line endings (may have \r\n) to \n
     const fullDiff = result.stdout.replace(/\r\n/g, "\n");
     const diffsWithContent: FileDiffWithContent[] = [];
 

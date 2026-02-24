@@ -5,7 +5,7 @@
  * - Fetching available AI models for a workspace
  * - Managing user preferences (last used model, last used directory)
  * 
- * Uses workspace-specific server settings to connect to the opencode backend.
+ * Uses workspace-specific server settings and provider-aware discovery routing.
  * 
  * @module api/models
  */
@@ -13,7 +13,7 @@
 import { backendManager, buildConnectionConfig } from "../core/backend-manager";
 import { getWorkspace } from "../persistence/workspaces";
 import { getLastModel, setLastModel, getLastDirectory, setLastDirectory, getMarkdownRenderingEnabled, setMarkdownRenderingEnabled, getLogLevelPreference, setLogLevelPreference, DEFAULT_LOG_LEVEL, getDashboardViewMode, setDashboardViewMode } from "../persistence/preferences";
-import { getDefaultServerSettings } from "../types/settings";
+import type { ServerSettings } from "../types/settings";
 import type { ModelInfo } from "../types/api";
 import { createLogger, setLogLevel as setBackendLogLevel, type LogLevelName, VALID_LOG_LEVELS, isLogLevelFromEnv } from "../core/logger";
 import { parseAndValidate } from "./validation";
@@ -41,16 +41,130 @@ export interface ModelValidationResult {
 }
 
 /**
+ * Parse supported model IDs from `copilot --help` output.
+ */
+function parseCopilotModelChoices(helpText: string): string[] {
+  const modelFlagIndex = helpText.indexOf("--model <model>");
+  if (modelFlagIndex < 0) {
+    return [];
+  }
+
+  const afterModelFlag = helpText.slice(modelFlagIndex + 1);
+  const nextOptionOffset = afterModelFlag.search(/\n\s{2,}--[a-z0-9-]+/i);
+  const endIndex = nextOptionOffset >= 0
+    ? modelFlagIndex + 1 + nextOptionOffset
+    : helpText.length;
+  const modelSection = helpText.slice(modelFlagIndex, endIndex);
+
+  const modelIds = Array.from(modelSection.matchAll(/"([^"]+)"/g))
+    .map((match) => match[1]?.trim() ?? "")
+    .filter((modelId) => modelId.length > 0);
+
+  return Array.from(new Set(modelIds));
+}
+
+/**
+ * Build ModelInfo rows for Copilot CLI-discovered models.
+ */
+function mapCopilotModelInfo(modelIds: string[]): ModelInfo[] {
+  return modelIds.map((modelId) => ({
+    providerID: "copilot",
+    providerName: "Copilot",
+    modelID: modelId,
+    modelName: modelId,
+    connected: true,
+  }));
+}
+
+/**
+ * Discover models through the execution channel using the Copilot CLI.
+ */
+async function getCopilotModelsViaExecution(
+  workspaceId: string,
+  directory: string,
+): Promise<ModelInfo[]> {
+  const executor = await backendManager.getCommandExecutorAsync(workspaceId, directory);
+  const result = await executor.exec("copilot", ["--help"], { cwd: directory });
+
+  if (!result.success) {
+    throw new Error(
+      `Failed to query Copilot models via copilot --help: ${result.stderr || result.stdout || `exit code ${result.exitCode}`}`,
+    );
+  }
+
+  const modelIds = parseCopilotModelChoices(`${result.stdout}\n${result.stderr}`);
+  if (modelIds.length === 0) {
+    throw new Error(
+      "Could not parse model choices from copilot --help output",
+    );
+  }
+
+  return mapCopilotModelInfo(modelIds);
+}
+
+/**
+ * Discover models via the configured agent backend (OpenCode path).
+ */
+async function getAgentBackendModels(
+  workspaceId: string,
+  directory: string,
+  settings: ServerSettings,
+): Promise<ModelInfo[]> {
+  const testBackend = backendManager.getTestBackend();
+  if (testBackend) {
+    if (!testBackend.isConnected()) {
+      await testBackend.connect(buildConnectionConfig(settings, directory));
+    }
+    return await testBackend.getModels(directory);
+  }
+
+  const existingBackend = backendManager.getBackend(workspaceId);
+  if (existingBackend.isConnected()) {
+    return await existingBackend.getModels(directory);
+  }
+
+  const tempBackend = backendManager.createBackend(settings);
+  try {
+    await tempBackend.connect(buildConnectionConfig(settings, directory));
+    return await tempBackend.getModels(directory);
+  } finally {
+    try {
+      await tempBackend.disconnect();
+    } catch (disconnectError) {
+      log.trace("Failed to disconnect temporary backend", { error: String(disconnectError) });
+    }
+  }
+}
+
+/**
+ * Discover models for a workspace using provider-aware routing.
+ */
+async function getModelsForWorkspace(
+  workspaceId: string,
+  directory: string,
+  workspaceOverride?: Awaited<ReturnType<typeof getWorkspace>>,
+): Promise<ModelInfo[]> {
+  const workspace = workspaceOverride ?? await getWorkspace(workspaceId);
+  if (!workspace) {
+    throw new Error(`Workspace not found: ${workspaceId}`);
+  }
+
+  const settings = workspace.serverSettings;
+  if (settings.agent.provider === "copilot") {
+    return await getCopilotModelsViaExecution(workspaceId, directory);
+  }
+  return await getAgentBackendModels(workspaceId, directory, settings);
+}
+
+/**
  * Check if a model is enabled (its provider is connected).
  * 
  * This function fetches the available models for a workspace and checks
  * if the specified model exists and its provider is connected.
  * 
- * To avoid mutating global connection state during validation:
- * - If a test backend is set via setBackendForTesting(), it uses that (for testing)
- * - If the workspace backend is already connected, it uses that (no side effects)
- * - Otherwise, it creates a temporary OpenCodeBackend that connects and disconnects
- *   within this function, similar to GET /api/models
+ * Discovery is provider-aware:
+ * - `copilot`: model list comes from Copilot CLI via execution channel
+ * - other providers: model list comes from the configured agent backend
  * 
  * @param workspaceId - The workspace ID to check models for
  * @param directory - The working directory path
@@ -65,48 +179,7 @@ export async function isModelEnabled(
   modelID: string
 ): Promise<ModelValidationResult> {
   try {
-    let models: ModelInfo[];
-    
-    // Check if a test backend is set (for testing purposes)
-    const testBackend = backendManager.getTestBackend();
-    if (testBackend) {
-      // Use test backend directly - no connection state mutation
-      if (!testBackend.isConnected()) {
-        await testBackend.connect(buildConnectionConfig(getDefaultServerSettings(), directory));
-      }
-      models = await testBackend.getModels(directory);
-    } else {
-      // Check if workspace backend is already connected
-      const existingBackend = backendManager.getBackend(workspaceId);
-      if (existingBackend.isConnected()) {
-        // Use existing connected backend - no side effects
-        models = await existingBackend.getModels(directory);
-      } else {
-        // Create a temporary backend (similar to GET /api/models)
-        // This avoids mutating global connection state
-        const workspace = await getWorkspace(workspaceId);
-        if (!workspace) {
-          return {
-            enabled: false,
-            error: `Workspace not found: ${workspaceId}`,
-            errorCode: "validation_failed",
-          };
-        }
-        
-        const tempBackend = backendManager.createBackend(workspace.serverSettings);
-        try {
-          await tempBackend.connect(buildConnectionConfig(workspace.serverSettings, directory));
-          models = await tempBackend.getModels(directory);
-        } finally {
-          // Always disconnect temporary backend
-          try {
-            await tempBackend.disconnect();
-          } catch (disconnectError) {
-            log.trace("Failed to disconnect temporary backend", { error: String(disconnectError) });
-          }
-        }
-      }
-    }
+    const models = await getModelsForWorkspace(workspaceId, directory);
 
     // Check if the provider exists
     const providerModels = models.filter((m) => m.providerID === providerID);
@@ -158,8 +231,7 @@ export const modelsRoutes = {
     /**
      * GET /api/models - Get available AI models.
      * 
-     * Fetches the list of available AI models from the opencode backend.
-     * Creates a temporary connection using workspace-specific server settings.
+      * Fetches the list of available AI models using provider-aware discovery.
      * 
      * Query Parameters:
      * - directory (required): Working directory path for model context
@@ -186,27 +258,10 @@ export const modelsRoutes = {
         return errorResponse("workspace_not_found", `Workspace not found: ${workspaceId}`, 404);
       }
 
-      // Create a temporary backend to get models (don't reuse the global one)
-      // This avoids interfering with any running loops
-      const backend = backendManager.createBackend(workspace.serverSettings);
-      
       try {
-        // Connect using workspace-specific settings
-        await backend.connect(buildConnectionConfig(workspace.serverSettings, directory));
-
-        const models = await backend.getModels(directory);
-        
-        // Disconnect after getting models
-        await backend.disconnect();
-
+        const models = await getModelsForWorkspace(workspaceId, directory, workspace);
         return Response.json(models);
       } catch (error) {
-        // Make sure to disconnect on error
-        try {
-          await backend.disconnect();
-        } catch (disconnectError) {
-          log.trace("Failed to disconnect backend on error path", { error: String(disconnectError) });
-        }
         return errorResponse("models_failed", String(error), 500);
       }
     },

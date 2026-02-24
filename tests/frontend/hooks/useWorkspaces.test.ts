@@ -398,7 +398,7 @@ describe("exportConfig", () => {
         {
           name: "WS 1",
           directory: "/workspaces/ws1",
-          serverSettings: createServerSettings({ mode: "spawn", useHttps: false, allowInsecure: false }),
+          serverSettings: createServerSettings({ mode: "spawn" }),
         },
       ],
     };
@@ -461,8 +461,6 @@ describe("importConfig", () => {
             mode: "connect",
             hostname: "host.com",
             port: 3000,
-            useHttps: true,
-            allowInsecure: false,
           }),
         },
       ],
@@ -530,7 +528,7 @@ describe("importConfig", () => {
           {
             name: "WS 2",
             directory: "/workspaces/ws2",
-            serverSettings: createServerSettings({ mode: "spawn", useHttps: false, allowInsecure: false }),
+            serverSettings: createServerSettings({ mode: "spawn" }),
           },
         ],
       });

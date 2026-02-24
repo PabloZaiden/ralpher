@@ -219,7 +219,6 @@ export const workspacesRoutes = {
           name: trimmedName,
           agentProvider: serverSettings.agent.provider,
           agentTransport: serverSettings.agent.transport,
-          executionProvider: serverSettings.execution.provider,
         });
         
         const validation = await backendManager.validateRemoteDirectory(serverSettings, trimmedDirectory);
@@ -456,8 +455,8 @@ export const workspacesRoutes = {
           const bodyText = await req.text();
           if (bodyText.trim()) {
             const bodyJson = JSON.parse(bodyText);
-            // Only use the body if it looks like a full ServerSettings object.
-            if (bodyJson && bodyJson.agent && bodyJson.execution) {
+            // Only use the body if it looks like a ServerSettings object.
+            if (bodyJson && bodyJson.agent) {
               const result = ServerSettingsSchema.safeParse(bodyJson);
               if (result.success) {
                 settings = result.data;

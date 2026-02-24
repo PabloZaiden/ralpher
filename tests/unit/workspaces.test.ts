@@ -36,23 +36,17 @@ function createTestWorkspace(overrides: {
 function createConnectServerSettings(overrides?: {
   hostname?: string;
   port?: number;
+  username?: string;
   password?: string;
-  useHttps?: boolean;
-  allowInsecure?: boolean;
 }) {
   return {
     agent: {
       provider: "opencode" as const,
-      transport: "tcp" as const,
+      transport: "ssh" as const,
       hostname: overrides?.hostname ?? "localhost",
-      port: overrides?.port ?? 4096,
-      useHttps: overrides?.useHttps ?? false,
-      allowInsecure: overrides?.allowInsecure ?? false,
+      port: overrides?.port ?? 22,
+      ...(overrides?.username ? { username: overrides.username } : {}),
       ...(overrides?.password ? { password: overrides.password } : {}),
-    },
-    execution: {
-      provider: "local" as const,
-      workspaceRoot: "",
     },
   };
 }
@@ -412,8 +406,6 @@ describe("Workspace Persistence", () => {
       const customSettings = createConnectServerSettings({
         hostname: "custom.server.com",
         port: 9000,
-        useHttps: true,
-        allowInsecure: false,
       });
 
       const workspace = createTestWorkspace({
@@ -443,8 +435,6 @@ describe("Workspace Persistence", () => {
       const newSettings = createConnectServerSettings({
         hostname: "updated.server.com",
         port: 8080,
-        useHttps: true,
-        allowInsecure: true,
       });
 
       const updated = await updateWorkspace(workspace.id, { serverSettings: newSettings });
@@ -465,8 +455,6 @@ describe("Workspace Persistence", () => {
       const customSettings = createConnectServerSettings({
         hostname: "preserved.server.com",
         port: 7000,
-        useHttps: false,
-        allowInsecure: true,
       });
 
       const workspace = createTestWorkspace({
@@ -497,8 +485,6 @@ describe("Workspace Persistence", () => {
       const customSettings = createConnectServerSettings({
         hostname: "list.server.com",
         port: 6000,
-        useHttps: true,
-        allowInsecure: false,
       });
 
       const workspace = createTestWorkspace({
@@ -522,8 +508,6 @@ describe("Workspace Persistence", () => {
       const customSettings = createConnectServerSettings({
         hostname: "directory.server.com",
         port: 5000,
-        useHttps: false,
-        allowInsecure: true,
       });
 
       const workspace = createTestWorkspace({
@@ -597,14 +581,16 @@ describe("Workspace Persistence", () => {
         hostname: "secure.server.com",
         port: 443,
         password: "my-secret-password",
-        useHttps: true,
-        allowInsecure: false,
       });
       await createWorkspace(ws);
 
       const result = await exportWorkspaces();
       expect(result.workspaces).toHaveLength(1);
-      expect(result.workspaces[0]!.serverSettings.agent.password).toBe("my-secret-password");
+      const exportedSettings = result.workspaces[0]!.serverSettings;
+      expect(exportedSettings.agent.transport).toBe("ssh");
+      if (exportedSettings.agent.transport === "ssh") {
+        expect(exportedSettings.agent.password).toBe("my-secret-password");
+      }
     });
 
     test("import with valid data creates workspaces and returns correct result", async () => {
@@ -628,8 +614,6 @@ describe("Workspace Persistence", () => {
             serverSettings: createConnectServerSettings({
               hostname: "remote.server.com",
               port: 8080,
-              useHttps: true,
-              allowInsecure: false,
             }),
           },
         ],
@@ -756,8 +740,6 @@ describe("Workspace Persistence", () => {
         hostname: "secure.host.com",
         port: 9443,
         password: "super-secret",
-        useHttps: true,
-        allowInsecure: true,
       });
 
       const importData = {
@@ -778,7 +760,10 @@ describe("Workspace Persistence", () => {
       expect(workspace).not.toBeNull();
       expect(workspace!.name).toBe("Secure Workspace");
       expect(workspace!.serverSettings).toEqual(settings);
-      expect(workspace!.serverSettings.agent.password).toBe("super-secret");
+      expect(workspace!.serverSettings.agent.transport).toBe("ssh");
+      if (workspace!.serverSettings.agent.transport === "ssh") {
+        expect(workspace!.serverSettings.agent.password).toBe("super-secret");
+      }
     });
 
     test("import trims whitespace from name and directory", async () => {
@@ -859,8 +844,6 @@ describe("Workspace Persistence", () => {
         hostname: "rt-server.com",
         port: 7777,
         password: "rt-pass",
-        useHttps: true,
-        allowInsecure: false,
       });
       const ws2 = createTestWorkspace({ name: "Round Trip B", directory: "/tmp/rt-b" });
       await createWorkspace(ws1);

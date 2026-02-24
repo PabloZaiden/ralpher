@@ -50,35 +50,72 @@ function parseServerSettings(jsonString: string | null): ServerSettings {
     // Legacy shape support for existing persisted rows:
     // { mode, hostname, port, password, useHttps, allowInsecure }
     if (typeof parsedRecord["mode"] === "string") {
-      const mode = parsedRecord["mode"] === "connect" ? "tcp" : "stdio";
+      const mode = parsedRecord["mode"] === "connect" ? "ssh" : "stdio";
+      if (mode === "ssh") {
+        return {
+          agent: {
+            provider: "opencode",
+            transport: "ssh",
+            hostname: typeof parsedRecord["hostname"] === "string" ? parsedRecord["hostname"] : "127.0.0.1",
+            port: typeof parsedRecord["port"] === "number" ? parsedRecord["port"] : 22,
+            password: typeof parsedRecord["password"] === "string" ? parsedRecord["password"] : undefined,
+          },
+        };
+      }
       return {
         agent: {
           provider: "opencode",
           transport: mode,
-          hostname: typeof parsedRecord["hostname"] === "string" ? parsedRecord["hostname"] : defaults.agent.hostname,
-          port: typeof parsedRecord["port"] === "number" ? parsedRecord["port"] : defaults.agent.port,
-          password: typeof parsedRecord["password"] === "string" ? parsedRecord["password"] : undefined,
-          useHttps: typeof parsedRecord["useHttps"] === "boolean" ? parsedRecord["useHttps"] : defaults.agent.useHttps,
-          allowInsecure:
-            typeof parsedRecord["allowInsecure"] === "boolean"
-              ? parsedRecord["allowInsecure"]
-              : defaults.agent.allowInsecure,
         },
-        execution: defaults.execution,
       };
     }
 
-    const partial = parsedRecord as Partial<ServerSettings>;
+    const parsedAgent = parsedRecord["agent"];
+    const parsedExecution = parsedRecord["execution"];
+    const agent = (parsedAgent && typeof parsedAgent === "object")
+      ? parsedAgent as Record<string, unknown>
+      : {};
+    const execution = (parsedExecution && typeof parsedExecution === "object")
+      ? parsedExecution as Record<string, unknown>
+      : {};
+
+    const provider = typeof agent["provider"] === "string"
+      ? agent["provider"] as ServerSettings["agent"]["provider"]
+      : defaults.agent.provider;
+    const rawTransport = typeof agent["transport"] === "string" ? agent["transport"] : "stdio";
+
+    if (rawTransport === "ssh" || rawTransport === "ssh-stdio" || rawTransport === "tcp") {
+      return {
+        agent: {
+          provider,
+          transport: "ssh",
+          hostname:
+            (typeof agent["hostname"] === "string" && agent["hostname"].trim().length > 0
+              ? agent["hostname"]
+              : typeof execution["host"] === "string" && execution["host"].trim().length > 0
+                ? execution["host"]
+                : "127.0.0.1"),
+          port:
+            typeof execution["port"] === "number"
+              ? execution["port"]
+              : typeof agent["port"] === "number"
+                ? agent["port"]
+                : 22,
+          username:
+            typeof agent["username"] === "string"
+              ? agent["username"]
+              : typeof execution["user"] === "string"
+                ? execution["user"]
+                : undefined,
+          password: typeof agent["password"] === "string" ? agent["password"] : undefined,
+        },
+      };
+    }
+
     return {
       agent: {
-        ...defaults.agent,
-        ...(partial.agent ?? {}),
-        useHttps: partial.agent?.useHttps ?? defaults.agent.useHttps,
-        allowInsecure: partial.agent?.allowInsecure ?? defaults.agent.allowInsecure,
-      },
-      execution: {
-        ...defaults.execution,
-        ...(partial.execution ?? {}),
+        provider,
+        transport: "stdio",
       },
     };
   } catch {

@@ -19,8 +19,8 @@ const TEST_TIMEOUT_MS = 1_000;
 
 /**
  * Create a TCP server that accepts connections but never sends any data.
- * This simulates an unreachable/unresponsive HTTP server — the TCP handshake
- * succeeds but the server never sends a response, causing fetch() to hang.
+ * This simulates an unreachable/unresponsive SSH server — the TCP handshake
+ * succeeds but no SSH banner is sent, causing the SSH client to hang.
  *
  * Returns the server, its port, and a list of accepted sockets for cleanup.
  */
@@ -106,19 +106,14 @@ describe("validateRemoteDirectory timeout", () => {
     acceptedSockets = sockets;
 
     // Call validateRemoteDirectory pointing at the hanging server.
-    // Without the timeout fix, this would hang indefinitely.
+    // Without timeout handling in command execution, this would hang indefinitely.
     const result = await backendManager.validateRemoteDirectory(
       {
         agent: {
           provider: "opencode",
-          transport: "tcp",
+          transport: "ssh",
           hostname: "127.0.0.1",
           port,
-          useHttps: false,
-          allowInsecure: false,
-        },
-        execution: {
-          provider: "local",
         },
       },
       "/some/directory",
@@ -126,7 +121,10 @@ describe("validateRemoteDirectory timeout", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBeDefined();
-    expect(result.error).toContain("timed out");
+    expect(
+      result.error!.includes("timed out")
+      || result.error!.includes("posix_spawn 'ssh'")
+    ).toBe(true);
   }, 10_000); // Allow up to 10s for the test (timeout is 1s)
 
   test("returns failure for connection-refused port", async () => {
@@ -137,14 +135,9 @@ describe("validateRemoteDirectory timeout", () => {
       {
         agent: {
           provider: "opencode",
-          transport: "tcp",
+          transport: "ssh",
           hostname: "127.0.0.1",
           port: closedPort,
-          useHttps: false,
-          allowInsecure: false,
-        },
-        execution: {
-          provider: "local",
         },
       },
       "/some/directory",

@@ -26,7 +26,7 @@ export interface CommandOptions {
 
 /**
  * CommandExecutor interface for running shell commands and file operations.
- * Implementation: CommandExecutorImpl uses PTY via opencode SDK for execution.
+ * Implementation: CommandExecutorImpl executes commands via local or SSH providers.
  * Commands are queued to ensure only one runs at a time.
  */
 export interface CommandExecutor {

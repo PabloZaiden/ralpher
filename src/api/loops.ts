@@ -8,9 +8,9 @@
  * - Review: Address reviewer comments on pushed/merged loops
  * - Data: Access loop diffs, plans, and status files
  * 
- * Uses the CommandExecutor abstraction which works identically for both:
- * - Spawn mode: Commands run on locally-spawned opencode server via PTY+WebSocket
- * - Connect mode: Commands run on remote opencode server via PTY+WebSocket
+ * Uses the CommandExecutor abstraction over the configured execution channel:
+ * - local provider: commands run on the Ralpher host
+ * - ssh provider: commands run on the remote workspace host
  * 
  * @module api/loops
  */

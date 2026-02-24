@@ -2,8 +2,8 @@
  * Git API endpoints for Ralph Loops Management System.
  * 
  * This module provides git-related endpoints for querying repository information.
- * All git operations use the CommandExecutor abstraction which works identically
- * for both spawn and connect modes via PTY+WebSocket.
+ * All git operations use the deterministic CommandExecutor abstraction
+ * (local or SSH execution providers).
  * 
  * Endpoints:
  * - GET /api/git/branches - Get all local branches for a directory
@@ -39,8 +39,8 @@ export interface DefaultBranchResponse {
 }
 
 /**
- * Get a GitService configured for the current backend mode.
- * Uses PTY+WebSocket for command execution in both spawn and connect modes.
+ * Get a GitService configured for the current execution provider.
+ * Uses deterministic command execution (local/SSH), independent of agent transport.
  * 
  * @param directory - The directory containing the git repository
  * @returns Configured GitService instance

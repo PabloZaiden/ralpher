@@ -1,20 +1,8 @@
 /**
  * OpenCode backend implementation for Ralph Loops Management System.
- * Uses the @opencode-ai/sdk/v2 to connect to opencode servers.
+ * Uses ACP JSON-RPC over stdio for agent communication.
  */
 
-import {
-  createOpencode,
-  createOpencodeClient,
-  type OpencodeClient,
-  type OpencodeClientConfig,
-} from "@opencode-ai/sdk/v2";
-import type {
-  Session as OpenCodeSession,
-  Event as OpenCodeEvent,
-  Part,
-  AssistantMessage,
-} from "@opencode-ai/sdk/v2";
 import { isRemoteOnlyMode } from "../../core/config";
 import { log } from "../../core/logger";
 import type { ModelInfo } from "../../types/api";
@@ -35,6 +23,19 @@ import { createEventStream, type EventStream } from "../../utils/event-stream";
 // Re-export ConnectionInfo for backward compatibility
 export type { ConnectionInfo } from "../types";
 
+// Compatibility types retained for translation/unit tests.
+type OpenCodeSession = {
+  id: string;
+  title?: string;
+  time: { created: number };
+};
+type OpenCodeEvent = {
+  type: string;
+  properties: any;
+};
+type Part = any;
+type AssistantMessage = any;
+
 /**
  * Context object for translateEvent(), bundling per-subscription tracking state.
  */
@@ -51,171 +52,182 @@ interface TranslateEventContext {
   reasoningTextLength: Map<string, number>;
   /** Map of part IDs to their type (text, reasoning, tool, etc.) for delta routing */
   partTypes: Map<string, string>;
-  /** OpenCode client for API calls */
-  client: OpencodeClient;
+  /** Optional client-like object used by translateEvent() tests */
+  client: any;
   /** Directory for session queries */
   directory: string;
 }
 
+type JsonRpcMessage = {
+  jsonrpc: "2.0";
+  id?: number;
+  method?: string;
+  params?: Record<string, unknown>;
+  result?: unknown;
+  error?: { code?: number; message?: string; data?: unknown };
+};
+
+type PendingRequest = {
+  resolve: (value: unknown) => void;
+  reject: (error: Error) => void;
+  timeout: ReturnType<typeof setTimeout>;
+};
+
+type SessionSubscriber = (event: AgentEvent) => void;
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function getNumber(value: unknown): number | undefined {
+  return typeof value === "number" ? value : undefined;
+}
+
+function inferProviderID(modelID: string): string {
+  if (modelID.startsWith("claude")) {
+    return "anthropic";
+  }
+  if (modelID.startsWith("gpt")) {
+    return "openai";
+  }
+  if (modelID.startsWith("gemini")) {
+    return "google";
+  }
+  return "copilot";
+}
+
 /**
  * OpenCode backend implementation.
- * Supports both spawn mode (creates a new server) and connect mode (connects to existing).
+ * Supports stdio ACP mode and translates ACP stream updates into AgentEvents.
  */
 export class OpenCodeBackend implements Backend {
   readonly name = "opencode";
 
-  private client: OpencodeClient | null = null;
-  private server: { url: string; close(): void } | null = null;
+  private process: Bun.Subprocess | null = null;
   private connected = false;
   private directory = "";
   private connectionInfo: ConnectionInfo | null = null;
-  
+
   /** Track active subscriptions for reset functionality */
   private activeSubscriptions = new Set<AbortController>();
 
+  /** Track pending JSON-RPC requests by ID */
+  private pendingRequests = new Map<number, PendingRequest>();
+  private nextRequestId = 1;
+
+  /** Event subscriber callbacks by session */
+  private sessionSubscribers = new Map<string, Set<SessionSubscriber>>();
+
+  /** Track whether message.start has been emitted for active prompt per session */
+  private sessionMessageStarted = new Map<string, boolean>();
+
+  /** Cache sessions and model discovery results */
+  private sessionCache = new Map<string, AgentSession>();
+  private modelCache = new Map<string, ModelInfo[]>();
+
   /**
-   * Connect to an opencode server.
-   * For spawn mode, this spawns a new local server.
-   * For connect mode, this verifies the connection.
+   * Connect to an ACP-capable agent.
+   * For spawn mode, this launches the configured CLI with stdio ACP transport.
+   * For connect mode, this validates reachability only.
    */
-  async connect(config: BackendConnectionConfig, signal?: AbortSignal): Promise<void> {
+  async connect(config: BackendConnectionConfig, _signal?: AbortSignal): Promise<void> {
     if (this.connected) {
       throw new Error("Already connected. Call disconnect() first.");
     }
 
     this.directory = config.directory;
 
-    if (config.mode === "spawn") {
-      // Block spawn mode when RALPHER_REMOTE_ONLY is set
-      if (isRemoteOnlyMode()) {
-        throw new Error(
-          "Spawn mode is disabled. RALPHER_REMOTE_ONLY environment variable is set. " +
-          "Only connecting to remote servers is allowed."
-        );
-      }
-      await this.connectSpawn(config);
-    } else {
-      await this.connectToExisting(config, signal);
+    if (config.mode !== "spawn") {
+      throw new Error("Connect mode is not supported by ACP runtime. Use stdio or ssh transport.");
+    }
+
+    if (isRemoteOnlyMode() && config.transport !== "ssh") {
+      throw new Error(
+        "Spawn mode is disabled. RALPHER_REMOTE_ONLY environment variable is set. " +
+        "Only connecting to remote servers is allowed.",
+      );
     }
 
     this.connected = true;
+    try {
+      await this.connectSpawn(config);
+    } catch (error) {
+      this.connected = false;
+      this.process = null;
+      throw error;
+    }
   }
 
   /**
-   * Spawn a new opencode server and connect to it.
+   * Spawn an ACP stdio process and initialize JSON-RPC.
    */
   private async connectSpawn(config: BackendConnectionConfig): Promise<void> {
-    const options: Parameters<typeof createOpencode>[0] = {
-      hostname: config.hostname ?? "127.0.0.1",
-      port: config.port,
-      timeout: 10000,
-    };
+    const command = config.command ?? (config.provider === "copilot" ? "copilot" : "opencode");
+    const args = config.args ?? (config.provider === "copilot" ? ["--acp"] : ["acp"]);
 
-    const result = await createOpencode(options);
-    this.client = result.client;
-    this.server = result.server;
-    
-    // Store connection info for spawn mode
+    let process: Bun.Subprocess;
+    try {
+      process = Bun.spawn([command, ...args], {
+        cwd: config.directory,
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+    } catch (error) {
+      throw new Error(`Failed to spawn ACP process (${command}): ${String(error)}`);
+    }
+
+    this.process = process;
+    this.startProcessReaders();
+
+    try {
+      await this.sendRpcRequest("initialize", {
+        protocolVersion: 1,
+        clientInfo: {
+          name: "ralpher",
+          version: "0.0.0",
+        },
+      });
+    } catch (error) {
+      await this.disconnect();
+      throw new Error(`Failed to initialize ACP process (${command}): ${String(error)}`);
+    }
+
     this.connectionInfo = {
-      baseUrl: result.server.url,
-      authHeaders: {}, // Spawn mode doesn't need auth
+      baseUrl: `acp://stdio/${command}`,
+      authHeaders: {},
     };
   }
 
   /**
-   * Connect to an existing opencode server.
-   * Supports both HTTP and HTTPS, with optional self-signed certificate support.
-   */
-  private async connectToExisting(
-    config: BackendConnectionConfig,
-    signal?: AbortSignal,
-  ): Promise<void> {
-    const hostname = config.hostname ?? "127.0.0.1";
-    const port = config.port ?? 4096;
-    
-    // Determine protocol: use HTTPS only if explicitly set
-    const useHttps = config.useHttps ?? false;
-    const protocol = useHttps ? "https" : "http";
-    const baseUrl = `${protocol}://${hostname}:${port}`;
-
-    // Build auth headers if password provided
-    const authHeaders: Record<string, string> = {};
-    if (config.password) {
-      const credentials = Buffer.from(`opencode:${config.password}`).toString("base64");
-      authHeaders["Authorization"] = `Basic ${credentials}`;
-    }
-
-    // Create custom fetch function that handles TLS options for self-signed certs
-    // Note: Bun's `typeof fetch` includes static properties like `preconnect` that 
-    // a plain function doesn't have. The SDK's type expects `typeof fetch`, but
-    // only uses it as a callable. We use a type assertion to bridge this gap.
-    const customFetch = (req: Request): Promise<Response> => {
-      // Set timeout to false to prevent request timeouts (SDK default behavior)
-      // @ts-expect-error - Bun extends Request with timeout property
-      req.timeout = false;
-      
-      // Build fetch options, propagating the abort signal if provided so that
-      // callers (e.g., validateRemoteDirectory) can cancel in-flight requests.
-      const fetchOptions: RequestInit & { tls?: { rejectUnauthorized: boolean } } = {};
-      if (signal) {
-        fetchOptions.signal = signal;
-      }
-
-      // For HTTPS with self-signed certificates, use Bun's tls option
-      if (useHttps && config.allowInsecure) {
-        fetchOptions.tls = { rejectUnauthorized: false };
-      }
-
-      return Object.keys(fetchOptions).length > 0
-        ? fetch(req, fetchOptions as RequestInit)
-        : fetch(req);
-    };
-
-    // Build client config with optional Basic auth and custom fetch
-    // Type assertion needed: SDK expects `typeof fetch` which in Bun includes
-    // static properties, but only the callable signature is actually used
-    const clientConfig: OpencodeClientConfig & { directory?: string } = {
-      baseUrl,
-      directory: config.directory,
-      headers: authHeaders,
-      fetch: customFetch as typeof fetch,
-    };
-
-    this.client = createOpencodeClient(clientConfig);
-
-    // Verify connection by checking health (v2 uses flattened params)
-    const result = await this.client.session.list({
-      directory: config.directory,
-    });
-
-    if (result.error) {
-      this.client = null;
-      throw new Error(`Failed to connect to opencode at ${baseUrl}: ${JSON.stringify(result.error)}`);
-    }
-
-    // Store connection info (including allowInsecure for WebSocket connections)
-    this.connectionInfo = {
-      baseUrl,
-      authHeaders,
-      allowInsecure: config.allowInsecure,
-    };
-  }
-
-  /**
-   * Disconnect from the backend.
-   * For spawn mode, this stops the server.
+   * Disconnect from the backend and clean up resources.
    */
   async disconnect(): Promise<void> {
-    if (!this.connected) {
+    if (!this.connected && !this.process) {
       return;
     }
 
-    if (this.server) {
-      this.server.close();
-      this.server = null;
-    }
+    this.abortAllSubscriptions();
 
-    this.client = null;
+    for (const pending of this.pendingRequests.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error("Disconnected"));
+    }
+    this.pendingRequests.clear();
+
+    this.process = null;
+
+    this.sessionSubscribers.clear();
+    this.sessionMessageStarted.clear();
+    this.sessionCache.clear();
+    this.modelCache.clear();
+
     this.connected = false;
     this.directory = "";
     this.connectionInfo = null;
@@ -225,15 +237,17 @@ export class OpenCodeBackend implements Backend {
    * Check if connected to the backend.
    */
   isConnected(): boolean {
-    return this.connected && this.client !== null;
+    return this.connected;
   }
 
   /**
-   * Get the SDK client for advanced operations.
-   * Returns null if not connected.
+   * Get the low-level client object (not used for ACP transport).
    */
-  getSdkClient(): OpencodeClient | null {
-    return this.client;
+  getSdkClient(): { transport: "acp-stdio" } | null {
+    if (!this.connected) {
+      return null;
+    }
+    return { transport: "acp-stdio" };
   }
 
   /**
@@ -244,379 +258,728 @@ export class OpenCodeBackend implements Backend {
   }
 
   /**
-   * Get connection info for WebSocket and other direct connections.
-   * Returns null if not connected.
+   * Get connection info for diagnostics and ancillary connections.
    */
   getConnectionInfo(): ConnectionInfo | null {
     return this.connectionInfo;
   }
 
-  /**
-   * Get the client, throwing if not connected.
-   */
-  private getClient(): OpencodeClient {
-    if (!this.client) {
+  private ensureConnected(): void {
+    if (!this.connected || !this.process) {
       throw new Error("Not connected. Call connect() first.");
     }
-    return this.client;
+  }
+
+  private startProcessReaders(): void {
+    const process = this.process;
+    if (
+      !process
+      || !process.stdout
+      || !process.stderr
+      || typeof process.stdout === "number"
+      || typeof process.stderr === "number"
+    ) {
+      return;
+    }
+
+    void this.readRpcStream(process.stdout, "stdout");
+    void this.readRpcStream(process.stderr, "stderr");
+  }
+
+  private async readRpcStream(stream: ReadableStream<Uint8Array>, source: "stdout" | "stderr"): Promise<void> {
+    const reader = stream.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        let newlineIndex = buffer.indexOf("\n");
+        while (newlineIndex >= 0) {
+          const line = buffer.slice(0, newlineIndex).trim();
+          buffer = buffer.slice(newlineIndex + 1);
+          if (line.length > 0) {
+            this.handleRpcLine(line, source);
+          }
+          newlineIndex = buffer.indexOf("\n");
+        }
+      }
+
+      const rest = buffer.trim();
+      if (rest.length > 0) {
+        this.handleRpcLine(rest, source);
+      }
+    } catch (error) {
+      log.warn(`[OpenCodeBackend] ACP ${source} stream ended with error`, {
+        error: String(error),
+      });
+    }
+  }
+
+  private handleRpcLine(line: string, source: "stdout" | "stderr"): void {
+    let message: JsonRpcMessage;
+    try {
+      message = JSON.parse(line) as JsonRpcMessage;
+    } catch {
+      if (source === "stderr") {
+        log.debug(`[OpenCodeBackend] ACP stderr: ${line}`);
+      } else {
+        log.trace(`[OpenCodeBackend] Non-JSON stdout: ${line}`);
+      }
+      return;
+    }
+
+    this.handleRpcMessage(message);
+  }
+
+  private handleRpcMessage(message: JsonRpcMessage): void {
+    if (typeof message.id === "number") {
+      const pending = this.pendingRequests.get(message.id);
+      if (!pending) {
+        return;
+      }
+
+      clearTimeout(pending.timeout);
+      this.pendingRequests.delete(message.id);
+
+      if (message.error) {
+        const errMessage = message.error.message ?? JSON.stringify(message.error);
+        pending.reject(new Error(errMessage));
+        return;
+      }
+
+      pending.resolve(message.result);
+      return;
+    }
+
+    const method = message.method;
+    if (!method || !isRecord(message.params)) {
+      return;
+    }
+
+    if (method === "session/update") {
+      this.handleSessionUpdate(message.params);
+      return;
+    }
+
+    if (method === "session/request_permission") {
+      const sessionId = getString(message.params["sessionId"]);
+      const requestId = getString(message.params["requestId"]);
+      if (!sessionId || !requestId) {
+        return;
+      }
+      const permission = getString(message.params["permission"]) ?? "*";
+      const patterns = Array.isArray(message.params["patterns"])
+        ? message.params["patterns"].filter((p): p is string => typeof p === "string")
+        : ["*"];
+      this.emitSessionEvent(sessionId, {
+        type: "permission.asked",
+        requestId,
+        sessionId,
+        permission,
+        patterns,
+      });
+      return;
+    }
+
+    if (method === "session/question") {
+      const sessionId = getString(message.params["sessionId"]);
+      const requestId = getString(message.params["requestId"]);
+      const questions = message.params["questions"];
+      if (!sessionId || !requestId || !Array.isArray(questions)) {
+        return;
+      }
+      this.emitSessionEvent(sessionId, {
+        type: "question.asked",
+        requestId,
+        sessionId,
+        questions: questions as any,
+      });
+      return;
+    }
+
+    if (method === "session/status") {
+      const sessionId = getString(message.params["sessionId"]);
+      const status = getString(message.params["status"]);
+      if (!sessionId || (status !== "idle" && status !== "busy" && status !== "retry")) {
+        return;
+      }
+      this.emitSessionEvent(sessionId, {
+        type: "session.status",
+        sessionId,
+        status,
+        attempt: getNumber(message.params["attempt"]),
+        message: getString(message.params["message"]),
+      });
+      return;
+    }
+
+    if (method === "session/todo_updated") {
+      const sessionId = getString(message.params["sessionId"]);
+      const todos = message.params["todos"];
+      if (!sessionId || !Array.isArray(todos)) {
+        return;
+      }
+      this.emitSessionEvent(sessionId, {
+        type: "todo.updated",
+        sessionId,
+        todos: todos as any,
+      });
+    }
+  }
+
+  private handleSessionUpdate(params: Record<string, unknown>): void {
+    const sessionId = getString(params["sessionId"]);
+    const updateObj = isRecord(params["update"]) ? params["update"] : params;
+    const updateType = getString(updateObj["sessionUpdate"]) ?? getString(updateObj["type"]);
+    const content = isRecord(updateObj["content"]) ? updateObj["content"] : {};
+
+    if (!sessionId || !updateType) {
+      return;
+    }
+
+    if (updateType === "agent_message_chunk") {
+      const text = getString(content["text"]) ?? "";
+      if (!this.sessionMessageStarted.get(sessionId)) {
+        this.sessionMessageStarted.set(sessionId, true);
+        this.emitSessionEvent(sessionId, {
+          type: "message.start",
+          messageId: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        });
+      }
+      if (text.length > 0) {
+        this.emitSessionEvent(sessionId, {
+          type: "message.delta",
+          content: text,
+        });
+      }
+      return;
+    }
+
+    if (updateType === "agent_thought_chunk") {
+      const text = getString(content["text"]) ?? "";
+      if (text.length > 0) {
+        this.emitSessionEvent(sessionId, {
+          type: "reasoning.delta",
+          content: text,
+        });
+      }
+      return;
+    }
+
+    if (updateType === "tool_call") {
+      const toolName = getString(content["toolName"]) ?? getString(content["name"]) ?? "unknown_tool";
+      this.emitSessionEvent(sessionId, {
+        type: "tool.start",
+        toolName,
+        input: content["input"] ?? {},
+      });
+      return;
+    }
+
+    if (updateType === "tool_call_update") {
+      const toolName = getString(content["toolName"]) ?? getString(content["name"]) ?? "unknown_tool";
+      const status = getString(content["status"])
+        ?? getString(content["state"]);
+
+      if (status === "completed" || status === "success") {
+        this.emitSessionEvent(sessionId, {
+          type: "tool.complete",
+          toolName,
+          output: content["output"] ?? {},
+        });
+      } else if (status === "failed" || status === "error") {
+        this.emitSessionEvent(sessionId, {
+          type: "error",
+          message: getString(content["error"]) ?? `Tool ${toolName} failed`,
+        });
+      }
+    }
+  }
+
+  private addSessionSubscriber(sessionId: string, subscriber: SessionSubscriber): void {
+    const existing = this.sessionSubscribers.get(sessionId) ?? new Set<SessionSubscriber>();
+    existing.add(subscriber);
+    this.sessionSubscribers.set(sessionId, existing);
+  }
+
+  private removeSessionSubscriber(sessionId: string, subscriber: SessionSubscriber): void {
+    const existing = this.sessionSubscribers.get(sessionId);
+    if (!existing) {
+      return;
+    }
+    existing.delete(subscriber);
+    if (existing.size === 0) {
+      this.sessionSubscribers.delete(sessionId);
+    }
+  }
+
+  private emitSessionEvent(sessionId: string, event: AgentEvent): void {
+    const subscribers = this.sessionSubscribers.get(sessionId);
+    if (!subscribers || subscribers.size === 0) {
+      return;
+    }
+
+    for (const subscriber of subscribers) {
+      subscriber(event);
+    }
+  }
+
+  private writeRpcMessage(message: JsonRpcMessage): void {
+    const process = this.process;
+    if (!process || !process.stdin) {
+      throw new Error("ACP process is not available");
+    }
+    if (typeof process.stdin === "number") {
+      throw new Error("ACP process stdin is not writable");
+    }
+
+    process.stdin.write(`${JSON.stringify(message)}\n`);
+  }
+
+  private async sendRpcRequest<T>(
+    method: string,
+    params: Record<string, unknown>,
+    timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  ): Promise<T> {
+    this.ensureConnected();
+
+    const id = this.nextRequestId;
+    this.nextRequestId += 1;
+
+    const message: JsonRpcMessage = {
+      jsonrpc: "2.0",
+      id,
+      method,
+      params,
+    };
+
+    return await new Promise<T>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingRequests.delete(id);
+        reject(new Error(`ACP request timed out for method '${method}'`));
+      }, timeoutMs);
+
+      this.pendingRequests.set(id, {
+        resolve: (value: unknown) => resolve(value as T),
+        reject,
+        timeout,
+      });
+
+      try {
+        this.writeRpcMessage(message);
+      } catch (error) {
+        clearTimeout(timeout);
+        this.pendingRequests.delete(id);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  }
+
+  private parseModelsFromSessionResult(result: unknown): ModelInfo[] {
+    if (!isRecord(result) || !Array.isArray(result["models"])) {
+      return [];
+    }
+
+    const mapped: ModelInfo[] = [];
+    for (const item of result["models"]) {
+      if (!isRecord(item)) {
+        continue;
+      }
+
+      const modelID = getString(item["id"]) ?? getString(item["modelId"]);
+      if (!modelID) {
+        continue;
+      }
+
+      const name = getString(item["name"]) ?? modelID;
+      const providerID = getString(item["provider"]) ?? inferProviderID(modelID);
+
+      mapped.push({
+        providerID,
+        providerName: providerID,
+        modelID,
+        modelName: name,
+        connected: true,
+        variants: [""],
+      });
+    }
+
+    const seen = new Set<string>();
+    return mapped.filter((model) => {
+      const key = `${model.providerID}:${model.modelID}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+  }
+
+  private buildPromptParts(prompt: PromptInput): Array<Record<string, string>> {
+    return prompt.parts.map((part) => ({
+      type: "text",
+      text: part.text,
+    }));
+  }
+
+  private buildPromptParams(sessionId: string, prompt: PromptInput): Record<string, unknown> {
+    const modelID = prompt.model?.modelID;
+    return {
+      sessionId,
+      prompt: this.buildPromptParts(prompt),
+      ...(modelID ? { model: modelID } : {}),
+    };
   }
 
   /**
    * Create a new session.
-   * By default, creates sessions with auto-allow permissions to avoid permission prompts.
    */
   async createSession(options: CreateSessionOptions): Promise<AgentSession> {
-    const client = this.getClient();
-
-    // Auto-allow all permissions to prevent blocking on permission requests
-    // This is important for Ralph Loops which run unattended
-    const autoAllowPermissions = [
-      { permission: "*", pattern: "*", action: "allow" as const },
-    ];
-
-    // v2 SDK uses flattened parameters
-    const result = await client.session.create({
-      title: options.title,
-      directory: options.directory,
-      permission: autoAllowPermissions,
+    const result = await this.sendRpcRequest<unknown>("session/new", {
+      cwd: options.directory,
+      mcpServers: [],
+      ...(options.title ? { title: options.title } : {}),
     });
 
-    if (result.error) {
-      throw new Error(`Failed to create session: ${JSON.stringify(result.error)}`);
+    if (!isRecord(result)) {
+      throw new Error("Invalid ACP response for session/new");
     }
 
-    const session = result.data as OpenCodeSession;
-    return this.mapSession(session);
+    const id = getString(result["sessionId"]);
+    if (!id) {
+      throw new Error("ACP session/new did not return sessionId");
+    }
+
+    const session = this.mapSession({
+      id,
+      title: options.title,
+      time: { created: Date.now() },
+    });
+
+    this.sessionCache.set(id, session);
+
+    const models = this.parseModelsFromSessionResult(result);
+    if (models.length > 0) {
+      this.modelCache.set(options.directory, models);
+    }
+
+    return session;
   }
 
   /**
    * Get an existing session by ID.
    */
   async getSession(id: string): Promise<AgentSession | null> {
-    const client = this.getClient();
+    const cached = this.sessionCache.get(id);
+    if (cached) {
+      return cached;
+    }
 
-    // v2 SDK uses sessionID instead of path.id
-    const result = await client.session.get({
-      sessionID: id,
-      directory: this.directory,
-    });
-
-    if (result.error) {
-      // 404 means the session genuinely doesn't exist — return null
-      if (result.response?.status === 404) {
-        return null;
-      }
-      // Any other error (network, parse failure, server error) should be logged
-      // so unexpected issues are visible rather than silently treated as "not found"
-      log.warn(`[OpenCodeBackend] Unexpected error fetching session ${id}: ${JSON.stringify(result.error)} (status: ${result.response?.status ?? "unknown"})`);
+    const result = await this.sendRpcRequest<unknown>("session/list", {});
+    if (!isRecord(result) || !Array.isArray(result["sessions"])) {
       return null;
     }
 
-    const session = result.data as OpenCodeSession;
-    return this.mapSession(session);
+    for (const rawSession of result["sessions"]) {
+      if (!isRecord(rawSession)) {
+        continue;
+      }
+      const sessionId = getString(rawSession["sessionId"]);
+      if (sessionId !== id) {
+        continue;
+      }
+      const session = this.mapSession({
+        id: sessionId,
+        title: getString(rawSession["title"]),
+        time: { created: Date.now() },
+      });
+      this.sessionCache.set(session.id, session);
+      return session;
+    }
+
+    return null;
   }
 
   /**
    * Delete a session.
    */
   async deleteSession(id: string): Promise<void> {
-    const client = this.getClient();
+    this.ensureConnected();
 
-    // v2 SDK uses sessionID instead of path.id
-    const result = await client.session.delete({
-      sessionID: id,
-      directory: this.directory,
-    });
-
-    if (result.error) {
-      throw new Error(`Failed to delete session: ${JSON.stringify(result.error)}`);
+    try {
+      await this.sendRpcRequest("session/delete", { sessionId: id });
+    } catch (error) {
+      const message = String(error);
+      if (!message.includes("Method not found") && !message.includes("-32601")) {
+        throw error;
+      }
     }
+
+    this.sessionCache.delete(id);
+    this.sessionSubscribers.delete(id);
+    this.sessionMessageStarted.delete(id);
   }
 
   /**
-   * Send a prompt and wait for the full response.
+   * Send a prompt synchronously and return collected content.
    */
   async sendPrompt(sessionId: string, prompt: PromptInput): Promise<AgentResponse> {
-    const client = this.getClient();
+    this.ensureConnected();
 
-    // v2 SDK uses flattened parameters
-    // Note: variant is a separate field at the same level as model
-    const result = await client.session.prompt({
-      sessionID: sessionId,
-      directory: this.directory,
-      parts: prompt.parts.map((p) => ({
-        type: p.type as "text",
-        text: p.text,
-      })),
-      model: prompt.model ? { providerID: prompt.model.providerID, modelID: prompt.model.modelID } : undefined,
-      variant: prompt.model?.variant,
-    });
+    const chunks: string[] = [];
+    const toolParts: AgentPart[] = [];
 
-    if (result.error) {
-      throw new Error(`Failed to send prompt: ${JSON.stringify(result.error)}`);
+    const capture: SessionSubscriber = (event) => {
+      if (event.type === "message.delta") {
+        chunks.push(event.content);
+      } else if (event.type === "tool.start") {
+        toolParts.push({
+          type: "tool_call",
+          toolName: event.toolName,
+          toolInput: event.input,
+        });
+      } else if (event.type === "tool.complete") {
+        toolParts.push({
+          type: "tool_result",
+          toolName: event.toolName,
+          toolOutput: event.output,
+        });
+      }
+    };
+
+    this.addSessionSubscriber(sessionId, capture);
+    this.sessionMessageStarted.set(sessionId, false);
+
+    let responseContent = "";
+    try {
+      const result = await this.sendRpcRequest<unknown>(
+        "session/prompt",
+        this.buildPromptParams(sessionId, prompt),
+      );
+
+      if (isRecord(result)) {
+        const content = getString(result["content"]);
+        if (content) {
+          responseContent = content;
+        }
+      }
+    } finally {
+      this.removeSessionSubscriber(sessionId, capture);
+      this.sessionMessageStarted.delete(sessionId);
     }
 
-    // The response is { info: Message, parts: Part[] }
-    const response = result.data as { info: AssistantMessage; parts: Part[] };
-    return this.mapResponse(response);
+    if (!responseContent) {
+      responseContent = chunks.join("");
+    }
+
+    const mappedParts: Part[] = [];
+    if (responseContent.length > 0) {
+      mappedParts.push({
+        type: "text",
+        text: responseContent,
+      });
+    }
+    for (const part of toolParts) {
+      if (part.type === "tool_call") {
+        mappedParts.push({
+          type: "tool",
+          tool: part.toolName ?? "unknown_tool",
+          state: {
+            status: "running",
+            input: part.toolInput,
+          },
+        });
+      } else if (part.type === "tool_result") {
+        mappedParts.push({
+          type: "tool",
+          tool: part.toolName ?? "unknown_tool",
+          state: {
+            status: "completed",
+            output: part.toolOutput,
+          },
+        });
+      }
+    }
+
+    return this.mapResponse({
+      info: {
+        id: `msg-${Date.now()}`,
+        tokens: { input: 0, output: 0 },
+      },
+      parts: mappedParts,
+    });
   }
 
   /**
-   * Send a prompt without waiting for response.
-   * Use subscribeToEvents to get the response.
+   * Send a prompt asynchronously. Streaming updates are emitted via subscribeToEvents().
    */
   async sendPromptAsync(sessionId: string, prompt: PromptInput): Promise<void> {
-    log.trace("[OpenCodeBackend] sendPromptAsync: Entry", { sessionId });
-    log.debug("[OpenCodeBackend] sendPromptAsync: Prompt details", {
-      sessionId,
-      partsCount: prompt.parts.length,
-      model: prompt.model ? `${prompt.model.providerID}/${prompt.model.modelID}` : "default",
-      variant: prompt.model?.variant,
-      firstPartType: prompt.parts[0]?.type,
-      firstPartTextLength: prompt.parts[0]?.text?.length ?? 0,
-      textPreview: prompt.parts[0]?.text?.slice(0, 200) ?? "",
-    });
-    const client = this.getClient();
+    this.ensureConnected();
+    this.sessionMessageStarted.set(sessionId, false);
 
-    // v2 SDK uses flattened parameters
-    // Note: variant is a separate field at the same level as model
-    log.trace("[OpenCodeBackend] sendPromptAsync: About to call client.session.promptAsync");
-    const result = await client.session.promptAsync({
-      sessionID: sessionId,
-      directory: this.directory,
-      parts: prompt.parts.map((p) => ({
-        type: p.type as "text",
-        text: p.text,
-      })),
-      model: prompt.model ? { providerID: prompt.model.providerID, modelID: prompt.model.modelID } : undefined,
-      variant: prompt.model?.variant,
-    });
-    log.debug("[OpenCodeBackend] sendPromptAsync: client.session.promptAsync returned", { 
-      sessionId,
-      hasError: !!result.error,
-      errorDetails: result.error ? JSON.stringify(result.error) : undefined,
-    });
-
-    if (result.error) {
-      log.error("[OpenCodeBackend] sendPromptAsync: Failed to send async prompt", {
-        sessionId,
-        error: JSON.stringify(result.error),
+    void this.sendRpcRequest("session/prompt", this.buildPromptParams(sessionId, prompt))
+      .then(() => {
+        this.emitSessionEvent(sessionId, {
+          type: "message.complete",
+          content: "",
+        });
+        this.sessionMessageStarted.delete(sessionId);
+      })
+      .catch((error) => {
+        this.emitSessionEvent(sessionId, {
+          type: "error",
+          message: String(error),
+        });
+        this.sessionMessageStarted.delete(sessionId);
       });
-      throw new Error(`Failed to send async prompt: ${JSON.stringify(result.error)}`);
-    }
-    log.trace("[OpenCodeBackend] sendPromptAsync: Exit", { sessionId });
   }
 
   /**
-   * Abort a running session.
+   * Abort a running session prompt if supported by the ACP provider.
    */
   async abortSession(sessionId: string): Promise<void> {
-    const client = this.getClient();
+    this.ensureConnected();
 
-    // v2 SDK uses sessionID instead of path.id
-    const result = await client.session.abort({
-      sessionID: sessionId,
-      directory: this.directory,
+    const cancellationMethods = ["session/cancel", "session/abort", "session/stop"];
+    for (const method of cancellationMethods) {
+      try {
+        await this.sendRpcRequest(method, { sessionId }, 5_000);
+        return;
+      } catch (error) {
+        const message = String(error);
+        if (!message.includes("Method not found") && !message.includes("-32601")) {
+          throw error;
+        }
+      }
+    }
+
+    log.debug("[OpenCodeBackend] Session abort is not supported by current ACP provider", { sessionId });
+  }
+
+  /**
+   * Get available models for a directory.
+   */
+  async getModels(directory: string): Promise<ModelInfo[]> {
+    const cached = this.modelCache.get(directory);
+    if (cached) {
+      return cached;
+    }
+
+    const result = await this.sendRpcRequest<unknown>("session/new", {
+      cwd: directory,
+      mcpServers: [],
     });
 
-    if (result.error) {
-      throw new Error(`Failed to abort session: ${JSON.stringify(result.error)}`);
+    const models = this.parseModelsFromSessionResult(result);
+    if (models.length > 0) {
+      this.modelCache.set(directory, models);
     }
+    return models;
   }
 
   /**
    * Reply to a permission request.
-   * Called when the AI asks for permission to perform an action.
-   * @param requestId - The request ID from the permission.asked event
-   * @param response - "once" to allow once, "always" to always allow, "reject" to deny
    */
-  async replyToPermission(requestId: string, response: "once" | "always" | "reject"): Promise<void> {
-    const client = this.getClient();
+  async replyToPermission(requestId: string, response: string): Promise<void> {
+    this.ensureConnected();
 
-    log.trace("[OpenCodeBackend] replyToPermission", { requestId, response });
-    const result = await client.permission.reply({
-      requestID: requestId,
-      directory: this.directory,
-      reply: response,
-    });
+    const payload = {
+      requestId,
+      response,
+    };
 
-    if (result.error) {
-      throw new Error(`Failed to reply to permission: ${JSON.stringify(result.error)}`);
+    const methods = ["session/reply_permission", "session/permission_reply"];
+    for (const method of methods) {
+      try {
+        await this.sendRpcRequest(method, payload, 10_000);
+        return;
+      } catch (error) {
+        const message = String(error);
+        if (!message.includes("Method not found") && !message.includes("-32601")) {
+          throw error;
+        }
+      }
     }
-    log.trace("[OpenCodeBackend] replyToPermission: Success");
+
+    log.debug("[OpenCodeBackend] Permission reply is not supported by current ACP provider", {
+      requestId,
+      response,
+    });
   }
 
   /**
-   * Reply to a question asked by the AI.
-   * Called when the AI asks for user input via the question.asked event.
-   * @param requestId - The request ID from the question.asked event
-   * @param answers - Array of answers, one per question. Each answer is an array of selected labels.
+   * Reply to a question request.
    */
   async replyToQuestion(requestId: string, answers: string[][]): Promise<void> {
-    const client = this.getClient();
+    this.ensureConnected();
 
-    log.trace("[OpenCodeBackend] replyToQuestion", { requestId, answersCount: answers.length });
-    const result = await client.question.reply({
-      requestID: requestId,
-      directory: this.directory,
-      answers: answers,
-    });
+    const payload = {
+      requestId,
+      answers,
+    };
 
-    if (result.error) {
-      throw new Error(`Failed to reply to question: ${JSON.stringify(result.error)}`);
+    const methods = ["session/reply_question", "session/question_reply"];
+    for (const method of methods) {
+      try {
+        await this.sendRpcRequest(method, payload, 10_000);
+        return;
+      } catch (error) {
+        const message = String(error);
+        if (!message.includes("Method not found") && !message.includes("-32601")) {
+          throw error;
+        }
+      }
     }
-    log.trace("[OpenCodeBackend] replyToQuestion: Success");
+
+    log.debug("[OpenCodeBackend] Question reply is not supported by current ACP provider", {
+      requestId,
+      answersCount: answers.length,
+    });
   }
 
   /**
    * Abort all active event subscriptions.
-   * Useful for resetting stale connections.
    */
   abortAllSubscriptions(): void {
-    log.trace("[OpenCodeBackend] abortAllSubscriptions", { count: this.activeSubscriptions.size });
-    for (const controller of this.activeSubscriptions) {
-      controller.abort();
+    for (const abortController of this.activeSubscriptions) {
+      abortController.abort();
     }
     this.activeSubscriptions.clear();
   }
 
   /**
-   * Subscribe to events from a session.
-   * Returns a promise that resolves when the subscription is established,
-   * providing an EventStream of AgentEvents translated from OpenCode SDK events.
-   * 
-   * IMPORTANT: The caller MUST await this method before sending prompts to ensure
-   * the SSE subscription is established and ready to receive events. This prevents
-   * race conditions where events are emitted before the listener is ready.
-   * 
-   * Deduplication: The SDK emits update events repeatedly as messages/parts
-   * are being built. We track what we've already emitted to avoid duplicates.
+   * Subscribe to session events emitted from ACP notifications.
    */
   async subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>> {
-    // Generate subscription ID for tracking
-    const subId = `sub-${Math.random().toString(36).slice(2, 9)}`;
-    log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Entry`, { sessionId });
-    const client = this.getClient();
+    this.ensureConnected();
 
-    // Create AbortController to allow cancellation when consumer calls close()
     const abortController = new AbortController();
-    
-    // Track this subscription for reset functionality
     this.activeSubscriptions.add(abortController);
-    log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Active subscription count`, { 
-      count: this.activeSubscriptions.size,
-      sessionId,
-    });
 
-    // v2 SDK uses flattened parameters
-    log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: About to call client.event.subscribe`);
-    const subscription = await client.event.subscribe({
-      directory: this.directory,
-    }, {
-      signal: abortController.signal,
-    });
-    log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Subscription created`);
-
-    // Track emitted events to avoid duplicates
-    const emittedMessageStarts = new Set<string>();
-    const toolPartStatus = new Map<string, string>();
-    const reasoningTextLength = new Map<string, number>();
-    const partTypes = new Map<string, string>();
-    // Track whether we've seen a message.start in this subscription.
-    // This guard prevents stale `session.idle` events from causing phantom iterations.
-    let hasMessageStart = false;
-
-    // Create the event stream
     const { stream, push, end } = createEventStream<AgentEvent>();
 
-    // Start consuming SDK events in the background and pushing to our stream
-    const self = this;
-    (async () => {
-      try {
-        log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Starting background event loop`);
-        for await (const event of subscription.stream) {
-          // Check if aborted
-          if (abortController.signal.aborted) {
-            log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Abort detected in loop, breaking`);
-            break;
-          }
-          const rawEventType = (event as OpenCodeEvent).type;
-          log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Received raw event`, { 
-            type: rawEventType,
-            sessionId,
-          });
-          
-          // Filter events for our session and translate them
-          const translated = self.translateEvent(
-            event as OpenCodeEvent,
-            {
-              sessionId,
-              subId,
-              emittedMessageStarts,
-              toolPartStatus,
-              reasoningTextLength,
-              partTypes,
-              client,
-              directory: self.directory,
-            }
-          );
-          
-          if (translated) {
-            log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Translated event`, {
-              rawType: rawEventType,
-              translatedType: translated.type,
-              sessionId,
-            });
-            if (translated.type === "message.start") {
-              hasMessageStart = true;
-              log.info(`[OpenCodeBackend:${subId}] subscribeToEvents: First message.start seen`, { sessionId });
-            }
-            // Skip stale message.complete before we've seen a message.start
-            if (translated.type === "message.complete" && !hasMessageStart) {
-              log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Skipping stale message.complete (no message.start yet)`, { sessionId });
-              continue;
-            }
-            push(translated);
-          } else {
-            log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: Event filtered out (translated to null)`, {
-              rawType: rawEventType,
-              sessionId,
-            });
-          }
-        }
-        log.trace(`[OpenCodeBackend:${subId}] subscribeToEvents: SDK stream ended`);
-        end();
-      } catch (err) {
-        // AbortError is expected when we close the subscription
-        const isAbortError = err instanceof Error && err.name === "AbortError";
-        if (!isAbortError) {
-          log.error(`[OpenCodeBackend:${subId}] subscribeToEvents: Error in event loop`, { error: String(err) });
-        } else {
-          log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Subscription aborted (expected)`);
-        }
-        end();
-      } finally {
-        // Remove from tracking when done
-        log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Background loop exiting`, {
-          activeCount: self.activeSubscriptions.size,
-        });
-        self.activeSubscriptions.delete(abortController);
+    const subscriber: SessionSubscriber = (event) => {
+      if (!abortController.signal.aborted) {
+        push(event);
       }
-    })();
+    };
 
-    // Wrap the stream to abort subscription when closed
+    this.addSessionSubscriber(sessionId, subscriber);
+
     const wrappedStream: EventStream<AgentEvent> = {
       next: () => stream.next(),
       close: () => {
-        log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Closing subscription`, {
-          activeBeforeClose: self.activeSubscriptions.size,
-        });
-        stream.close();
         abortController.abort();
-        self.activeSubscriptions.delete(abortController);
-        log.debug(`[OpenCodeBackend:${subId}] subscribeToEvents: Subscription closed`, {
-          activeAfterClose: self.activeSubscriptions.size,
-        });
+        this.activeSubscriptions.delete(abortController);
+        this.removeSessionSubscriber(sessionId, subscriber);
+        stream.close();
+        end();
       },
     };
 
@@ -681,7 +1044,7 @@ export class OpenCodeBackend implements Backend {
    * Translate an OpenCode SDK event to our AgentEvent type.
    * Returns null if the event is not relevant, for a different session, or a duplicate.
    */
-  private translateEvent(
+  translateEvent(
     event: OpenCodeEvent,
     ctx: TranslateEventContext
   ): AgentEvent | null {
@@ -881,10 +1244,10 @@ export class OpenCodeBackend implements Backend {
           type: "question.asked",
           requestId: props.id,
           sessionId: props.sessionID,
-          questions: (props.questions ?? []).map((q) => ({
+          questions: (props.questions ?? []).map((q: any) => ({
             question: q.question ?? "",
             header: q.header ?? "",
-            options: (q.options ?? []).map((o) => ({
+            options: (q.options ?? []).map((o: any) => ({
               label: o.label ?? "",
               description: o.description ?? "",
             })),
@@ -917,7 +1280,7 @@ export class OpenCodeBackend implements Backend {
         return {
           type: "todo.updated",
           sessionId: props.sessionID,
-          todos: (props.todos ?? []).map((todo, index) => ({
+          todos: (props.todos ?? []).map((todo: any, index: number) => ({
             content: todo.content,
             status: todo.status as "pending" | "in_progress" | "completed" | "cancelled",
             priority: todo.priority as "high" | "medium" | "low",
@@ -969,64 +1332,4 @@ export class OpenCodeBackend implements Backend {
     }
   }
 
-  /**
-   * Get available models from the backend.
-   * Returns models from all providers, indicating which are connected.
-   */
-  async getModels(directory: string): Promise<ModelInfo[]> {
-    const client = this.getClient();
-
-    // v2 SDK uses flattened parameters
-    const result = await client.provider.list({
-      directory,
-    });
-
-    if (result.error) {
-      throw new Error(`Failed to get models: ${JSON.stringify(result.error)}`);
-    }
-
-    // The SDK returns provider list with models
-    // We extract what we need without strict type checking since SDK types may vary
-    const data = result.data as {
-      all: Array<{
-        id: string;
-        name: string;
-        models: {
-          [key: string]: {
-            id: string;
-            name: string;
-            variants?: { [key: string]: unknown };
-          };
-        };
-      }>;
-      connected: string[];
-    };
-
-    const models: ModelInfo[] = [];
-    const connectedProviders = new Set(data.connected);
-
-    for (const provider of data.all) {
-      const isConnected = connectedProviders.has(provider.id);
-
-      for (const modelId of Object.keys(provider.models)) {
-        const model = provider.models[modelId];
-        if (model) {
-          // Extract variant names from the variants object
-          // Keys are variant names, empty string ("") represents default
-          const variants = model.variants ? Object.keys(model.variants) : undefined;
-
-          models.push({
-            providerID: provider.id,
-            providerName: provider.name,
-            modelID: model.id,
-            modelName: model.name,
-            connected: isConnected,
-            variants,
-          });
-        }
-      }
-    }
-
-    return models;
-  }
 }

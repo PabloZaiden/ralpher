@@ -21,28 +21,27 @@ function makeServerSettings(overrides?: {
   mode?: "spawn" | "connect";
   hostname?: string;
   port?: number;
+  username?: string;
   password?: string;
-  useHttps?: boolean;
-  allowInsecure?: boolean;
 }) {
   const mode = overrides?.mode ?? "spawn";
   const isConnect = mode === "connect";
-  const transport: "tcp" | "stdio" = isConnect ? "tcp" : "stdio";
+  if (isConnect) {
+    return {
+      agent: {
+        provider: "opencode" as const,
+        transport: "ssh" as const,
+        hostname: overrides?.hostname ?? "localhost",
+        port: overrides?.port ?? 22,
+        ...(overrides?.username ? { username: overrides.username } : {}),
+        ...(overrides?.password ? { password: overrides.password } : {}),
+      },
+    };
+  }
   return {
     agent: {
       provider: "opencode" as const,
-      transport,
-      useHttps: isConnect ? (overrides?.useHttps ?? false) : false,
-      allowInsecure: isConnect ? (overrides?.allowInsecure ?? false) : false,
-      ...(isConnect && {
-        hostname: overrides?.hostname ?? "localhost",
-        port: overrides?.port ?? 4096,
-        ...(overrides?.password ? { password: overrides.password } : {}),
-      }),
-    },
-    execution: {
-      provider: "local" as const,
-      workspaceRoot: "",
+      transport: "stdio" as const,
     },
   };
 }
@@ -484,8 +483,6 @@ describe("Workspace API Integration", () => {
 
         // Should have default settings
         expect(settings.agent.transport).toBe("stdio");
-        expect(settings.agent.useHttps).toBe(false);
-        expect(settings.agent.allowInsecure).toBe(false);
       });
 
       test("returns 404 for non-existent workspace", async () => {
@@ -512,8 +509,6 @@ describe("Workspace API Integration", () => {
           mode: "connect",
           hostname: "example.com",
           port: 8080,
-          useHttps: true,
-          allowInsecure: true,
         });
 
         const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings`, {
@@ -524,16 +519,14 @@ describe("Workspace API Integration", () => {
         expect(response.ok).toBe(true);
         const updatedSettings = await response.json();
 
-        expect(updatedSettings.agent.transport).toBe("tcp");
+        expect(updatedSettings.agent.transport).toBe("ssh");
         expect(updatedSettings.agent.hostname).toBe("example.com");
         expect(updatedSettings.agent.port).toBe(8080);
-        expect(updatedSettings.agent.useHttps).toBe(true);
-        expect(updatedSettings.agent.allowInsecure).toBe(true);
 
         // Verify persistence by fetching again
         const getResponse = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings`);
         const fetchedSettings = await getResponse.json();
-        expect(fetchedSettings.agent.transport).toBe("tcp");
+        expect(fetchedSettings.agent.transport).toBe("ssh");
         expect(fetchedSettings.agent.hostname).toBe("example.com");
       });
 
@@ -557,11 +550,6 @@ describe("Workspace API Integration", () => {
             agent: {
               provider: "opencode",
               transport: "invalid-transport",
-              useHttps: false,
-              allowInsecure: false,
-            },
-            execution: {
-              provider: "local",
             },
           }),
         });
@@ -598,10 +586,10 @@ describe("Workspace API Integration", () => {
         const status = await response.json();
 
         // Should return a valid status object
-        expect(status).toHaveProperty("agent");
-        expect(status).toHaveProperty("execution");
-        expect(status.agent).toHaveProperty("connected");
-        expect(status.execution).toHaveProperty("connected");
+        expect(status).toHaveProperty("connected");
+        expect(status).toHaveProperty("provider");
+        expect(status).toHaveProperty("transport");
+        expect(status).toHaveProperty("capabilities");
       });
 
       test("returns 404 for non-existent workspace", async () => {
@@ -714,8 +702,6 @@ describe("Workspace API Integration", () => {
 
         expect(workspace.serverSettings).toBeDefined();
         expect(workspace.serverSettings.agent.transport).toBe("stdio");
-        expect(workspace.serverSettings.agent.useHttps).toBe(false);
-        expect(workspace.serverSettings.agent.allowInsecure).toBe(false);
       });
 
       test("creates workspace with custom server settings when provided", async () => {
@@ -723,8 +709,6 @@ describe("Workspace API Integration", () => {
           mode: "connect",
           hostname: "custom.server.com",
           port: 9000,
-          useHttps: true,
-          allowInsecure: false,
         });
 
         const response = await fetch(`${baseUrl}/api/workspaces`, {
@@ -741,11 +725,9 @@ describe("Workspace API Integration", () => {
         const workspace = await response.json();
 
         expect(workspace.serverSettings).toBeDefined();
-        expect(workspace.serverSettings.agent.transport).toBe("tcp");
+        expect(workspace.serverSettings.agent.transport).toBe("ssh");
         expect(workspace.serverSettings.agent.hostname).toBe("custom.server.com");
         expect(workspace.serverSettings.agent.port).toBe(9000);
-        expect(workspace.serverSettings.agent.useHttps).toBe(true);
-        expect(workspace.serverSettings.agent.allowInsecure).toBe(false);
       });
     });
 
@@ -772,8 +754,6 @@ describe("Workspace API Integration", () => {
               mode: "connect",
               hostname: "new-server.com",
               port: 7000,
-              useHttps: false,
-              allowInsecure: true,
             }),
           }),
         });
@@ -782,10 +762,9 @@ describe("Workspace API Integration", () => {
         const updated = await response.json();
 
         expect(updated.name).toBe("New Name");
-        expect(updated.serverSettings.agent.transport).toBe("tcp");
+        expect(updated.serverSettings.agent.transport).toBe("ssh");
         expect(updated.serverSettings.agent.hostname).toBe("new-server.com");
         expect(updated.serverSettings.agent.port).toBe(7000);
-        expect(updated.serverSettings.agent.allowInsecure).toBe(true);
       });
 
       test("updates only name, keeping server settings", async () => {
@@ -794,8 +773,6 @@ describe("Workspace API Integration", () => {
           mode: "connect",
           hostname: "original.server.com",
           port: 5000,
-          useHttps: true,
-          allowInsecure: false,
         });
 
         const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
@@ -823,7 +800,7 @@ describe("Workspace API Integration", () => {
 
         expect(updated.name).toBe("Updated Name Only");
         // Server settings should remain unchanged
-        expect(updated.serverSettings.agent.transport).toBe("tcp");
+        expect(updated.serverSettings.agent.transport).toBe("ssh");
         expect(updated.serverSettings.agent.hostname).toBe("original.server.com");
         expect(updated.serverSettings.agent.port).toBe(5000);
       });
@@ -864,8 +841,6 @@ describe("Workspace API Integration", () => {
                 mode: "connect",
                 hostname: "new-server.com",
                 port: 8080,
-                useHttps: false,
-                allowInsecure: false,
               }),
             }),
           });
@@ -948,8 +923,6 @@ describe("Workspace API Integration", () => {
             mode: "connect",
             hostname: "server-a.com",
             port: 5001,
-            useHttps: false,
-            allowInsecure: false,
           });
 
           const createResponseA = await fetch(`${baseUrl}/api/workspaces`, {
@@ -969,8 +942,6 @@ describe("Workspace API Integration", () => {
             mode: "connect",
             hostname: "server-b.com",
             port: 5002,
-            useHttps: true,
-            allowInsecure: true,
           });
 
           const createResponseB = await fetch(`${baseUrl}/api/workspaces`, {
@@ -988,19 +959,15 @@ describe("Workspace API Integration", () => {
           // Verify initial settings are different
           expect(workspaceA.serverSettings.agent.hostname).toBe("server-a.com");
           expect(workspaceA.serverSettings.agent.port).toBe(5001);
-          expect(workspaceA.serverSettings.agent.allowInsecure).toBe(false);
 
           expect(workspaceB.serverSettings.agent.hostname).toBe("server-b.com");
           expect(workspaceB.serverSettings.agent.port).toBe(5002);
-          expect(workspaceB.serverSettings.agent.allowInsecure).toBe(true);
 
           // Update workspace A's settings
           const newSettingsA = makeServerSettings({
             mode: "connect",
             hostname: "updated-server-a.com",
             port: 6001,
-            useHttps: true,
-            allowInsecure: false,
           });
 
           const updateResponseA = await fetch(`${baseUrl}/api/workspaces/${workspaceA.id}/server-settings`, {
@@ -1016,7 +983,6 @@ describe("Workspace API Integration", () => {
           const updatedA = await getResponseA.json();
           expect(updatedA.serverSettings.agent.hostname).toBe("updated-server-a.com");
           expect(updatedA.serverSettings.agent.port).toBe(6001);
-          expect(updatedA.serverSettings.agent.useHttps).toBe(true);
 
           // CRITICAL: Verify workspace B was NOT affected
           const getResponseB = await fetch(`${baseUrl}/api/workspaces/${workspaceB.id}`);
@@ -1024,8 +990,6 @@ describe("Workspace API Integration", () => {
           const unchangedB = await getResponseB.json();
           expect(unchangedB.serverSettings.agent.hostname).toBe("server-b.com");
           expect(unchangedB.serverSettings.agent.port).toBe(5002);
-          expect(unchangedB.serverSettings.agent.useHttps).toBe(true);
-          expect(unchangedB.serverSettings.agent.allowInsecure).toBe(true);
 
           // Also verify via the list endpoint
           const listResponse = await fetch(`${baseUrl}/api/workspaces`);
@@ -1078,8 +1042,6 @@ describe("Workspace API Integration", () => {
                 hostname: "export-a.com",
                 port: 3001,
                 password: "secret-a",
-                useHttps: true,
-                allowInsecure: false,
               }),
             }),
           });
@@ -1151,8 +1113,6 @@ describe("Workspace API Integration", () => {
                   mode: "connect",
                   hostname: "imported.server.com",
                   port: 9000,
-                  useHttps: true,
-                  allowInsecure: false,
                 }),
               },
               {
@@ -1390,8 +1350,6 @@ describe("Workspace API Integration", () => {
               hostname: "rt.server.com",
               port: 5555,
               password: "rt-password",
-              useHttps: true,
-              allowInsecure: false,
             }),
           }),
         });

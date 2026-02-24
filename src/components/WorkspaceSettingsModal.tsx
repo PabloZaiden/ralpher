@@ -91,7 +91,6 @@ export function WorkspaceSettingsModal({
     log.trace("Server settings changed", {
       provider: settings.agent.provider,
       transport: settings.agent.transport,
-      executionProvider: settings.execution.provider,
       isValid,
     });
     setServerSettings(settings);
@@ -204,21 +203,16 @@ export function WorkspaceSettingsModal({
         {/* Connection Status */}
         <div className="flex items-center gap-2 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
           <span className="text-sm text-gray-600 dark:text-gray-400">Connection Status:</span>
-          {status?.agent.connected && status?.execution.connected ? (
+          {status?.connected ? (
             <Badge variant="success">Connected</Badge>
           ) : status?.error ? (
             <Badge variant="error">Error</Badge>
           ) : (
             <Badge variant="warning">Idle</Badge>
           )}
-          {status?.agent.connected !== undefined && (
+          {status && (
             <span className="text-xs text-gray-500 dark:text-gray-400">
-              agent: {status.agent.connected ? "ok" : "down"}
-            </span>
-          )}
-          {status?.execution.connected !== undefined && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              exec: {status.execution.connected ? "ok" : "down"}
+              {status.provider}/{status.transport}
             </span>
           )}
         </div>

@@ -22,28 +22,27 @@ function makeServerSettings(overrides?: {
   mode?: "spawn" | "connect";
   hostname?: string;
   port?: number;
+  username?: string;
   password?: string;
-  useHttps?: boolean;
-  allowInsecure?: boolean;
 }) {
   const mode = overrides?.mode ?? "spawn";
   const isConnect = mode === "connect";
-  const transport: "tcp" | "stdio" = isConnect ? "tcp" : "stdio";
+  if (isConnect) {
+    return {
+      agent: {
+        provider: "opencode" as const,
+        transport: "ssh" as const,
+        hostname: overrides?.hostname ?? "localhost",
+        port: overrides?.port ?? 22,
+        ...(overrides?.username ? { username: overrides.username } : {}),
+        ...(overrides?.password ? { password: overrides.password } : {}),
+      },
+    };
+  }
   return {
     agent: {
       provider: "opencode" as const,
-      transport,
-      useHttps: isConnect ? (overrides?.useHttps ?? false) : false,
-      allowInsecure: isConnect ? (overrides?.allowInsecure ?? false) : false,
-      ...(isConnect && {
-        hostname: overrides?.hostname ?? "localhost",
-        port: overrides?.port ?? 4096,
-        ...(overrides?.password ? { password: overrides.password } : {}),
-      }),
-    },
-    execution: {
-      provider: "local" as const,
-      workspaceRoot: "",
+      transport: "stdio" as const,
     },
   };
 }
@@ -147,8 +146,6 @@ describe("Multi-Workspace E2E", () => {
             mode: "connect",
             hostname: "example-server.com",
             port: 8080,
-            useHttps: true,
-            allowInsecure: false,
           }),
         }),
       });
@@ -168,7 +165,7 @@ describe("Multi-Workspace E2E", () => {
 
       // Verify workspace 2 settings
       const fetchedWs2 = workspaces.find((w: { id: string }) => w.id === ws2.id);
-      expect(fetchedWs2.serverSettings.agent.transport).toBe("tcp");
+      expect(fetchedWs2.serverSettings.agent.transport).toBe("ssh");
       expect(fetchedWs2.serverSettings.agent.hostname).toBe("example-server.com");
       expect(fetchedWs2.serverSettings.agent.port).toBe(8080);
     });
@@ -206,8 +203,6 @@ describe("Multi-Workspace E2E", () => {
             mode: "connect",
             hostname: "new-server.com",
             port: 9000,
-            useHttps: true,
-            allowInsecure: true,
           })
         ),
       });
@@ -216,7 +211,7 @@ describe("Multi-Workspace E2E", () => {
       // Verify workspace 1 was updated
       const ws1GetResponse = await fetch(`${baseUrl}/api/workspaces/${ws1.id}/server-settings`);
       const ws1Settings = await ws1GetResponse.json();
-      expect(ws1Settings.agent.transport).toBe("tcp");
+      expect(ws1Settings.agent.transport).toBe("ssh");
       expect(ws1Settings.agent.hostname).toBe("new-server.com");
 
       // Verify workspace 2 was NOT affected
@@ -388,8 +383,6 @@ describe("Multi-Workspace E2E", () => {
             mode: "connect",
             hostname: "example.com",
             port: 8080,
-            useHttps: true,
-            allowInsecure: false,
           }),
         }),
       });
@@ -405,10 +398,12 @@ describe("Multi-Workspace E2E", () => {
       const status2 = await status2Response.json();
 
       // Both should have independent status
-      expect(status1).toHaveProperty("agent");
-      expect(status1).toHaveProperty("execution");
-      expect(status2).toHaveProperty("agent");
-      expect(status2).toHaveProperty("execution");
+      expect(status1).toHaveProperty("connected");
+      expect(status1).toHaveProperty("provider");
+      expect(status1).toHaveProperty("transport");
+      expect(status2).toHaveProperty("connected");
+      expect(status2).toHaveProperty("provider");
+      expect(status2).toHaveProperty("transport");
     });
   });
 });

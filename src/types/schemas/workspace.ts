@@ -16,51 +16,45 @@ export const AgentProviderSchema = z.enum(["opencode", "copilot"]);
 
 /**
  * Agent transport options.
+ * - stdio: local ACP CLI process
+ * - ssh: ACP CLI process started over SSH
  */
-export const AgentTransportSchema = z.enum(["stdio", "tcp", "ssh-stdio"]);
+export const AgentTransportSchema = z.enum(["stdio", "ssh"]);
 
-/**
- * Execution provider options.
- */
-export const ExecutionProviderSchema = z.enum(["local", "ssh"]);
-
-/**
- * Schema for the agent channel settings.
- */
-export const AgentSettingsSchema = z.object({
+const StdioAgentSettingsSchema = z.object({
   provider: AgentProviderSchema,
-  transport: AgentTransportSchema,
-  hostname: z.string().optional(),
-  port: z.number().optional(),
+  transport: z.literal("stdio"),
+});
+
+const SshAgentSettingsSchema = z.object({
+  provider: AgentProviderSchema,
+  transport: z.literal("ssh"),
+  hostname: z.string().min(1, "hostname is required for ssh transport"),
+  port: z.number().int().min(1).max(65535).optional(),
+  username: z.string().optional(),
   password: z.string().optional(),
-  useHttps: z.boolean(),
-  allowInsecure: z.boolean(),
-  command: z.string().optional(),
-  args: z.array(z.string()).optional(),
 });
 
 /**
- * Schema for the deterministic execution channel settings.
+ * Schema for the agent settings.
+ *
+ * Note: this is intentionally a single channel config. Execution behavior is
+ * derived from transport:
+ * - stdio => local deterministic execution
+ * - ssh => ssh deterministic execution
  */
-export const ExecutionSettingsSchema = z.object({
-  provider: ExecutionProviderSchema,
-  host: z.string().optional(),
-  port: z.number().optional(),
-  user: z.string().optional(),
-  workspaceRoot: z.string().optional(),
-});
+export const AgentSettingsSchema = z.discriminatedUnion("transport", [
+  StdioAgentSettingsSchema,
+  SshAgentSettingsSchema,
+]);
 
 /**
  * Schema for workspace server settings.
  *
  * This schema is the single source of truth. The ServerSettings type is inferred from it.
- * The settings are split into two channels:
- * - agent: ACP-compatible agent runtime settings
- * - execution: deterministic command/file execution settings
  */
 export const ServerSettingsSchema = z.object({
   agent: AgentSettingsSchema,
-  execution: ExecutionSettingsSchema,
 });
 
 /**
@@ -126,11 +120,10 @@ export const WorkspaceImportRequestSchema = WorkspaceExportSchema;
  */
 export type AgentProvider = z.infer<typeof AgentProviderSchema>;
 export type AgentTransport = z.infer<typeof AgentTransportSchema>;
-export type ExecutionProvider = z.infer<typeof ExecutionProviderSchema>;
 export type AgentSettings = z.infer<typeof AgentSettingsSchema>;
-export type ExecutionSettings = z.infer<typeof ExecutionSettingsSchema>;
 export type ServerSettings = z.infer<typeof ServerSettingsSchema>;
 
 export type WorkspaceConfig = z.infer<typeof WorkspaceConfigSchema>;
 export type WorkspaceExportData = z.infer<typeof WorkspaceExportSchema>;
 export type WorkspaceImportRequest = z.infer<typeof WorkspaceImportRequestSchema>;
+

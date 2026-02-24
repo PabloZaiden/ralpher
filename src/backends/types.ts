@@ -14,12 +14,10 @@ export type { TodoItem };
  * Connection info needed for WebSocket and other direct connections.
  */
 export interface ConnectionInfo {
-  /** Base URL for the opencode server */
+  /** Base URL for the active transport */
   baseUrl: string;
   /** Auth headers to use for connections */
   authHeaders: Record<string, string>;
-  /** Whether to allow insecure connections (self-signed certificates) */
-  allowInsecure?: boolean;
 }
 
 /**
@@ -28,18 +26,24 @@ export interface ConnectionInfo {
 export interface BackendConnectionConfig {
   /** Spawn new server or connect to existing */
   mode: "spawn" | "connect";
-  /** Hostname for connect mode */
+  /** Selected agent provider (used by ACP backends) */
+  provider?: "opencode" | "copilot";
+  /** Selected agent transport (used by ACP backends) */
+  transport?: "stdio" | "ssh";
+  /** SSH hostname */
   hostname?: string;
-  /** Port for connect mode */
+  /** SSH port */
   port?: number;
-  /** Password for connect mode (optional) */
+  /** SSH username (optional) */
+  username?: string;
+  /** SSH password (optional) */
   password?: string;
+  /** Derived command for ACP transport */
+  command?: string;
+  /** Derived command args for ACP transport */
+  args?: string[];
   /** Working directory for the backend */
   directory: string;
-  /** Whether to use HTTPS for connect mode */
-  useHttps?: boolean;
-  /** Whether to allow insecure connections (self-signed certificates) */
-  allowInsecure?: boolean;
 }
 
 /**

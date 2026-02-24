@@ -279,7 +279,7 @@ See [docs/API.md](docs/API.md) for complete API documentation.
 | Language | TypeScript (strict mode) |
 | Frontend | React 19 |
 | Styling | Tailwind CSS v4 |
-| AI Integration | [@opencode-ai/sdk](https://opencode.ai) |
+| AI Integration | ACP-compatible agent CLIs (Copilot/OpenCode) |
 | Real-time | WebSocket |
 
 ---

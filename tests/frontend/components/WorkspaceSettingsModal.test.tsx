@@ -37,16 +37,10 @@ function makeWorkspace(overrides?: Parameters<typeof createWorkspace>[0]) {
 /** Default connection status (idle, not connected). */
 function makeStatus(overrides?: Partial<ConnectionStatus>): ConnectionStatus {
   return {
-    agent: {
-      connected: false,
-      provider: "opencode",
-      transport: "stdio",
-      capabilities: [],
-    },
-    execution: {
-      connected: false,
-      provider: "local",
-    },
+    connected: false,
+    provider: "opencode",
+    transport: "stdio",
+    capabilities: [],
     ...overrides,
   };
 }
@@ -315,16 +309,10 @@ describe("WorkspaceSettingsModal AGENTS.md optimization", () => {
         <WorkspaceSettingsModal
           {...defaultProps()}
           status={makeStatus({
-            agent: {
-              connected: false,
-              provider: "opencode",
-              transport: "stdio",
-              capabilities: [],
-            },
-            execution: {
-              connected: false,
-              provider: "local",
-            },
+            connected: false,
+            provider: "opencode",
+            transport: "stdio",
+            capabilities: [],
           })}
         />
       );

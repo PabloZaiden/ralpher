@@ -42,9 +42,8 @@ type LegacyServerSettingsOverrides = {
   mode?: "spawn" | "connect";
   hostname?: string;
   port?: number;
+  username?: string;
   password?: string;
-  useHttps?: boolean;
-  allowInsecure?: boolean;
 };
 
 export function createServerSettings(
@@ -54,12 +53,6 @@ export function createServerSettings(
     agent: {
       provider: "opencode",
       transport: "stdio",
-      useHttps: false,
-      allowInsecure: false,
-    },
-    execution: {
-      provider: "local",
-      workspaceRoot: "",
     },
   };
 
@@ -67,29 +60,42 @@ export function createServerSettings(
     return defaults;
   }
 
-  const legacyTransport =
-    overrides.mode === "connect" ? "tcp" : overrides.mode === "spawn" ? "stdio" : undefined;
-  const legacyAgent = {
-    transport: legacyTransport,
-    hostname: overrides.hostname,
-    port: overrides.port,
-    password: overrides.password,
-    useHttps: overrides.useHttps,
-    allowInsecure: overrides.allowInsecure,
-  };
+  const legacyTransport = overrides.mode === "connect"
+    ? "ssh"
+    : overrides.mode === "spawn"
+      ? "stdio"
+      : undefined;
+  const requestedTransport = overrides.agent?.transport ?? legacyTransport ?? defaults.agent.transport;
+
+  if (requestedTransport === "ssh") {
+    return {
+      agent: {
+        provider: overrides.agent?.provider ?? defaults.agent.provider,
+        transport: "ssh",
+        hostname:
+          (overrides.agent?.transport === "ssh" && overrides.agent.hostname)
+          || overrides.hostname
+          || "localhost",
+        port:
+          (overrides.agent?.transport === "ssh" && overrides.agent.port)
+          || overrides.port
+          || 22,
+        username:
+          (overrides.agent?.transport === "ssh" && overrides.agent.username)
+          || overrides.username
+          || undefined,
+        password:
+          (overrides.agent?.transport === "ssh" && overrides.agent.password)
+          || overrides.password
+          || undefined,
+      },
+    };
+  }
 
   return {
     agent: {
-      ...defaults.agent,
-      ...legacyAgent,
-      ...(overrides.agent ?? {}),
-      transport: overrides.agent?.transport ?? legacyTransport ?? defaults.agent.transport,
-      useHttps: overrides.agent?.useHttps ?? legacyAgent.useHttps ?? defaults.agent.useHttps,
-      allowInsecure: overrides.agent?.allowInsecure ?? legacyAgent.allowInsecure ?? defaults.agent.allowInsecure,
-    },
-    execution: {
-      ...defaults.execution,
-      ...(overrides.execution ?? {}),
+      provider: overrides.agent?.provider ?? defaults.agent.provider,
+      transport: "stdio",
     },
   };
 }

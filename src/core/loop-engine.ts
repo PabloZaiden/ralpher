@@ -982,8 +982,8 @@ export class LoopEngine {
       this.emitLog("info", "Backend not connected, establishing connection...", {
         provider: settings.agent.provider,
         transport: settings.agent.transport,
-        hostname: settings.agent.hostname,
-        port: settings.agent.port,
+        hostname: settings.agent.transport === "ssh" ? settings.agent.hostname : undefined,
+        port: settings.agent.transport === "ssh" ? settings.agent.port : undefined,
       });
       log.trace("[LoopEngine] setupSession: About to call backend.connect");
       await this.backend.connect(buildConnectionConfig(settings, this.workingDirectory));
@@ -1007,9 +1007,8 @@ export class LoopEngine {
 
     // Store session info for remote transports.
     const connectionConfig = buildConnectionConfig(settings, this.workingDirectory);
-    const protocol = connectionConfig.useHttps ? "https" : "http";
-    const serverUrl = connectionConfig.mode === "connect" && connectionConfig.hostname
-      ? `${protocol}://${connectionConfig.hostname}:${connectionConfig.port ?? 4096}`
+    const serverUrl = connectionConfig.transport === "ssh" && connectionConfig.hostname
+      ? `ssh://${connectionConfig.hostname}:${connectionConfig.port ?? 22}`
       : undefined;
 
     log.trace("[LoopEngine] setupSession: About to update state");
@@ -1052,8 +1051,8 @@ export class LoopEngine {
         this.emitLog("info", "Reconnecting to backend...", {
           provider: settings.agent.provider,
           transport: settings.agent.transport,
-          hostname: settings.agent.hostname,
-          port: settings.agent.port,
+          hostname: settings.agent.transport === "ssh" ? settings.agent.hostname : undefined,
+          port: settings.agent.transport === "ssh" ? settings.agent.port : undefined,
         });
         await this.backend.connect(buildConnectionConfig(settings, this.workingDirectory));
         this.emitLog("info", "Backend connection re-established");

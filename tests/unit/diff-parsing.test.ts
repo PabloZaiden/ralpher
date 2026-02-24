@@ -12,7 +12,7 @@ import type { CommandExecutor, CommandResult, CommandOptions } from "../../src/c
 
 /**
  * Mock executor that simulates PTY output with CRLF line endings.
- * This mimics what we get from the real PTY-based command execution.
+ * This mimics what we get from real command execution output.
  */
 class CRLFCommandExecutor implements CommandExecutor {
   private realExecutor: CommandExecutor;
