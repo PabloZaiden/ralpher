@@ -198,7 +198,10 @@ export class CommandExecutorImpl implements CommandExecutor {
       quoteShell(command),
       ...args.map((arg) => quoteShell(arg)),
     ].join(" ");
-    const remoteShellCommand = `bash -lc ${quoteShell(remoteCommand)}`;
+    const wrappedRemoteCommand = command === "git"
+      ? `if [ -f ~/.bashrc ]; then source ~/.bashrc >/dev/null 2>&1; fi; ${remoteCommand}`
+      : remoteCommand;
+    const remoteShellCommand = `bash -lc ${quoteShell(wrappedRemoteCommand)}`;
 
     const sshArgs = [
       "-o",
@@ -213,6 +216,8 @@ export class CommandExecutorImpl implements CommandExecutor {
       "ServerAliveInterval=15",
       "-o",
       "ServerAliveCountMax=1",
+      "-o",
+      "ForwardAgent=yes",
       "-p",
       String(this.port),
       this.user ? `${this.user}@${this.host}` : this.host,
