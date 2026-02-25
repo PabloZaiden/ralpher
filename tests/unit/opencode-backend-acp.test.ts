@@ -9,6 +9,7 @@ type PrivateBackend = {
   pendingPermissionRequests: Map<string, { rpcId: number; options: Array<{ optionId: string; kind?: string }> }>;
   toolCallNames: Map<string, string>;
   sessionPromptSequences: Map<string, number>;
+  sessionReasoningPartKeys: Map<string, string>;
   connected: boolean;
   process: { stdin: { write: (line: string) => void } } | null;
   replyToPermission(requestId: string, response: string): Promise<void>;
@@ -210,6 +211,119 @@ describe("OpenCodeBackend ACP parsing", () => {
         error: "file not found",
       },
     });
+  });
+
+  test("adds a line break between distinct reasoning parts", () => {
+    const backend = getBackend();
+    const sessionId = "session-reasoning-parts";
+    const events: Array<Record<string, unknown>> = [];
+
+    backend.sessionSubscribers.set(
+      sessionId,
+      new Set([
+        (event: unknown) => {
+          events.push(event as Record<string, unknown>);
+        },
+      ]),
+    );
+
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId,
+        update: {
+          sessionUpdate: "agent_thought_chunk",
+          content: {
+            partId: "part-1",
+            text: "First reasoning part.",
+          },
+        },
+      },
+    });
+
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId,
+        update: {
+          sessionUpdate: "agent_thought_chunk",
+          content: {
+            partId: "part-2",
+            text: "Second reasoning part.",
+          },
+        },
+      },
+    });
+
+    expect(events).toEqual([
+      {
+        type: "reasoning.delta",
+        content: "First reasoning part.",
+      },
+      {
+        type: "reasoning.delta",
+        content: "\nSecond reasoning part.",
+      },
+    ]);
+  });
+
+  test("does not add a line break when reasoning chunks belong to the same part", () => {
+    const backend = getBackend();
+    const sessionId = "session-reasoning-same-part";
+    const events: Array<Record<string, unknown>> = [];
+
+    backend.sessionSubscribers.set(
+      sessionId,
+      new Set([
+        (event: unknown) => {
+          events.push(event as Record<string, unknown>);
+        },
+      ]),
+    );
+
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId,
+        update: {
+          sessionUpdate: "agent_thought_chunk",
+          content: {
+            partId: "part-1",
+            text: "Chunk one",
+          },
+        },
+      },
+    });
+
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId,
+        update: {
+          sessionUpdate: "agent_thought_chunk",
+          content: {
+            partId: "part-1",
+            text: " chunk two",
+          },
+        },
+      },
+    });
+
+    expect(events).toEqual([
+      {
+        type: "reasoning.delta",
+        content: "Chunk one",
+      },
+      {
+        type: "reasoning.delta",
+        content: " chunk two",
+      },
+    ]);
+    expect(backend.sessionReasoningPartKeys.get(sessionId)).toBe("id:part-1");
   });
 
   test("emits todo.updated when tool_call input carries checklist todos", () => {

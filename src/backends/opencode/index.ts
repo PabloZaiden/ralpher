@@ -335,6 +335,9 @@ export class OpenCodeBackend implements Backend {
   /** Whether the active async prompt has produced meaningful activity */
   private sessionPromptHasActivity = new Map<string, boolean>();
 
+  /** Track reasoning part identity per session to separate distinct reasoning parts */
+  private sessionReasoningPartKeys = new Map<string, string>();
+
   /** Cache sessions and model discovery results */
   private sessionCache = new Map<string, AgentSession>();
   private modelCache = new Map<string, ModelInfo[]>();
@@ -444,6 +447,7 @@ export class OpenCodeBackend implements Backend {
     this.sessionMessageStarted.clear();
     this.sessionPromptSequences.clear();
     this.sessionPromptHasActivity.clear();
+    this.sessionReasoningPartKeys.clear();
     this.sessionCache.clear();
     this.modelCache.clear();
     this.pendingPermissionRequests.clear();
@@ -667,6 +671,7 @@ export class OpenCodeBackend implements Backend {
           this.sessionMessageStarted.delete(sessionId);
           this.sessionPromptSequences.delete(sessionId);
           this.sessionPromptHasActivity.delete(sessionId);
+          this.sessionReasoningPartKeys.delete(sessionId);
         }
         return;
       }
@@ -747,9 +752,18 @@ export class OpenCodeBackend implements Backend {
       }
       const text = getString(content["text"]) ?? "";
       if (text.length > 0) {
+        let reasoningText = text;
+        const partKey = this.getReasoningPartKey(updateObj, content);
+        if (partKey) {
+          const previousPartKey = this.sessionReasoningPartKeys.get(sessionId);
+          if (previousPartKey && previousPartKey !== partKey && !text.startsWith("\n")) {
+            reasoningText = `\n${text}`;
+          }
+          this.sessionReasoningPartKeys.set(sessionId, partKey);
+        }
         this.emitSessionEvent(sessionId, {
           type: "reasoning.delta",
-          content: text,
+          content: reasoningText,
         });
       }
       return;
@@ -863,6 +877,35 @@ export class OpenCodeBackend implements Backend {
       sessionId,
       todos,
     });
+  }
+
+  private getReasoningPartKey(
+    updateObj: Record<string, unknown>,
+    content: Record<string, unknown>,
+  ): string | undefined {
+    const partId = firstString(
+      content["partId"],
+      content["partID"],
+      updateObj["partId"],
+      updateObj["partID"],
+      content["reasoningPartId"],
+      updateObj["reasoningPartId"],
+      content["thoughtId"],
+      updateObj["thoughtId"],
+    );
+    if (partId) {
+      return `id:${partId}`;
+    }
+
+    const partIndex = getNumber(content["partIndex"])
+      ?? getNumber(updateObj["partIndex"])
+      ?? getNumber(content["reasoningPartIndex"])
+      ?? getNumber(updateObj["reasoningPartIndex"]);
+    if (partIndex !== undefined) {
+      return `index:${partIndex}`;
+    }
+
+    return undefined;
   }
 
   private maybeEmitTodoUpdateFromToolPayload(
@@ -1141,6 +1184,7 @@ export class OpenCodeBackend implements Backend {
     this.sessionMessageStarted.delete(id);
     this.sessionPromptSequences.delete(id);
     this.sessionPromptHasActivity.delete(id);
+    this.sessionReasoningPartKeys.delete(id);
     this.sessionTodoSnapshots.delete(id);
   }
 
@@ -1244,6 +1288,7 @@ export class OpenCodeBackend implements Backend {
     const sequence = (this.sessionPromptSequences.get(sessionId) ?? 0) + 1;
     this.sessionPromptSequences.set(sessionId, sequence);
     this.sessionPromptHasActivity.set(sessionId, false);
+    this.sessionReasoningPartKeys.delete(sessionId);
 
     void this.sendRpcRequest("session/prompt", this.buildPromptParams(sessionId, prompt), PROMPT_REQUEST_TIMEOUT_MS)
       .then(() => {
@@ -1257,6 +1302,7 @@ export class OpenCodeBackend implements Backend {
         this.sessionMessageStarted.delete(sessionId);
         this.sessionPromptSequences.delete(sessionId);
         this.sessionPromptHasActivity.delete(sessionId);
+        this.sessionReasoningPartKeys.delete(sessionId);
       })
       .catch((error) => {
         if (this.sessionPromptSequences.get(sessionId) !== sequence) {
@@ -1276,6 +1322,7 @@ export class OpenCodeBackend implements Backend {
         this.sessionMessageStarted.delete(sessionId);
         this.sessionPromptSequences.delete(sessionId);
         this.sessionPromptHasActivity.delete(sessionId);
+        this.sessionReasoningPartKeys.delete(sessionId);
       });
   }
 
