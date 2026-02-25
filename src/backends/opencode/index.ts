@@ -77,6 +77,7 @@ type PendingRequest = {
 type SessionSubscriber = (event: AgentEvent) => void;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+const PROMPT_REQUEST_TIMEOUT_MS = 1_800_000;
 
 type PermissionOption = {
   optionId: string;
@@ -642,6 +643,7 @@ export class OpenCodeBackend implements Backend {
         if (!sessionId || (status !== "idle" && status !== "busy" && status !== "retry")) {
           return;
         }
+        const hasActivePrompt = this.sessionPromptSequences.has(sessionId);
         this.emitSessionEvent(sessionId, {
           type: "session.status",
           sessionId,
@@ -649,6 +651,14 @@ export class OpenCodeBackend implements Backend {
           attempt: getNumber(message.params["attempt"]),
           message: getString(message.params["message"]),
         });
+        if (status === "idle" && hasActivePrompt) {
+          this.emitSessionEvent(sessionId, {
+            type: "message.complete",
+            content: "",
+          });
+          this.sessionMessageStarted.delete(sessionId);
+          this.sessionPromptSequences.delete(sessionId);
+        }
         return;
       }
 
@@ -1147,6 +1157,7 @@ export class OpenCodeBackend implements Backend {
       const result = await this.sendRpcRequest<unknown>(
         "session/prompt",
         this.buildPromptParams(sessionId, prompt),
+        PROMPT_REQUEST_TIMEOUT_MS,
       );
 
       if (isRecord(result)) {
@@ -1211,7 +1222,7 @@ export class OpenCodeBackend implements Backend {
     const sequence = (this.sessionPromptSequences.get(sessionId) ?? 0) + 1;
     this.sessionPromptSequences.set(sessionId, sequence);
 
-    void this.sendRpcRequest("session/prompt", this.buildPromptParams(sessionId, prompt))
+    void this.sendRpcRequest("session/prompt", this.buildPromptParams(sessionId, prompt), PROMPT_REQUEST_TIMEOUT_MS)
       .then(() => {
         if (this.sessionPromptSequences.get(sessionId) !== sequence) {
           return;
@@ -1227,9 +1238,16 @@ export class OpenCodeBackend implements Backend {
         if (this.sessionPromptSequences.get(sessionId) !== sequence) {
           return;
         }
+        const message = String(error);
+        if (message.includes("ACP request timed out for method 'session/prompt'")) {
+          log.warn("[OpenCodeBackend] session/prompt request timed out; waiting for status-driven completion", {
+            sessionId,
+          });
+          return;
+        }
         this.emitSessionEvent(sessionId, {
           type: "error",
-          message: String(error),
+          message,
         });
         this.sessionMessageStarted.delete(sessionId);
         this.sessionPromptSequences.delete(sessionId);

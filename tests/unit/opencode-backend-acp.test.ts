@@ -392,6 +392,82 @@ describe("OpenCodeBackend ACP parsing", () => {
     });
   });
 
+  test("emits message.complete when session becomes idle with an active prompt", () => {
+    const backend = getBackend();
+    const sessionId = "session-idle-complete";
+    const events: Array<Record<string, unknown>> = [];
+
+    backend.sessionSubscribers.set(
+      sessionId,
+      new Set([
+        (event: unknown) => {
+          events.push(event as Record<string, unknown>);
+        },
+      ]),
+    );
+    backend.sessionPromptSequences.set(sessionId, 1);
+
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/status",
+      params: {
+        sessionId,
+        status: "idle",
+      },
+    });
+
+    expect(events).toEqual([
+      {
+        type: "session.status",
+        sessionId,
+        status: "idle",
+        attempt: undefined,
+        message: undefined,
+      },
+      {
+        type: "message.complete",
+        content: "",
+      },
+    ]);
+    expect(backend.sessionPromptSequences.has(sessionId)).toBe(false);
+  });
+
+  test("does not emit error for session/prompt timeout in async mode", async () => {
+    const backend = getBackend();
+    const sessionId = "session-timeout";
+    const events: Array<Record<string, unknown>> = [];
+
+    backend.connected = true;
+    backend.process = {
+      stdin: {
+        write: () => {
+          // no-op
+        },
+      },
+    };
+    backend.sessionSubscribers.set(
+      sessionId,
+      new Set([
+        (event: unknown) => {
+          events.push(event as Record<string, unknown>);
+        },
+      ]),
+    );
+
+    backend.sendRpcRequest = ((method: string) => {
+      if (method === "session/prompt") {
+        return Promise.reject(new Error("ACP request timed out for method 'session/prompt'"));
+      }
+      return Promise.resolve({}) as Promise<unknown>;
+    }) as PrivateBackend["sendRpcRequest"];
+
+    await backend.sendPromptAsync(sessionId, { parts: [{ type: "text", text: "hello" }] });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(events).toEqual([]);
+  });
+
   test("ignores stale message.complete from previous async prompt", async () => {
     const backend = getBackend();
     const sessionId = "session-stale";
