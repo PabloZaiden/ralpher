@@ -38,7 +38,7 @@ export const settingsRoutes = {
      * 
      * Returns settings that affect app behavior based on environment.
      * Currently includes:
-     * - remoteOnly: Whether spawn mode is disabled (RALPHER_REMOTE_ONLY)
+     * - remoteOnly: Whether local stdio transport is disabled (RALPHER_REMOTE_ONLY)
      * 
      * @returns AppConfig object
      */

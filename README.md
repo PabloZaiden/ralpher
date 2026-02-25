@@ -150,7 +150,8 @@ This downloads the appropriate binary for your platform (Linux/macOS, x64/arm64)
 
 - [Bun](https://bun.sh) v1.3.5+ (for development only)
 - Git
-- A local [OpenCode](https://opencode.ai) binary in your PATH (for Spawn mode) **or** a remote OpenCode server URL (for Connect mode)
+- An ACP-capable CLI in your PATH (`opencode` and/or `copilot`)
+- Optional SSH access to remote workspace hosts (for `ssh` transport)
 
 ### Running Ralpher
 
@@ -180,7 +181,7 @@ The web UI will be available at `http://localhost:3000` (configurable via `RALPH
 |----------|-------------|---------|
 | `RALPHER_PORT` | Server port | `3000` |
 | `RALPHER_DATA_DIR` | Data directory for persistence | `./data` |
-| `RALPHER_REMOTE_ONLY` | Disable spawn mode, only allow remote connections (`true`/`1`/`yes`) | unset |
+| `RALPHER_REMOTE_ONLY` | Disable local `stdio` transport and only allow `ssh` transport (`true`/`1`/`yes`) | unset |
 | `RALPHER_LOG_LEVEL` | Override server log level (`silly`, `trace`, `debug`, `info`, `warn`, `error`, `fatal`) | `info` |
 
 ### Data Storage
@@ -329,16 +330,14 @@ See [AGENTS.md](AGENTS.md) for detailed coding guidelines.
 
 ---
 
-## Server Modes
+## Workspace Connection Transports
 
-Ralpher supports two modes for connecting to the opencode backend:
+Ralpher uses provider + transport settings per workspace:
 
-| Mode | Description |
-|------|-------------|
-| **Spawn** | Ralpher spawns a local opencode server process automatically |
-| **Connect** | Ralpher connects to a remote opencode server via URL |
-
-Both modes work identically from the user's perspective.
+| Transport | Description |
+|-----------|-------------|
+| **stdio** | Ralpher starts the configured ACP CLI locally (`opencode acp` or `copilot --acp`) |
+| **ssh** | Ralpher starts the configured ACP CLI on a remote host via SSH |
 
 ### Per-Workspace Server Configuration
 
@@ -346,13 +345,13 @@ Each workspace has its own server configuration, allowing you to:
 
 - **Run multiple workspaces in parallel** with different server settings
 - **Connect to different remote servers** for different projects
-- **Mix spawn and connect modes** across your workspaces
+- **Mix local and remote transports** across your workspaces
 
 To configure server settings for a workspace:
 
 1. Click the **gear icon** next to a workspace name in the dashboard header
-2. Select **Spawn** mode (local) or **Connect** mode (remote server)
-3. For Connect mode, enter the hostname, port, and authentication details
+2. Select provider (**OpenCode** or **Copilot**) and transport (**stdio** or **ssh**)
+3. For `ssh`, enter hostname, port, and optional username/password
 4. Click **Test Connection** to verify the settings
 5. Click **Save Changes** to apply
 

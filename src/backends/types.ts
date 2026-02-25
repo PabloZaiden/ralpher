@@ -24,7 +24,7 @@ export interface ConnectionInfo {
  * Configuration for connecting to the OpenCode backend.
  */
 export interface BackendConnectionConfig {
-  /** Spawn new server or connect to existing */
+  /** Backend runtime mode (ACP backends currently use "spawn") */
   mode: "spawn" | "connect";
   /** Selected agent provider (used by ACP backends) */
   provider?: "opencode" | "copilot";

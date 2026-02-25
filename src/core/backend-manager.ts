@@ -107,6 +107,7 @@ function buildAgentRuntimeCommand(settings: ServerSettings): { command: string; 
 export interface ServerConnectedEvent {
   type: "server.connected";
   workspaceId?: string;
+  /** Legacy runtime mode field (ACP path currently emits "spawn"). */
   mode: "spawn" | "connect";
   serverUrl?: string;
   timestamp: string;

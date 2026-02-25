@@ -32,6 +32,21 @@ function setupBaseApi() {
   api.get("/api/preferences/log-level", () => ({ level: "info" }));
   api.get("/api/preferences/last-directory", () => null);
   api.get("/api/models", () => [createModelInfo({ connected: true })]);
+  api.get("/api/workspaces/:id/server-settings/status", () => ({
+    connected: false,
+    provider: "opencode",
+    transport: "stdio",
+    capabilities: [],
+  }));
+  api.get("/api/workspaces/:id/agents-md", () => ({
+    content: "# AGENTS.md",
+    fileExists: true,
+    analysis: {
+      isOptimized: false,
+      currentVersion: null,
+      updateAvailable: false,
+    },
+  }));
 }
 
 beforeEach(() => {
@@ -89,11 +104,6 @@ describe("workspace management scenario", () => {
         agent: {
           provider: "opencode",
           transport: "stdio",
-          useHttps: false,
-          allowInsecure: false,
-        },
-        execution: {
-          provider: "local",
         },
       },
       createdAt: new Date().toISOString(),
@@ -139,6 +149,16 @@ describe("workspace management scenario", () => {
     // API was called
     const postCalls = api.calls("/api/workspaces", "POST");
     expect(postCalls.length).toBeGreaterThan(0);
+    expect(postCalls[0]?.body).toEqual({
+      name: "X",
+      directory: "/",
+      serverSettings: {
+        agent: {
+          provider: "opencode",
+          transport: "stdio",
+        },
+      },
+    });
   });
 
   test("cancel create workspace closes modal", async () => {

@@ -17,7 +17,7 @@ export type {
 
 /**
  * Get default server settings.
- * @param remoteOnly - If true, defaults to "connect" mode instead of "spawn" mode.
+ * @param remoteOnly - If true, defaults to `ssh` transport instead of `stdio`.
  *                     This should be passed from the server config (RALPHER_REMOTE_ONLY env var).
  */
 export function getDefaultServerSettings(remoteOnly: boolean = false): ServerSettings {

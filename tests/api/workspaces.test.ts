@@ -647,6 +647,55 @@ describe("Workspace API Integration", () => {
         expect(result).toHaveProperty("success");
       });
 
+      test("returns 400 when proposed settings body is invalid JSON", async () => {
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Invalid JSON Settings Test",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings/test`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{invalid-json",
+        });
+
+        expect(response.status).toBe(400);
+        const body = await response.json();
+        expect(body.error).toBe("invalid_json");
+      });
+
+      test("returns 400 when proposed settings fail schema validation", async () => {
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Invalid Settings Shape Test",
+            directory: testWorkDir,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings/test`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            agent: {
+              provider: "opencode",
+              transport: "invalid-transport",
+            },
+          }),
+        });
+
+        expect(response.status).toBe(400);
+        const body = await response.json();
+        expect(body.error).toBe("validation_error");
+      });
+
       test("returns 404 for non-existent workspace", async () => {
         const response = await fetch(`${baseUrl}/api/workspaces/non-existent-id/server-settings/test`, {
           method: "POST",

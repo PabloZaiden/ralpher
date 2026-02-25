@@ -450,22 +450,31 @@ export const workspacesRoutes = {
         // If no body, use the workspace's current settings
         let settings = workspace.serverSettings;
         
-        // Try to parse the body - if empty or invalid JSON, use current settings
-        try {
-          const bodyText = await req.text();
-          if (bodyText.trim()) {
-            const bodyJson = JSON.parse(bodyText);
-            // Only use the body if it looks like a ServerSettings object.
-            if (bodyJson && bodyJson.agent) {
-              const result = ServerSettingsSchema.safeParse(bodyJson);
-              if (result.success) {
-                settings = result.data;
-              }
-              // If validation fails, use current settings.
-            }
+        const bodyText = await req.text();
+        if (bodyText.trim()) {
+          let bodyJson: unknown;
+          try {
+            bodyJson = JSON.parse(bodyText);
+          } catch {
+            return errorResponse("invalid_json", "Request body must be valid JSON", 400);
           }
-        } catch {
-          // JSON parse error or empty body - use current settings
+
+          // Allow "{}" as shorthand for "use current settings".
+          if (
+            typeof bodyJson === "object"
+            && bodyJson !== null
+            && !Array.isArray(bodyJson)
+            && Object.keys(bodyJson).length === 0
+          ) {
+            settings = workspace.serverSettings;
+          } else {
+            const parsedSettings = ServerSettingsSchema.safeParse(bodyJson);
+            if (!parsedSettings.success) {
+              const firstIssue = parsedSettings.error.issues[0]?.message ?? "Invalid server settings";
+              return errorResponse("validation_error", firstIssue, 400);
+            }
+            settings = parsedSettings.data;
+          }
         }
 
         const result = await backendManager.testConnection(settings, workspace.directory);

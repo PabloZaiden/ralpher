@@ -1,7 +1,7 @@
 /**
  * Command execution abstraction for Ralph Loops Management System.
  * Provides a unified interface for running shell commands and file operations
- * that works both locally (spawn mode) and remotely (connect mode).
+ * that works both locally (`stdio` transport) and remotely (`ssh` transport).
  */
 
 /**

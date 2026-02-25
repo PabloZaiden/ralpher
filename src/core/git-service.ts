@@ -165,7 +165,7 @@ export interface CommitInfo {
 /**
  * GitService provides git operations for Ralph Loops.
  * Uses a CommandExecutor for running git commands, allowing for both
- * local execution (spawn mode) and remote execution (connect mode).
+ * local execution (`stdio` transport) and remote execution (`ssh` transport).
  */
 export class GitService {
   private executor: CommandExecutor;

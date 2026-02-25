@@ -152,10 +152,11 @@ export function ServerSettingsForm({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="agent-provider" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Provider
             </label>
             <select
+              id="agent-provider"
               value={agentProvider}
               onChange={(e) => {
                 const value = e.target.value as AgentProvider;
@@ -171,10 +172,11 @@ export function ServerSettingsForm({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="agent-transport" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Transport
             </label>
             <select
+              id="agent-transport"
               value={agentTransport}
               onChange={(e) => {
                 const value = e.target.value as AgentTransport;
@@ -194,10 +196,11 @@ export function ServerSettingsForm({
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="agent-hostname" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Hostname
                 </label>
                 <input
+                  id="agent-hostname"
                   type="text"
                   value={agentHostname}
                   onChange={(e) => {
@@ -210,10 +213,11 @@ export function ServerSettingsForm({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="agent-port" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Port
                 </label>
                 <input
+                  id="agent-port"
                   type="number"
                   value={agentPort}
                   onChange={(e) => {
@@ -230,10 +234,11 @@ export function ServerSettingsForm({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="agent-username" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Username (optional)
                 </label>
                 <input
+                  id="agent-username"
                   type="text"
                   value={agentUsername}
                   onChange={(e) => {
@@ -247,11 +252,12 @@ export function ServerSettingsForm({
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="agent-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Password (optional)
                 </label>
                 <div className="relative">
                   <input
+                    id="agent-password"
                     type={showPassword ? "text" : "password"}
                     value={agentPassword}
                     onChange={(e) => {
@@ -346,4 +352,3 @@ function EyeOffIcon({ className }: { className?: string }) {
 }
 
 export default ServerSettingsForm;
-

@@ -133,8 +133,8 @@ export class OpenCodeBackend implements Backend {
 
   /**
    * Connect to an ACP-capable agent.
-   * For spawn mode, this launches the configured CLI with stdio ACP transport.
-   * For connect mode, this validates reachability only.
+   * Uses spawn mode to launch the configured CLI with ACP stdio transport.
+   * Connect mode is intentionally unsupported in the ACP runtime.
    */
   async connect(config: BackendConnectionConfig, _signal?: AbortSignal): Promise<void> {
     if (this.connected) {
@@ -149,8 +149,8 @@ export class OpenCodeBackend implements Backend {
 
     if (isRemoteOnlyMode() && config.transport !== "ssh") {
       throw new Error(
-        "Spawn mode is disabled. RALPHER_REMOTE_ONLY environment variable is set. " +
-        "Only connecting to remote servers is allowed.",
+        "Local stdio transport is disabled. RALPHER_REMOTE_ONLY environment variable is set. " +
+        "Only ssh transport is allowed.",
       );
     }
 
