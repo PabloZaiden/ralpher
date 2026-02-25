@@ -79,6 +79,7 @@ type SessionSubscriber = (event: AgentEvent) => void;
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 const PROMPT_REQUEST_TIMEOUT_MS = 1_800_000;
 const MAX_RECENT_PROCESS_LINES = 20;
+const SSHPASS_INVALID_PASSWORD_EXIT_CODE = 5;
 
 /**
  * Sanitize process args before logging.
@@ -98,6 +99,13 @@ export function sanitizeSpawnArgsForLogging(command: string, args: string[]): st
   }
 
   return sanitizedArgs;
+}
+
+function getProcessExitHint(command: string, exitCode: number): string | undefined {
+  if (command === "sshpass" && exitCode === SSHPASS_INVALID_PASSWORD_EXIT_CODE) {
+    return "sshpass reported authentication failure (invalid username/password or auth method mismatch).";
+  }
+  return undefined;
 }
 
 type PermissionOption = {
@@ -444,7 +452,7 @@ export class AcpBackend implements Backend {
     }
 
     this.process = process;
-    this.startProcessReaders();
+    this.startProcessReaders(command);
 
     try {
       await this.sendRpcRequest("initialize", {
@@ -538,7 +546,7 @@ export class AcpBackend implements Backend {
     }
   }
 
-  private startProcessReaders(): void {
+  private startProcessReaders(command: string): void {
     const process = this.process;
     if (
       !process
@@ -556,10 +564,16 @@ export class AcpBackend implements Backend {
       if (this.process !== process || !this.connected) {
         return;
       }
+      const hint = getProcessExitHint(command, exitCode);
       const details = this.recentProcessLines.slice(-5).join(" | ");
-      const reason = details.length > 0
-        ? `ACP process exited with code ${exitCode}: ${details}`
-        : `ACP process exited with code ${exitCode}`;
+      const parts = [`ACP process exited with code ${exitCode}`];
+      if (details.length > 0) {
+        parts.push(details);
+      }
+      if (hint) {
+        parts.push(hint);
+      }
+      const reason = parts.join(": ");
       this.rejectPendingRequests(reason);
     });
   }
