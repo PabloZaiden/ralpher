@@ -77,4 +77,40 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
       (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
     }
   });
+
+  test("uses sshpass environment mode for password auth", async () => {
+    const originalSpawn = Bun.spawn;
+    let capturedCommand: string[] | undefined;
+    let capturedEnv: Record<string, string | undefined> | undefined;
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((...args: unknown[]) => {
+      const command = (args.length === 1
+        ? (args[0] as { cmd?: string[] } | undefined)?.cmd
+        : args[0]) as string[] | undefined;
+      const options = (args.length === 1 ? args[0] : args[1]) as { env?: Record<string, string | undefined> } | undefined;
+      capturedCommand = command;
+      capturedEnv = options?.env;
+      throw new Error("mock spawn failure");
+    }) as unknown as typeof Bun.spawn;
+
+    try {
+      const executor = new CommandExecutorImpl({
+        provider: "ssh",
+        directory: "/workspaces/remote-only-path",
+        host: "127.0.0.1",
+        password: "top-secret",
+      });
+
+      const result = await executor.exec("pwd", []);
+      expect(result.success).toBe(false);
+
+      const commandTokens = capturedCommand ?? [];
+      expect(commandTokens[0]).toBe("sshpass");
+      expect(commandTokens).toContain("-e");
+      expect(commandTokens).not.toContain("top-secret");
+      expect(capturedEnv?.["SSHPASS"]).toBe("top-secret");
+    } finally {
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+    }
+  });
 });

@@ -124,12 +124,14 @@ export class CommandExecutorImpl implements CommandExecutor {
     args: string[],
     cwd: string,
     timeoutMs: number,
+    env?: Record<string, string>,
   ): Promise<CommandResult> {
     try {
       const proc = Bun.spawn([command, ...args], {
         cwd,
         stdout: "pipe",
         stderr: "pipe",
+        ...(env ? { env: { ...process.env, ...env } } : {}),
       });
 
       let timedOut = false;
@@ -228,9 +230,10 @@ export class CommandExecutorImpl implements CommandExecutor {
     if (this.password && this.password.trim().length > 0) {
       return await this.execLocal(
         "sshpass",
-        ["-p", this.password, "ssh", "-o", "NumberOfPasswordPrompts=1", ...sshArgs],
+        ["-e", "ssh", "-o", "NumberOfPasswordPrompts=1", ...sshArgs],
         "/",
         timeoutMs,
+        { SSHPASS: this.password },
       );
     }
 

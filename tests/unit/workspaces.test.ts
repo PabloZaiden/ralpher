@@ -521,6 +521,43 @@ describe("Workspace Persistence", () => {
       expect(found).not.toBeNull();
       expect(found!.serverSettings).toEqual(customSettings);
     });
+
+    test("legacy experimental transports fall back to stdio", async () => {
+      const { ensureDataDirectories, getDatabase } = await import("../../src/persistence/database");
+      const { getWorkspace, getWorkspaceByDirectory } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const db = getDatabase();
+      const now = new Date().toISOString();
+      db.run(
+        `INSERT INTO workspaces (id, name, directory, server_settings, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          randomUUID(),
+          "Legacy Transport Workspace",
+          "/tmp/legacy-transport",
+          JSON.stringify({
+            agent: {
+              provider: "opencode",
+              transport: "ssh-stdio",
+              hostname: "legacy-host",
+              port: 2222,
+            },
+          }),
+          now,
+          now,
+        ],
+      );
+
+      const workspace = await getWorkspaceByDirectory("/tmp/legacy-transport");
+      expect(workspace).not.toBeNull();
+      expect(workspace!.serverSettings.agent.transport).toBe("stdio");
+
+      const loadedById = await getWorkspace(workspace!.id);
+      expect(loadedById).not.toBeNull();
+      expect(loadedById!.serverSettings.agent.transport).toBe("stdio");
+    });
   });
 
   describe("Export/Import operations", () => {

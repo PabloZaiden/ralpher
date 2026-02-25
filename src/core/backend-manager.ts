@@ -793,13 +793,14 @@ class BackendManager {
 
     const dir = directory ?? state.backend.getDirectory();
     const execution = deriveExecutionSettings(state.settings);
-    log.debug(`[BackendManager] Creating CommandExecutor for workspace ${workspaceId}`, {
+    const commandExecutorLogContext: Record<string, string | number> = {
       directory: dir,
       executionProvider: execution.provider,
-      host: execution.host,
-      port: execution.port,
-      user: execution.user,
-    });
+      ...(execution.host ? { host: execution.host } : {}),
+      ...(typeof execution.port === "number" ? { port: execution.port } : {}),
+      ...(execution.user ? { user: execution.user } : {}),
+    };
+    log.debug(`[BackendManager] Creating CommandExecutor for workspace ${workspaceId}`, commandExecutorLogContext);
     return new CommandExecutorImpl({
       provider: execution.provider,
       directory: dir,

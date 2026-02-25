@@ -84,7 +84,7 @@ function parseServerSettings(jsonString: string | null): ServerSettings {
       : defaults.agent.provider;
     const rawTransport = typeof agent["transport"] === "string" ? agent["transport"] : "stdio";
 
-    if (rawTransport === "ssh" || rawTransport === "ssh-stdio" || rawTransport === "tcp") {
+    if (rawTransport === "ssh") {
       return {
         agent: {
           provider,
