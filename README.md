@@ -285,6 +285,19 @@ See [docs/API.md](docs/API.md) for complete API documentation.
 
 ---
 
+## ACP Runtime Architecture
+
+Ralpher separates agent interaction from deterministic repository operations:
+
+| Channel | Purpose | Runtime |
+|---------|---------|---------|
+| **Agent Channel** | AI sessions, prompts, streaming, tool events, permissions | ACP JSON-RPC via provider CLI (`opencode acp` or `copilot --acp`) |
+| **Execution Channel** | Git/file/command operations used by loop orchestration and APIs | `CommandExecutor` (local for `stdio`, remote over SSH for `ssh`) |
+
+This decoupling allows Ralpher to support multiple ACP providers while keeping repository operations deterministic and transport-aware.
+
+---
+
 ## Development
 
 ### Setup

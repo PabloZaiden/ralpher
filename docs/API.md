@@ -25,15 +25,29 @@ All responses are JSON. Successful responses return the requested data directly.
 }
 ```
 
+## ACP Agent Runtime Architecture
+
+Ralpher runs agent interactions through ACP JSON-RPC and supports two providers:
+
+- `opencode` (CLI command: `opencode acp`)
+- `copilot` (CLI command: `copilot --acp`)
+
+Agent transport is configured per workspace:
+
+1. **Local ACP** (`stdio`): provider CLI is launched on the local host.
+2. **Remote ACP** (`ssh`): provider CLI is launched over SSH on the target workspace host.
+
+This agent channel handles sessions, prompts, streaming updates, tool events, and permission/question requests.
+
 ## Command Execution Architecture
 
 All API endpoints that perform deterministic server-side operations (git commands, file operations, etc.) use the `CommandExecutor` abstraction:
 
-1. **Local execution** (`stdio` agent transport): commands run directly on the local host.
-2. **Remote execution** (`ssh` agent transport): commands run over SSH on the target workspace host.
+1. **Local execution** (`stdio` transport): commands run directly on the local host.
+2. **Remote execution** (`ssh` transport): commands run over SSH on the target workspace host.
 3. **Bounded execution**: command operations enforce timeouts and explicit success/failure results.
 
-This execution channel is independent from ACP agent session streaming. The following operations use deterministic command execution:
+This execution channel is decoupled from ACP streaming/provider internals. The following operations use deterministic command execution:
 
 - Git operations (`/api/git/branches`, loop git operations)
 - File existence checks (`/api/check-planning-dir`)
@@ -1419,6 +1433,10 @@ Execution behavior is derived automatically from `agent.transport`:
 - `stdio` → local deterministic execution
 - `ssh` → remote deterministic execution over SSH
 
+Provider runtime command is derived from `agent.provider`:
+- `opencode` → `opencode acp`
+- `copilot` → `copilot --acp`
+
 #### GET /api/workspaces/:id/server-settings
 
 Get server settings for a specific workspace.
@@ -1488,12 +1506,14 @@ Get connection status for a workspace.
   "connected": true,
   "provider": "opencode",
   "transport": "ssh",
-  "capabilities": ["session/list", "session/load"],
+  "capabilities": ["createSession", "sendPromptAsync", "abortSession", "subscribeToEvents", "models"],
   "serverUrl": "ssh://remote.example.com:22",
   "directoryExists": true,
   "isGitRepo": true
 }
 ```
+
+`capabilities` lists high-level runtime operations exposed by the selected provider. For example, `opencode` includes `models`, while `copilot` currently does not.
 
 **Errors**
 
