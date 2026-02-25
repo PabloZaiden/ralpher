@@ -6,6 +6,7 @@
 import { isRemoteOnlyMode } from "../../core/config";
 import { log } from "../../core/logger";
 import type { ModelInfo } from "../../types/api";
+import type { TodoItem } from "../../types/loop";
 
 import type {
   BackendConnectionConfig,
@@ -77,6 +78,16 @@ type SessionSubscriber = (event: AgentEvent) => void;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 
+type PermissionOption = {
+  optionId: string;
+  kind?: string;
+};
+
+type PendingPermissionRequest = {
+  rpcId: number;
+  options: PermissionOption[];
+};
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -87,6 +98,196 @@ function getString(value: unknown): string | undefined {
 
 function getNumber(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string") {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function normalizeTodoStatus(value: unknown): TodoItem["status"] | undefined {
+  const normalized = typeof value === "string" ? value.toLowerCase() : undefined;
+  switch (normalized) {
+    case "pending":
+      return "pending";
+    case "in_progress":
+    case "in-progress":
+    case "running":
+    case "active":
+      return "in_progress";
+    case "completed":
+    case "complete":
+    case "done":
+    case "finished":
+    case "success":
+      return "completed";
+    case "cancelled":
+    case "canceled":
+    case "skipped":
+      return "cancelled";
+    default:
+      return undefined;
+  }
+}
+
+function normalizeTodoPriority(value: unknown): TodoItem["priority"] | undefined {
+  const normalized = typeof value === "string" ? value.toLowerCase() : undefined;
+  switch (normalized) {
+    case "high":
+    case "urgent":
+      return "high";
+    case "medium":
+    case "normal":
+      return "medium";
+    case "low":
+      return "low";
+    default:
+      return undefined;
+  }
+}
+
+function makeTodoId(prefix: string, index: number, content: string): string {
+  const normalizedContent = content
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40);
+  const suffix = normalizedContent.length > 0 ? normalizedContent : String(index);
+  return `${prefix}-${index}-${suffix}`;
+}
+
+function parseTodoChecklist(raw: string, prefix: string): TodoItem[] {
+  const todos: TodoItem[] = [];
+  const lines = raw.split(/\r?\n/);
+  const checkboxPattern = /^\s*[-*]\s*\[([ xX~\-])\]\s*(.+?)\s*$/;
+
+  for (const line of lines) {
+    const match = line.match(checkboxPattern);
+    if (!match) {
+      continue;
+    }
+    const marker = match[1];
+    const content = match[2]?.trim() ?? "";
+    if (content.length === 0) {
+      continue;
+    }
+
+    const status: TodoItem["status"] =
+      marker === "x" || marker === "X"
+        ? "completed"
+        : marker === "~" || marker === "-"
+          ? "in_progress"
+          : "pending";
+
+    todos.push({
+      id: makeTodoId(prefix, todos.length, content),
+      content,
+      status,
+      priority: "medium",
+    });
+  }
+
+  return todos;
+}
+
+function parseTodoRecord(value: Record<string, unknown>, index: number, prefix: string): TodoItem | null {
+  const content = firstString(
+    value["content"],
+    value["text"],
+    value["title"],
+    value["task"],
+    value["name"],
+  )?.trim();
+
+  if (!content) {
+    return null;
+  }
+
+  const status = normalizeTodoStatus(value["status"])
+    ?? (typeof value["done"] === "boolean" ? (value["done"] ? "completed" : "pending") : undefined)
+    ?? "pending";
+
+  const priority = normalizeTodoPriority(value["priority"]) ?? "medium";
+  const id = firstString(value["id"], value["todoId"], value["key"]) ?? makeTodoId(prefix, index, content);
+
+  return {
+    id,
+    content,
+    status,
+    priority,
+  };
+}
+
+function parseTodosFromUnknown(value: unknown, prefix: string): TodoItem[] {
+  if (Array.isArray(value)) {
+    const todos: TodoItem[] = [];
+    for (const [index, item] of value.entries()) {
+      if (isRecord(item)) {
+        const parsed = parseTodoRecord(item, index, prefix);
+        if (parsed) {
+          todos.push(parsed);
+        }
+        continue;
+      }
+      if (typeof item === "string") {
+        const checklistTodos = parseTodoChecklist(item, `${prefix}-${index}`);
+        if (checklistTodos.length > 0) {
+          todos.push(...checklistTodos);
+        } else if (item.trim().length > 0) {
+          todos.push({
+            id: makeTodoId(prefix, index, item),
+            content: item.trim(),
+            status: "pending",
+            priority: "medium",
+          });
+        }
+      }
+    }
+    return todos;
+  }
+
+  if (isRecord(value)) {
+    const nestedTodos = value["todos"];
+    if (nestedTodos !== undefined) {
+      const parsedNested = parseTodosFromUnknown(nestedTodos, `${prefix}-todos`);
+      if (parsedNested.length > 0) {
+        return parsedNested;
+      }
+    }
+
+    const parsedRecord = parseTodoRecord(value, 0, prefix);
+    if (parsedRecord) {
+      return [parsedRecord];
+    }
+
+    const textCandidates = [
+      firstString(value["detailedContent"]),
+      firstString(value["content"]),
+      firstString(value["text"]),
+      firstString(value["message"]),
+    ];
+    for (const candidate of textCandidates) {
+      if (!candidate) {
+        continue;
+      }
+      const parsedChecklist = parseTodoChecklist(candidate, prefix);
+      if (parsedChecklist.length > 0) {
+        return parsedChecklist;
+      }
+    }
+
+    return [];
+  }
+
+  if (typeof value === "string") {
+    return parseTodoChecklist(value, prefix);
+  }
+
+  return [];
 }
 
 function inferProviderID(modelID: string): string {
@@ -130,6 +331,15 @@ export class OpenCodeBackend implements Backend {
   /** Cache sessions and model discovery results */
   private sessionCache = new Map<string, AgentSession>();
   private modelCache = new Map<string, ModelInfo[]>();
+
+  /** Track active permission requests that expect a JSON-RPC response */
+  private pendingPermissionRequests = new Map<string, PendingPermissionRequest>();
+
+  /** Track tool call names by toolCallId to resolve later updates */
+  private toolCallNames = new Map<string, string>();
+
+  /** Track last emitted TODO snapshot per session to avoid duplicate updates */
+  private sessionTodoSnapshots = new Map<string, string>();
 
   /**
    * Connect to an ACP-capable agent.
@@ -227,6 +437,9 @@ export class OpenCodeBackend implements Backend {
     this.sessionMessageStarted.clear();
     this.sessionCache.clear();
     this.modelCache.clear();
+    this.pendingPermissionRequests.clear();
+    this.toolCallNames.clear();
+    this.sessionTodoSnapshots.clear();
 
     this.connected = false;
     this.directory = "";
@@ -338,6 +551,123 @@ export class OpenCodeBackend implements Backend {
   }
 
   private handleRpcMessage(message: JsonRpcMessage): void {
+    const method = message.method;
+    if (method && isRecord(message.params)) {
+      if (method === "session/update") {
+        this.handleSessionUpdate(message.params);
+        return;
+      }
+
+      if (method === "session/request_permission") {
+        const sessionId = getString(message.params["sessionId"]);
+        if (!sessionId) {
+          return;
+        }
+        const toolCall = isRecord(message.params["toolCall"]) ? message.params["toolCall"] : {};
+        const requestId = typeof message.id === "number"
+          ? `permission-${sessionId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          : firstString(message.params["requestId"], toolCall["toolCallId"]);
+        if (!requestId) {
+          return;
+        }
+
+        const permission = firstString(
+          message.params["permission"],
+          toolCall["kind"],
+          toolCall["title"],
+        ) ?? "*";
+        const rawInput = isRecord(toolCall["rawInput"]) ? toolCall["rawInput"] : {};
+
+        const patternsFromCommands = Array.isArray(rawInput["commands"])
+          ? rawInput["commands"].filter((p): p is string => typeof p === "string")
+          : [];
+        const patterns = Array.isArray(message.params["patterns"])
+          ? message.params["patterns"].filter((p): p is string => typeof p === "string")
+          : patternsFromCommands.length > 0
+            ? patternsFromCommands
+            : firstString(rawInput["command"])
+              ? [String(rawInput["command"])]
+              : ["*"];
+
+        const options = Array.isArray(message.params["options"])
+          ? message.params["options"]
+            .filter((option): option is Record<string, unknown> => isRecord(option))
+            .map((option) => ({
+              optionId: getString(option["optionId"]) ?? "",
+              kind: getString(option["kind"]),
+            }))
+            .filter((option) => option.optionId.length > 0)
+          : [];
+
+        if (typeof message.id === "number") {
+          this.pendingPermissionRequests.set(requestId, {
+            rpcId: message.id,
+            options,
+          });
+        }
+
+        this.emitSessionEvent(sessionId, {
+          type: "permission.asked",
+          requestId,
+          sessionId,
+          permission,
+          patterns,
+        });
+        return;
+      }
+
+      if (method === "session/question") {
+        const sessionId = getString(message.params["sessionId"]);
+        const requestId = getString(message.params["requestId"]);
+        const questions = message.params["questions"];
+        if (!sessionId || !requestId || !Array.isArray(questions)) {
+          return;
+        }
+        this.emitSessionEvent(sessionId, {
+          type: "question.asked",
+          requestId,
+          sessionId,
+          questions: questions as any,
+        });
+        return;
+      }
+
+      if (method === "session/status") {
+        const sessionId = getString(message.params["sessionId"]);
+        const status = getString(message.params["status"]);
+        if (!sessionId || (status !== "idle" && status !== "busy" && status !== "retry")) {
+          return;
+        }
+        this.emitSessionEvent(sessionId, {
+          type: "session.status",
+          sessionId,
+          status,
+          attempt: getNumber(message.params["attempt"]),
+          message: getString(message.params["message"]),
+        });
+        return;
+      }
+
+      if (method === "session/todo_updated") {
+        const sessionId = getString(message.params["sessionId"]);
+        const todos = message.params["todos"];
+        if (!sessionId || !Array.isArray(todos)) {
+          return;
+        }
+        const parsedTodos = parseTodosFromUnknown(todos, `session-todo-updated-${sessionId}`);
+        if (parsedTodos.length > 0) {
+          this.emitTodoUpdate(sessionId, parsedTodos);
+          return;
+        }
+        this.emitSessionEvent(sessionId, {
+          type: "todo.updated",
+          sessionId,
+          todos: todos as any,
+        });
+      }
+      return;
+    }
+
     if (typeof message.id === "number") {
       const pending = this.pendingRequests.get(message.id);
       if (!pending) {
@@ -354,82 +684,6 @@ export class OpenCodeBackend implements Backend {
       }
 
       pending.resolve(message.result);
-      return;
-    }
-
-    const method = message.method;
-    if (!method || !isRecord(message.params)) {
-      return;
-    }
-
-    if (method === "session/update") {
-      this.handleSessionUpdate(message.params);
-      return;
-    }
-
-    if (method === "session/request_permission") {
-      const sessionId = getString(message.params["sessionId"]);
-      const requestId = getString(message.params["requestId"]);
-      if (!sessionId || !requestId) {
-        return;
-      }
-      const permission = getString(message.params["permission"]) ?? "*";
-      const patterns = Array.isArray(message.params["patterns"])
-        ? message.params["patterns"].filter((p): p is string => typeof p === "string")
-        : ["*"];
-      this.emitSessionEvent(sessionId, {
-        type: "permission.asked",
-        requestId,
-        sessionId,
-        permission,
-        patterns,
-      });
-      return;
-    }
-
-    if (method === "session/question") {
-      const sessionId = getString(message.params["sessionId"]);
-      const requestId = getString(message.params["requestId"]);
-      const questions = message.params["questions"];
-      if (!sessionId || !requestId || !Array.isArray(questions)) {
-        return;
-      }
-      this.emitSessionEvent(sessionId, {
-        type: "question.asked",
-        requestId,
-        sessionId,
-        questions: questions as any,
-      });
-      return;
-    }
-
-    if (method === "session/status") {
-      const sessionId = getString(message.params["sessionId"]);
-      const status = getString(message.params["status"]);
-      if (!sessionId || (status !== "idle" && status !== "busy" && status !== "retry")) {
-        return;
-      }
-      this.emitSessionEvent(sessionId, {
-        type: "session.status",
-        sessionId,
-        status,
-        attempt: getNumber(message.params["attempt"]),
-        message: getString(message.params["message"]),
-      });
-      return;
-    }
-
-    if (method === "session/todo_updated") {
-      const sessionId = getString(message.params["sessionId"]);
-      const todos = message.params["todos"];
-      if (!sessionId || !Array.isArray(todos)) {
-        return;
-      }
-      this.emitSessionEvent(sessionId, {
-        type: "todo.updated",
-        sessionId,
-        todos: todos as any,
-      });
     }
   }
 
@@ -473,31 +727,134 @@ export class OpenCodeBackend implements Backend {
     }
 
     if (updateType === "tool_call") {
-      const toolName = getString(content["toolName"]) ?? getString(content["name"]) ?? "unknown_tool";
+      const toolCallId = firstString(updateObj["toolCallId"], content["toolCallId"]);
+      const toolName = firstString(
+        content["toolName"],
+        content["name"],
+        updateObj["toolName"],
+        updateObj["name"],
+        updateObj["kind"],
+        content["kind"],
+        updateObj["title"],
+      ) ?? "unknown_tool";
+      if (toolCallId) {
+        this.toolCallNames.set(toolCallId, toolName);
+      }
       this.emitSessionEvent(sessionId, {
         type: "tool.start",
         toolName,
-        input: content["input"] ?? {},
+        input: content["input"] ?? updateObj["input"] ?? updateObj["rawInput"] ?? {},
       });
+      this.maybeEmitTodoUpdateFromToolPayload(sessionId, updateObj, content);
       return;
     }
 
     if (updateType === "tool_call_update") {
-      const toolName = getString(content["toolName"]) ?? getString(content["name"]) ?? "unknown_tool";
-      const status = getString(content["status"])
-        ?? getString(content["state"]);
+      const toolCallId = firstString(updateObj["toolCallId"], content["toolCallId"]);
+      const toolName = firstString(
+        content["toolName"],
+        content["name"],
+        updateObj["toolName"],
+        updateObj["name"],
+        updateObj["kind"],
+        toolCallId ? this.toolCallNames.get(toolCallId) : undefined,
+        updateObj["title"],
+      ) ?? "unknown_tool";
+      const status = firstString(
+        content["status"],
+        updateObj["status"],
+        content["state"],
+        updateObj["state"],
+      );
 
       if (status === "completed" || status === "success") {
         this.emitSessionEvent(sessionId, {
           type: "tool.complete",
           toolName,
-          output: content["output"] ?? {},
+          output: content["output"] ?? updateObj["output"] ?? updateObj["rawOutput"] ?? content["content"] ?? updateObj["content"] ?? {},
         });
+        this.maybeEmitTodoUpdateFromToolPayload(sessionId, updateObj, content);
+        if (toolCallId) {
+          this.toolCallNames.delete(toolCallId);
+        }
       } else if (status === "failed" || status === "error") {
+        const rawOutput = isRecord(updateObj["rawOutput"]) ? updateObj["rawOutput"] : {};
         this.emitSessionEvent(sessionId, {
           type: "error",
-          message: getString(content["error"]) ?? `Tool ${toolName} failed`,
+          message: firstString(content["error"], updateObj["error"], rawOutput["message"]) ?? `Tool ${toolName} failed`,
         });
+        if (toolCallId) {
+          this.toolCallNames.delete(toolCallId);
+        }
+      }
+    }
+  }
+
+  private emitTodoUpdate(sessionId: string, todos: TodoItem[]): void {
+    if (todos.length === 0) {
+      return;
+    }
+
+    const snapshot = JSON.stringify(
+      todos.map((todo) => ({
+        content: todo.content,
+        status: todo.status,
+        priority: todo.priority,
+      })),
+    );
+    if (this.sessionTodoSnapshots.get(sessionId) === snapshot) {
+      return;
+    }
+
+    this.sessionTodoSnapshots.set(sessionId, snapshot);
+    this.emitSessionEvent(sessionId, {
+      type: "todo.updated",
+      sessionId,
+      todos,
+    });
+  }
+
+  private maybeEmitTodoUpdateFromToolPayload(
+    sessionId: string,
+    updateObj: Record<string, unknown>,
+    content: Record<string, unknown>,
+  ): void {
+    const rawInput = isRecord(updateObj["rawInput"]) ? updateObj["rawInput"] : {};
+    const input = isRecord(updateObj["input"]) ? updateObj["input"] : {};
+    const contentInput = isRecord(content["input"]) ? content["input"] : {};
+    const rawOutput = isRecord(updateObj["rawOutput"]) ? updateObj["rawOutput"] : {};
+    const output = isRecord(updateObj["output"]) ? updateObj["output"] : {};
+    const contentOutput = isRecord(content["output"]) ? content["output"] : {};
+
+    const todoCandidates: Array<{ value: unknown; source: string }> = [
+      { value: updateObj["todos"], source: "update-todos" },
+      { value: content["todos"], source: "content-todos" },
+      { value: rawInput["todos"], source: "raw-input-todos" },
+      { value: input["todos"], source: "input-todos" },
+      { value: contentInput["todos"], source: "content-input-todos" },
+      { value: rawOutput["todos"], source: "raw-output-todos" },
+      { value: output["todos"], source: "output-todos" },
+      { value: contentOutput["todos"], source: "content-output-todos" },
+      { value: rawOutput["detailedContent"], source: "raw-output-detailed-content" },
+      { value: rawOutput["content"], source: "raw-output-content" },
+      { value: output["detailedContent"], source: "output-detailed-content" },
+      { value: output["content"], source: "output-content" },
+      { value: contentOutput["detailedContent"], source: "content-output-detailed-content" },
+      { value: contentOutput["content"], source: "content-output-content" },
+    ];
+
+    for (const candidate of todoCandidates) {
+      if (candidate.value === undefined || candidate.value === null) {
+        continue;
+      }
+
+      const parsedTodos = parseTodosFromUnknown(
+        candidate.value,
+        `tool-todos-${sessionId}-${candidate.source}`,
+      );
+      if (parsedTodos.length > 0) {
+        this.emitTodoUpdate(sessionId, parsedTodos);
+        return;
       }
     }
   }
@@ -582,12 +939,19 @@ export class OpenCodeBackend implements Backend {
   }
 
   private parseModelsFromSessionResult(result: unknown): ModelInfo[] {
-    if (!isRecord(result) || !Array.isArray(result["models"])) {
+    if (!isRecord(result)) {
       return [];
     }
 
+    const modelsRaw = result["models"];
+    const modelEntries = Array.isArray(modelsRaw)
+      ? modelsRaw
+      : isRecord(modelsRaw) && Array.isArray(modelsRaw["availableModels"])
+        ? modelsRaw["availableModels"]
+        : [];
+
     const mapped: ModelInfo[] = [];
-    for (const item of result["models"]) {
+    for (const item of modelEntries) {
       if (!isRecord(item)) {
         continue;
       }
@@ -724,6 +1088,7 @@ export class OpenCodeBackend implements Backend {
     this.sessionCache.delete(id);
     this.sessionSubscribers.delete(id);
     this.sessionMessageStarted.delete(id);
+    this.sessionTodoSnapshots.delete(id);
   }
 
   /**
@@ -888,6 +1253,45 @@ export class OpenCodeBackend implements Backend {
    */
   async replyToPermission(requestId: string, response: string): Promise<void> {
     this.ensureConnected();
+
+    const pendingRequest = this.pendingPermissionRequests.get(requestId);
+    if (pendingRequest) {
+      const normalizedResponse = response.toLowerCase();
+      const preferredKinds =
+        normalizedResponse === "always"
+          ? ["allow_always", "allow_once"]
+          : normalizedResponse === "once" || normalizedResponse === "allow"
+            ? ["allow_once", "allow_always"]
+            : normalizedResponse === "reject" || normalizedResponse === "deny"
+              ? ["reject_once", "reject_always"]
+              : [];
+
+      let optionId = pendingRequest.options.find((option) => option.optionId === response)?.optionId;
+      if (!optionId) {
+        for (const preferredKind of preferredKinds) {
+          optionId = pendingRequest.options.find((option) => option.kind === preferredKind)?.optionId;
+          if (optionId) {
+            break;
+          }
+        }
+      }
+      optionId = optionId
+        ?? pendingRequest.options.find((option) => option.kind?.startsWith("allow"))?.optionId
+        ?? pendingRequest.options[0]?.optionId;
+
+      this.pendingPermissionRequests.delete(requestId);
+
+      this.writeRpcMessage({
+        jsonrpc: "2.0",
+        id: pendingRequest.rpcId,
+        result: {
+          outcome: optionId
+            ? { outcome: "selected", optionId }
+            : { outcome: "cancelled" },
+        },
+      });
+      return;
+    }
 
     const payload = {
       requestId,
