@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { OpenCodeBackend } from "../../src/backends/opencode";
+import { AcpBackend } from "../../src/backends/acp";
 
 type PrivateBackend = {
   handleRpcMessage(message: unknown): void;
@@ -25,7 +25,7 @@ type PrivateBackend = {
 };
 
 function getBackend(): PrivateBackend {
-  return new OpenCodeBackend() as unknown as PrivateBackend;
+  return new AcpBackend() as unknown as PrivateBackend;
 }
 
 function createDeferred<T>(): {
@@ -47,7 +47,7 @@ function createDeferred<T>(): {
   };
 }
 
-describe("OpenCodeBackend ACP parsing", () => {
+describe("AcpBackend ACP parsing", () => {
   test("handles session/request_permission JSON-RPC requests with id", () => {
     const backend = getBackend();
     const sessionId = "session-1";

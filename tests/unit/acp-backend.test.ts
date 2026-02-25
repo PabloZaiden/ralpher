@@ -1,22 +1,22 @@
 /**
- * Unit tests for OpenCodeBackend.
+ * Unit tests for AcpBackend.
  * 
  * Note: These tests verify the class structure and basic behaviors.
- * Integration tests that actually connect to opencode would be in tests/api/.
+ * Integration tests that actually connect to a provider runtime are in tests/api/.
  */
 
 import { test, expect, describe, beforeEach } from "bun:test";
-import { OpenCodeBackend } from "../../src/backends/opencode";
+import { AcpBackend } from "../../src/backends/acp";
 
-describe("OpenCodeBackend", () => {
-  let backend: OpenCodeBackend;
+describe("AcpBackend", () => {
+  let backend: AcpBackend;
 
   beforeEach(() => {
-    backend = new OpenCodeBackend();
+    backend = new AcpBackend();
   });
 
   test("has correct name", () => {
-    expect(backend.name).toBe("opencode");
+    expect(backend.name).toBe("acp");
   });
 
   test("isConnected returns false initially", () => {
@@ -60,9 +60,9 @@ describe("OpenCodeBackend", () => {
   });
 });
 
-describe("OpenCodeBackend Connection Config", () => {
+describe("AcpBackend Connection Config", () => {
   test("connect rejects when already connected", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     // We can't actually connect without a server, but we can test the double-connect check
     // by mocking the internal state. For now, we test that connect with invalid config fails.
@@ -81,16 +81,16 @@ describe("OpenCodeBackend Connection Config", () => {
   });
 });
 
-describe("OpenCodeBackend abortAllSubscriptions", () => {
+describe("AcpBackend abortAllSubscriptions", () => {
   test("abortAllSubscriptions works when no subscriptions exist", () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     // Should not throw when called with no active subscriptions
     expect(() => backend.abortAllSubscriptions()).not.toThrow();
   });
 
   test("abortAllSubscriptions aborts all tracked subscriptions", () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     // Access the private activeSubscriptions set via type assertion
     const b = backend as unknown as { activeSubscriptions: Set<AbortController> };
@@ -123,7 +123,7 @@ describe("OpenCodeBackend abortAllSubscriptions", () => {
   });
 
   test("abortAllSubscriptions clears the subscription set", () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     // Access the private activeSubscriptions set
     const b = backend as unknown as { activeSubscriptions: Set<AbortController> };
@@ -140,9 +140,9 @@ describe("OpenCodeBackend abortAllSubscriptions", () => {
   });
 });
 
-describe("OpenCodeBackend replyToPermission", () => {
+describe("AcpBackend replyToPermission", () => {
   test("throws when replyToPermission called before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToPermission("request-123", "once")
@@ -150,7 +150,7 @@ describe("OpenCodeBackend replyToPermission", () => {
   });
 
   test("throws when replyToPermission called with 'always' before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToPermission("request-456", "always")
@@ -158,7 +158,7 @@ describe("OpenCodeBackend replyToPermission", () => {
   });
 
   test("throws when replyToPermission called with 'reject' before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToPermission("request-789", "reject")
@@ -166,9 +166,9 @@ describe("OpenCodeBackend replyToPermission", () => {
   });
 });
 
-describe("OpenCodeBackend replyToQuestion", () => {
+describe("AcpBackend replyToQuestion", () => {
   test("throws when replyToQuestion called before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToQuestion("question-123", [["answer1"]])
@@ -176,7 +176,7 @@ describe("OpenCodeBackend replyToQuestion", () => {
   });
 
   test("throws when replyToQuestion called with multiple answers before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToQuestion("question-456", [["option1", "option2"], ["choice1"]])
@@ -184,7 +184,7 @@ describe("OpenCodeBackend replyToQuestion", () => {
   });
 
   test("throws when replyToQuestion called with empty answers before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToQuestion("question-789", [])
@@ -192,7 +192,7 @@ describe("OpenCodeBackend replyToQuestion", () => {
   });
 
   test("throws when replyToQuestion called with empty answer arrays before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToQuestion("question-101", [[], []])
@@ -200,14 +200,14 @@ describe("OpenCodeBackend replyToQuestion", () => {
   });
 });
 
-describe("OpenCodeBackend transport validation", () => {
+describe("AcpBackend transport validation", () => {
   test("getConnectionInfo returns null when not connected", () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     expect(backend.getConnectionInfo()).toBe(null);
   });
 
   test("connect mode is rejected by ACP runtime", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     const config = {
       mode: "connect" as const,
       hostname: "test-server.example.com",
@@ -222,7 +222,7 @@ describe("OpenCodeBackend transport validation", () => {
   });
 
   test("connect mode with legacy HTTPS fields is still rejected", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     const config = {
       mode: "connect" as const,
       hostname: "test-server.example.com",

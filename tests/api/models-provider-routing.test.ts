@@ -38,11 +38,11 @@ describe("GET /api/models provider routing", () => {
     await ensureDataDirectories();
 
     const { backendManager } = await import("../../src/core/backend-manager");
-    const { MockOpenCodeBackend } = await import("../mocks/mock-backend");
+    const { MockAcpBackend } = await import("../mocks/mock-backend");
 
     // Register a backend with a distinct model to ensure Copilot routing does not use it.
     backendManager.setBackendForTesting(
-      new MockOpenCodeBackend({
+      new MockAcpBackend({
         models: [
           {
             providerID: "opencode-provider",

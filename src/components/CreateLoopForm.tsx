@@ -574,7 +574,7 @@ export function CreateLoopForm({
         />
         {!modelsLoading && models.length > 0 && groupModelsByProvider(models).connectedProviders.length === 0 && (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-            No providers are connected. Please configure API credentials in the opencode server.
+            No providers are connected. Please configure your agent backend credentials/settings.
           </p>
         )}
         {!modelsLoading && models.length > 0 && groupModelsByProvider(models).connectedProviders.length > 0 && !selectedModel && (

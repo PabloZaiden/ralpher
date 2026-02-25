@@ -6,7 +6,7 @@
  * allowing parallel operation of loops across different workspaces.
  */
 
-import { OpenCodeBackend } from "../backends/opencode";
+import { AcpBackend } from "../backends/acp";
 import type { BackendConnectionConfig, Backend } from "../backends/types";
 import { getWorkspace } from "../persistence/workspaces";
 import {
@@ -229,9 +229,9 @@ class BackendManager {
       case "opencode":
       case "copilot":
         // Both providers use the same backend implementation for now.
-        return new OpenCodeBackend();
+        return new AcpBackend();
       default:
-        return new OpenCodeBackend();
+        return new AcpBackend();
     }
   }
 
@@ -688,7 +688,7 @@ class BackendManager {
 
   /**
    * Get a dedicated backend instance for a loop.
-   * Each loop gets its own OpenCodeBackend so that concurrent loops
+   * Each loop gets its own AcpBackend so that concurrent loops
    * in the same workspace don't interfere with each other.
    * 
    * The actual directory binding happens later when LoopEngine calls
@@ -822,8 +822,8 @@ class BackendManager {
 
   /**
    * Set a custom backend instance (for testing).
-   * This bypasses the normal OpenCodeBackend creation.
-   * Accepts OpenCodeBackend or MockOpenCodeBackend (both implement Backend).
+   * This bypasses the normal AcpBackend creation.
+   * Accepts AcpBackend or MockAcpBackend (both implement Backend).
    */
   setBackendForTesting(backend: Backend): void {
     this.testBackend = backend;

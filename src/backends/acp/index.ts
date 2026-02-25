@@ -1,5 +1,5 @@
 /**
- * OpenCode backend implementation for Ralph Loops Management System.
+ * ACP backend implementation for Ralph Loops Management System.
  * Uses ACP JSON-RPC over stdio for agent communication.
  */
 
@@ -25,12 +25,12 @@ import { createEventStream, type EventStream } from "../../utils/event-stream";
 export type { ConnectionInfo } from "../types";
 
 // Compatibility types retained for translation/unit tests.
-type OpenCodeSession = {
+type AcpSession = {
   id: string;
   title?: string;
   time: { created: number };
 };
-type OpenCodeEvent = {
+type AcpEvent = {
   type: string;
   properties: any;
 };
@@ -305,11 +305,11 @@ function inferProviderID(modelID: string): string {
 }
 
 /**
- * OpenCode backend implementation.
+ * ACP backend implementation.
  * Supports stdio ACP mode and translates ACP stream updates into AgentEvents.
  */
-export class OpenCodeBackend implements Backend {
-  readonly name = "opencode";
+export class AcpBackend implements Backend {
+  readonly name = "acp";
 
   private process: Bun.Subprocess | null = null;
   private connected = false;
@@ -541,7 +541,7 @@ export class OpenCodeBackend implements Backend {
         this.handleRpcLine(rest, source);
       }
     } catch (error) {
-      log.warn(`[OpenCodeBackend] ACP ${source} stream ended with error`, {
+      log.warn(`[AcpBackend] ACP ${source} stream ended with error`, {
         error: String(error),
       });
     }
@@ -553,9 +553,9 @@ export class OpenCodeBackend implements Backend {
       message = JSON.parse(line) as JsonRpcMessage;
     } catch {
       if (source === "stderr") {
-        log.debug(`[OpenCodeBackend] ACP stderr: ${line}`);
+        log.debug(`[AcpBackend] ACP stderr: ${line}`);
       } else {
-        log.trace(`[OpenCodeBackend] Non-JSON stdout: ${line}`);
+        log.trace(`[AcpBackend] Non-JSON stdout: ${line}`);
       }
       return;
     }
@@ -1310,7 +1310,7 @@ export class OpenCodeBackend implements Backend {
         }
         const message = String(error);
         if (message.includes("ACP request timed out for method 'session/prompt'")) {
-          log.warn("[OpenCodeBackend] session/prompt request timed out; waiting for status-driven completion", {
+          log.warn("[AcpBackend] session/prompt request timed out; waiting for status-driven completion", {
             sessionId,
           });
           return;
@@ -1345,7 +1345,7 @@ export class OpenCodeBackend implements Backend {
       }
     }
 
-    log.debug("[OpenCodeBackend] Session abort is not supported by current ACP provider", { sessionId });
+    log.debug("[AcpBackend] Session abort is not supported by current ACP provider", { sessionId });
   }
 
   /**
@@ -1432,7 +1432,7 @@ export class OpenCodeBackend implements Backend {
       }
     }
 
-    log.debug("[OpenCodeBackend] Permission reply is not supported by current ACP provider", {
+    log.debug("[AcpBackend] Permission reply is not supported by current ACP provider", {
       requestId,
       response,
     });
@@ -1462,7 +1462,7 @@ export class OpenCodeBackend implements Backend {
       }
     }
 
-    log.debug("[OpenCodeBackend] Question reply is not supported by current ACP provider", {
+    log.debug("[AcpBackend] Question reply is not supported by current ACP provider", {
       requestId,
       answersCount: answers.length,
     });
@@ -1512,9 +1512,9 @@ export class OpenCodeBackend implements Backend {
   }
 
   /**
-   * Map an OpenCode session to our AgentSession type.
+   * Map an ACP session to our AgentSession type.
    */
-  private mapSession(session: OpenCodeSession): AgentSession {
+  private mapSession(session: AcpSession): AgentSession {
     return {
       id: session.id,
       title: session.title,
@@ -1523,7 +1523,7 @@ export class OpenCodeBackend implements Backend {
   }
 
   /**
-   * Map an OpenCode response to our AgentResponse type.
+   * Map an ACP response to our AgentResponse type.
    */
   private mapResponse(response: { info: AssistantMessage; parts: Part[] }): AgentResponse {
     const parts: AgentPart[] = [];
@@ -1566,18 +1566,18 @@ export class OpenCodeBackend implements Backend {
   }
 
   /**
-   * Translate an OpenCode SDK event to our AgentEvent type.
+   * Translate an ACP event to our AgentEvent type.
    * Returns null if the event is not relevant, for a different session, or a duplicate.
    */
   translateEvent(
-    event: OpenCodeEvent,
+    event: AcpEvent,
     ctx: TranslateEventContext
   ): AgentEvent | null {
     const { sessionId, subId, emittedMessageStarts, toolPartStatus, reasoningTextLength, partTypes, client, directory } = ctx;
     switch (event.type) {
       case "message.updated": {
         const msg = event.properties.info;
-        log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.updated`, {
+        log.trace(`[AcpBackend:${subId}] translateEvent: message.updated`, {
           msgSessionId: msg.sessionID,
           targetSessionId: sessionId,
           role: msg.role,
@@ -1585,36 +1585,36 @@ export class OpenCodeBackend implements Backend {
           alreadyEmitted: emittedMessageStarts.has(msg.id),
         });
         if (msg.sessionID !== sessionId) {
-          log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.updated - session ID mismatch`);
+          log.trace(`[AcpBackend:${subId}] translateEvent: message.updated - session ID mismatch`);
           return null;
         }
 
         if (msg.role === "assistant") {
           // Only emit message.start once per message ID
           if (emittedMessageStarts.has(msg.id)) {
-            log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.updated - already emitted start for this message`);
+            log.trace(`[AcpBackend:${subId}] translateEvent: message.updated - already emitted start for this message`);
             return null;
           }
           emittedMessageStarts.add(msg.id);
-          log.info(`[OpenCodeBackend:${subId}] translateEvent: message.updated - emitting message.start`, { messageId: msg.id });
+          log.info(`[AcpBackend:${subId}] translateEvent: message.updated - emitting message.start`, { messageId: msg.id });
           return {
             type: "message.start",
             messageId: msg.id,
           };
         }
-        log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.updated - role is not assistant, returning null`, { role: msg.role });
+        log.trace(`[AcpBackend:${subId}] translateEvent: message.updated - role is not assistant, returning null`, { role: msg.role });
         return null;
       }
 
       case "message.part.updated": {
         const part = event.properties.part;
-        log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated`, {
+        log.trace(`[AcpBackend:${subId}] translateEvent: message.part.updated`, {
           partSessionId: part.sessionID,
           targetSessionId: sessionId,
           partType: part.type,
         });
         if (part.sessionID !== sessionId) {
-          log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - session ID mismatch`);
+          log.trace(`[AcpBackend:${subId}] translateEvent: message.part.updated - session ID mismatch`);
           return null;
         }
 
@@ -1625,7 +1625,7 @@ export class OpenCodeBackend implements Backend {
           // In SDK 1.2.x, text deltas arrive via message.part.delta events.
           // message.part.updated only carries the full accumulated text.
           // We use message.part.delta for streaming, so nothing to emit here.
-          log.trace(`[OpenCodeBackend:${subId}] translateEvent: message.part.updated - text part (deltas via message.part.delta)`);
+          log.trace(`[AcpBackend:${subId}] translateEvent: message.part.updated - text part (deltas via message.part.delta)`);
         } else if (part.type === "reasoning") {
           // In SDK 1.2.x, reasoning deltas arrive via message.part.delta events.
           // Fallback: if we have full text and our tracked length is behind,
@@ -1698,13 +1698,13 @@ export class OpenCodeBackend implements Backend {
 
       case "session.idle": {
         if (event.properties.sessionID !== sessionId) {
-          log.trace(`[OpenCodeBackend:${subId}] translateEvent: session.idle - session ID mismatch`);
+          log.trace(`[AcpBackend:${subId}] translateEvent: session.idle - session ID mismatch`);
           return null;
         }
         // Session is idle = message complete
         // If we never saw a message.start, this might indicate an empty or error response
         if (!emittedMessageStarts.size) {
-          log.warn(`[OpenCodeBackend:${subId}] translateEvent: session.idle received but no assistant messages were seen`, {
+          log.warn(`[AcpBackend:${subId}] translateEvent: session.idle received but no assistant messages were seen`, {
             sessionId,
             emittedMessageStartsCount: emittedMessageStarts.size,
           });
@@ -1717,18 +1717,18 @@ export class OpenCodeBackend implements Backend {
               });
               if (sessionResult.data) {
                 const session = sessionResult.data as any;
-                log.warn(`[OpenCodeBackend:${subId}] translateEvent: session.idle - session details`, {
+                log.warn(`[AcpBackend:${subId}] translateEvent: session.idle - session details`, {
                   sessionId,
                   messageCount: session.messages?.length ?? 0,
                   messages: JSON.stringify(session.messages ?? [], null, 2),
                 });
               }
             } catch (err) {
-              log.error(`[OpenCodeBackend:${subId}] translateEvent: Failed to fetch session details`, { error: String(err) });
+              log.error(`[AcpBackend:${subId}] translateEvent: Failed to fetch session details`, { error: String(err) });
             }
           })();
         }
-        log.info(`[OpenCodeBackend:${subId}] translateEvent: session.idle - emitting message.complete`, { sessionId });
+        log.info(`[AcpBackend:${subId}] translateEvent: session.idle - emitting message.complete`, { sessionId });
         return {
           type: "message.complete",
           content: "", // Content is accumulated by the caller
@@ -1741,7 +1741,7 @@ export class OpenCodeBackend implements Backend {
         const errorMessage = typeof error?.data?.message === "string" 
           ? error.data.message 
           : "Unknown error";
-        log.error(`[OpenCodeBackend:${subId}] translateEvent: session.error`, { sessionId, errorMessage });
+        log.error(`[AcpBackend:${subId}] translateEvent: session.error`, { sessionId, errorMessage });
         return {
           type: "error",
           message: errorMessage,
@@ -1852,7 +1852,7 @@ export class OpenCodeBackend implements Backend {
         }
 
         // Log unhandled event types for debugging
-        log.debug(`[OpenCodeBackend:${subId}] translateEvent: Unhandled event type`, { type: event.type });
+        log.debug(`[AcpBackend:${subId}] translateEvent: Unhandled event type`, { type: event.type });
         return null;
     }
   }

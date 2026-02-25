@@ -1,6 +1,6 @@
 /**
- * Type definitions for the OpenCode backend.
- * These types define the data structures used by OpenCodeBackend.
+ * Type definitions for ACP backends.
+ * These types define the data structures used by AcpBackend.
  */
 
 import type { EventStream } from "../utils/event-stream";
@@ -21,7 +21,7 @@ export interface ConnectionInfo {
 }
 
 /**
- * Configuration for connecting to the OpenCode backend.
+ * Configuration for connecting to an ACP backend.
  */
 export interface BackendConnectionConfig {
   /** Backend runtime mode (ACP backends currently use "spawn") */
@@ -146,7 +146,7 @@ export interface QuestionInfo {
 }
 
 /**
- * Events emitted by the OpenCode backend.
+ * Events emitted by ACP backends.
  */
 export type AgentEvent =
   | { type: "message.start"; messageId: string }
@@ -163,7 +163,7 @@ export type AgentEvent =
 
 /**
  * Backend interface that all backend implementations must implement.
- * This includes both the real OpenCodeBackend and MockOpenCodeBackend for tests.
+ * This includes both the real AcpBackend and MockAcpBackend for tests.
  * 
  * The interface is split into two parts:
  * - Core methods: Used by LoopEngine for loop execution
@@ -215,12 +215,11 @@ export interface Backend {
   abortAllSubscriptions(): void;
 
   /**
-   * Get the SDK client instance.
+   * Get the SDK/client instance.
    * Returns `unknown` intentionally — this interface is implemented by both
-   * the real OpenCodeBackend (which returns an OpencodeClient) and
-   * MockOpenCodeBackend (which returns a mock object). Typing it as
-   * OpencodeClient would couple the shared interface to a concrete SDK type
-   * that mocks cannot satisfy. Callers should cast as needed.
+   * the real AcpBackend and MockAcpBackend. Typing it as a concrete client
+   * would couple shared contracts to one provider's SDK shape.
+   * Callers should cast as needed.
    */
   getSdkClient(): unknown;
 

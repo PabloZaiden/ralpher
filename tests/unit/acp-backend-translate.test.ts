@@ -1,13 +1,13 @@
 /**
- * Positive-path unit tests for OpenCodeBackend.
+ * Positive-path unit tests for AcpBackend.
  *
  * Tests translateEvent(), mapSession(), and mapResponse() by calling
  * the private methods via type assertion. This complements the existing
- * opencode-backend.test.ts which mostly covers "not connected" errors.
+ * acp-backend.test.ts which mostly covers "not connected" errors.
  */
 
 import { test, expect, describe } from "bun:test";
-import { OpenCodeBackend } from "../../src/backends/opencode";
+import { AcpBackend } from "../../src/backends/acp";
 import type { AgentEvent } from "../../src/backends/types";
 
 // Access private methods via type assertion
@@ -62,7 +62,7 @@ function createContext(sessionId = "test-session") {
 
 /** Helper to get the private backend for method access */
 function getBackend(): PrivateBackend {
-  return new OpenCodeBackend() as unknown as PrivateBackend;
+  return new AcpBackend() as unknown as PrivateBackend;
 }
 
 // ==========================================================================
@@ -1300,7 +1300,7 @@ describe("translateEvent: unknown event types", () => {
 // ==========================================================================
 
 describe("mapSession", () => {
-  test("maps OpenCode session to AgentSession", () => {
+  test("maps ACP session to AgentSession", () => {
     const backend = getBackend();
 
     const result = backend.mapSession({

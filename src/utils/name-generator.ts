@@ -1,6 +1,6 @@
 /**
  * Loop name generation utility.
- * Generates meaningful loop names from prompts using opencode.
+ * Generates meaningful loop names from prompts using the configured agent backend.
  */
 
 import type { PromptInput, AgentResponse } from "../backends/types";
@@ -71,9 +71,9 @@ function generateFallbackName(prompt: string): string {
 }
 
 /**
- * Generate a loop name from a prompt using opencode.
+ * Generate a loop name from a prompt using the configured agent backend.
  * 
- * This function sends a prompt to opencode asking it to generate a short,
+ * This function sends a prompt to the backend asking it to generate a short,
  * descriptive title for a coding task. The title is sanitized and validated
  * before being returned.
  * 
@@ -98,7 +98,7 @@ export async function generateLoopName(options: GenerateLoopNameOptions): Promis
   // Truncate prompt for generation (max 1000 chars)
   const truncatedPrompt = prompt.slice(0, 1000);
 
-  // Build the prompt for opencode
+  // Build the prompt for the backend
   const nameGenerationPrompt: PromptInput = {
     parts: [{
       type: "text",

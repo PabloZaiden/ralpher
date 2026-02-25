@@ -52,7 +52,7 @@ export interface TestServerContext {
  * This enables tests to control iteration outcomes.
  */
 export class ConfigurableMockBackend implements LoopBackend {
-  readonly name = "opencode";
+  readonly name = "acp";
 
   private connected = false;
   private directory = "";

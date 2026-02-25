@@ -14,7 +14,7 @@ import { closeDatabase } from "../src/persistence/database";
 import { createWorkspace } from "../src/persistence/workspaces";
 import { loadLoop } from "../src/persistence/loops";
 import { TestCommandExecutor } from "./mocks/mock-executor";
-import { MockOpenCodeBackend, defaultTestModel } from "./mocks/mock-backend";
+import { MockAcpBackend, defaultTestModel } from "./mocks/mock-backend";
 import type { LoopEvent } from "../src/types/events";
 import { getDefaultServerSettings } from "../src/types/settings";
 
@@ -61,7 +61,7 @@ export interface TestContext {
   /** Loop manager instance */
   manager: LoopManager;
   /** Mock backend instance (if using mock) */
-  mockBackend?: MockOpenCodeBackend;
+  mockBackend?: MockAcpBackend;
 }
 
 /**
@@ -136,9 +136,9 @@ export async function setupTestContext(options: SetupOptions = {}): Promise<Test
   emitter.subscribe((event) => events.push(event));
 
   // Register mock backend if requested
-  let mockBackend: MockOpenCodeBackend | undefined;
+  let mockBackend: MockAcpBackend | undefined;
   if (useMockBackend) {
-    mockBackend = new MockOpenCodeBackend({ 
+    mockBackend = new MockAcpBackend({ 
       responses: mockResponses,
       models: [defaultTestModel],
     });

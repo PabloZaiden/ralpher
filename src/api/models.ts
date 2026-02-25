@@ -103,7 +103,7 @@ async function getCopilotModelsViaExecution(
 }
 
 /**
- * Discover models via the configured agent backend (OpenCode path).
+ * Discover models via the configured agent backend (ACP path).
  */
 async function getAgentBackendModels(
   workspaceId: string,

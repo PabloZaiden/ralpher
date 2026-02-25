@@ -27,7 +27,7 @@ import { loopManager } from "../../src/core/loop-manager";
 import { closeDatabase } from "../../src/persistence/database";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 import {
-  MockOpenCodeBackend,
+  MockAcpBackend,
   type MockModelInfo,
 } from "../mocks/mock-backend";
 
@@ -122,7 +122,7 @@ describe("Model Variants API", () => {
     await ensureDataDirectories();
 
     // Set up backend manager with mock that returns models with variants
-    const mockBackend = new MockOpenCodeBackend({
+    const mockBackend = new MockAcpBackend({
       responses: ["<promise>COMPLETE</promise>"],
       models: modelsWithVariants,
     });
@@ -173,7 +173,7 @@ describe("Model Variants API", () => {
     }
 
     // Re-setup backend after reset
-    const mockBackend = new MockOpenCodeBackend({
+    const mockBackend = new MockAcpBackend({
       responses: ["<promise>COMPLETE</promise>"],
       models: modelsWithVariants,
     });

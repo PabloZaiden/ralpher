@@ -288,7 +288,7 @@ export type LoopStatus =
 
 /**
  * Backend session information.
- * Tracks the connection to the opencode backend.
+ * Tracks the connection to the agent backend.
  */
 export interface SessionInfo {
   /** Backend session ID for the conversation */
@@ -422,4 +422,3 @@ export interface ReviewComment {
   /** When the comment was marked as addressed (ISO timestamp, null if pending) */
   addressedAt?: string;
 }
-

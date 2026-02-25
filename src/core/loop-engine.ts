@@ -26,7 +26,7 @@ import type {
   PromptInput,
   AgentEvent,
 } from "../backends/types";
-import { OpenCodeBackend } from "../backends/opencode";
+import { AcpBackend } from "../backends/acp";
 import { backendManager, buildConnectionConfig } from "./backend-manager";
 import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
@@ -78,21 +78,21 @@ function generateBranchName(prefix: string, name: string, timestamp: string): st
 /**
  * Backend interface for LoopEngine.
  * This is a structural type that defines the methods LoopEngine needs.
- * Both OpenCodeBackend and MockOpenCodeBackend satisfy this interface.
+ * Both AcpBackend and MockAcpBackend satisfy this interface.
  * Using a structural type (interface) instead of a union allows for
  * easy mocking in tests without requiring all internal class fields.
  */
 export interface LoopBackend {
-  connect: OpenCodeBackend["connect"];
-  disconnect: OpenCodeBackend["disconnect"];
-  isConnected: OpenCodeBackend["isConnected"];
-  createSession: OpenCodeBackend["createSession"];
-  sendPrompt: OpenCodeBackend["sendPrompt"];
-  sendPromptAsync: OpenCodeBackend["sendPromptAsync"];
-  abortSession: OpenCodeBackend["abortSession"];
-  subscribeToEvents: OpenCodeBackend["subscribeToEvents"];
-  replyToPermission: OpenCodeBackend["replyToPermission"];
-  replyToQuestion: OpenCodeBackend["replyToQuestion"];
+  connect: AcpBackend["connect"];
+  disconnect: AcpBackend["disconnect"];
+  isConnected: AcpBackend["isConnected"];
+  createSession: AcpBackend["createSession"];
+  sendPrompt: AcpBackend["sendPrompt"];
+  sendPromptAsync: AcpBackend["sendPromptAsync"];
+  abortSession: AcpBackend["abortSession"];
+  subscribeToEvents: AcpBackend["subscribeToEvents"];
+  replyToPermission: AcpBackend["replyToPermission"];
+  replyToQuestion: AcpBackend["replyToQuestion"];
 }
 
 /**
@@ -2233,7 +2233,7 @@ ${userMessageSection}${errorContext}
 
   /**
    * Generate a meaningful commit message based on the changes.
-   * Uses opencode to summarize what was done, then normalizes the output
+   * Uses the configured agent backend to summarize what was done, then normalizes the output
    * into a valid conventional commit message with the configured scope.
    */
   private async generateCommitMessage(iteration: number, responseContent: string): Promise<string> {
@@ -2249,7 +2249,7 @@ ${userMessageSection}${errorContext}
       return formatConventionalCommit("chore", scope, `iteration ${iteration}`);
     }
 
-    // Ask opencode to generate a commit message in conventional commit format
+    // Ask the agent backend to generate a commit message in conventional commit format
     const prompt: PromptInput = {
       parts: [{
         type: "text",

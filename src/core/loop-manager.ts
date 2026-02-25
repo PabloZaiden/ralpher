@@ -179,7 +179,7 @@ export class LoopManager {
 
   /**
    * Create a new loop.
-   * The loop name is automatically generated from the prompt using opencode.
+   * The loop name is automatically generated from the prompt using the configured agent backend.
    */
   async createLoop(options: CreateLoopOptions): Promise<Loop> {
     const id = crypto.randomUUID();
