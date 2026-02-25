@@ -183,7 +183,7 @@ export const workspacesRoutes = {
       log.debug("GET /api/workspaces - Listing all workspaces");
       try {
         const workspaces = await listWorkspaces();
-        log.trace("GET /api/workspaces - Retrieved workspaces", { count: workspaces.length });
+        log.debug("GET /api/workspaces - Retrieved workspaces", { count: workspaces.length });
         return Response.json(workspaces);
       } catch (error) {
         log.error("Failed to list workspaces:", String(error));
@@ -278,7 +278,7 @@ export const workspacesRoutes = {
   "/api/workspaces/:id": {
     async GET(req: Request & { params: { id: string } }) {
       const { id } = req.params;
-      log.trace("GET /api/workspaces/:id", { workspaceId: id });
+      log.debug("GET /api/workspaces/:id", { workspaceId: id });
       try {
         const result = await requireWorkspace(id);
         if (result instanceof Response) {

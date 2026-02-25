@@ -45,7 +45,7 @@ export const settingsRoutes = {
     async GET(): Promise<Response> {
       log.debug("GET /api/config");
       const config = getAppConfig();
-      log.trace("Returning app config", { remoteOnly: config.remoteOnly });
+      log.debug("Returning app config", { remoteOnly: config.remoteOnly });
       return Response.json(config);
     },
   },

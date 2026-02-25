@@ -346,7 +346,7 @@ export class GitService {
       const ref = originHeadResult.stdout.trim();
       const match = ref.match(/^refs\/remotes\/origin\/(.+)$/);
       if (match?.[1]) {
-        log.trace(`[GitService] Default branch from origin/HEAD: ${match[1]}`);
+        log.debug(`[GitService] Default branch from origin/HEAD: ${match[1]}`);
         return match[1];
       }
     }
@@ -354,20 +354,20 @@ export class GitService {
     // Strategy 2: Check if 'main' branch exists locally
     const mainExists = await this.branchExists(directory, "main");
     if (mainExists) {
-      log.trace(`[GitService] Default branch: main (exists locally)`);
+      log.debug(`[GitService] Default branch: main (exists locally)`);
       return "main";
     }
 
     // Strategy 3: Check if 'master' branch exists locally
     const masterExists = await this.branchExists(directory, "master");
     if (masterExists) {
-      log.trace(`[GitService] Default branch: master (exists locally)`);
+      log.debug(`[GitService] Default branch: master (exists locally)`);
       return "master";
     }
 
     // Strategy 4: Fall back to current branch
     const currentBranch = await this.getCurrentBranch(directory);
-    log.trace(`[GitService] Default branch fallback to current: ${currentBranch}`);
+    log.debug(`[GitService] Default branch fallback to current: ${currentBranch}`);
     return currentBranch;
   }
 
@@ -384,9 +384,9 @@ export class GitService {
     const matches = currentBranch === expectedBranch;
     
     if (!matches) {
-      log.trace(`[GitService] Branch verification failed: expected '${expectedBranch}' but on '${currentBranch}'`);
+      log.debug(`[GitService] Branch verification failed: expected '${expectedBranch}' but on '${currentBranch}'`);
     } else {
-      log.trace(`[GitService] Branch verification passed: on '${currentBranch}'`);
+      log.debug(`[GitService] Branch verification passed: on '${currentBranch}'`);
     }
     
     return {
@@ -794,7 +794,7 @@ export class GitService {
     // Check if the remote exists
     const remoteResult = await this.runGitCommand(directory, ["remote", "get-url", remote]);
     if (!remoteResult.success) {
-      log.trace(`[GitService] No remote '${remote}' configured, skipping fetch`);
+      log.debug(`[GitService] No remote '${remote}' configured, skipping fetch`);
       return false;
     }
 
@@ -803,10 +803,10 @@ export class GitService {
     if (!fetchResult.success) {
       if (fetchResult.stderr.includes("couldn't find remote ref") ||
           fetchResult.stderr.includes("fatal: couldn't find remote ref")) {
-        log.trace(`[GitService] Remote branch '${branchName}' does not exist, skipping fetch`);
+        log.debug(`[GitService] Remote branch '${branchName}' does not exist, skipping fetch`);
         return false;
       }
-      log.trace(`[GitService] Fetch failed: ${fetchResult.stderr}`);
+      log.debug(`[GitService] Fetch failed: ${fetchResult.stderr}`);
       return false;
     }
 
@@ -970,7 +970,7 @@ export class GitService {
     // First check if the remote exists
     const remoteResult = await this.runGitCommand(directory, ["remote", "get-url", remote]);
     if (!remoteResult.success) {
-      log.trace(`[GitService] No remote '${remote}' configured, skipping pull`);
+      log.debug(`[GitService] No remote '${remote}' configured, skipping pull`);
       return false;
     }
 
@@ -983,11 +983,11 @@ export class GitService {
       // Check if the failure is because the remote branch doesn't exist
       if (fetchResult.stderr.includes("couldn't find remote ref") || 
           fetchResult.stderr.includes("fatal: couldn't find remote ref")) {
-        log.trace(`[GitService] Remote branch '${branch}' does not exist, skipping pull`);
+        log.debug(`[GitService] Remote branch '${branch}' does not exist, skipping pull`);
         return false;
       }
       // For other fetch errors (network issues, etc.), log and return false
-      log.trace(`[GitService] Fetch failed: ${fetchResult.stderr}`);
+      log.debug(`[GitService] Fetch failed: ${fetchResult.stderr}`);
       return false;
     }
 
@@ -1002,7 +1002,7 @@ export class GitService {
     if (!mergeResult.success) {
       // --ff-only failed means branches have diverged, not a fast-forward
       // This is safe - working tree is unchanged
-      log.trace(`[GitService] Fast-forward merge not possible for '${branch}': ${mergeResult.stderr}`);
+      log.debug(`[GitService] Fast-forward merge not possible for '${branch}': ${mergeResult.stderr}`);
       return false;
     }
 
@@ -1029,7 +1029,7 @@ export class GitService {
 
     if (checkResult.success) {
       // Already configured — no-op
-      log.trace(`[GitService] pull.rebase already configured: ${checkResult.stdout.trim()}`);
+      log.debug(`[GitService] pull.rebase already configured: ${checkResult.stdout.trim()}`);
       return true;
     }
 
@@ -1045,7 +1045,7 @@ export class GitService {
       return false;
     }
 
-    log.trace(`[GitService] Set pull.rebase to false`);
+    log.debug(`[GitService] Set pull.rebase to false`);
     return true;
   }
 
@@ -1461,7 +1461,7 @@ export class GitService {
       );
 
       if (alreadyExcluded) {
-        log.trace(`[GitService] .ralph-worktrees already in .git/info/exclude`);
+        log.debug(`[GitService] .ralph-worktrees already in .git/info/exclude`);
         return;
       }
 
@@ -1475,7 +1475,7 @@ export class GitService {
       log.info(`[GitService] Added .ralph-worktrees to .git/info/exclude`);
     } catch {
       // If the exclude file doesn't exist, create it
-      log.trace(`[GitService] .git/info/exclude not found, creating it`);
+      log.debug(`[GitService] .git/info/exclude not found, creating it`);
       // Ensure the info directory exists
       await this.executor.exec("mkdir", ["-p", excludeDir]);
       const content = `# git ls-files --others --exclude-from=.git/info/exclude\n# Lines that start with '#' are comments.\n${excludePattern}\n`;

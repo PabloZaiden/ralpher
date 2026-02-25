@@ -164,11 +164,11 @@ export async function getWorkspace(id: string): Promise<Workspace | null> {
   const stmt = db.prepare("SELECT * FROM workspaces WHERE id = ?");
   const row = stmt.get(id) as Record<string, unknown> | null;
   if (!row) {
-    log.trace("Workspace not found", { id });
+    log.debug("Workspace not found", { id });
     return null;
   }
   const workspace = rowToWorkspace(row);
-  log.trace("Workspace retrieved", { id, name: workspace.name });
+  log.debug("Workspace retrieved", { id, name: workspace.name });
   return workspace;
 }
 
@@ -181,11 +181,11 @@ export async function getWorkspaceByDirectory(directory: string): Promise<Worksp
   const stmt = db.prepare("SELECT * FROM workspaces WHERE directory = ?");
   const row = stmt.get(directory) as Record<string, unknown> | null;
   if (!row) {
-    log.trace("Workspace not found for directory", { directory });
+    log.debug("Workspace not found for directory", { directory });
     return null;
   }
   const workspace = rowToWorkspace(row);
-  log.trace("Workspace found for directory", { directory, id: workspace.id, name: workspace.name });
+  log.debug("Workspace found for directory", { directory, id: workspace.id, name: workspace.name });
   return workspace;
 }
 
@@ -201,7 +201,7 @@ export async function listWorkspaces(): Promise<Workspace[]> {
   `);
   const rows = stmt.all() as Array<Record<string, unknown>>;
   const workspaces = rows.map(rowToWorkspace);
-  log.trace("Workspaces listed", { count: workspaces.length });
+  log.debug("Workspaces listed", { count: workspaces.length });
   return workspaces;
 }
 
@@ -231,7 +231,7 @@ export async function updateWorkspace(
   
   if (setClauses.length === 0) {
     // No updates provided, just return the existing workspace
-    log.trace("No updates provided, returning existing workspace", { id });
+    log.debug("No updates provided, returning existing workspace", { id });
     return getWorkspace(id);
   }
   
@@ -245,7 +245,7 @@ export async function updateWorkspace(
   const stmt = db.prepare(sql);
   stmt.run(...values);
   
-  log.trace("Workspace updated", { id });
+  log.debug("Workspace updated", { id });
   return getWorkspace(id);
 }
 
@@ -262,7 +262,7 @@ export async function deleteWorkspace(id: string): Promise<{ success: boolean; r
   // Check if workspace exists
   const workspace = await getWorkspace(id);
   if (!workspace) {
-    log.trace("Workspace not found for deletion", { id });
+    log.debug("Workspace not found for deletion", { id });
     return { success: false, reason: "Workspace not found" };
   }
   
@@ -288,11 +288,11 @@ export async function deleteWorkspace(id: string): Promise<{ success: boolean; r
  * Get the count of loops for a workspace.
  */
 export async function getWorkspaceLoopCount(workspaceId: string): Promise<number> {
-  log.trace("Getting workspace loop count", { workspaceId });
+  log.debug("Getting workspace loop count", { workspaceId });
   const db = getDatabase();
   const stmt = db.prepare("SELECT COUNT(*) as count FROM loops WHERE workspace_id = ?");
   const row = stmt.get(workspaceId) as { count: number };
-  log.trace("Workspace loop count retrieved", { workspaceId, count: row.count });
+  log.debug("Workspace loop count retrieved", { workspaceId, count: row.count });
   return row.count;
 }
 
@@ -301,7 +301,7 @@ export async function getWorkspaceLoopCount(workspaceId: string): Promise<number
  * Called when a loop is created in this workspace.
  */
 export async function touchWorkspace(id: string): Promise<void> {
-  log.trace("Touching workspace", { id });
+  log.debug("Touching workspace", { id });
   const db = getDatabase();
   db.run("UPDATE workspaces SET updated_at = ? WHERE id = ?", [
     new Date().toISOString(),

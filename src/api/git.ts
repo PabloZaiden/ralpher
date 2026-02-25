@@ -47,7 +47,7 @@ export interface DefaultBranchResponse {
  * @throws Error if no workspace is found for the directory
  */
 async function getGitService(directory: string): Promise<GitService> {
-  log.trace("Getting GitService for directory", { directory });
+  log.debug("Getting GitService for directory", { directory });
   // Look up the workspace by directory to get its workspaceId
   const workspace = await getWorkspaceByDirectory(directory);
   if (!workspace) {
@@ -55,7 +55,7 @@ async function getGitService(directory: string): Promise<GitService> {
     throw new Error(`No workspace found for directory: ${directory}`);
   }
   const executor = await backendManager.getCommandExecutorAsync(workspace.id, directory);
-  log.trace("GitService created", { workspaceId: workspace.id });
+  log.debug("GitService created", { workspaceId: workspace.id });
   return GitService.withExecutor(executor);
 }
 
@@ -126,7 +126,7 @@ export const gitRoutes = {
           branches,
         };
 
-        log.trace("Branches retrieved", { directory, currentBranch, branchCount: branches.length });
+        log.debug("Branches retrieved", { directory, currentBranch, branchCount: branches.length });
         return Response.json(response);
       } catch (error) {
         log.error("Git branches error", { error: String(error) });
@@ -165,7 +165,7 @@ export const gitRoutes = {
           defaultBranch,
         };
 
-        log.trace("Default branch retrieved", { directory, defaultBranch });
+        log.debug("Default branch retrieved", { directory, defaultBranch });
         return Response.json(response);
       } catch (error) {
         log.error("Git default-branch error", { error: String(error) });

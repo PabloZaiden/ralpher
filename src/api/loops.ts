@@ -145,7 +145,7 @@ export const loopsCrudRoutes = {
         loops = loops.filter((loop) => loop.config.mode === modeFilter);
       }
 
-      log.trace("GET /api/loops - Retrieved loops", { count: loops.length, modeFilter });
+      log.debug("GET /api/loops - Retrieved loops", { count: loops.length, modeFilter });
       return Response.json(loops);
     },
 
@@ -188,7 +188,7 @@ export const loopsCrudRoutes = {
       }
       const body = validation.data;
       
-      log.trace("POST /api/loops - Request validated", { 
+      log.debug("POST /api/loops - Request validated", { 
         workspaceId: body.workspaceId, 
         planMode: body.planMode, 
         draft: body.draft,
@@ -334,7 +334,7 @@ export const loopsCrudRoutes = {
      * @returns Loop object or 404 if not found
      */
     async GET(req: Request & { params: { id: string } }): Promise<Response> {
-      log.trace("GET /api/loops/:id", { loopId: req.params.id });
+      log.debug("GET /api/loops/:id", { loopId: req.params.id });
       const loop = await loopManager.getLoop(req.params.id);
       if (!loop) {
         log.debug("GET /api/loops/:id - Loop not found", { loopId: req.params.id });

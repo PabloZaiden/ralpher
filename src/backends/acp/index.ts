@@ -362,6 +362,11 @@ export class AcpBackend implements Backend {
     }
 
     this.directory = config.directory;
+    log.debug("[AcpBackend] connect requested", {
+      transport: config.transport,
+      provider: config.provider,
+      directory: config.directory,
+    });
 
     if (config.mode !== "spawn") {
       throw new Error("Connect mode is not supported by ACP runtime. Use stdio or ssh transport.");
@@ -390,6 +395,13 @@ export class AcpBackend implements Backend {
   private async connectSpawn(config: BackendConnectionConfig): Promise<void> {
     const command = config.command ?? (config.provider === "copilot" ? "copilot" : "opencode");
     const args = config.args ?? (config.provider === "copilot" ? ["--acp"] : ["acp"]);
+    log.debug("[AcpBackend] Spawning ACP runtime", {
+      command,
+      args,
+      directory: config.directory,
+      transport: config.transport,
+      provider: config.provider,
+    });
 
     let process: Bun.Subprocess;
     try {
@@ -418,6 +430,7 @@ export class AcpBackend implements Backend {
       await this.disconnect();
       throw new Error(`Failed to initialize ACP process (${command}): ${String(error)}`);
     }
+    log.debug("[AcpBackend] ACP runtime initialized", { command });
 
     this.connectionInfo = {
       baseUrl: `acp://stdio/${command}`,
@@ -432,6 +445,10 @@ export class AcpBackend implements Backend {
     if (!this.connected && !this.process) {
       return;
     }
+    log.debug("[AcpBackend] Disconnecting ACP runtime", {
+      hasProcess: !!this.process,
+      directory: this.directory,
+    });
 
     this.abortAllSubscriptions();
 
@@ -1099,6 +1116,10 @@ export class AcpBackend implements Backend {
    * Create a new session.
    */
   async createSession(options: CreateSessionOptions): Promise<AgentSession> {
+    log.debug("[AcpBackend] Creating session", {
+      directory: options.directory,
+      hasTitle: !!options.title,
+    });
     const result = await this.sendRpcRequest<unknown>("session/new", {
       cwd: options.directory,
       mcpServers: [],
@@ -1126,6 +1147,11 @@ export class AcpBackend implements Backend {
     if (models.length > 0) {
       this.modelCache.set(options.directory, models);
     }
+
+    log.debug("[AcpBackend] Session created", {
+      sessionId: session.id,
+      modelsDiscovered: models.length,
+    });
 
     return session;
   }
@@ -1193,6 +1219,11 @@ export class AcpBackend implements Backend {
    */
   async sendPrompt(sessionId: string, prompt: PromptInput): Promise<AgentResponse> {
     this.ensureConnected();
+    log.debug("[AcpBackend] Sending synchronous prompt", {
+      sessionId,
+      parts: prompt.parts.length,
+      model: prompt.model?.modelID ?? "default",
+    });
 
     const chunks: string[] = [];
     const toolParts: AgentPart[] = [];
@@ -1270,13 +1301,19 @@ export class AcpBackend implements Backend {
       }
     }
 
-    return this.mapResponse({
+    const response = this.mapResponse({
       info: {
         id: `msg-${Date.now()}`,
         tokens: { input: 0, output: 0 },
       },
       parts: mappedParts,
     });
+    log.debug("[AcpBackend] Synchronous prompt completed", {
+      sessionId,
+      responseLength: response.content.length,
+      responseParts: response.parts.length,
+    });
+    return response;
   }
 
   /**
@@ -1289,12 +1326,19 @@ export class AcpBackend implements Backend {
     this.sessionPromptSequences.set(sessionId, sequence);
     this.sessionPromptHasActivity.set(sessionId, false);
     this.sessionReasoningPartKeys.delete(sessionId);
+    log.debug("[AcpBackend] Sending async prompt", {
+      sessionId,
+      sequence,
+      parts: prompt.parts.length,
+      model: prompt.model?.modelID ?? "default",
+    });
 
     void this.sendRpcRequest("session/prompt", this.buildPromptParams(sessionId, prompt), PROMPT_REQUEST_TIMEOUT_MS)
       .then(() => {
         if (this.sessionPromptSequences.get(sessionId) !== sequence) {
           return;
         }
+        log.debug("[AcpBackend] Async prompt RPC completed", { sessionId, sequence });
         this.emitSessionEvent(sessionId, {
           type: "message.complete",
           content: "",
@@ -1315,6 +1359,11 @@ export class AcpBackend implements Backend {
           });
           return;
         }
+        log.debug("[AcpBackend] Async prompt failed", {
+          sessionId,
+          sequence,
+          message,
+        });
         this.emitSessionEvent(sessionId, {
           type: "error",
           message,
@@ -1483,6 +1532,7 @@ export class AcpBackend implements Backend {
    */
   async subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>> {
     this.ensureConnected();
+    log.debug("[AcpBackend] Subscribing to session events", { sessionId });
 
     const abortController = new AbortController();
     this.activeSubscriptions.add(abortController);
@@ -1505,6 +1555,7 @@ export class AcpBackend implements Backend {
         this.removeSessionSubscriber(sessionId, subscriber);
         stream.close();
         end();
+        log.debug("[AcpBackend] Unsubscribed from session events", { sessionId });
       },
     };
 
@@ -1596,7 +1647,7 @@ export class AcpBackend implements Backend {
             return null;
           }
           emittedMessageStarts.add(msg.id);
-          log.info(`[AcpBackend:${subId}] translateEvent: message.updated - emitting message.start`, { messageId: msg.id });
+          log.debug(`[AcpBackend:${subId}] translateEvent: message.updated - emitting message.start`, { messageId: msg.id });
           return {
             type: "message.start",
             messageId: msg.id,
@@ -1728,7 +1779,7 @@ export class AcpBackend implements Backend {
             }
           })();
         }
-        log.info(`[AcpBackend:${subId}] translateEvent: session.idle - emitting message.complete`, { sessionId });
+        log.debug(`[AcpBackend:${subId}] translateEvent: session.idle - emitting message.complete`, { sessionId });
         return {
           type: "message.complete",
           content: "", // Content is accumulated by the caller
@@ -1852,7 +1903,7 @@ export class AcpBackend implements Backend {
         }
 
         // Log unhandled event types for debugging
-        log.debug(`[AcpBackend:${subId}] translateEvent: Unhandled event type`, { type: event.type });
+        log.trace(`[AcpBackend:${subId}] translateEvent: Unhandled event type`, { type: event.type });
         return null;
     }
   }

@@ -326,7 +326,7 @@ export async function saveLoop(loop: Loop): Promise<void> {
   `);
   
   stmt.run(...values);
-  log.trace("Loop saved to database", { id: loop.config.id });
+  log.debug("Loop saved to database", { id: loop.config.id });
 }
 
 /**
@@ -341,12 +341,12 @@ export async function loadLoop(loopId: string): Promise<Loop | null> {
   const row = stmt.get(loopId) as Record<string, unknown> | null;
   
   if (!row) {
-    log.trace("Loop not found", { loopId });
+    log.debug("Loop not found", { loopId });
     return null;
   }
   
   const loop = rowToLoop(row);
-  log.trace("Loop loaded", { loopId, status: loop.state.status });
+  log.debug("Loop loaded", { loopId, status: loop.state.status });
   return loop;
 }
 
@@ -365,7 +365,7 @@ export async function deleteLoop(loopId: string): Promise<boolean> {
   if (deleted) {
     log.info("Loop deleted", { loopId });
   } else {
-    log.trace("Loop not found for deletion", { loopId });
+    log.debug("Loop not found for deletion", { loopId });
   }
   return deleted;
 }
@@ -382,7 +382,7 @@ export async function listLoops(): Promise<Loop[]> {
   const rows = stmt.all() as Record<string, unknown>[];
   
   const loops = rows.map(rowToLoop);
-  log.trace("Loops listed", { count: loops.length });
+  log.debug("Loops listed", { count: loops.length });
   return loops;
 }
 
@@ -390,14 +390,14 @@ export async function listLoops(): Promise<Loop[]> {
  * Check if a loop exists.
  */
 export async function loopExists(loopId: string): Promise<boolean> {
-  log.trace("Checking if loop exists", { loopId });
+  log.debug("Checking if loop exists", { loopId });
   const db = getDatabase();
   
   const stmt = db.prepare("SELECT 1 FROM loops WHERE id = ? LIMIT 1");
   const row = stmt.get(loopId);
   
   const exists = row !== null;
-  log.trace("Loop exists check result", { loopId, exists });
+  log.debug("Loop exists check result", { loopId, exists });
   return exists;
 }
 
@@ -440,12 +440,12 @@ export async function getActiveLoopByDirectory(directory: string): Promise<Loop 
   const row = stmt.get(directory, ...ACTIVE_LOOP_STATUSES) as Record<string, unknown> | null;
   
   if (!row) {
-    log.trace("No active loop found for directory", { directory });
+    log.debug("No active loop found for directory", { directory });
     return null;
   }
   
   const loop = rowToLoop(row);
-  log.trace("Active loop found", { directory, loopId: loop.config.id, status: loop.state.status });
+  log.debug("Active loop found", { directory, loopId: loop.config.id, status: loop.state.status });
   return loop;
 }
 
@@ -464,7 +464,7 @@ export async function updateLoopState(loopId: string, state: LoopState): Promise
   const updateInTransaction = db.transaction(() => {
     const row = selectStmt.get(loopId) as Record<string, unknown> | null;
     if (!row) {
-      log.trace("Loop not found for state update", { loopId });
+      log.debug("Loop not found for state update", { loopId });
       return false;
     }
     
@@ -487,7 +487,7 @@ export async function updateLoopState(loopId: string, state: LoopState): Promise
     `);
     updateStmt.run(...values);
     
-    log.trace("Loop state updated", { loopId, status: state.status });
+    log.debug("Loop state updated", { loopId, status: state.status });
     return true;
   });
   
@@ -509,7 +509,7 @@ export async function updateLoopConfig(loopId: string, config: LoopConfig): Prom
   const updateInTransaction = db.transaction(() => {
     const row = selectStmt.get(loopId) as Record<string, unknown> | null;
     if (!row) {
-      log.trace("Loop not found for config update", { loopId });
+      log.debug("Loop not found for config update", { loopId });
       return false;
     }
     
@@ -532,7 +532,7 @@ export async function updateLoopConfig(loopId: string, config: LoopConfig): Prom
     `);
     updateStmt.run(...values);
     
-    log.trace("Loop config updated", { loopId, name: config.name });
+    log.debug("Loop config updated", { loopId, name: config.name });
     return true;
   });
   
@@ -588,7 +588,7 @@ export async function resetStaleLoops(): Promise<number> {
   if (result.changes > 0) {
     log.info("Reset stale loops", { count: result.changes });
   } else {
-    log.trace("No stale loops to reset");
+    log.debug("No stale loops to reset");
   }
   return result.changes;
 }

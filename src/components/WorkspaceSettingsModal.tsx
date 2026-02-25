@@ -79,7 +79,7 @@ export function WorkspaceSettingsModal({
     log.debug("Saving workspace settings", { workspaceName: name.trim() });
     const success = await onSave(name.trim(), serverSettings);
     if (success) {
-      log.trace("Workspace settings saved successfully");
+      log.debug("Workspace settings saved successfully");
       onClose();
     } else {
       log.warn("Failed to save workspace settings");
@@ -88,7 +88,7 @@ export function WorkspaceSettingsModal({
 
   // Handle server settings change
   function handleServerSettingsChange(settings: ServerSettings, isValid: boolean) {
-    log.trace("Server settings changed", {
+    log.debug("Server settings changed", {
       provider: settings.agent.provider,
       transport: settings.agent.transport,
       isValid,

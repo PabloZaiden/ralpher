@@ -110,7 +110,7 @@ export function LoopActionBar({
 
       const success = await onQueuePending(options);
       if (success) {
-        log.trace("Pending changes queued successfully");
+        log.debug("Pending changes queued successfully");
         // Clear local state on success
         setMessage("");
         setSelectedModel("");
@@ -130,7 +130,7 @@ export function LoopActionBar({
     setIsSubmitting(true);
     try {
       await onClearPending();
-      log.trace("Pending changes cleared");
+      log.debug("Pending changes cleared");
     } finally {
       setIsSubmitting(false);
     }

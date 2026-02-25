@@ -33,7 +33,7 @@ export function insertReviewComment(comment: {
       comment.status ?? "pending",
     ]
   );
-  log.trace("Review comment inserted", { id: comment.id });
+  log.debug("Review comment inserted", { id: comment.id });
 }
 
 /**
@@ -65,7 +65,7 @@ export function getReviewComments(loopId: string): Array<{
     addressed_at: string | null;
   }>;
   
-  log.trace("Review comments retrieved", { loopId, count: comments.length });
+  log.debug("Review comments retrieved", { loopId, count: comments.length });
   return comments;
 }
 
@@ -82,5 +82,5 @@ export function markCommentsAsAddressed(loopId: string, reviewCycle: number, add
      WHERE loop_id = ? AND review_cycle = ? AND status = 'pending'`,
     [addressedAt, loopId, reviewCycle]
   );
-  log.trace("Comments marked as addressed", { loopId, reviewCycle, addressedAt });
+  log.debug("Comments marked as addressed", { loopId, reviewCycle, addressedAt });
 }
