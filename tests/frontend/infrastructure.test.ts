@@ -52,7 +52,7 @@ describe("Frontend Test Infrastructure", () => {
     test("createWorkspace returns valid workspace", () => {
       const ws = createWorkspace({ name: "My Workspace" });
       expect(ws.name).toBe("My Workspace");
-      expect(ws.serverSettings.mode).toBe("spawn");
+      expect(ws.serverSettings.agent.transport).toBe("stdio");
     });
 
     test("createModelInfo returns valid model info", () => {

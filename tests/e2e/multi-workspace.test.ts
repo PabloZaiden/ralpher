@@ -18,6 +18,35 @@ import { TestCommandExecutor } from "../mocks/mock-executor";
 // Default test model for loop creation (model is now required)
 const testModel = { providerID: "test-provider", modelID: "test-model" };
 
+function makeServerSettings(overrides?: {
+  mode?: "spawn" | "connect";
+  hostname?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+}) {
+  const mode = overrides?.mode ?? "spawn";
+  const isConnect = mode === "connect";
+  if (isConnect) {
+    return {
+      agent: {
+        provider: "opencode" as const,
+        transport: "ssh" as const,
+        hostname: overrides?.hostname ?? "localhost",
+        port: overrides?.port ?? 22,
+        ...(overrides?.username ? { username: overrides.username } : {}),
+        ...(overrides?.password ? { password: overrides.password } : {}),
+      },
+    };
+  }
+  return {
+    agent: {
+      provider: "opencode" as const,
+      transport: "stdio" as const,
+    },
+  };
+}
+
 describe("Multi-Workspace E2E", () => {
   let testDataDir: string;
   let testWorkDir1: string;
@@ -100,11 +129,7 @@ describe("Multi-Workspace E2E", () => {
         body: JSON.stringify({
           name: "Workspace 1 - Spawn",
           directory: testWorkDir1,
-          serverSettings: {
-            mode: "spawn",
-            useHttps: false,
-            allowInsecure: false,
-          },
+          serverSettings: makeServerSettings({ mode: "spawn" }),
         }),
       });
       expect(ws1Response.ok).toBe(true);
@@ -117,13 +142,11 @@ describe("Multi-Workspace E2E", () => {
         body: JSON.stringify({
           name: "Workspace 2 - Connect",
           directory: testWorkDir2,
-          serverSettings: {
+          serverSettings: makeServerSettings({
             mode: "connect",
             hostname: "example-server.com",
             port: 8080,
-            useHttps: true,
-            allowInsecure: false,
-          },
+          }),
         }),
       });
       expect(ws2Response.ok).toBe(true);
@@ -138,13 +161,13 @@ describe("Multi-Workspace E2E", () => {
 
       // Verify workspace 1 settings
       const fetchedWs1 = workspaces.find((w: { id: string }) => w.id === ws1.id);
-      expect(fetchedWs1.serverSettings.mode).toBe("spawn");
+      expect(fetchedWs1.serverSettings.agent.transport).toBe("stdio");
 
       // Verify workspace 2 settings
       const fetchedWs2 = workspaces.find((w: { id: string }) => w.id === ws2.id);
-      expect(fetchedWs2.serverSettings.mode).toBe("connect");
-      expect(fetchedWs2.serverSettings.hostname).toBe("example-server.com");
-      expect(fetchedWs2.serverSettings.port).toBe(8080);
+      expect(fetchedWs2.serverSettings.agent.transport).toBe("ssh");
+      expect(fetchedWs2.serverSettings.agent.hostname).toBe("example-server.com");
+      expect(fetchedWs2.serverSettings.agent.port).toBe(8080);
     });
 
     test("updating one workspace settings does not affect another", async () => {
@@ -155,11 +178,7 @@ describe("Multi-Workspace E2E", () => {
         body: JSON.stringify({
           name: "Workspace 1",
           directory: testWorkDir1,
-          serverSettings: {
-            mode: "spawn",
-            useHttps: false,
-            allowInsecure: false,
-          },
+          serverSettings: makeServerSettings({ mode: "spawn" }),
         }),
       });
       const ws1 = await ws1Response.json();
@@ -170,11 +189,7 @@ describe("Multi-Workspace E2E", () => {
         body: JSON.stringify({
           name: "Workspace 2",
           directory: testWorkDir2,
-          serverSettings: {
-            mode: "spawn",
-            useHttps: false,
-            allowInsecure: false,
-          },
+          serverSettings: makeServerSettings({ mode: "spawn" }),
         }),
       });
       const ws2 = await ws2Response.json();
@@ -183,27 +198,27 @@ describe("Multi-Workspace E2E", () => {
       const updateResponse = await fetch(`${baseUrl}/api/workspaces/${ws1.id}/server-settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: "connect",
-          hostname: "new-server.com",
-          port: 9000,
-          useHttps: true,
-          allowInsecure: true,
-        }),
+        body: JSON.stringify(
+          makeServerSettings({
+            mode: "connect",
+            hostname: "new-server.com",
+            port: 9000,
+          })
+        ),
       });
       expect(updateResponse.ok).toBe(true);
 
       // Verify workspace 1 was updated
       const ws1GetResponse = await fetch(`${baseUrl}/api/workspaces/${ws1.id}/server-settings`);
       const ws1Settings = await ws1GetResponse.json();
-      expect(ws1Settings.mode).toBe("connect");
-      expect(ws1Settings.hostname).toBe("new-server.com");
+      expect(ws1Settings.agent.transport).toBe("ssh");
+      expect(ws1Settings.agent.hostname).toBe("new-server.com");
 
       // Verify workspace 2 was NOT affected
       const ws2GetResponse = await fetch(`${baseUrl}/api/workspaces/${ws2.id}/server-settings`);
       const ws2Settings = await ws2GetResponse.json();
-      expect(ws2Settings.mode).toBe("spawn");
-      expect(ws2Settings.hostname).toBeUndefined();
+      expect(ws2Settings.agent.transport).toBe("stdio");
+      expect(ws2Settings.agent.hostname).toBeUndefined();
     });
 
     test("resetting one workspace connection does not affect another", async () => {
@@ -353,11 +368,7 @@ describe("Multi-Workspace E2E", () => {
         body: JSON.stringify({
           name: "Workspace 1 - Spawn",
           directory: testWorkDir1,
-          serverSettings: {
-            mode: "spawn",
-            useHttps: false,
-            allowInsecure: false,
-          },
+          serverSettings: makeServerSettings({ mode: "spawn" }),
         }),
       });
       const ws1 = await ws1Response.json();
@@ -368,13 +379,11 @@ describe("Multi-Workspace E2E", () => {
         body: JSON.stringify({
           name: "Workspace 2 - Connect",
           directory: testWorkDir2,
-          serverSettings: {
+          serverSettings: makeServerSettings({
             mode: "connect",
             hostname: "example.com",
             port: 8080,
-            useHttps: true,
-            allowInsecure: false,
-          },
+          }),
         }),
       });
       const ws2 = await ws2Response.json();
@@ -390,9 +399,11 @@ describe("Multi-Workspace E2E", () => {
 
       // Both should have independent status
       expect(status1).toHaveProperty("connected");
-      expect(status1).toHaveProperty("mode");
+      expect(status1).toHaveProperty("provider");
+      expect(status1).toHaveProperty("transport");
       expect(status2).toHaveProperty("connected");
-      expect(status2).toHaveProperty("mode");
+      expect(status2).toHaveProperty("provider");
+      expect(status2).toHaveProperty("transport");
     });
   });
 });

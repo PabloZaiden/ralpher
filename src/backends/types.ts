@@ -1,6 +1,6 @@
 /**
- * Type definitions for the OpenCode backend.
- * These types define the data structures used by OpenCodeBackend.
+ * Type definitions for ACP backends.
+ * These types define the data structures used by AcpBackend.
  */
 
 import type { EventStream } from "../utils/event-stream";
@@ -14,32 +14,36 @@ export type { TodoItem };
  * Connection info needed for WebSocket and other direct connections.
  */
 export interface ConnectionInfo {
-  /** Base URL for the opencode server */
+  /** Base URL for the active transport */
   baseUrl: string;
   /** Auth headers to use for connections */
   authHeaders: Record<string, string>;
-  /** Whether to allow insecure connections (self-signed certificates) */
-  allowInsecure?: boolean;
 }
 
 /**
- * Configuration for connecting to the OpenCode backend.
+ * Configuration for connecting to an ACP backend.
  */
 export interface BackendConnectionConfig {
-  /** Spawn new server or connect to existing */
+  /** Backend runtime mode (ACP backends currently use "spawn") */
   mode: "spawn" | "connect";
-  /** Hostname for connect mode */
+  /** Selected agent provider (used by ACP backends) */
+  provider?: "opencode" | "copilot";
+  /** Selected agent transport (used by ACP backends) */
+  transport?: "stdio" | "ssh";
+  /** SSH hostname */
   hostname?: string;
-  /** Port for connect mode */
+  /** SSH port */
   port?: number;
-  /** Password for connect mode (optional) */
+  /** SSH username (optional) */
+  username?: string;
+  /** SSH password (optional) */
   password?: string;
+  /** Derived command for ACP transport */
+  command?: string;
+  /** Derived command args for ACP transport */
+  args?: string[];
   /** Working directory for the backend */
   directory: string;
-  /** Whether to use HTTPS for connect mode */
-  useHttps?: boolean;
-  /** Whether to allow insecure connections (self-signed certificates) */
-  allowInsecure?: boolean;
 }
 
 /**
@@ -142,7 +146,7 @@ export interface QuestionInfo {
 }
 
 /**
- * Events emitted by the OpenCode backend.
+ * Events emitted by ACP backends.
  */
 export type AgentEvent =
   | { type: "message.start"; messageId: string }
@@ -159,7 +163,7 @@ export type AgentEvent =
 
 /**
  * Backend interface that all backend implementations must implement.
- * This includes both the real OpenCodeBackend and MockOpenCodeBackend for tests.
+ * This includes both the real AcpBackend and MockAcpBackend for tests.
  * 
  * The interface is split into two parts:
  * - Core methods: Used by LoopEngine for loop execution
@@ -211,12 +215,11 @@ export interface Backend {
   abortAllSubscriptions(): void;
 
   /**
-   * Get the SDK client instance.
+   * Get the SDK/client instance.
    * Returns `unknown` intentionally — this interface is implemented by both
-   * the real OpenCodeBackend (which returns an OpencodeClient) and
-   * MockOpenCodeBackend (which returns a mock object). Typing it as
-   * OpencodeClient would couple the shared interface to a concrete SDK type
-   * that mocks cannot satisfy. Callers should cast as needed.
+   * the real AcpBackend and MockAcpBackend. Typing it as a concrete client
+   * would couple shared contracts to one provider's SDK shape.
+   * Callers should cast as needed.
    */
   getSdkClient(): unknown;
 

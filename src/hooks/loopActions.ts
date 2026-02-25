@@ -39,7 +39,7 @@ async function apiCall<T = unknown>(
   }
 
   const data = await response.json() as T;
-  log.trace(`API: ${actionName} success`, { url });
+  log.debug(`API: ${actionName} success`, { url });
   return data;
 }
 

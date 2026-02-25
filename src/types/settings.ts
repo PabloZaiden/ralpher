@@ -1,43 +1,64 @@
 /**
  * Server settings types for Ralph Loops Management System.
- * Defines global server configuration that applies to all loops.
+ * Defines workspace settings for agent and deterministic execution channels.
  */
 
 // Import and re-export ServerSettings from schema (single source of truth)
-import type { ServerSettings } from "./schemas/workspace";
-export type { ServerSettings };
-
-/**
- * Server connection mode.
- * - "spawn": Spawn a local opencode server on demand
- * - "connect": Connect to an existing remote opencode server
- */
-export type ServerMode = "spawn" | "connect";
+import type {
+  ServerSettings,
+  AgentProvider,
+  AgentTransport,
+} from "./schemas/workspace";
+export type {
+  ServerSettings,
+  AgentProvider,
+  AgentTransport,
+};
 
 /**
  * Get default server settings.
- * @param remoteOnly - If true, defaults to "connect" mode instead of "spawn" mode.
+ * @param remoteOnly - If true, defaults to `ssh` transport instead of `stdio`.
  *                     This should be passed from the server config (RALPHER_REMOTE_ONLY env var).
  */
 export function getDefaultServerSettings(remoteOnly: boolean = false): ServerSettings {
+  const defaultAgent = remoteOnly
+    ? {
+        provider: "opencode" as const,
+        transport: "ssh" as const,
+        hostname: "127.0.0.1",
+        port: 22,
+        username: "",
+        password: "",
+      }
+    : {
+        provider: "opencode" as const,
+        transport: "stdio" as const,
+      };
+
   return {
-    mode: remoteOnly ? "connect" : "spawn",
-    useHttps: false,
-    allowInsecure: false,
+    agent: defaultAgent,
   };
 }
 
 /**
- * Connection status information.
- * Returned by the status endpoint and used in the UI.
+ * Unified workspace connection status.
+ * Deterministic execution checks are derived from the selected transport.
  */
 export interface ConnectionStatus {
-  /** Whether currently connected to a server */
+  /** Whether workspace connection is healthy */
   connected: boolean;
-  /** Current mode (spawn or connect) */
-  mode: ServerMode;
-  /** Server URL when connected in connect mode */
+  /** Selected agent provider */
+  provider: AgentProvider;
+  /** Selected transport */
+  transport: AgentTransport;
+  /** Provider capability list */
+  capabilities: string[];
+  /** Connected server URL, when applicable */
   serverUrl?: string;
-  /** Error message if connection failed */
+  /** Whether target workspace directory exists */
+  directoryExists?: boolean;
+  /** Whether target workspace is a git repository */
+  isGitRepo?: boolean;
+  /** Error message if connection check failed */
   error?: string;
 }

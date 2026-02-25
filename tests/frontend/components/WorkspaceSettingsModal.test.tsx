@@ -38,7 +38,9 @@ function makeWorkspace(overrides?: Parameters<typeof createWorkspace>[0]) {
 function makeStatus(overrides?: Partial<ConnectionStatus>): ConnectionStatus {
   return {
     connected: false,
-    mode: "spawn",
+    provider: "opencode",
+    transport: "stdio",
+    capabilities: [],
     ...overrides,
   };
 }
@@ -306,7 +308,12 @@ describe("WorkspaceSettingsModal AGENTS.md optimization", () => {
       const { getByText } = renderWithUser(
         <WorkspaceSettingsModal
           {...defaultProps()}
-          status={makeStatus({ connected: false })}
+          status={makeStatus({
+            connected: false,
+            provider: "opencode",
+            transport: "stdio",
+            capabilities: [],
+          })}
         />
       );
 

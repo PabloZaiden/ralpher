@@ -33,6 +33,24 @@ function createTestWorkspace(overrides: {
   };
 }
 
+function createConnectServerSettings(overrides?: {
+  hostname?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+}) {
+  return {
+    agent: {
+      provider: "opencode" as const,
+      transport: "ssh" as const,
+      hostname: overrides?.hostname ?? "localhost",
+      port: overrides?.port ?? 22,
+      ...(overrides?.username ? { username: overrides.username } : {}),
+      ...(overrides?.password ? { password: overrides.password } : {}),
+    },
+  };
+}
+
 describe("Workspace Persistence", () => {
   beforeEach(async () => {
     // Create a temp directory for each test
@@ -385,13 +403,10 @@ describe("Workspace Persistence", () => {
 
       await ensureDataDirectories();
 
-      const customSettings = {
-        mode: "connect" as const,
+      const customSettings = createConnectServerSettings({
         hostname: "custom.server.com",
         port: 9000,
-        useHttps: true,
-        allowInsecure: false,
-      };
+      });
 
       const workspace = createTestWorkspace({
         name: "Custom Settings Workspace",
@@ -417,13 +432,10 @@ describe("Workspace Persistence", () => {
       });
       await createWorkspace(workspace);
 
-      const newSettings = {
-        mode: "connect" as const,
+      const newSettings = createConnectServerSettings({
         hostname: "updated.server.com",
         port: 8080,
-        useHttps: true,
-        allowInsecure: true,
-      };
+      });
 
       const updated = await updateWorkspace(workspace.id, { serverSettings: newSettings });
       expect(updated).not.toBeNull();
@@ -440,13 +452,10 @@ describe("Workspace Persistence", () => {
 
       await ensureDataDirectories();
 
-      const customSettings = {
-        mode: "connect" as const,
+      const customSettings = createConnectServerSettings({
         hostname: "preserved.server.com",
         port: 7000,
-        useHttps: false,
-        allowInsecure: true,
-      };
+      });
 
       const workspace = createTestWorkspace({
         name: "Original Name",
@@ -473,13 +482,10 @@ describe("Workspace Persistence", () => {
 
       await ensureDataDirectories();
 
-      const customSettings = {
-        mode: "connect" as const,
+      const customSettings = createConnectServerSettings({
         hostname: "list.server.com",
         port: 6000,
-        useHttps: true,
-        allowInsecure: false,
-      };
+      });
 
       const workspace = createTestWorkspace({
         name: "List Settings Test",
@@ -499,13 +505,10 @@ describe("Workspace Persistence", () => {
 
       await ensureDataDirectories();
 
-      const customSettings = {
-        mode: "connect" as const,
+      const customSettings = createConnectServerSettings({
         hostname: "directory.server.com",
         port: 5000,
-        useHttps: false,
-        allowInsecure: true,
-      };
+      });
 
       const workspace = createTestWorkspace({
         name: "Directory Settings Test",
@@ -517,6 +520,43 @@ describe("Workspace Persistence", () => {
       const found = await getWorkspaceByDirectory("/tmp/directory-settings");
       expect(found).not.toBeNull();
       expect(found!.serverSettings).toEqual(customSettings);
+    });
+
+    test("legacy experimental transports fall back to stdio", async () => {
+      const { ensureDataDirectories, getDatabase } = await import("../../src/persistence/database");
+      const { getWorkspace, getWorkspaceByDirectory } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const db = getDatabase();
+      const now = new Date().toISOString();
+      db.run(
+        `INSERT INTO workspaces (id, name, directory, server_settings, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          randomUUID(),
+          "Legacy Transport Workspace",
+          "/tmp/legacy-transport",
+          JSON.stringify({
+            agent: {
+              provider: "opencode",
+              transport: "ssh-stdio",
+              hostname: "legacy-host",
+              port: 2222,
+            },
+          }),
+          now,
+          now,
+        ],
+      );
+
+      const workspace = await getWorkspaceByDirectory("/tmp/legacy-transport");
+      expect(workspace).not.toBeNull();
+      expect(workspace!.serverSettings.agent.transport).toBe("stdio");
+
+      const loadedById = await getWorkspace(workspace!.id);
+      expect(loadedById).not.toBeNull();
+      expect(loadedById!.serverSettings.agent.transport).toBe("stdio");
     });
   });
 
@@ -574,19 +614,20 @@ describe("Workspace Persistence", () => {
       await ensureDataDirectories();
 
       const ws = createTestWorkspace({ name: "With Password", directory: "/tmp/password-test" });
-      ws.serverSettings = {
-        mode: "connect",
+      ws.serverSettings = createConnectServerSettings({
         hostname: "secure.server.com",
         port: 443,
         password: "my-secret-password",
-        useHttps: true,
-        allowInsecure: false,
-      };
+      });
       await createWorkspace(ws);
 
       const result = await exportWorkspaces();
       expect(result.workspaces).toHaveLength(1);
-      expect(result.workspaces[0]!.serverSettings.password).toBe("my-secret-password");
+      const exportedSettings = result.workspaces[0]!.serverSettings;
+      expect(exportedSettings.agent.transport).toBe("ssh");
+      if (exportedSettings.agent.transport === "ssh") {
+        expect(exportedSettings.agent.password).toBe("my-secret-password");
+      }
     });
 
     test("import with valid data creates workspaces and returns correct result", async () => {
@@ -607,13 +648,10 @@ describe("Workspace Persistence", () => {
           {
             name: "Imported WS 2",
             directory: "/tmp/imported-2",
-            serverSettings: {
-              mode: "connect" as const,
+            serverSettings: createConnectServerSettings({
               hostname: "remote.server.com",
               port: 8080,
-              useHttps: true,
-              allowInsecure: false,
-            },
+            }),
           },
         ],
       };
@@ -735,14 +773,11 @@ describe("Workspace Persistence", () => {
 
       await ensureDataDirectories();
 
-      const settings = {
-        mode: "connect" as const,
+      const settings = createConnectServerSettings({
         hostname: "secure.host.com",
         port: 9443,
         password: "super-secret",
-        useHttps: true,
-        allowInsecure: true,
-      };
+      });
 
       const importData = {
         version: 1 as const,
@@ -762,7 +797,10 @@ describe("Workspace Persistence", () => {
       expect(workspace).not.toBeNull();
       expect(workspace!.name).toBe("Secure Workspace");
       expect(workspace!.serverSettings).toEqual(settings);
-      expect(workspace!.serverSettings.password).toBe("super-secret");
+      expect(workspace!.serverSettings.agent.transport).toBe("ssh");
+      if (workspace!.serverSettings.agent.transport === "ssh") {
+        expect(workspace!.serverSettings.agent.password).toBe("super-secret");
+      }
     });
 
     test("import trims whitespace from name and directory", async () => {
@@ -839,14 +877,11 @@ describe("Workspace Persistence", () => {
 
       // Create workspaces
       const ws1 = createTestWorkspace({ name: "Round Trip A", directory: "/tmp/rt-a" });
-      ws1.serverSettings = {
-        mode: "connect",
+      ws1.serverSettings = createConnectServerSettings({
         hostname: "rt-server.com",
         port: 7777,
         password: "rt-pass",
-        useHttps: true,
-        allowInsecure: false,
-      };
+      });
       const ws2 = createTestWorkspace({ name: "Round Trip B", directory: "/tmp/rt-b" });
       await createWorkspace(ws1);
       await createWorkspace(ws2);

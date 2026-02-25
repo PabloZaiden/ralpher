@@ -54,7 +54,7 @@ describe("LoopManager", () => {
     });
 
     // Set up test backend to avoid real backend connections during name generation.
-    // Without this, createLoop() attempts real OpenCodeBackend sessions which can
+    // Without this, createLoop() attempts real AcpBackend sessions which can
     // hang or timeout in some environments, causing flaky test failures.
     backendManager.setBackendForTesting(createMockBackend());
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());

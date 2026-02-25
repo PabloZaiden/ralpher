@@ -21,7 +21,7 @@ import { backendManager } from "../../src/core/backend-manager";
 import { loopManager } from "../../src/core/loop-manager";
 import { closeDatabase } from "../../src/persistence/database";
 import { TestCommandExecutor } from "../mocks/mock-executor";
-import { MockOpenCodeBackend, type MockModelInfo } from "../mocks/mock-backend";
+import { MockAcpBackend, type MockModelInfo } from "../mocks/mock-backend";
 
 describe("Model Validation in API Endpoints", () => {
   let testDataDir: string;
@@ -94,7 +94,7 @@ describe("Model Validation in API Endpoints", () => {
     await ensureDataDirectories();
 
     // Set up backend manager with mock that returns models (including disconnected ones)
-    const mockBackend = new MockOpenCodeBackend({
+    const mockBackend = new MockAcpBackend({
       responses: ["<promise>COMPLETE</promise>"],
       models: defaultTestModels,
     });
@@ -143,7 +143,7 @@ describe("Model Validation in API Endpoints", () => {
     }
 
     // Re-setup backend after reset
-    const mockBackend = new MockOpenCodeBackend({
+    const mockBackend = new MockAcpBackend({
       responses: ["<promise>COMPLETE</promise>"],
       models: defaultTestModels,
     });

@@ -179,7 +179,7 @@ export class LoopManager {
 
   /**
    * Create a new loop.
-   * The loop name is automatically generated from the prompt using opencode.
+   * The loop name is automatically generated from the prompt using the configured agent backend.
    */
   async createLoop(options: CreateLoopOptions): Promise<Loop> {
     const id = crypto.randomUUID();
@@ -778,9 +778,9 @@ Follow the standard loop execution flow:
 
     // No directory conflict check needed — each loop operates in its own worktree
 
-    // Get the appropriate command executor for the current mode
-    // (local for spawn mode, remote for connect mode)
-    // Use async version to ensure connection is established in connect mode
+    // Get the appropriate command executor for the workspace transport
+    // (`stdio` => local, `ssh` => remote). Use async version to ensure
+    // the workspace connection is established when needed.
     const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
     const git = GitService.withExecutor(executor);
 

@@ -183,7 +183,7 @@ export const workspacesRoutes = {
       log.debug("GET /api/workspaces - Listing all workspaces");
       try {
         const workspaces = await listWorkspaces();
-        log.trace("GET /api/workspaces - Retrieved workspaces", { count: workspaces.length });
+        log.debug("GET /api/workspaces - Retrieved workspaces", { count: workspaces.length });
         return Response.json(workspaces);
       } catch (error) {
         log.error("Failed to list workspaces:", String(error));
@@ -217,7 +217,8 @@ export const workspacesRoutes = {
         log.debug("Validating workspace directory on remote server", { 
           directory: trimmedDirectory, 
           name: trimmedName,
-          serverMode: serverSettings.mode 
+          agentProvider: serverSettings.agent.provider,
+          agentTransport: serverSettings.agent.transport,
         });
         
         const validation = await backendManager.validateRemoteDirectory(serverSettings, trimmedDirectory);
@@ -277,7 +278,7 @@ export const workspacesRoutes = {
   "/api/workspaces/:id": {
     async GET(req: Request & { params: { id: string } }) {
       const { id } = req.params;
-      log.trace("GET /api/workspaces/:id", { workspaceId: id });
+      log.debug("GET /api/workspaces/:id", { workspaceId: id });
       try {
         const result = await requireWorkspace(id);
         if (result instanceof Response) {
@@ -426,7 +427,7 @@ export const workspacesRoutes = {
         const result = await requireWorkspace(id);
         if (result instanceof Response) return result;
 
-        const status = backendManager.getWorkspaceStatus(id);
+        const status = await backendManager.getWorkspaceStatus(id);
         return Response.json(status);
       } catch (error) {
         log.error("Failed to get workspace connection status:", String(error));
@@ -449,22 +450,31 @@ export const workspacesRoutes = {
         // If no body, use the workspace's current settings
         let settings = workspace.serverSettings;
         
-        // Try to parse the body - if empty or invalid JSON, use current settings
-        try {
-          const bodyText = await req.text();
-          if (bodyText.trim()) {
-            const bodyJson = JSON.parse(bodyText);
-            // Only use the body if it has a mode (meaning it's a valid ServerSettings object)
-            if (bodyJson && bodyJson.mode) {
-              const result = ServerSettingsSchema.safeParse(bodyJson);
-              if (result.success) {
-                settings = result.data;
-              }
-              // If validation fails, just use current settings (backward compatible)
-            }
+        const bodyText = await req.text();
+        if (bodyText.trim()) {
+          let bodyJson: unknown;
+          try {
+            bodyJson = JSON.parse(bodyText);
+          } catch {
+            return errorResponse("invalid_json", "Request body must be valid JSON", 400);
           }
-        } catch {
-          // JSON parse error or empty body - use current settings
+
+          // Allow "{}" as shorthand for "use current settings".
+          if (
+            typeof bodyJson === "object"
+            && bodyJson !== null
+            && !Array.isArray(bodyJson)
+            && Object.keys(bodyJson).length === 0
+          ) {
+            settings = workspace.serverSettings;
+          } else {
+            const parsedSettings = ServerSettingsSchema.safeParse(bodyJson);
+            if (!parsedSettings.success) {
+              const firstIssue = parsedSettings.error.issues[0]?.message ?? "Invalid server settings";
+              return errorResponse("validation_error", firstIssue, 400);
+            }
+            settings = parsedSettings.data;
+          }
         }
 
         const result = await backendManager.testConnection(settings, workspace.directory);

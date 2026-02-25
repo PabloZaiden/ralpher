@@ -38,14 +38,14 @@ export const settingsRoutes = {
      * 
      * Returns settings that affect app behavior based on environment.
      * Currently includes:
-     * - remoteOnly: Whether spawn mode is disabled (RALPHER_REMOTE_ONLY)
+     * - remoteOnly: Whether local stdio transport is disabled (RALPHER_REMOTE_ONLY)
      * 
      * @returns AppConfig object
      */
     async GET(): Promise<Response> {
       log.debug("GET /api/config");
       const config = getAppConfig();
-      log.trace("Returning app config", { remoteOnly: config.remoteOnly });
+      log.debug("Returning app config", { remoteOnly: config.remoteOnly });
       return Response.json(config);
     },
   },

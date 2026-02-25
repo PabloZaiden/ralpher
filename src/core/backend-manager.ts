@@ -6,9 +6,8 @@
  * allowing parallel operation of loops across different workspaces.
  */
 
-import { OpenCodeBackend } from "../backends/opencode";
+import { AcpBackend } from "../backends/acp";
 import type { BackendConnectionConfig, Backend } from "../backends/types";
-import type { OpencodeClient } from "@opencode-ai/sdk/v2";
 import { getWorkspace } from "../persistence/workspaces";
 import {
   getDefaultServerSettings,
@@ -23,6 +22,11 @@ import { GitService } from "./git-service";
 import { log } from "./logger";
 
 /**
+ * Agent transports that require an explicit remote endpoint.
+ */
+const REMOTE_AGENT_TRANSPORTS = new Set(["ssh"]);
+
+/**
  * Default timeout (in ms) for remote connection operations (validation, test connections,
  * workspace connections). This bounds network operations to prevent indefinite hangs
  * when the remote server is unreachable.
@@ -34,6 +38,85 @@ const DEFAULT_CONNECTION_TIMEOUT_MS = 15_000;
  */
 export type CommandExecutorFactory = (directory: string) => CommandExecutor;
 
+interface DerivedExecutionSettings {
+  provider: "local" | "ssh";
+  host?: string;
+  port?: number;
+  user?: string;
+  password?: string;
+}
+
+function getProviderAcpCommand(provider: "opencode" | "copilot"): { command: string; args: string[] } {
+  if (provider === "copilot") {
+    return { command: "copilot", args: ["--acp"] };
+  }
+  return { command: "opencode", args: ["acp"] };
+}
+
+function quoteShell(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
+function deriveExecutionSettings(settings: ServerSettings): DerivedExecutionSettings {
+  if (settings.agent.transport === "ssh") {
+    return {
+      provider: "ssh",
+      host: settings.agent.hostname,
+      port: settings.agent.port ?? 22,
+      user: settings.agent.username?.trim() || undefined,
+      password: settings.agent.password?.trim() || undefined,
+    };
+  }
+
+  return { provider: "local" };
+}
+
+function buildAgentRuntimeCommand(settings: ServerSettings): { command: string; args: string[] } {
+  const provider = settings.agent.provider;
+  const providerCommand = getProviderAcpCommand(provider);
+  const providerInvocation = [providerCommand.command, ...providerCommand.args].join(" ");
+  const remoteCommand = `bash -lc ${quoteShell(providerInvocation)}`;
+
+  if (settings.agent.transport === "stdio") {
+    return providerCommand;
+  }
+
+  const sshTarget = settings.agent.username?.trim()
+    ? `${settings.agent.username.trim()}@${settings.agent.hostname}`
+    : settings.agent.hostname;
+  const sshArgs = [
+    "-o",
+    "ConnectTimeout=10",
+    "-o",
+    "StrictHostKeyChecking=no",
+    "-o",
+    "UserKnownHostsFile=/dev/null",
+    "-o",
+    "LogLevel=ERROR",
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=1",
+    "-p",
+    String(settings.agent.port ?? 22),
+    sshTarget,
+    "--",
+    remoteCommand,
+  ];
+
+  if (settings.agent.password && settings.agent.password.trim().length > 0) {
+    return {
+      command: "sshpass",
+      args: ["-p", settings.agent.password, "ssh", "-o", "NumberOfPasswordPrompts=1", ...sshArgs],
+    };
+  }
+
+  return {
+    command: "ssh",
+    args: ["-o", "BatchMode=yes", ...sshArgs],
+  };
+}
+
 /**
  * Server status events.
  * These are emitted via the global event emitter.
@@ -41,6 +124,7 @@ export type CommandExecutorFactory = (directory: string) => CommandExecutor;
 export interface ServerConnectedEvent {
   type: "server.connected";
   workspaceId?: string;
+  /** Legacy runtime mode field (ACP path currently emits "spawn"). */
   mode: "spawn" | "connect";
   serverUrl?: string;
   timestamp: string;
@@ -107,15 +191,30 @@ interface LoopConnectionState {
  * @returns A complete BackendConnectionConfig
  */
 export function buildConnectionConfig(settings: ServerSettings, directory: string): BackendConnectionConfig {
+  const derivedCommand = buildAgentRuntimeCommand(settings);
+  const sshAgent = settings.agent.transport === "ssh" ? settings.agent : undefined;
   return {
-    mode: settings.mode,
-    hostname: settings.hostname,
-    port: settings.port,
-    password: settings.password,
-    useHttps: settings.useHttps,
-    allowInsecure: settings.allowInsecure,
+    mode: "spawn",
+    provider: settings.agent.provider,
+    transport: settings.agent.transport,
+    hostname: sshAgent?.hostname,
+    port: sshAgent?.port ?? (sshAgent ? 22 : undefined),
+    username: sshAgent?.username?.trim() || undefined,
+    password: sshAgent?.password,
+    command: derivedCommand.command,
+    args: derivedCommand.args,
     directory,
   };
+}
+
+/**
+ * Build a displayable server URL for agent transports that expose host/port.
+ */
+function buildAgentServerUrl(settings: ServerSettings): string | undefined {
+  if (!REMOTE_AGENT_TRANSPORTS.has(settings.agent.transport) || settings.agent.transport !== "ssh") {
+    return undefined;
+  }
+  return `ssh://${settings.agent.hostname}:${settings.agent.port ?? 22}`;
 }
 
 /**
@@ -138,6 +237,30 @@ class BackendManager {
   private testSettings: ServerSettings = getDefaultServerSettings();
   /** Overridable connection timeout (ms) for testing. Defaults to DEFAULT_CONNECTION_TIMEOUT_MS. */
   private connectionTimeoutMs: number = DEFAULT_CONNECTION_TIMEOUT_MS;
+
+  /**
+   * Create a backend instance for the configured agent provider.
+   */
+  private createBackendForSettings(settings: ServerSettings): Backend {
+    switch (settings.agent.provider) {
+      case "opencode":
+      case "copilot":
+        // Both providers use the same backend implementation for now.
+        return new AcpBackend();
+      default:
+        return new AcpBackend();
+    }
+  }
+
+  /**
+   * Static capabilities exposed to the status endpoint.
+   */
+  private getAgentCapabilities(settings: ServerSettings): string[] {
+    if (settings.agent.provider === "opencode") {
+      return ["createSession", "sendPromptAsync", "abortSession", "subscribeToEvents", "models"];
+    }
+    return ["createSession", "sendPromptAsync", "abortSession", "subscribeToEvents"];
+  }
 
   /**
    * Initialize the backend manager.
@@ -175,13 +298,16 @@ class BackendManager {
     // Create new connection state if it doesn't exist
     if (!state) {
       state = {
-        backend: new OpenCodeBackend(),
+        backend: this.createBackendForSettings(settings),
         settings,
         connectionError: null,
       };
       this.connections.set(workspaceId, state);
     } else {
       // Update settings from workspace (in case they changed)
+      if (state.settings.agent.provider !== settings.agent.provider) {
+        state.backend = this.createBackendForSettings(settings);
+      }
       state.settings = settings;
     }
 
@@ -212,19 +338,11 @@ class BackendManager {
         timeoutPromise,
       ]);
       
-      // Determine the correct protocol for the server URL
-      const port = settings.port ?? 4096;
-      const useHttps = settings.useHttps ?? false;
-      const protocol = useHttps ? "https" : "http";
-      
       this.emitEvent({
         type: "server.connected",
         workspaceId,
-        mode: settings.mode,
-        serverUrl:
-          settings.mode === "connect"
-            ? `${protocol}://${settings.hostname}:${port}`
-            : undefined,
+        mode: config.mode,
+        serverUrl: buildAgentServerUrl(settings),
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
@@ -270,7 +388,7 @@ class BackendManager {
     this.emitEvent({
       type: "server.connected",
       workspaceId,
-      mode: state.settings.mode,
+      mode: buildConnectionConfig(state.settings, directory).mode,
       timestamp: new Date().toISOString(),
     });
   }
@@ -384,7 +502,7 @@ class BackendManager {
     directory: string
   ): Promise<{ success: boolean; error?: string }> {
     // Create a temporary backend for testing
-    const testBackend = new OpenCodeBackend();
+    const testBackend = this.createBackendForSettings(settings);
     const config = buildConnectionConfig(settings, directory);
     const abortController = new AbortController();
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -429,7 +547,12 @@ class BackendManager {
     settings: ServerSettings,
     directory: string
   ): Promise<{ success: boolean; isGitRepo?: boolean; directoryExists?: boolean; error?: string }> {
-    log.debug("Validating remote directory", { directory, mode: settings.mode });
+    log.debug("Validating remote directory", {
+      directory,
+      provider: settings.agent.provider,
+      transport: settings.agent.transport,
+      executionProvider: deriveExecutionSettings(settings).provider,
+    });
     
     // In test mode, use the test executor factory if available
     if (this.testExecutorFactory) {
@@ -447,129 +570,84 @@ class BackendManager {
       const isGitRepo = await git.isGitRepo(directory);
       return { success: true, directoryExists: true, isGitRepo };
     }
-    
-    // Create a temporary backend for validation
-    const tempBackend = new OpenCodeBackend();
-    const config = buildConnectionConfig(settings, directory);
 
-    // AbortController to cancel in-flight fetch requests on timeout.
-    // This ensures the underlying TCP connection is properly cleaned up
-    // rather than leaving orphaned requests running in the background.
-    const abortController = new AbortController();
-
-    // Race the entire validation against a timeout to prevent indefinite hangs
-    // when the remote server is unreachable. The custom fetch in connectToExisting()
-    // disables Bun's request timeout, so without this guard the request hangs forever.
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(
-          () => reject(new Error(`Connection timed out after ${this.connectionTimeoutMs}ms`)),
-          this.connectionTimeoutMs,
-        );
+      const execution = deriveExecutionSettings(settings);
+      const executor = new CommandExecutorImpl({
+        provider: execution.provider,
+        directory,
+        host: execution.host,
+        port: execution.port,
+        user: execution.user,
+        password: execution.password,
+        timeoutMs: this.connectionTimeoutMs,
       });
 
-      const result = await Promise.race([
-        this.performRemoteValidation(tempBackend, config, directory, abortController.signal),
-        timeoutPromise,
-      ]);
+      if (execution.provider === "ssh") {
+        const connectivityProbe = await executor.exec("true", [], { cwd: "/" });
+        if (!connectivityProbe.success) {
+          const detail = connectivityProbe.stderr || connectivityProbe.stdout || `exit code ${connectivityProbe.exitCode}`;
+          return {
+            success: false,
+            error: `Failed to connect to remote server: ${detail}`,
+          };
+        }
+      }
 
-      return result;
+      const directoryExists = await executor.directoryExists(directory);
+      if (!directoryExists) {
+        log.debug("Directory does not exist on execution target", { directory });
+        return { success: true, directoryExists: false, isGitRepo: false };
+      }
+
+      const git = GitService.withExecutor(executor);
+      const isGitRepo = await git.isGitRepo(directory);
+      return { success: true, directoryExists: true, isGitRepo };
     } catch (error) {
       log.error("Failed to validate remote directory", { directory, error: String(error) });
-      // Abort any in-flight fetch requests before disconnecting
-      abortController.abort();
-      try {
-        await tempBackend.disconnect();
-      } catch {
-        // Ignore disconnect errors during cleanup
-      }
       return { success: false, error: String(error) };
-    } finally {
-      clearTimeout(timeoutId);
     }
-  }
-
-  /**
-   * Perform the actual remote directory validation: connect, check directory, check git, disconnect.
-   * Extracted so it can be raced against a timeout in validateRemoteDirectory().
-   */
-  private async performRemoteValidation(
-    tempBackend: OpenCodeBackend,
-    config: BackendConnectionConfig,
-    directory: string,
-    signal: AbortSignal,
-  ): Promise<{ success: boolean; isGitRepo?: boolean; directoryExists?: boolean; error?: string }> {
-    // Connect to the server, passing the abort signal so in-flight fetch
-    // requests can be cancelled if the validation times out
-    await tempBackend.connect(config, signal);
-
-    // Get connection info and client
-    const connectionInfo = tempBackend.getConnectionInfo();
-    const client = tempBackend.getSdkClient() as OpencodeClient | null;
-
-    if (!connectionInfo || !client) {
-      await tempBackend.disconnect();
-      return { success: false, error: "Failed to get connection info" };
-    }
-
-    // Create a command executor
-    const executor = new CommandExecutorImpl({
-      client,
-      directory,
-      baseUrl: connectionInfo.baseUrl,
-      authHeaders: connectionInfo.authHeaders,
-      allowInsecure: connectionInfo.allowInsecure,
-    });
-
-    // First check if directory exists to provide clearer error messages
-    const directoryExists = await executor.directoryExists(directory);
-    if (!directoryExists) {
-      log.debug("Directory does not exist on remote server", { directory });
-      await tempBackend.disconnect();
-      return { success: true, directoryExists: false, isGitRepo: false };
-    }
-
-    // Use GitService to check if it's a git repository (consistent with rest of codebase)
-    const git = GitService.withExecutor(executor);
-    const isGitRepo = await git.isGitRepo(directory);
-
-    log.debug("Remote directory validation result", { directory, directoryExists: true, isGitRepo });
-
-    // Disconnect
-    await tempBackend.disconnect();
-
-    return { success: true, directoryExists: true, isGitRepo };
   }
 
   /**
    * Get connection status for a specific workspace.
    */
-  getWorkspaceStatus(workspaceId: string): ConnectionStatus {
+  async getWorkspaceStatus(workspaceId: string): Promise<ConnectionStatus> {
+    const workspace = await getWorkspace(workspaceId);
+    const settings = workspace?.serverSettings ?? getDefaultServerSettings();
     const state = this.connections.get(workspaceId);
-    
-    if (!state) {
-      return {
-        connected: false,
-        mode: "spawn",
-        error: undefined,
-      };
+    const status: ConnectionStatus = {
+      connected: state?.backend.isConnected() ?? false,
+      provider: settings.agent.provider,
+      transport: settings.agent.transport,
+      capabilities: this.getAgentCapabilities(settings),
+      serverUrl: buildAgentServerUrl(settings),
+      error: state?.connectionError ?? undefined,
+    };
+
+    if (!workspace) {
+      status.connected = false;
+      status.error = "Workspace not found";
+      return status;
     }
 
-    const connected = state.backend.isConnected();
-    const port = state.settings.port ?? 4096;
-    const useHttps = state.settings.useHttps ?? false;
-    const protocol = useHttps ? "https" : "http";
+    try {
+      const executor = await this.getCommandExecutorAsync(workspaceId, workspace.directory);
+      const directoryExists = await executor.directoryExists(workspace.directory);
+      let isGitRepo = false;
+      if (directoryExists) {
+        const git = GitService.withExecutor(executor);
+        isGitRepo = await git.isGitRepo(workspace.directory);
+      }
+      status.directoryExists = directoryExists;
+      status.isGitRepo = isGitRepo;
+      status.connected = status.connected && directoryExists;
+    } catch (error) {
+      status.connected = false;
+      status.error = state?.connectionError ?? String(error);
+    }
 
-    return {
-      connected,
-      mode: state.settings.mode,
-      serverUrl:
-        state.settings.mode === "connect" && state.settings.hostname
-          ? `${protocol}://${state.settings.hostname}:${port}`
-          : undefined,
-      error: state.connectionError ?? undefined,
-    };
+    return status;
   }
 
   /**
@@ -615,10 +693,11 @@ class BackendManager {
     }
     
     // Create a new backend on demand
-    const backend = new OpenCodeBackend();
+    const defaultSettings = getDefaultServerSettings();
+    const backend = this.createBackendForSettings(defaultSettings);
     this.connections.set(workspaceId, {
       backend,
-      settings: getDefaultServerSettings(),
+      settings: defaultSettings,
       connectionError: null,
     });
     return backend;
@@ -626,7 +705,7 @@ class BackendManager {
 
   /**
    * Get a dedicated backend instance for a loop.
-   * Each loop gets its own OpenCodeBackend so that concurrent loops
+   * Each loop gets its own AcpBackend so that concurrent loops
    * in the same workspace don't interfere with each other.
    * 
    * The actual directory binding happens later when LoopEngine calls
@@ -650,7 +729,8 @@ class BackendManager {
     }
 
     // Create a new dedicated backend for this loop
-    const backend = new OpenCodeBackend();
+    const settings = this.connections.get(workspaceId)?.settings ?? getDefaultServerSettings();
+    const backend = this.createBackendForSettings(settings);
     this.loopConnections.set(loopId, {
       backend,
       workspaceId,
@@ -698,16 +778,7 @@ class BackendManager {
   }
 
   /**
-   * Get a CommandExecutor for running commands on the opencode server.
-   * All commands go through the PTY+WebSocket connection, regardless of mode.
-   * Commands are queued to ensure only one runs at a time.
-   * 
-   * Note: This method is synchronous and cannot establish connections.
-   * Ensure connect() has been called first.
-   * 
-   * @param workspaceId - The workspace ID
-   * @param directory - The directory to run commands in
-   * @returns A CommandExecutor instance
+   * Get a CommandExecutor for running deterministic commands/files via execution settings.
    */
   getCommandExecutor(workspaceId: string, directory?: string): CommandExecutor {
     // Use test factory if set (for testing)
@@ -716,44 +787,32 @@ class BackendManager {
     }
 
     const state = this.connections.get(workspaceId);
-    if (!state || !state.backend.isConnected()) {
-      throw new Error(`[BackendManager] Workspace ${workspaceId} not connected! Call connect() first.`);
+    if (!state) {
+      throw new Error(`[BackendManager] Workspace ${workspaceId} not initialized`);
     }
 
-    // Get the SDK client (cast to OpencodeClient since Backend interface is agnostic)
-    const client = state.backend.getSdkClient() as OpencodeClient | null;
-    if (!client) {
-      throw new Error("[BackendManager] No SDK client available");
-    }
-
-    // Get connection info (baseUrl and auth headers)
-    const connectionInfo = state.backend.getConnectionInfo();
-    if (!connectionInfo) {
-      throw new Error("[BackendManager] No connection info available");
-    }
-
-    // Use the provided directory or the backend's current directory
     const dir = directory ?? state.backend.getDirectory();
-
-    log.debug(`[BackendManager] Creating CommandExecutor for workspace ${workspaceId} (baseUrl: ${connectionInfo.baseUrl}, directory: ${dir})`);
-    return new CommandExecutorImpl({
-      client,
+    const execution = deriveExecutionSettings(state.settings);
+    const commandExecutorLogContext: Record<string, string | number> = {
       directory: dir,
-      baseUrl: connectionInfo.baseUrl,
-      authHeaders: connectionInfo.authHeaders,
-      allowInsecure: connectionInfo.allowInsecure,
+      executionProvider: execution.provider,
+      ...(execution.host ? { host: execution.host } : {}),
+      ...(typeof execution.port === "number" ? { port: execution.port } : {}),
+      ...(execution.user ? { user: execution.user } : {}),
+    };
+    log.debug(`[BackendManager] Creating CommandExecutor for workspace ${workspaceId}`, commandExecutorLogContext);
+    return new CommandExecutorImpl({
+      provider: execution.provider,
+      directory: dir,
+      host: execution.host,
+      port: execution.port,
+      user: execution.user,
+      password: execution.password,
     });
   }
 
   /**
-   * Get a CommandExecutor for running commands on the opencode server.
-   * This async version will establish a connection if needed.
-   * All commands go through the PTY+WebSocket connection, regardless of mode.
-   * Commands are queued to ensure only one runs at a time.
-   * 
-   * @param workspaceId - The workspace ID
-   * @param directory - The directory to run commands in (required)
-   * @returns A CommandExecutor instance
+   * Get a CommandExecutor for running commands/files via execution settings.
    */
   async getCommandExecutorAsync(workspaceId: string, directory: string): Promise<CommandExecutor> {
     // Use test factory if set (for testing)
@@ -761,20 +820,28 @@ class BackendManager {
       return this.testExecutorFactory(directory);
     }
 
-    // Ensure we're connected
-    if (!this.isWorkspaceConnected(workspaceId)) {
-      log.debug(`[BackendManager] Establishing connection for workspace ${workspaceId}...`);
-      await this.connect(workspaceId, directory);
+    // Ensure workspace settings are loaded into state for executor creation.
+    let state = this.connections.get(workspaceId);
+    if (!state) {
+      const workspace = await getWorkspace(workspaceId);
+      if (!workspace) {
+        throw new Error(`Workspace not found: ${workspaceId}`);
+      }
+      state = {
+        backend: this.createBackendForSettings(workspace.serverSettings),
+        settings: workspace.serverSettings,
+        connectionError: null,
+      };
+      this.connections.set(workspaceId, state);
     }
 
-    // Now get the executor (should be connected)
     return this.getCommandExecutor(workspaceId, directory);
   }
 
   /**
    * Set a custom backend instance (for testing).
-   * This bypasses the normal OpenCodeBackend creation.
-   * Accepts OpenCodeBackend or MockOpenCodeBackend (both implement Backend).
+   * This bypasses the normal AcpBackend creation.
+   * Accepts AcpBackend or MockAcpBackend (both implement Backend).
    */
   setBackendForTesting(backend: Backend): void {
     this.testBackend = backend;
@@ -791,6 +858,13 @@ class BackendManager {
       return this.testBackend;
     }
     return null;
+  }
+
+  /**
+   * Create a new backend instance for ad-hoc operations (e.g. model discovery).
+   */
+  createBackend(settings: ServerSettings): Backend {
+    return this.createBackendForSettings(settings);
   }
 
   /**
@@ -817,7 +891,7 @@ class BackendManager {
 
   /**
    * Set a custom command executor factory (for testing).
-   * This bypasses the normal PTY-based executor creation.
+   * This bypasses the normal execution-provider-based executor creation.
    */
   setExecutorFactoryForTesting(factory: CommandExecutorFactory): void {
     this.testExecutorFactory = factory;

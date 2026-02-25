@@ -79,7 +79,7 @@ export function WorkspaceSettingsModal({
     log.debug("Saving workspace settings", { workspaceName: name.trim() });
     const success = await onSave(name.trim(), serverSettings);
     if (success) {
-      log.trace("Workspace settings saved successfully");
+      log.debug("Workspace settings saved successfully");
       onClose();
     } else {
       log.warn("Failed to save workspace settings");
@@ -88,7 +88,11 @@ export function WorkspaceSettingsModal({
 
   // Handle server settings change
   function handleServerSettingsChange(settings: ServerSettings, isValid: boolean) {
-    log.trace("Server settings changed", { mode: settings.mode, isValid });
+    log.debug("Server settings changed", {
+      provider: settings.agent.provider,
+      transport: settings.agent.transport,
+      isValid,
+    });
     setServerSettings(settings);
     setIsServerSettingsValid(isValid);
   }
@@ -206,17 +210,23 @@ export function WorkspaceSettingsModal({
           ) : (
             <Badge variant="warning">Idle</Badge>
           )}
-          {status?.error && (
-            <span className="text-xs text-red-600 dark:text-red-400 truncate flex-1">
-              {status.error}
+          {status && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              {status.provider}/{status.transport}
             </span>
           )}
         </div>
 
+        {status?.error && (
+          <div className="text-xs text-red-600 dark:text-red-400 break-words -mt-3">
+            {status.error}
+          </div>
+        )}
+
         {/* Server Settings Form (shared component) */}
-        {serverSettings && (
+        {serverSettings && workspace && (
           <ServerSettingsForm
-            initialSettings={serverSettings}
+            initialSettings={workspace.serverSettings}
             onChange={handleServerSettingsChange}
             onTest={onTest}
             testing={testing}

@@ -8,7 +8,7 @@ import { mkdir, writeFile, stat } from "fs/promises";
 import { join } from "path";
 import { setupTestContext, teardownTestContext, waitForPlanReady, waitForPersistedPlanReady, waitForLoopStatus, testModelFields } from "../setup";
 import type { TestContext } from "../setup";
-import { MockOpenCodeBackend, defaultTestModel } from "../mocks/mock-backend";
+import { MockAcpBackend, defaultTestModel } from "../mocks/mock-backend";
 import { backendManager } from "../../src/core/backend-manager";
 
 // Helper to check if a file exists
@@ -741,7 +741,7 @@ describe("Plan Mode - Worktree Isolation", () => {
   test("multiple plan mode loops have separate worktrees", async () => {
     // Override mock backend with responses for two loops:
     // name1, name2 (for createLoop), PLAN_READY, PLAN_READY (for startPlanMode)
-    const multiLoopMock = new MockOpenCodeBackend({
+    const multiLoopMock = new MockAcpBackend({
       responses: [
         "multi-loop-a",                     // Name generation for loop 1
         "multi-loop-b",                     // Name generation for loop 2

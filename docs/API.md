@@ -25,16 +25,29 @@ All responses are JSON. Successful responses return the requested data directly.
 }
 ```
 
+## ACP Agent Runtime Architecture
+
+Ralpher runs agent interactions through ACP JSON-RPC and supports two providers:
+
+- `opencode` (CLI command: `opencode acp`)
+- `copilot` (CLI command: `copilot --acp`)
+
+Agent transport is configured per workspace:
+
+1. **Local ACP** (`stdio`): provider CLI is launched on the local host.
+2. **Remote ACP** (`ssh`): provider CLI is launched over SSH on the target workspace host.
+
+This agent channel handles sessions, prompts, streaming updates, tool events, and permission/question requests.
+
 ## Command Execution Architecture
 
-All API endpoints that perform server-side operations (git commands, file operations, etc.) use a unified PTY (pseudo-terminal) execution model:
+All API endpoints that perform deterministic server-side operations (git commands, file operations, etc.) use the `CommandExecutor` abstraction:
 
-1. **PTY Session Creation**: A temporary PTY shell session is created on the opencode server
-2. **WebSocket Connection**: Commands are sent via WebSocket with unique markers
-3. **Output Capture**: Command output is captured between markers for clean results
-4. **Cleanup**: The PTY session is removed after command completion
+1. **Local execution** (`stdio` transport): commands run directly on the local host.
+2. **Remote execution** (`ssh` transport): commands run over SSH on the target workspace host.
+3. **Bounded execution**: command operations enforce timeouts and explicit success/failure results.
 
-This architecture works identically in both spawn mode (local opencode server) and connect mode (remote opencode server). The following operations use PTY execution:
+This execution channel is decoupled from ACP streaming/provider internals. The following operations use deterministic command execution:
 
 - Git operations (`/api/git/branches`, loop git operations)
 - File existence checks (`/api/check-planning-dir`)
@@ -1037,7 +1050,7 @@ Get application configuration based on environment.
 
 | Field | Description |
 |-------|-------------|
-| `remoteOnly` | If true, spawn mode is disabled (set via RALPHER_REMOTE_ONLY env var) |
+| `remoteOnly` | If true, local `stdio` transport is disabled and only `ssh` transport is allowed (set via RALPHER_REMOTE_ONLY env var) |
 
 ---
 
@@ -1100,7 +1113,12 @@ List all workspaces.
     "id": "ws-uuid",
     "name": "My Project",
     "directory": "/path/to/project",
-    "serverSettings": { "mode": "spawn", ... },
+    "serverSettings": {
+      "agent": {
+        "provider": "opencode",
+        "transport": "stdio"
+      }
+    },
     "createdAt": "2026-01-20T10:00:00.000Z",
     "updatedAt": "2026-01-20T10:00:00.000Z"
   }
@@ -1117,7 +1135,7 @@ Create a new workspace. Validates that the directory exists on the remote server
 |-------|------|----------|-------------|
 | `name` | string | Yes | Workspace display name |
 | `directory` | string | Yes | Absolute path to git repository |
-| `serverSettings` | object | No | Server connection settings (defaults to spawn mode) |
+| `serverSettings` | object | No | Workspace connection settings (defaults to `{ agent: { provider: "opencode", transport: "stdio" } }`) |
 
 **Response**
 
@@ -1223,7 +1241,12 @@ Export all workspace configurations as JSON for backup or migration.
     {
       "name": "My Project",
       "directory": "/path/to/project",
-      "serverSettings": { "mode": "spawn", ... }
+      "serverSettings": {
+        "agent": {
+          "provider": "opencode",
+          "transport": "stdio"
+        }
+      }
     }
   ]
 }
@@ -1242,7 +1265,12 @@ Import workspace configurations from JSON. Each workspace's directory is validat
     {
       "name": "My Project",
       "directory": "/path/to/project",
-      "serverSettings": { "mode": "spawn", ... }
+      "serverSettings": {
+        "agent": {
+          "provider": "opencode",
+          "transport": "stdio"
+        }
+      }
     }
   ]
 }
@@ -1385,9 +1413,29 @@ Apply the Ralpher optimization to the workspace's AGENTS.md file. If the file al
 
 ### Server Settings
 
-Server settings are configured per-workspace. Each workspace can have different connection settings, allowing you to connect to different remote servers or use different modes for different projects.
+Server settings are configured per-workspace. Each workspace can have different connection settings, allowing different providers/transports per project.
+Settings use a single contract:
 
-Ralpher supports two modes for connecting to the opencode backend. Both modes provide identical functionality - all commands (git, file operations, etc.) are executed via PTY over WebSocket regardless of mode.
+```json
+{
+  "agent": {
+    "provider": "opencode | copilot",
+    "transport": "stdio | ssh",
+    "hostname": "required for ssh",
+    "port": 22,
+    "username": "optional",
+    "password": "optional"
+  }
+}
+```
+
+Execution behavior is derived automatically from `agent.transport`:
+- `stdio` → local deterministic execution
+- `ssh` → remote deterministic execution over SSH
+
+Provider runtime command is derived from `agent.provider`:
+- `opencode` → `opencode acp`
+- `copilot` → `copilot --acp`
 
 #### GET /api/workspaces/:id/server-settings
 
@@ -1397,12 +1445,10 @@ Get server settings for a specific workspace.
 
 ```json
 {
-  "mode": "spawn",
-  "hostname": null,
-  "port": null,
-  "password": null,
-  "useHttps": false,
-  "allowInsecure": false
+  "agent": {
+    "provider": "opencode",
+    "transport": "stdio"
+  }
 }
 ```
 
@@ -1420,23 +1466,25 @@ Update server settings for a workspace.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `mode` | string | Yes | "spawn" (local opencode) or "connect" (remote server) |
-| `hostname` | string | For connect | Hostname for connect mode |
-| `port` | number | No | Port for connect mode |
-| `password` | string | No | Password for Basic auth in connect mode |
-| `useHttps` | boolean | No | Use HTTPS for connect mode (default: false) |
-| `allowInsecure` | boolean | No | Allow self-signed certificates (default: false) |
+| `agent.provider` | string | Yes | `opencode` or `copilot` |
+| `agent.transport` | string | Yes | `stdio` or `ssh` |
+| `agent.hostname` | string | For `ssh` | SSH hostname |
+| `agent.port` | number | No | SSH port (default `22`) |
+| `agent.username` | string | No | SSH username |
+| `agent.password` | string | No | SSH password |
 
 **Response**
 
 ```json
 {
-  "mode": "connect",
-  "hostname": "remote.example.com",
-  "port": 8080,
-  "password": "***",
-  "useHttps": true,
-  "allowInsecure": false
+  "agent": {
+    "provider": "copilot",
+    "transport": "ssh",
+    "hostname": "remote.example.com",
+    "port": 22,
+    "username": "vscode",
+    "password": "***"
+  }
 }
 ```
 
@@ -1444,8 +1492,8 @@ Update server settings for a workspace.
 
 | Status | Error | Description |
 |--------|-------|-------------|
-| 400 | `invalid_mode` | mode must be "spawn" or "connect" |
-| 404 | `not_found` | Workspace not found |
+| 400 | `validation_error` | Invalid settings payload |
+| 404 | `workspace_not_found` | Workspace not found |
 
 #### GET /api/workspaces/:id/server-settings/status
 
@@ -1456,16 +1504,22 @@ Get connection status for a workspace.
 ```json
 {
   "connected": true,
-  "mode": "spawn",
-  "serverUrl": "http://localhost:41234"
+  "provider": "opencode",
+  "transport": "ssh",
+  "capabilities": ["createSession", "sendPromptAsync", "abortSession", "subscribeToEvents", "models"],
+  "serverUrl": "ssh://remote.example.com:22",
+  "directoryExists": true,
+  "isGitRepo": true
 }
 ```
+
+`capabilities` lists high-level runtime operations exposed by the selected provider. For example, `opencode` includes `models`, while `copilot` currently does not.
 
 **Errors**
 
 | Status | Error | Description |
 |--------|-------|-------------|
-| 404 | `not_found` | Workspace not found |
+| 404 | `workspace_not_found` | Workspace not found |
 
 #### POST /api/workspaces/:id/server-settings/test
 
@@ -1475,14 +1529,14 @@ Test connection with provided settings for a workspace.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `mode` | string | Yes | "spawn" or "connect" |
-| `hostname` | string | For connect | Hostname for connect mode |
-| `port` | number | No | Port for connect mode |
-| `password` | string | No | Password for Basic auth |
-| `useHttps` | boolean | No | Use HTTPS |
-| `allowInsecure` | boolean | No | Allow self-signed certificates |
+| `agent.provider` | string | Yes | `opencode` or `copilot` |
+| `agent.transport` | string | Yes | `stdio` or `ssh` |
+| `agent.hostname` | string | For `ssh` | SSH hostname |
+| `agent.port` | number | No | SSH port (default `22`) |
+| `agent.username` | string | No | SSH username |
+| `agent.password` | string | No | SSH password |
 
-If no body is provided, tests with the workspace's current settings.
+If no body (or `{}`) is provided, the workspace's current settings are used.
 
 **Response**
 
@@ -1497,7 +1551,9 @@ If no body is provided, tests with the workspace's current settings.
 
 | Status | Error | Description |
 |--------|-------|-------------|
-| 404 | `not_found` | Workspace not found |
+| 400 | `invalid_json` | Request body is not valid JSON |
+| 400 | `validation_error` | Proposed settings do not match schema |
+| 404 | `workspace_not_found` | Workspace not found |
 
 #### POST /api/workspaces/:id/server-settings/reset
 
@@ -1526,12 +1582,12 @@ Test a server connection without requiring a workspace. Useful for validating co
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `settings` | object | Yes | Server settings to test |
-| `settings.mode` | string | Yes | "spawn" or "connect" |
-| `settings.hostname` | string | No | Hostname for connect mode |
-| `settings.port` | number | No | Port for connect mode |
-| `settings.password` | string | No | Password for Basic auth |
-| `settings.useHttps` | boolean | Yes | Use HTTPS |
-| `settings.allowInsecure` | boolean | Yes | Allow self-signed certificates |
+| `settings.agent.provider` | string | Yes | `opencode` or `copilot` |
+| `settings.agent.transport` | string | Yes | `stdio` or `ssh` |
+| `settings.agent.hostname` | string | For `ssh` | SSH hostname |
+| `settings.agent.port` | number | No | SSH port (default `22`) |
+| `settings.agent.username` | string | No | SSH username |
+| `settings.agent.password` | string | No | SSH password |
 | `directory` | string | Yes | Directory path to test against |
 
 **Response**

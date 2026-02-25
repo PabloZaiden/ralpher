@@ -35,20 +35,91 @@ function workspaceToRow(workspace: Workspace): Record<string, unknown> {
  * Parse server settings from database, with fallback to defaults.
  */
 function parseServerSettings(jsonString: string | null): ServerSettings {
+  const defaults = getDefaultServerSettings();
   if (!jsonString) {
-    return getDefaultServerSettings();
+    return defaults;
   }
   try {
-    const parsed = JSON.parse(jsonString);
-    const defaults = getDefaultServerSettings();
+    const parsed = JSON.parse(jsonString) as unknown;
+    if (!parsed || typeof parsed !== "object") {
+      return defaults;
+    }
+
+    const parsedRecord = parsed as Record<string, unknown>;
+
+    // Legacy shape support for existing persisted rows:
+    // { mode, hostname, port, password, useHttps, allowInsecure }
+    if (typeof parsedRecord["mode"] === "string") {
+      const mode = parsedRecord["mode"] === "connect" ? "ssh" : "stdio";
+      if (mode === "ssh") {
+        return {
+          agent: {
+            provider: "opencode",
+            transport: "ssh",
+            hostname: typeof parsedRecord["hostname"] === "string" ? parsedRecord["hostname"] : "127.0.0.1",
+            port: typeof parsedRecord["port"] === "number" ? parsedRecord["port"] : 22,
+            password: typeof parsedRecord["password"] === "string" ? parsedRecord["password"] : undefined,
+          },
+        };
+      }
+      return {
+        agent: {
+          provider: "opencode",
+          transport: mode,
+        },
+      };
+    }
+
+    const parsedAgent = parsedRecord["agent"];
+    const parsedExecution = parsedRecord["execution"];
+    const agent = (parsedAgent && typeof parsedAgent === "object")
+      ? parsedAgent as Record<string, unknown>
+      : {};
+    const execution = (parsedExecution && typeof parsedExecution === "object")
+      ? parsedExecution as Record<string, unknown>
+      : {};
+
+    const provider = typeof agent["provider"] === "string"
+      ? agent["provider"] as ServerSettings["agent"]["provider"]
+      : defaults.agent.provider;
+    const rawTransport = typeof agent["transport"] === "string" ? agent["transport"] : "stdio";
+
+    if (rawTransport === "ssh") {
+      return {
+        agent: {
+          provider,
+          transport: "ssh",
+          hostname:
+            (typeof agent["hostname"] === "string" && agent["hostname"].trim().length > 0
+              ? agent["hostname"]
+              : typeof execution["host"] === "string" && execution["host"].trim().length > 0
+                ? execution["host"]
+                : "127.0.0.1"),
+          port:
+            typeof execution["port"] === "number"
+              ? execution["port"]
+              : typeof agent["port"] === "number"
+                ? agent["port"]
+                : 22,
+          username:
+            typeof agent["username"] === "string"
+              ? agent["username"]
+              : typeof execution["user"] === "string"
+                ? execution["user"]
+                : undefined,
+          password: typeof agent["password"] === "string" ? agent["password"] : undefined,
+        },
+      };
+    }
+
     return {
-      ...defaults,
-      ...parsed,
-      useHttps: parsed.useHttps ?? defaults.useHttps,
-      allowInsecure: parsed.allowInsecure ?? defaults.allowInsecure,
+      agent: {
+        provider,
+        transport: "stdio",
+      },
     };
   } catch {
-    return getDefaultServerSettings();
+    return defaults;
   }
 }
 
@@ -93,11 +164,11 @@ export async function getWorkspace(id: string): Promise<Workspace | null> {
   const stmt = db.prepare("SELECT * FROM workspaces WHERE id = ?");
   const row = stmt.get(id) as Record<string, unknown> | null;
   if (!row) {
-    log.trace("Workspace not found", { id });
+    log.debug("Workspace not found", { id });
     return null;
   }
   const workspace = rowToWorkspace(row);
-  log.trace("Workspace retrieved", { id, name: workspace.name });
+  log.debug("Workspace retrieved", { id, name: workspace.name });
   return workspace;
 }
 
@@ -110,11 +181,11 @@ export async function getWorkspaceByDirectory(directory: string): Promise<Worksp
   const stmt = db.prepare("SELECT * FROM workspaces WHERE directory = ?");
   const row = stmt.get(directory) as Record<string, unknown> | null;
   if (!row) {
-    log.trace("Workspace not found for directory", { directory });
+    log.debug("Workspace not found for directory", { directory });
     return null;
   }
   const workspace = rowToWorkspace(row);
-  log.trace("Workspace found for directory", { directory, id: workspace.id, name: workspace.name });
+  log.debug("Workspace found for directory", { directory, id: workspace.id, name: workspace.name });
   return workspace;
 }
 
@@ -130,7 +201,7 @@ export async function listWorkspaces(): Promise<Workspace[]> {
   `);
   const rows = stmt.all() as Array<Record<string, unknown>>;
   const workspaces = rows.map(rowToWorkspace);
-  log.trace("Workspaces listed", { count: workspaces.length });
+  log.debug("Workspaces listed", { count: workspaces.length });
   return workspaces;
 }
 
@@ -160,7 +231,7 @@ export async function updateWorkspace(
   
   if (setClauses.length === 0) {
     // No updates provided, just return the existing workspace
-    log.trace("No updates provided, returning existing workspace", { id });
+    log.debug("No updates provided, returning existing workspace", { id });
     return getWorkspace(id);
   }
   
@@ -174,7 +245,7 @@ export async function updateWorkspace(
   const stmt = db.prepare(sql);
   stmt.run(...values);
   
-  log.trace("Workspace updated", { id });
+  log.debug("Workspace updated", { id });
   return getWorkspace(id);
 }
 
@@ -191,7 +262,7 @@ export async function deleteWorkspace(id: string): Promise<{ success: boolean; r
   // Check if workspace exists
   const workspace = await getWorkspace(id);
   if (!workspace) {
-    log.trace("Workspace not found for deletion", { id });
+    log.debug("Workspace not found for deletion", { id });
     return { success: false, reason: "Workspace not found" };
   }
   
@@ -217,11 +288,11 @@ export async function deleteWorkspace(id: string): Promise<{ success: boolean; r
  * Get the count of loops for a workspace.
  */
 export async function getWorkspaceLoopCount(workspaceId: string): Promise<number> {
-  log.trace("Getting workspace loop count", { workspaceId });
+  log.debug("Getting workspace loop count", { workspaceId });
   const db = getDatabase();
   const stmt = db.prepare("SELECT COUNT(*) as count FROM loops WHERE workspace_id = ?");
   const row = stmt.get(workspaceId) as { count: number };
-  log.trace("Workspace loop count retrieved", { workspaceId, count: row.count });
+  log.debug("Workspace loop count retrieved", { workspaceId, count: row.count });
   return row.count;
 }
 
@@ -230,7 +301,7 @@ export async function getWorkspaceLoopCount(workspaceId: string): Promise<number
  * Called when a loop is created in this workspace.
  */
 export async function touchWorkspace(id: string): Promise<void> {
-  log.trace("Touching workspace", { id });
+  log.debug("Touching workspace", { id });
   const db = getDatabase();
   db.run("UPDATE workspaces SET updated_at = ? WHERE id = ?", [
     new Date().toISOString(),

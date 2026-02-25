@@ -1,5 +1,5 @@
 /**
- * Mock OpenCodeBackend for testing.
+ * Mock AcpBackend for testing.
  * Implements the Backend interface to ensure type safety and API compatibility.
  */
 
@@ -30,7 +30,7 @@ export interface MockModelInfo {
 }
 
 /**
- * Options for creating a MockOpenCodeBackend.
+ * Options for creating a MockAcpBackend.
  */
 export interface MockBackendOptions {
   /** Responses to return for prompts (cycled through in order) */
@@ -40,16 +40,16 @@ export interface MockBackendOptions {
 }
 
 /**
- * MockOpenCodeBackend provides a mock implementation of the Backend interface.
- * It implements all methods that OpenCodeBackend has, ensuring no runtime errors
+ * MockAcpBackend provides a mock implementation of the Backend interface.
+ * It implements all methods that AcpBackend has, ensuring no runtime errors
  * when BackendManager calls any Backend methods.
  *
  * Supports special response patterns:
  * - "ERROR:message" - Throws an error with the given message
  * - Any other string - Returns as normal response
  */
-export class MockOpenCodeBackend implements Backend {
-  readonly name = "opencode";
+export class MockAcpBackend implements Backend {
+  readonly name = "acp";
 
   private connected = false;
   private directory = "";
@@ -170,7 +170,7 @@ export class MockOpenCodeBackend implements Backend {
   }
 
   // ============================================
-  // OpenCode-specific methods (used by BackendManager)
+  // Backend-specific methods (used by BackendManager)
   // ============================================
 
   /**
@@ -250,8 +250,8 @@ export const defaultTestModel: MockModelInfo = {
  * Convenience function for tests.
  * Includes the default test model by default.
  */
-export function createMockBackend(responses: string[] = ["<promise>COMPLETE</promise>"]): MockOpenCodeBackend {
-  return new MockOpenCodeBackend({ 
+export function createMockBackend(responses: string[] = ["<promise>COMPLETE</promise>"]): MockAcpBackend {
+  return new MockAcpBackend({ 
     responses,
     models: [defaultTestModel],
   });
@@ -270,7 +270,7 @@ export interface NeverCompletingMockBackendOptions {
  * pending message handling, and other scenarios where loops need to stay running.
  */
 export class NeverCompletingMockBackend implements Backend {
-  readonly name = "opencode";
+  readonly name = "acp";
 
   private connected = false;
   private directory = "";
@@ -378,7 +378,7 @@ export class NeverCompletingMockBackend implements Backend {
  * Uses sendPrompt for name generation and subscribeToEvents for planning/execution.
  */
 export class PlanModeMockBackend implements Backend {
-  readonly name = "opencode";
+  readonly name = "acp";
 
   private connected = false;
   private directory = "";

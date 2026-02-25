@@ -38,12 +38,65 @@ export function createModelConfig(overrides?: Partial<ModelConfig>): ModelConfig
 // Server Settings
 // ============================================
 
-export function createServerSettings(overrides?: Partial<ServerSettings>): ServerSettings {
+type LegacyServerSettingsOverrides = {
+  mode?: "spawn" | "connect";
+  hostname?: string;
+  port?: number;
+  username?: string;
+  password?: string;
+};
+
+export function createServerSettings(
+  overrides?: Partial<ServerSettings> & LegacyServerSettingsOverrides
+): ServerSettings {
+  const defaults: ServerSettings = {
+    agent: {
+      provider: "opencode",
+      transport: "stdio",
+    },
+  };
+
+  if (!overrides) {
+    return defaults;
+  }
+
+  const legacyTransport = overrides.mode === "connect"
+    ? "ssh"
+    : overrides.mode === "spawn"
+      ? "stdio"
+      : undefined;
+  const requestedTransport = overrides.agent?.transport ?? legacyTransport ?? defaults.agent.transport;
+
+  if (requestedTransport === "ssh") {
+    return {
+      agent: {
+        provider: overrides.agent?.provider ?? defaults.agent.provider,
+        transport: "ssh",
+        hostname:
+          (overrides.agent?.transport === "ssh" && overrides.agent.hostname)
+          || overrides.hostname
+          || "localhost",
+        port:
+          (overrides.agent?.transport === "ssh" && overrides.agent.port)
+          || overrides.port
+          || 22,
+        username:
+          (overrides.agent?.transport === "ssh" && overrides.agent.username)
+          || overrides.username
+          || undefined,
+        password:
+          (overrides.agent?.transport === "ssh" && overrides.agent.password)
+          || overrides.password
+          || undefined,
+      },
+    };
+  }
+
   return {
-    mode: "spawn",
-    useHttps: false,
-    allowInsecure: false,
-    ...overrides,
+    agent: {
+      provider: overrides.agent?.provider ?? defaults.agent.provider,
+      transport: "stdio",
+    },
   };
 }
 

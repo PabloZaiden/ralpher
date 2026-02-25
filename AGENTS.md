@@ -23,7 +23,7 @@ When working on tasks, follow this general workflow to ensure clarity and goal a
 
 ## Project Overview
 
-Ralpher is a full-stack Bun + React application for controlling and managing Ralph Loops in opencode. It uses Bun's native bundler and server, React 19 for the frontend, and Tailwind CSS v4 for styling.
+Ralpher is a full-stack Bun + React application for controlling and managing Ralph Loops through ACP-compatible agent backends (OpenCode or Copilot). It uses Bun's native bundler and server, React 19 for the frontend, and Tailwind CSS v4 for styling.
 
 For more project information, see the [README.md](README.md).
 
@@ -37,13 +37,13 @@ Ralpher runs behind a reverse proxy that enforces authentication and authorizati
 
 ## Remote Command Execution Architecture
 
-**CRITICAL: All operations on workspace repositories MUST be executed on the remote opencode server, NEVER locally on the Ralpher server.**
+**CRITICAL: All operations on workspace repositories MUST be executed through `CommandExecutor` on the workspace host (local for `stdio`, remote for `ssh`), NEVER through direct filesystem assumptions in the Ralpher process.**
 
-Ralpher connects to opencode servers that may be running in different environments (e.g., devcontainers, remote machines). The workspace directory paths (like `/workspaces/myrepo`) exist on the **remote** server, not on the machine running Ralpher.
+Ralpher can connect to ACP runtimes across different environments (local host via `stdio`, or remote machines via `ssh`). Workspace directory paths (like `/workspaces/myrepo`) always refer to the selected workspace host for that transport, not implicitly to the Ralpher server filesystem.
 
-### How to Execute Commands on Remote Servers
+### How to Execute Commands on Workspace Hosts
 
-Always use the `CommandExecutor` interface to run commands on the remote server:
+Always use the `CommandExecutor` interface to run commands on the selected workspace host:
 
 ```typescript
 // Get a command executor for a workspace
@@ -76,7 +76,7 @@ if (await file.exists()) { ... }
 ### What to Do Instead
 
 ```typescript
-// CORRECT - runs on remote server via CommandExecutor
+// CORRECT - runs on the selected workspace host via CommandExecutor
 const executor = await backendManager.getCommandExecutorAsync(workspaceId, directory);
 const exists = await executor.directoryExists(directory);
 const result = await executor.exec("git", ["-C", directory, "status"]);

@@ -10,28 +10,51 @@
 import { z } from "zod";
 
 /**
- * Schema for ServerMode enum.
+ * Agent provider options.
  */
-export const ServerModeSchema = z.enum(["spawn", "connect"]);
+export const AgentProviderSchema = z.enum(["opencode", "copilot"]);
 
 /**
- * Schema for ServerSettings - server connection configuration.
+ * Agent transport options.
+ * - stdio: local ACP CLI process
+ * - ssh: ACP CLI process started over SSH
+ */
+export const AgentTransportSchema = z.enum(["stdio", "ssh"]);
+
+const StdioAgentSettingsSchema = z.object({
+  provider: AgentProviderSchema,
+  transport: z.literal("stdio"),
+});
+
+const SshAgentSettingsSchema = z.object({
+  provider: AgentProviderSchema,
+  transport: z.literal("ssh"),
+  hostname: z.string().min(1, "hostname is required for ssh transport"),
+  port: z.number().int().min(1).max(65535).optional(),
+  username: z.string().optional(),
+  password: z.string().optional(),
+});
+
+/**
+ * Schema for the agent settings.
+ *
+ * Note: this is intentionally a single channel config. Execution behavior is
+ * derived from transport:
+ * - stdio => local deterministic execution
+ * - ssh => ssh deterministic execution
+ */
+export const AgentSettingsSchema = z.discriminatedUnion("transport", [
+  StdioAgentSettingsSchema,
+  SshAgentSettingsSchema,
+]);
+
+/**
+ * Schema for workspace server settings.
  *
  * This schema is the single source of truth. The ServerSettings type is inferred from it.
- * - mode: Connection mode ("spawn" for local, "connect" for remote)
- * - hostname: Hostname for connect mode (optional)
- * - port: Port for connect mode (optional)
- * - password: Password for connect mode (optional)
- * - useHttps: Whether to use HTTPS for connect mode
- * - allowInsecure: Whether to allow insecure connections (self-signed certs)
  */
 export const ServerSettingsSchema = z.object({
-  mode: ServerModeSchema,
-  hostname: z.string().optional(),
-  port: z.number().optional(),
-  password: z.string().optional(),
-  useHttps: z.boolean(),
-  allowInsecure: z.boolean(),
+  agent: AgentSettingsSchema,
 });
 
 /**
@@ -95,8 +118,12 @@ export const WorkspaceImportRequestSchema = WorkspaceExportSchema;
  * ServerSettings type - inferred from ServerSettingsSchema.
  * This is the single source of truth for server connection configuration.
  */
+export type AgentProvider = z.infer<typeof AgentProviderSchema>;
+export type AgentTransport = z.infer<typeof AgentTransportSchema>;
+export type AgentSettings = z.infer<typeof AgentSettingsSchema>;
 export type ServerSettings = z.infer<typeof ServerSettingsSchema>;
 
 export type WorkspaceConfig = z.infer<typeof WorkspaceConfigSchema>;
 export type WorkspaceExportData = z.infer<typeof WorkspaceExportSchema>;
 export type WorkspaceImportRequest = z.infer<typeof WorkspaceImportRequestSchema>;
+

@@ -1,22 +1,22 @@
 /**
- * Unit tests for OpenCodeBackend.
+ * Unit tests for AcpBackend.
  * 
  * Note: These tests verify the class structure and basic behaviors.
- * Integration tests that actually connect to opencode would be in tests/api/.
+ * Integration tests that actually connect to a provider runtime are in tests/api/.
  */
 
 import { test, expect, describe, beforeEach } from "bun:test";
-import { OpenCodeBackend } from "../../src/backends/opencode";
+import { AcpBackend, sanitizeSpawnArgsForLogging } from "../../src/backends/acp";
 
-describe("OpenCodeBackend", () => {
-  let backend: OpenCodeBackend;
+describe("AcpBackend", () => {
+  let backend: AcpBackend;
 
   beforeEach(() => {
-    backend = new OpenCodeBackend();
+    backend = new AcpBackend();
   });
 
   test("has correct name", () => {
-    expect(backend.name).toBe("opencode");
+    expect(backend.name).toBe("acp");
   });
 
   test("isConnected returns false initially", () => {
@@ -60,9 +60,48 @@ describe("OpenCodeBackend", () => {
   });
 });
 
-describe("OpenCodeBackend Connection Config", () => {
+describe("sanitizeSpawnArgsForLogging", () => {
+  test("masks only sshpass password argument values", () => {
+    const args = [
+      "-p",
+      "super-secret-password",
+      "ssh",
+      "-o",
+      "NumberOfPasswordPrompts=1",
+      "-p",
+      "5001",
+      "host",
+      "--",
+      "bash -lc 'copilot --acp'",
+    ];
+
+    const sanitized = sanitizeSpawnArgsForLogging("sshpass", args);
+
+    expect(sanitized).toEqual([
+      "-p",
+      "***",
+      "ssh",
+      "-o",
+      "NumberOfPasswordPrompts=1",
+      "-p",
+      "5001",
+      "host",
+      "--",
+      "bash -lc 'copilot --acp'",
+    ]);
+    expect(args[1]).toBe("super-secret-password");
+  });
+
+  test("leaves non-sshpass commands unchanged", () => {
+    const args = ["-o", "BatchMode=yes", "-p", "5001", "host"];
+    const sanitized = sanitizeSpawnArgsForLogging("ssh", args);
+    expect(sanitized).toBe(args);
+  });
+});
+
+describe("AcpBackend Connection Config", () => {
   test("connect rejects when already connected", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     // We can't actually connect without a server, but we can test the double-connect check
     // by mocking the internal state. For now, we test that connect with invalid config fails.
@@ -81,16 +120,16 @@ describe("OpenCodeBackend Connection Config", () => {
   });
 });
 
-describe("OpenCodeBackend abortAllSubscriptions", () => {
+describe("AcpBackend abortAllSubscriptions", () => {
   test("abortAllSubscriptions works when no subscriptions exist", () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     // Should not throw when called with no active subscriptions
     expect(() => backend.abortAllSubscriptions()).not.toThrow();
   });
 
   test("abortAllSubscriptions aborts all tracked subscriptions", () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     // Access the private activeSubscriptions set via type assertion
     const b = backend as unknown as { activeSubscriptions: Set<AbortController> };
@@ -123,7 +162,7 @@ describe("OpenCodeBackend abortAllSubscriptions", () => {
   });
 
   test("abortAllSubscriptions clears the subscription set", () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     // Access the private activeSubscriptions set
     const b = backend as unknown as { activeSubscriptions: Set<AbortController> };
@@ -140,9 +179,9 @@ describe("OpenCodeBackend abortAllSubscriptions", () => {
   });
 });
 
-describe("OpenCodeBackend replyToPermission", () => {
+describe("AcpBackend replyToPermission", () => {
   test("throws when replyToPermission called before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToPermission("request-123", "once")
@@ -150,7 +189,7 @@ describe("OpenCodeBackend replyToPermission", () => {
   });
 
   test("throws when replyToPermission called with 'always' before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToPermission("request-456", "always")
@@ -158,7 +197,7 @@ describe("OpenCodeBackend replyToPermission", () => {
   });
 
   test("throws when replyToPermission called with 'reject' before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToPermission("request-789", "reject")
@@ -166,9 +205,9 @@ describe("OpenCodeBackend replyToPermission", () => {
   });
 });
 
-describe("OpenCodeBackend replyToQuestion", () => {
+describe("AcpBackend replyToQuestion", () => {
   test("throws when replyToQuestion called before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToQuestion("question-123", [["answer1"]])
@@ -176,7 +215,7 @@ describe("OpenCodeBackend replyToQuestion", () => {
   });
 
   test("throws when replyToQuestion called with multiple answers before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToQuestion("question-456", [["option1", "option2"], ["choice1"]])
@@ -184,7 +223,7 @@ describe("OpenCodeBackend replyToQuestion", () => {
   });
 
   test("throws when replyToQuestion called with empty answers before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToQuestion("question-789", [])
@@ -192,7 +231,7 @@ describe("OpenCodeBackend replyToQuestion", () => {
   });
 
   test("throws when replyToQuestion called with empty answer arrays before connect", async () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     
     await expect(
       backend.replyToQuestion("question-101", [[], []])
@@ -200,124 +239,150 @@ describe("OpenCodeBackend replyToQuestion", () => {
   });
 });
 
-describe("OpenCodeBackend HTTPS Configuration", () => {
+describe("AcpBackend transport validation", () => {
   test("getConnectionInfo returns null when not connected", () => {
-    const backend = new OpenCodeBackend();
+    const backend = new AcpBackend();
     expect(backend.getConnectionInfo()).toBe(null);
   });
 
-  test("connect mode defaults to HTTP when useHttps is not set", async () => {
-    const backend = new OpenCodeBackend();
-    
-    // Try to connect with default settings (will fail, but we check the URL format)
+  test("connect mode is rejected by ACP runtime", async () => {
+    const backend = new AcpBackend();
     const config = {
       mode: "connect" as const,
       hostname: "test-server.example.com",
       port: 4096,
       directory: "/tmp",
-      // useHttps not set - should default to HTTP
     };
 
-    // This will fail because no server exists, but we can inspect the error message
-    try {
-      await backend.connect(config);
-    } catch (error) {
-      const errorStr = String(error);
-      // Error message should contain http:// URL
-      expect(errorStr).toContain("http://test-server.example.com:4096");
-    }
-    
+    await expect(backend.connect(config)).rejects.toThrow(
+      "Connect mode is not supported by ACP runtime. Use stdio or ssh transport."
+    );
     expect(backend.isConnected()).toBe(false);
   });
 
-  test("connect mode uses HTTPS when useHttps is true", async () => {
-    const backend = new OpenCodeBackend();
-    
+  test("connect mode with legacy HTTPS fields is still rejected", async () => {
+    const backend = new AcpBackend();
     const config = {
       mode: "connect" as const,
       hostname: "test-server.example.com",
       port: 8443,
       directory: "/tmp",
-      useHttps: true,
     };
 
-    // This will fail because no server exists, but we can inspect the error message
-    try {
-      await backend.connect(config);
-    } catch (error) {
-      const errorStr = String(error);
-      // Error message should contain https:// URL
-      expect(errorStr).toContain("https://test-server.example.com:8443");
-    }
-    
+    await expect(backend.connect(config)).rejects.toThrow(
+      "Connect mode is not supported by ACP runtime. Use stdio or ssh transport."
+    );
     expect(backend.isConnected()).toBe(false);
   });
+});
 
-  test("connect mode defaults to HTTP when useHttps is not set (even on port 443)", async () => {
-    const backend = new OpenCodeBackend();
-    
-    const config = {
-      mode: "connect" as const,
-      hostname: "test-server.example.com",
-      port: 443,
-      directory: "/tmp",
-      // useHttps not set - should default to HTTP (no port inference)
-    };
+describe("AcpBackend spawn cwd selection", () => {
+  test("uses root cwd for ssh transport spawn", async () => {
+    const originalSpawn = Bun.spawn;
+    let capturedCwd: string | undefined;
 
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((...args: unknown[]) => {
+      const options = (args.length === 1 ? args[0] : args[1]) as { cwd?: string } | undefined;
+      capturedCwd = options?.cwd;
+      throw new Error("mock spawn failure");
+    }) as unknown as typeof Bun.spawn;
+
+    const backend = new AcpBackend();
     try {
-      await backend.connect(config);
-    } catch (error) {
-      const errorStr = String(error);
-      // Error message should contain http:// URL (no automatic HTTPS inference from port)
-      expect(errorStr).toContain("http://test-server.example.com:443");
+      await expect(
+        backend.connect({
+          mode: "spawn",
+          provider: "copilot",
+          transport: "ssh",
+          command: "sshpass",
+          args: ["-p", "secret", "ssh", "user@host", "--", "copilot", "--acp"],
+          directory: "/workspaces/remote-only-path",
+        }),
+      ).rejects.toThrow("Failed to spawn ACP process");
+      expect(capturedCwd).toBe("/");
+      expect(backend.isConnected()).toBe(false);
+    } finally {
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
     }
-    
-    expect(backend.isConnected()).toBe(false);
   });
 
-  test("connect mode uses HTTP when useHttps is explicitly false", async () => {
-    const backend = new OpenCodeBackend();
-    
-    const config = {
-      mode: "connect" as const,
-      hostname: "test-server.example.com",
-      port: 443,
-      directory: "/tmp",
-      useHttps: false,
-    };
+  test("uses configured cwd for stdio transport spawn", async () => {
+    const originalSpawn = Bun.spawn;
+    let capturedCwd: string | undefined;
 
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((...args: unknown[]) => {
+      const options = (args.length === 1 ? args[0] : args[1]) as { cwd?: string } | undefined;
+      capturedCwd = options?.cwd;
+      throw new Error("mock spawn failure");
+    }) as unknown as typeof Bun.spawn;
+
+    const backend = new AcpBackend();
     try {
-      await backend.connect(config);
-    } catch (error) {
-      const errorStr = String(error);
-      // Error message should contain http:// URL
-      expect(errorStr).toContain("http://test-server.example.com:443");
+      await expect(
+        backend.connect({
+          mode: "spawn",
+          provider: "copilot",
+          transport: "stdio",
+          command: "copilot",
+          args: ["--acp"],
+          directory: "/tmp/stdio-workdir",
+        }),
+      ).rejects.toThrow("Failed to spawn ACP process");
+      expect(capturedCwd).toBe("/tmp/stdio-workdir");
+      expect(backend.isConnected()).toBe(false);
+    } finally {
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
     }
-    
-    expect(backend.isConnected()).toBe(false);
   });
+});
 
-  test("connect mode accepts allowInsecure option for HTTPS", async () => {
-    const backend = new OpenCodeBackend();
-    
-    const config = {
-      mode: "connect" as const,
-      hostname: "test-server.example.com",
-      port: 8443,
-      directory: "/tmp",
-      useHttps: true,
-      allowInsecure: true,
-    };
+describe("AcpBackend process exit handling", () => {
+  test("rejects initialize request when ACP process exits early", async () => {
+    const originalSpawn = Bun.spawn;
+    let resolveExit: (code: number) => void = () => {};
+    const exited = new Promise<number>((resolve) => {
+      resolveExit = resolve;
+    });
+    const encoder = new TextEncoder();
 
-    // This will fail but verifies the config is accepted without error
+    const fakeProcess = {
+      stdin: {
+        write: () => {
+          resolveExit(255);
+        },
+      },
+      stdout: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      stderr: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode("Permission denied\n"));
+          controller.close();
+        },
+      }),
+      exited,
+    } as unknown as Bun.Subprocess;
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((..._args: unknown[]) => {
+      return fakeProcess;
+    }) as unknown as typeof Bun.spawn;
+
+    const backend = new AcpBackend();
     try {
-      await backend.connect(config);
-    } catch (error) {
-      const errorStr = String(error);
-      // Should still attempt HTTPS connection
-      expect(errorStr).toContain("https://test-server.example.com:8443");
+      await expect(
+        backend.connect({
+          mode: "spawn",
+          provider: "copilot",
+          transport: "ssh",
+          command: "sshpass",
+          args: ["-p", "secret", "ssh", "user@host", "--", "copilot", "--acp"],
+          directory: "/workspaces/remote-path",
+        }),
+      ).rejects.toThrow("ACP process exited with code 255");
+    } finally {
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
     }
-    
-    expect(backend.isConnected()).toBe(false);
   });
 });

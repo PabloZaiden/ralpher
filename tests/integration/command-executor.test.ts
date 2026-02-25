@@ -3,7 +3,7 @@
  * 
  * These tests verify the command execution logic and marker parsing.
  * They use the TestCommandExecutor for local execution, which validates
- * the same code paths as the real PTY-based executor.
+ * the same code paths as the real command executor.
  * 
  * For true end-to-end testing with a real opencode server, see the
  * manual test scripts in the .planning folder.

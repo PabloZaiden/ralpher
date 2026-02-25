@@ -1,7 +1,7 @@
 /**
  * Command execution abstraction for Ralph Loops Management System.
  * Provides a unified interface for running shell commands and file operations
- * that works both locally (spawn mode) and remotely (connect mode).
+ * that works both locally (`stdio` transport) and remotely (`ssh` transport).
  */
 
 /**
@@ -26,7 +26,7 @@ export interface CommandOptions {
 
 /**
  * CommandExecutor interface for running shell commands and file operations.
- * Implementation: CommandExecutorImpl uses PTY via opencode SDK for execution.
+ * Implementation: CommandExecutorImpl executes commands via local or SSH providers.
  * Commands are queued to ensure only one runs at a time.
  */
 export interface CommandExecutor {

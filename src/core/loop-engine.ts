@@ -26,7 +26,7 @@ import type {
   PromptInput,
   AgentEvent,
 } from "../backends/types";
-import { OpenCodeBackend } from "../backends/opencode";
+import { AcpBackend } from "../backends/acp";
 import { backendManager, buildConnectionConfig } from "./backend-manager";
 import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
@@ -78,21 +78,21 @@ function generateBranchName(prefix: string, name: string, timestamp: string): st
 /**
  * Backend interface for LoopEngine.
  * This is a structural type that defines the methods LoopEngine needs.
- * Both OpenCodeBackend and MockOpenCodeBackend satisfy this interface.
+ * Both AcpBackend and MockAcpBackend satisfy this interface.
  * Using a structural type (interface) instead of a union allows for
  * easy mocking in tests without requiring all internal class fields.
  */
 export interface LoopBackend {
-  connect: OpenCodeBackend["connect"];
-  disconnect: OpenCodeBackend["disconnect"];
-  isConnected: OpenCodeBackend["isConnected"];
-  createSession: OpenCodeBackend["createSession"];
-  sendPrompt: OpenCodeBackend["sendPrompt"];
-  sendPromptAsync: OpenCodeBackend["sendPromptAsync"];
-  abortSession: OpenCodeBackend["abortSession"];
-  subscribeToEvents: OpenCodeBackend["subscribeToEvents"];
-  replyToPermission: OpenCodeBackend["replyToPermission"];
-  replyToQuestion: OpenCodeBackend["replyToQuestion"];
+  connect: AcpBackend["connect"];
+  disconnect: AcpBackend["disconnect"];
+  isConnected: AcpBackend["isConnected"];
+  createSession: AcpBackend["createSession"];
+  sendPrompt: AcpBackend["sendPrompt"];
+  sendPromptAsync: AcpBackend["sendPromptAsync"];
+  abortSession: AcpBackend["abortSession"];
+  subscribeToEvents: AcpBackend["subscribeToEvents"];
+  replyToPermission: AcpBackend["replyToPermission"];
+  replyToQuestion: AcpBackend["replyToQuestion"];
 }
 
 /**
@@ -437,9 +437,9 @@ export class LoopEngine {
       // Skip git setup for review cycles - branch is already set up
       if (!isInPlanMode && !this.skipGitSetup) {
         this.emitLog("info", "Setting up git branch...");
-        log.trace("[LoopEngine] Starting setupGitBranch...");
+        log.debug("[LoopEngine] Starting setupGitBranch...");
         await this.setupGitBranch();
-        log.trace("[LoopEngine] setupGitBranch completed successfully");
+        log.debug("[LoopEngine] setupGitBranch completed successfully");
       } else if (this.skipGitSetup) {
         this.emitLog("info", "Skipping git branch setup (review cycle)");
       }
@@ -455,30 +455,30 @@ export class LoopEngine {
 
       // Create backend session
       this.emitLog("info", "Connecting to AI backend...");
-      log.trace("[LoopEngine] Starting setupSession...");
+      log.debug("[LoopEngine] Starting setupSession...");
       await this.setupSession();
-      log.trace("[LoopEngine] setupSession completed successfully");
+      log.debug("[LoopEngine] setupSession completed successfully");
 
       // Emit started event (skip in plan mode - will emit when plan is accepted)
       if (!isInPlanMode) {
-        log.trace("[LoopEngine] About to emit loop.started event");
+        log.debug("[LoopEngine] About to emit loop.started event");
         this.emit({
           type: "loop.started",
           loopId: this.config.id,
           iteration: 0,
           timestamp: createTimestamp(),
         });
-        log.trace("[LoopEngine] loop.started event emitted");
+        log.debug("[LoopEngine] loop.started event emitted");
       }
 
-      log.trace("[LoopEngine] About to emit 'Loop started successfully' log");
+      log.debug("[LoopEngine] About to emit 'Loop started successfully' log");
       this.emitLog("info", "Loop started successfully, beginning iterations");
-      log.trace("[LoopEngine] 'Loop started successfully' log emitted");
+      log.debug("[LoopEngine] 'Loop started successfully' log emitted");
 
       // Start the iteration loop
-      log.trace("[LoopEngine] About to call runLoop");
+      log.debug("[LoopEngine] About to call runLoop");
       await this.runLoop();
-      log.trace("[LoopEngine] runLoop completed");
+      log.debug("[LoopEngine] runLoop completed");
     } catch (error) {
       this.emitLog("error", `Failed to start loop: ${String(error)}`);
       this.handleError(error);
@@ -740,7 +740,7 @@ export class LoopEngine {
       return;
     }
     
-    log.trace("[LoopEngine] continueExecution: Starting execution loop");
+    log.debug("[LoopEngine] continueExecution: Starting execution loop");
     this.emitLog("info", "Starting execution after plan acceptance");
     
     // Run the loop
@@ -873,13 +873,13 @@ export class LoopEngine {
       },
     });
 
-    log.trace("[LoopEngine] About to emit 'Git branch setup complete' log");
+    log.debug("[LoopEngine] About to emit 'Git branch setup complete' log");
     this.emitLog("info", `Git branch setup complete`, { 
       originalBranch, 
       workingBranch: branchName,
       worktreePath,
     });
-    log.trace("[LoopEngine] Exiting setupGitBranch");
+    log.debug("[LoopEngine] Exiting setupGitBranch");
   }
 
   /**
@@ -965,55 +965,60 @@ export class LoopEngine {
    * Uses workspace-specific server settings.
    */
   private async setupSession(): Promise<void> {
-    log.trace("[LoopEngine] setupSession: Entry point");
+    log.debug("[LoopEngine] setupSession: Entry point");
     
     // Get workspace-specific server settings (uses test settings in test mode)
     const settings = await backendManager.getWorkspaceSettings(this.config.workspaceId);
-    log.trace("[LoopEngine] setupSession: Got settings", { mode: settings.mode, workspaceId: this.config.workspaceId });
+    log.debug("[LoopEngine] setupSession: Got settings", {
+      provider: settings.agent.provider,
+      transport: settings.agent.transport,
+      workspaceId: this.config.workspaceId,
+    });
     
     // Connect to backend if not already connected
     const isConnected = this.backend.isConnected();
-    log.trace("[LoopEngine] setupSession: Backend connected?", { isConnected });
+    log.debug("[LoopEngine] setupSession: Backend connected?", { isConnected });
     if (!isConnected) {
       this.emitLog("info", "Backend not connected, establishing connection...", {
-        mode: settings.mode,
-        hostname: settings.hostname,
-        port: settings.port,
+        provider: settings.agent.provider,
+        transport: settings.agent.transport,
+        hostname: settings.agent.transport === "ssh" ? settings.agent.hostname : undefined,
+        port: settings.agent.transport === "ssh" ? settings.agent.port : undefined,
       });
-      log.trace("[LoopEngine] setupSession: About to call backend.connect");
+      log.debug("[LoopEngine] setupSession: About to call backend.connect");
       await this.backend.connect(buildConnectionConfig(settings, this.workingDirectory));
-      log.trace("[LoopEngine] setupSession: backend.connect completed");
+      log.debug("[LoopEngine] setupSession: backend.connect completed");
       this.emitLog("info", "Backend connection established");
     } else {
       this.emitLog("debug", "Backend already connected");
     }
 
     // Create a new session for this loop
-    log.trace("[LoopEngine] setupSession: About to create session");
+    log.debug("[LoopEngine] setupSession: About to create session");
     this.emitLog("info", "Creating new AI session...");
     const session = await this.backend.createSession({
       title: `Ralph Loop: ${this.config.name}`,
       directory: this.workingDirectory,
     });
-    log.trace("[LoopEngine] setupSession: Session created", { sessionId: session.id });
+    log.debug("[LoopEngine] setupSession: Session created", { sessionId: session.id });
 
     this.sessionId = session.id;
     this.emitLog("info", `AI session created`, { sessionId: session.id });
 
-    // Store session info - use hostname for connect mode, undefined for spawn mode
-    const protocol = settings.useHttps ? "https" : "http";
-    const serverUrl = settings.mode === "connect" && settings.hostname
-      ? `${protocol}://${settings.hostname}:${settings.port ?? 4096}`
+    // Store session info for remote transports.
+    const connectionConfig = buildConnectionConfig(settings, this.workingDirectory);
+    const serverUrl = connectionConfig.transport === "ssh" && connectionConfig.hostname
+      ? `ssh://${connectionConfig.hostname}:${connectionConfig.port ?? 22}`
       : undefined;
 
-    log.trace("[LoopEngine] setupSession: About to update state");
+    log.debug("[LoopEngine] setupSession: About to update state");
     this.updateState({
       session: {
         id: session.id,
         serverUrl,
       },
     });
-    log.trace("[LoopEngine] setupSession: Exit point");
+    log.debug("[LoopEngine] setupSession: Exit point");
   }
 
   /**
@@ -1022,18 +1027,18 @@ export class LoopEngine {
    * while a loop is still in planning mode.
    */
   async reconnectSession(): Promise<void> {
-    log.trace("[LoopEngine] reconnectSession: Entry point");
+    log.debug("[LoopEngine] reconnectSession: Entry point");
     
     // Check if we already have a session
     if (this.sessionId) {
-      log.trace("[LoopEngine] reconnectSession: Already have sessionId", { sessionId: this.sessionId });
+      log.debug("[LoopEngine] reconnectSession: Already have sessionId", { sessionId: this.sessionId });
       return;
     }
     
     // Check if the loop state has a session we can reconnect to
     const existingSession = this.loop.state.session;
     if (existingSession?.id) {
-      log.trace("[LoopEngine] reconnectSession: Found existing session in state", { 
+      log.debug("[LoopEngine] reconnectSession: Found existing session in state", { 
         sessionId: existingSession.id,
         serverUrl: existingSession.serverUrl,
       });
@@ -1044,26 +1049,58 @@ export class LoopEngine {
       
       if (!isConnected) {
         this.emitLog("info", "Reconnecting to backend...", {
-          mode: settings.mode,
-          hostname: settings.hostname,
-          port: settings.port,
+          provider: settings.agent.provider,
+          transport: settings.agent.transport,
+          hostname: settings.agent.transport === "ssh" ? settings.agent.hostname : undefined,
+          port: settings.agent.transport === "ssh" ? settings.agent.port : undefined,
         });
         await this.backend.connect(buildConnectionConfig(settings, this.workingDirectory));
         this.emitLog("info", "Backend connection re-established");
+      }
+
+      const sessionLookupBackend = this.backend as Partial<Pick<AcpBackend, "getSession">>;
+      if (typeof sessionLookupBackend.getSession === "function") {
+        try {
+          const remoteSession = await sessionLookupBackend.getSession(existingSession.id);
+          if (!remoteSession) {
+            this.emitLog("warn", "Persisted session no longer exists - creating a new session", {
+              sessionId: existingSession.id,
+            });
+            await this.recreateSessionAfterSessionLoss(`Session ${existingSession.id} not found during reconnect`);
+            log.debug("[LoopEngine] reconnectSession: Recreated missing session");
+            return;
+          }
+        } catch (error) {
+          const message = String(error);
+          if (this.isSessionNotFoundError(message)) {
+            this.emitLog("warn", "Persisted session lookup reported not found - creating a new session", {
+              sessionId: existingSession.id,
+              error: message,
+            });
+            await this.recreateSessionAfterSessionLoss(message);
+            log.debug("[LoopEngine] reconnectSession: Recreated missing session after lookup error");
+            return;
+          }
+
+          this.emitLog("warn", "Failed to verify persisted session - reusing stored session id", {
+            sessionId: existingSession.id,
+            error: message,
+          });
+        }
       }
       
       // Reuse the existing session ID
       this.sessionId = existingSession.id;
       this.emitLog("info", "Reconnected to existing session", { sessionId: this.sessionId });
-      log.trace("[LoopEngine] reconnectSession: Reconnected to session", { sessionId: this.sessionId });
+      log.debug("[LoopEngine] reconnectSession: Reconnected to session", { sessionId: this.sessionId });
       return;
     }
     
     // No existing session, create a new one
-    log.trace("[LoopEngine] reconnectSession: No existing session, creating new one");
+    log.debug("[LoopEngine] reconnectSession: No existing session, creating new one");
     this.emitLog("info", "No existing session found, creating new session");
     await this.setupSession();
-    log.trace("[LoopEngine] reconnectSession: Exit point (new session created)");
+    log.debug("[LoopEngine] reconnectSession: Exit point (new session created)");
   }
 
   /**
@@ -1072,7 +1109,7 @@ export class LoopEngine {
    * Protected by isLoopRunning guard to prevent concurrent executions.
    */
   private async runLoop(): Promise<void> {
-    log.trace("[LoopEngine] runLoop: Entry point");
+    log.debug("[LoopEngine] runLoop: Entry point");
     
     // Guard against concurrent runLoop() calls
     if (this.isLoopRunning) {
@@ -1082,7 +1119,7 @@ export class LoopEngine {
     }
     
     this.isLoopRunning = true;
-    log.trace("[LoopEngine] runLoop: Set isLoopRunning = true");
+    log.debug("[LoopEngine] runLoop: Set isLoopRunning = true");
     
     try {
       this.emitLog("debug", "Entering runLoop", {
@@ -1090,20 +1127,20 @@ export class LoopEngine {
         status: this.loop.state.status,
         shouldContinue: this.shouldContinue(),
       });
-      log.trace("[LoopEngine] runLoop: Emitted debug log, checking while condition", {
+      log.debug("[LoopEngine] runLoop: Emitted debug log, checking while condition", {
         aborted: this.aborted,
         shouldContinue: this.shouldContinue(),
       });
 
       while (!this.aborted && this.shouldContinue()) {
-        log.trace("[LoopEngine] runLoop: Entered while loop, about to call runIteration");
+        log.debug("[LoopEngine] runLoop: Entered while loop, about to call runIteration");
         this.emitLog("debug", "Loop iteration check passed", {
           aborted: this.aborted,
           status: this.loop.state.status,
         });
 
         const iterationResult = await this.runIteration();
-        log.trace("[LoopEngine] runLoop: runIteration completed", { outcome: iterationResult.outcome });
+        log.debug("[LoopEngine] runLoop: runIteration completed", { outcome: iterationResult.outcome });
 
         // Delegate outcome handling — returns true if the loop should exit
         const shouldExit = await this.handleIterationOutcome(iterationResult);
@@ -1149,7 +1186,7 @@ export class LoopEngine {
       });
     } finally {
       this.isLoopRunning = false;
-      log.trace("[LoopEngine] runLoop: Set isLoopRunning = false");
+      log.debug("[LoopEngine] runLoop: Set isLoopRunning = false");
     }
   }
 
@@ -1426,7 +1463,7 @@ export class LoopEngine {
    * Run a single iteration with real-time event streaming.
    */
   private async runIteration(): Promise<IterationResult> {
-    log.trace("[LoopEngine] runIteration: Entry point");
+    log.debug("[LoopEngine] runIteration: Entry point");
     const iteration = this.loop.state.currentIteration + 1;
     const startedAt = createTimestamp();
     
@@ -1495,7 +1532,7 @@ export class LoopEngine {
    */
   private async executeIterationPrompt(ctx: IterationContext): Promise<void> {
     // Build the prompt
-    log.trace("[LoopEngine] runIteration: Building prompt");
+    log.debug("[LoopEngine] runIteration: Building prompt");
     this.emitLog("debug", "Building prompt for AI agent");
     const prompt = this.buildPrompt(ctx.iteration);
 
@@ -1511,66 +1548,138 @@ export class LoopEngine {
     const fullPromptText = prompt.parts.map((p) => p.text).join("\n---\n");
     this.emitLog("debug", `[Prompt] ${fullPromptText}`);
 
-    // Send prompt and collect response
-    if (!this.sessionId) {
-      throw new Error("No session ID");
-    }
+    let hasRetriedMissingSession = false;
+    let completed = false;
 
-    // Subscribe to events BEFORE sending the prompt.
-    // IMPORTANT: We must await the subscription to ensure the SSE connection is established
-    // before sending the prompt. This prevents a race condition where events are emitted
-    // by the server before we're ready to receive them.
-    log.trace("[LoopEngine] runIteration: About to subscribe to events");
-    this.emitLog("debug", "Subscribing to AI response stream");
-    const eventStream = await this.backend.subscribeToEvents(this.sessionId);
-    log.trace("[LoopEngine] runIteration: Subscription established, got event stream");
-
-    // Now send prompt asynchronously (subscription is definitely active)
-    log.trace("[LoopEngine] runIteration: About to send prompt async");
-    this.emitLog("info", "Sending prompt to AI agent...");
-    await this.backend.sendPromptAsync(this.sessionId, prompt);
-    log.trace("[LoopEngine] runIteration: sendPromptAsync completed");
-
-    try {
-      log.trace("[LoopEngine] runIteration: About to start event iteration loop");
-      
-      // Calculate activity timeout
-      const activityTimeoutMs = (this.config.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds) * 1000;
-      
-      let event: AgentEvent | null = await nextWithTimeout(eventStream, activityTimeoutMs);
-      while (event !== null) {
-        log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
-        // Check if aborted
-        if (this.aborted) {
-          if (this.injectionPending) {
-            this.emitLog("info", "Iteration interrupted for pending message injection");
-          } else {
-            this.emitLog("info", "Iteration aborted by user");
-          }
-          break;
-        }
-
-        // Update last activity timestamp
-        this.updateState({ lastActivityAt: createTimestamp() });
-
-        // Delegate event processing to the handler
-        await this.processAgentEvent(event, ctx);
-
-        // If message is complete or error occurred, stop listening
-        if (event.type === "message.complete" || event.type === "error") {
-          this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
-          break;
-        }
-
-        // Get next event with timeout
-        event = await nextWithTimeout(eventStream, activityTimeoutMs);
+    while (!completed) {
+      if (!this.sessionId) {
+        throw new Error("No session ID");
       }
-    } finally {
-      // Close the stream to abort the subscription
-      eventStream.close();
+      const activeSessionId = this.sessionId;
+
+      // Subscribe to events BEFORE sending the prompt.
+      // IMPORTANT: We must await the subscription to ensure the SSE connection is established
+      // before sending the prompt. This prevents a race condition where events are emitted
+      // by the server before we're ready to receive them.
+      log.debug("[LoopEngine] runIteration: About to subscribe to events");
+      this.emitLog("debug", "Subscribing to AI response stream");
+      const eventStream = await this.backend.subscribeToEvents(activeSessionId);
+      log.debug("[LoopEngine] runIteration: Subscription established, got event stream");
+
+      try {
+        // Now send prompt asynchronously (subscription is definitely active)
+        log.debug("[LoopEngine] runIteration: About to send prompt async");
+        this.emitLog("info", "Sending prompt to AI agent...");
+        await this.backend.sendPromptAsync(activeSessionId, prompt);
+        log.debug("[LoopEngine] runIteration: sendPromptAsync completed");
+
+        log.debug("[LoopEngine] runIteration: About to start event iteration loop");
+        
+        // Calculate activity timeout
+        const activityTimeoutMs = (this.config.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds) * 1000;
+        
+        let event: AgentEvent | null = await nextWithTimeout(eventStream, activityTimeoutMs);
+        while (event !== null) {
+          log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
+          // Check if aborted
+          if (this.aborted) {
+            if (this.injectionPending) {
+              this.emitLog("info", "Iteration interrupted for pending message injection");
+            } else {
+              this.emitLog("info", "Iteration aborted by user");
+            }
+            break;
+          }
+
+          // Update last activity timestamp
+          this.updateState({ lastActivityAt: createTimestamp() });
+
+          // Delegate event processing to the handler
+          await this.processAgentEvent(event, ctx);
+
+          if (event.type === "error" && ctx.error && this.isSessionNotFoundError(ctx.error)) {
+            throw new Error(ctx.error);
+          }
+
+          // If message is complete or error occurred, stop listening
+          if (event.type === "message.complete" || event.type === "error") {
+            this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
+            break;
+          }
+
+          // Get next event with timeout
+          event = await nextWithTimeout(eventStream, activityTimeoutMs);
+        }
+
+        completed = true;
+      } catch (error) {
+        const message = String(error);
+        if (!hasRetriedMissingSession && this.isSessionNotFoundError(message)) {
+          hasRetriedMissingSession = true;
+          this.emitLog("warn", "Session not found during prompt execution - recreating session and retrying once", {
+            sessionId: activeSessionId,
+            error: message,
+          });
+          await this.recreateSessionAfterSessionLoss(message);
+          this.resetIterationContextForRetry(ctx);
+          continue;
+        }
+
+        throw error;
+      } finally {
+        // Close the stream to abort the subscription
+        eventStream.close();
+      }
     }
 
     this.emitLog("debug", "Exited event stream loop", { outcome: ctx.outcome, error: ctx.error });
+  }
+
+  /**
+   * Detect if an error indicates that an ACP session no longer exists remotely.
+   */
+  private isSessionNotFoundError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      (normalized.includes("session") && normalized.includes("not found")) ||
+      normalized.includes("unknown session")
+    );
+  }
+
+  /**
+   * Reset transient per-iteration state before retrying a prompt with a new session.
+   */
+  private resetIterationContextForRetry(ctx: IterationContext): void {
+    ctx.responseContent = "";
+    ctx.reasoningContent = "";
+    ctx.messageCount = 0;
+    ctx.toolCallCount = 0;
+    ctx.outcome = "continue";
+    ctx.error = undefined;
+    ctx.currentMessageId = null;
+    ctx.toolCalls.clear();
+    ctx.currentResponseLogId = null;
+    ctx.currentResponseLogContent = "";
+    ctx.currentReasoningLogId = null;
+    ctx.currentReasoningLogContent = "";
+  }
+
+  /**
+   * Recreate the current ACP session after remote session loss.
+   */
+  private async recreateSessionAfterSessionLoss(reason: string): Promise<void> {
+    const previousSessionId = this.sessionId;
+    this.emitLog("warn", "Recreating AI session after session loss", {
+      reason,
+      previousSessionId,
+    });
+    this.sessionId = null;
+    this.updateState({ session: undefined });
+    await this.setupSession();
+    this.emitLog("info", "AI session recreated", {
+      previousSessionId,
+      newSessionId: this.sessionId,
+    });
   }
 
   /**
@@ -1698,6 +1807,13 @@ export class LoopEngine {
     ctx.currentResponseLogContent = "";
     ctx.currentReasoningLogId = null;
     ctx.currentReasoningLogContent = "";
+    this.emitLog("debug", "AI full message received", {
+      messageId: ctx.currentMessageId,
+      responseLength: ctx.responseContent.length,
+      responseContent: ctx.responseContent,
+      reasoningLength: ctx.reasoningContent.length,
+      reasoningContent: ctx.reasoningContent,
+    });
     this.emitLog("agent", "AI finished generating response", {
       logKind: "system",
       responseLength: ctx.responseContent.length,
@@ -1876,7 +1992,7 @@ export class LoopEngine {
       // Set isPlanReady flag in state
       if (this.state.planMode) {
         this.state.planMode.isPlanReady = true;
-        log.trace(`[LoopEngine] runIteration: Set isPlanReady = true, planMode:`, JSON.stringify(this.state.planMode));
+        log.debug(`[LoopEngine] runIteration: Set isPlanReady = true, planMode:`, JSON.stringify(this.state.planMode));
       }
     } else if (this.stopDetector.matches(ctx.responseContent)) {
       this.emitLog("info", "Stop pattern matched - task is complete");
@@ -2227,7 +2343,7 @@ ${userMessageSection}${errorContext}
 
   /**
    * Generate a meaningful commit message based on the changes.
-   * Uses opencode to summarize what was done, then normalizes the output
+   * Uses the configured agent backend to summarize what was done, then normalizes the output
    * into a valid conventional commit message with the configured scope.
    */
   private async generateCommitMessage(iteration: number, responseContent: string): Promise<string> {
@@ -2243,7 +2359,7 @@ ${userMessageSection}${errorContext}
       return formatConventionalCommit("chore", scope, `iteration ${iteration}`);
     }
 
-    // Ask opencode to generate a commit message in conventional commit format
+    // Ask the agent backend to generate a commit message in conventional commit format
     const prompt: PromptInput = {
       parts: [{
         type: "text",

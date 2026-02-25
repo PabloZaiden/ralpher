@@ -288,7 +288,7 @@ export function useLoop(loopId: string): UseLoopResult {
       }
       const data = (await response.json()) as Loop;
       setLoop(data);
-      log.trace("Loop data refreshed", { loopId, status: data.state.status });
+      log.debug("Loop data refreshed", { loopId, status: data.state.status });
       
       // Hydrate persisted data only on the first successful load.
       // Using a ref avoids adding state array lengths to the dependency array,
@@ -366,7 +366,7 @@ export function useLoop(loopId: string): UseLoopResult {
         }
         const data = (await response.json()) as Loop;
         setLoop(data);
-        log.trace("Loop updated successfully", { loopId });
+        log.debug("Loop updated successfully", { loopId });
         return true;
       } catch (err) {
         log.error("Failed to update loop", { loopId, error: String(err) });
@@ -489,7 +489,7 @@ export function useLoop(loopId: string): UseLoopResult {
       try {
         await setPendingPromptApi(loopId, prompt);
         await refresh();
-        log.trace("Pending prompt set", { loopId });
+        log.debug("Pending prompt set", { loopId });
         return true;
       } catch (err) {
         log.error("Failed to set pending prompt", { loopId, error: String(err) });
@@ -506,7 +506,7 @@ export function useLoop(loopId: string): UseLoopResult {
     try {
       await clearPendingPromptApi(loopId);
       await refresh();
-      log.trace("Pending prompt cleared", { loopId });
+      log.debug("Pending prompt cleared", { loopId });
       return true;
     } catch (err) {
       log.error("Failed to clear pending prompt", { loopId, error: String(err) });
@@ -517,7 +517,7 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Get the git diff
   const getDiff = useCallback(async (): Promise<FileDiff[]> => {
-    log.trace("Getting diff", { loopId });
+    log.debug("Getting diff", { loopId });
     try {
       const response = await fetch(`/api/loops/${loopId}/diff`);
       if (!response.ok) {
@@ -528,7 +528,7 @@ export function useLoop(loopId: string): UseLoopResult {
         throw new Error(`Failed to get diff: ${response.statusText}`);
       }
       const diff = (await response.json()) as FileDiff[];
-      log.trace("Diff retrieved", { loopId, fileCount: diff.length });
+      log.debug("Diff retrieved", { loopId, fileCount: diff.length });
       return diff;
     } catch (err) {
       log.error("Failed to get diff", { loopId, error: String(err) });
@@ -539,7 +539,7 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Get the plan.md content
   const getPlan = useCallback(async (): Promise<FileContentResponse> => {
-    log.trace("Getting plan", { loopId });
+    log.debug("Getting plan", { loopId });
     try {
       const response = await fetch(`/api/loops/${loopId}/plan`);
       if (!response.ok) {
@@ -555,7 +555,7 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Get the status.md content
   const getStatusFile = useCallback(async (): Promise<FileContentResponse> => {
-    log.trace("Getting status file", { loopId });
+    log.debug("Getting status file", { loopId });
     try {
       const response = await fetch(`/api/loops/${loopId}/status-file`);
       if (!response.ok) {
@@ -576,7 +576,7 @@ export function useLoop(loopId: string): UseLoopResult {
       try {
         await sendPlanFeedbackApi(loopId, feedback);
         await refresh();
-        log.trace("Plan feedback sent", { loopId });
+        log.debug("Plan feedback sent", { loopId });
         return true;
       } catch (err) {
         log.error("Failed to send plan feedback", { loopId, error: String(err) });
@@ -642,7 +642,7 @@ export function useLoop(loopId: string): UseLoopResult {
       try {
         const result = await setPendingApi(loopId, options);
         await refresh();
-        log.trace("Pending values set", { loopId });
+        log.debug("Pending values set", { loopId });
         return result;
       } catch (err) {
         log.error("Failed to set pending", { loopId, error: String(err) });
@@ -659,7 +659,7 @@ export function useLoop(loopId: string): UseLoopResult {
     try {
       await clearPendingApi(loopId);
       await refresh();
-      log.trace("Pending values cleared", { loopId });
+      log.debug("Pending values cleared", { loopId });
       return true;
     } catch (err) {
       log.error("Failed to clear pending", { loopId, error: String(err) });
@@ -675,7 +675,7 @@ export function useLoop(loopId: string): UseLoopResult {
       try {
         await sendChatMessageApi(loopId, message, model);
         await refresh();
-        log.trace("Chat message sent", { loopId });
+        log.debug("Chat message sent", { loopId });
         return true;
       } catch (err) {
         log.error("Failed to send chat message", { loopId, error: String(err) });
