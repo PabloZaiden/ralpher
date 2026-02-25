@@ -53,6 +53,10 @@ function getProviderAcpCommand(provider: "opencode" | "copilot"): { command: str
   return { command: "opencode", args: ["acp"] };
 }
 
+function quoteShell(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
 function deriveExecutionSettings(settings: ServerSettings): DerivedExecutionSettings {
   if (settings.agent.transport === "ssh") {
     return {
@@ -70,6 +74,8 @@ function deriveExecutionSettings(settings: ServerSettings): DerivedExecutionSett
 function buildAgentRuntimeCommand(settings: ServerSettings): { command: string; args: string[] } {
   const provider = settings.agent.provider;
   const providerCommand = getProviderAcpCommand(provider);
+  const providerInvocation = [providerCommand.command, ...providerCommand.args].join(" ");
+  const remoteCommand = `bash -lc ${quoteShell(providerInvocation)}`;
 
   if (settings.agent.transport === "stdio") {
     return providerCommand;
@@ -79,24 +85,35 @@ function buildAgentRuntimeCommand(settings: ServerSettings): { command: string; 
     ? `${settings.agent.username.trim()}@${settings.agent.hostname}`
     : settings.agent.hostname;
   const sshArgs = [
+    "-o",
+    "ConnectTimeout=10",
+    "-o",
+    "StrictHostKeyChecking=no",
+    "-o",
+    "UserKnownHostsFile=/dev/null",
+    "-o",
+    "LogLevel=ERROR",
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=1",
     "-p",
     String(settings.agent.port ?? 22),
     sshTarget,
     "--",
-    providerCommand.command,
-    ...providerCommand.args,
+    remoteCommand,
   ];
 
   if (settings.agent.password && settings.agent.password.trim().length > 0) {
     return {
       command: "sshpass",
-      args: ["-p", settings.agent.password, "ssh", ...sshArgs],
+      args: ["-p", settings.agent.password, "ssh", "-o", "NumberOfPasswordPrompts=1", ...sshArgs],
     };
   }
 
   return {
     command: "ssh",
-    args: sshArgs,
+    args: ["-o", "BatchMode=yes", ...sshArgs],
   };
 }
 

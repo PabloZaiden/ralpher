@@ -78,6 +78,27 @@ type SessionSubscriber = (event: AgentEvent) => void;
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
 const PROMPT_REQUEST_TIMEOUT_MS = 1_800_000;
+const MAX_RECENT_PROCESS_LINES = 20;
+
+/**
+ * Sanitize process args before logging.
+ * Masks sshpass password values while keeping other args visible.
+ */
+export function sanitizeSpawnArgsForLogging(command: string, args: string[]): string[] {
+  if (command !== "sshpass") {
+    return args;
+  }
+
+  const sanitizedArgs = [...args];
+  for (let i = 0; i < sanitizedArgs.length - 1; i++) {
+    if (sanitizedArgs[i] === "-p") {
+      sanitizedArgs[i + 1] = "***";
+      break;
+    }
+  }
+
+  return sanitizedArgs;
+}
 
 type PermissionOption = {
   optionId: string;
@@ -351,6 +372,9 @@ export class AcpBackend implements Backend {
   /** Track last emitted TODO snapshot per session to avoid duplicate updates */
   private sessionTodoSnapshots = new Map<string, string>();
 
+  /** Recent non-JSON ACP process output lines for diagnostics */
+  private recentProcessLines: string[] = [];
+
   /**
    * Connect to an ACP-capable agent.
    * Uses spawn mode to launch the configured CLI with ACP stdio transport.
@@ -395,10 +419,14 @@ export class AcpBackend implements Backend {
   private async connectSpawn(config: BackendConnectionConfig): Promise<void> {
     const command = config.command ?? (config.provider === "copilot" ? "copilot" : "opencode");
     const args = config.args ?? (config.provider === "copilot" ? ["--acp"] : ["acp"]);
+    const logArgs = sanitizeSpawnArgsForLogging(command, args);
+    const spawnCwd = config.transport === "ssh" ? "/" : config.directory;
+    this.recentProcessLines = [];
     log.debug("[AcpBackend] Spawning ACP runtime", {
       command,
-      args,
+      args: logArgs,
       directory: config.directory,
+      spawnCwd,
       transport: config.transport,
       provider: config.provider,
     });
@@ -406,13 +434,13 @@ export class AcpBackend implements Backend {
     let process: Bun.Subprocess;
     try {
       process = Bun.spawn([command, ...args], {
-        cwd: config.directory,
+        cwd: spawnCwd,
         stdin: "pipe",
         stdout: "pipe",
         stderr: "pipe",
       });
     } catch (error) {
-      throw new Error(`Failed to spawn ACP process (${command}): ${String(error)}`);
+      throw new Error(`Failed to spawn ACP process (${command}) in cwd '${spawnCwd}': ${String(error)}`);
     }
 
     this.process = process;
@@ -452,11 +480,7 @@ export class AcpBackend implements Backend {
 
     this.abortAllSubscriptions();
 
-    for (const pending of this.pendingRequests.values()) {
-      clearTimeout(pending.timeout);
-      pending.reject(new Error("Disconnected"));
-    }
-    this.pendingRequests.clear();
+    this.rejectPendingRequests("Disconnected");
 
     this.process = null;
 
@@ -470,6 +494,7 @@ export class AcpBackend implements Backend {
     this.pendingPermissionRequests.clear();
     this.toolCallNames.clear();
     this.sessionTodoSnapshots.clear();
+    this.recentProcessLines = [];
 
     this.connected = false;
     this.directory = "";
@@ -527,6 +552,31 @@ export class AcpBackend implements Backend {
 
     void this.readRpcStream(process.stdout, "stdout");
     void this.readRpcStream(process.stderr, "stderr");
+    void process.exited.then((exitCode) => {
+      if (this.process !== process || !this.connected) {
+        return;
+      }
+      const details = this.recentProcessLines.slice(-5).join(" | ");
+      const reason = details.length > 0
+        ? `ACP process exited with code ${exitCode}: ${details}`
+        : `ACP process exited with code ${exitCode}`;
+      this.rejectPendingRequests(reason);
+    });
+  }
+
+  private pushProcessLine(line: string): void {
+    this.recentProcessLines.push(line);
+    if (this.recentProcessLines.length > MAX_RECENT_PROCESS_LINES) {
+      this.recentProcessLines.shift();
+    }
+  }
+
+  private rejectPendingRequests(reason: string): void {
+    for (const pending of this.pendingRequests.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error(reason));
+    }
+    this.pendingRequests.clear();
   }
 
   private async readRpcStream(stream: ReadableStream<Uint8Array>, source: "stdout" | "stderr"): Promise<void> {
@@ -569,6 +619,7 @@ export class AcpBackend implements Backend {
     try {
       message = JSON.parse(line) as JsonRpcMessage;
     } catch {
+      this.pushProcessLine(`[${source}] ${line}`);
       if (source === "stderr") {
         log.debug(`[AcpBackend] ACP stderr: ${line}`);
       } else {

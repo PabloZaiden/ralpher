@@ -28,6 +28,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     tini \
+    openssh-client \
+    sshpass \
   && rm -rf /var/lib/apt/lists/*
 
 # Copy the standalone binary from builder

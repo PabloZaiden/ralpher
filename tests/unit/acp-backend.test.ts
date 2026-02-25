@@ -6,7 +6,7 @@
  */
 
 import { test, expect, describe, beforeEach } from "bun:test";
-import { AcpBackend } from "../../src/backends/acp";
+import { AcpBackend, sanitizeSpawnArgsForLogging } from "../../src/backends/acp";
 
 describe("AcpBackend", () => {
   let backend: AcpBackend;
@@ -57,6 +57,45 @@ describe("AcpBackend", () => {
 
   test("throws when abortSession called before connect", async () => {
     await expect(backend.abortSession("test-id")).rejects.toThrow("Not connected");
+  });
+});
+
+describe("sanitizeSpawnArgsForLogging", () => {
+  test("masks only sshpass password argument values", () => {
+    const args = [
+      "-p",
+      "super-secret-password",
+      "ssh",
+      "-o",
+      "NumberOfPasswordPrompts=1",
+      "-p",
+      "5001",
+      "host",
+      "--",
+      "bash -lc 'copilot --acp'",
+    ];
+
+    const sanitized = sanitizeSpawnArgsForLogging("sshpass", args);
+
+    expect(sanitized).toEqual([
+      "-p",
+      "***",
+      "ssh",
+      "-o",
+      "NumberOfPasswordPrompts=1",
+      "-p",
+      "5001",
+      "host",
+      "--",
+      "bash -lc 'copilot --acp'",
+    ]);
+    expect(args[1]).toBe("super-secret-password");
+  });
+
+  test("leaves non-sshpass commands unchanged", () => {
+    const args = ["-o", "BatchMode=yes", "-p", "5001", "host"];
+    const sanitized = sanitizeSpawnArgsForLogging("ssh", args);
+    expect(sanitized).toBe(args);
   });
 });
 
@@ -234,5 +273,116 @@ describe("AcpBackend transport validation", () => {
       "Connect mode is not supported by ACP runtime. Use stdio or ssh transport."
     );
     expect(backend.isConnected()).toBe(false);
+  });
+});
+
+describe("AcpBackend spawn cwd selection", () => {
+  test("uses root cwd for ssh transport spawn", async () => {
+    const originalSpawn = Bun.spawn;
+    let capturedCwd: string | undefined;
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((...args: unknown[]) => {
+      const options = (args.length === 1 ? args[0] : args[1]) as { cwd?: string } | undefined;
+      capturedCwd = options?.cwd;
+      throw new Error("mock spawn failure");
+    }) as unknown as typeof Bun.spawn;
+
+    const backend = new AcpBackend();
+    try {
+      await expect(
+        backend.connect({
+          mode: "spawn",
+          provider: "copilot",
+          transport: "ssh",
+          command: "sshpass",
+          args: ["-p", "secret", "ssh", "user@host", "--", "copilot", "--acp"],
+          directory: "/workspaces/remote-only-path",
+        }),
+      ).rejects.toThrow("Failed to spawn ACP process");
+      expect(capturedCwd).toBe("/");
+      expect(backend.isConnected()).toBe(false);
+    } finally {
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+    }
+  });
+
+  test("uses configured cwd for stdio transport spawn", async () => {
+    const originalSpawn = Bun.spawn;
+    let capturedCwd: string | undefined;
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((...args: unknown[]) => {
+      const options = (args.length === 1 ? args[0] : args[1]) as { cwd?: string } | undefined;
+      capturedCwd = options?.cwd;
+      throw new Error("mock spawn failure");
+    }) as unknown as typeof Bun.spawn;
+
+    const backend = new AcpBackend();
+    try {
+      await expect(
+        backend.connect({
+          mode: "spawn",
+          provider: "copilot",
+          transport: "stdio",
+          command: "copilot",
+          args: ["--acp"],
+          directory: "/tmp/stdio-workdir",
+        }),
+      ).rejects.toThrow("Failed to spawn ACP process");
+      expect(capturedCwd).toBe("/tmp/stdio-workdir");
+      expect(backend.isConnected()).toBe(false);
+    } finally {
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+    }
+  });
+});
+
+describe("AcpBackend process exit handling", () => {
+  test("rejects initialize request when ACP process exits early", async () => {
+    const originalSpawn = Bun.spawn;
+    let resolveExit: (code: number) => void = () => {};
+    const exited = new Promise<number>((resolve) => {
+      resolveExit = resolve;
+    });
+    const encoder = new TextEncoder();
+
+    const fakeProcess = {
+      stdin: {
+        write: () => {
+          resolveExit(255);
+        },
+      },
+      stdout: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      stderr: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode("Permission denied\n"));
+          controller.close();
+        },
+      }),
+      exited,
+    } as unknown as Bun.Subprocess;
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((..._args: unknown[]) => {
+      return fakeProcess;
+    }) as unknown as typeof Bun.spawn;
+
+    const backend = new AcpBackend();
+    try {
+      await expect(
+        backend.connect({
+          mode: "spawn",
+          provider: "copilot",
+          transport: "ssh",
+          command: "sshpass",
+          args: ["-p", "secret", "ssh", "user@host", "--", "copilot", "--acp"],
+          directory: "/workspaces/remote-path",
+        }),
+      ).rejects.toThrow("ACP process exited with code 255");
+    } finally {
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+    }
   });
 });

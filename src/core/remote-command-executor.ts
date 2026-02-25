@@ -194,30 +194,42 @@ export class CommandExecutorImpl implements CommandExecutor {
 
     const remoteCommand = [
       `cd ${quoteShell(cwd)}`,
+      "&&",
       quoteShell(command),
       ...args.map((arg) => quoteShell(arg)),
     ].join(" ");
+    const remoteShellCommand = `bash -lc ${quoteShell(remoteCommand)}`;
 
     const sshArgs = [
+      "-o",
+      "ConnectTimeout=10",
+      "-o",
+      "StrictHostKeyChecking=no",
+      "-o",
+      "UserKnownHostsFile=/dev/null",
+      "-o",
+      "LogLevel=ERROR",
+      "-o",
+      "ServerAliveInterval=15",
+      "-o",
+      "ServerAliveCountMax=1",
       "-p",
       String(this.port),
       this.user ? `${this.user}@${this.host}` : this.host,
       "--",
-      "sh",
-      "-lc",
-      remoteCommand,
+      remoteShellCommand,
     ];
 
     if (this.password && this.password.trim().length > 0) {
       return await this.execLocal(
         "sshpass",
-        ["-p", this.password, "ssh", ...sshArgs],
-        this.directory,
+        ["-p", this.password, "ssh", "-o", "NumberOfPasswordPrompts=1", ...sshArgs],
+        "/",
         timeoutMs,
       );
     }
 
-    return await this.execLocal("ssh", sshArgs, this.directory, timeoutMs);
+    return await this.execLocal("ssh", ["-o", "BatchMode=yes", ...sshArgs], "/", timeoutMs);
   }
 
   async fileExists(path: string): Promise<boolean> {

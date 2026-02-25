@@ -1057,6 +1057,37 @@ export class LoopEngine {
         await this.backend.connect(buildConnectionConfig(settings, this.workingDirectory));
         this.emitLog("info", "Backend connection re-established");
       }
+
+      const sessionLookupBackend = this.backend as Partial<Pick<AcpBackend, "getSession">>;
+      if (typeof sessionLookupBackend.getSession === "function") {
+        try {
+          const remoteSession = await sessionLookupBackend.getSession(existingSession.id);
+          if (!remoteSession) {
+            this.emitLog("warn", "Persisted session no longer exists - creating a new session", {
+              sessionId: existingSession.id,
+            });
+            await this.recreateSessionAfterSessionLoss(`Session ${existingSession.id} not found during reconnect`);
+            log.debug("[LoopEngine] reconnectSession: Recreated missing session");
+            return;
+          }
+        } catch (error) {
+          const message = String(error);
+          if (this.isSessionNotFoundError(message)) {
+            this.emitLog("warn", "Persisted session lookup reported not found - creating a new session", {
+              sessionId: existingSession.id,
+              error: message,
+            });
+            await this.recreateSessionAfterSessionLoss(message);
+            log.debug("[LoopEngine] reconnectSession: Recreated missing session after lookup error");
+            return;
+          }
+
+          this.emitLog("warn", "Failed to verify persisted session - reusing stored session id", {
+            sessionId: existingSession.id,
+            error: message,
+          });
+        }
+      }
       
       // Reuse the existing session ID
       this.sessionId = existingSession.id;
@@ -1517,66 +1548,138 @@ export class LoopEngine {
     const fullPromptText = prompt.parts.map((p) => p.text).join("\n---\n");
     this.emitLog("debug", `[Prompt] ${fullPromptText}`);
 
-    // Send prompt and collect response
-    if (!this.sessionId) {
-      throw new Error("No session ID");
-    }
+    let hasRetriedMissingSession = false;
+    let completed = false;
 
-    // Subscribe to events BEFORE sending the prompt.
-    // IMPORTANT: We must await the subscription to ensure the SSE connection is established
-    // before sending the prompt. This prevents a race condition where events are emitted
-    // by the server before we're ready to receive them.
-    log.debug("[LoopEngine] runIteration: About to subscribe to events");
-    this.emitLog("debug", "Subscribing to AI response stream");
-    const eventStream = await this.backend.subscribeToEvents(this.sessionId);
-    log.debug("[LoopEngine] runIteration: Subscription established, got event stream");
-
-    // Now send prompt asynchronously (subscription is definitely active)
-    log.debug("[LoopEngine] runIteration: About to send prompt async");
-    this.emitLog("info", "Sending prompt to AI agent...");
-    await this.backend.sendPromptAsync(this.sessionId, prompt);
-    log.debug("[LoopEngine] runIteration: sendPromptAsync completed");
-
-    try {
-      log.debug("[LoopEngine] runIteration: About to start event iteration loop");
-      
-      // Calculate activity timeout
-      const activityTimeoutMs = (this.config.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds) * 1000;
-      
-      let event: AgentEvent | null = await nextWithTimeout(eventStream, activityTimeoutMs);
-      while (event !== null) {
-        log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
-        // Check if aborted
-        if (this.aborted) {
-          if (this.injectionPending) {
-            this.emitLog("info", "Iteration interrupted for pending message injection");
-          } else {
-            this.emitLog("info", "Iteration aborted by user");
-          }
-          break;
-        }
-
-        // Update last activity timestamp
-        this.updateState({ lastActivityAt: createTimestamp() });
-
-        // Delegate event processing to the handler
-        await this.processAgentEvent(event, ctx);
-
-        // If message is complete or error occurred, stop listening
-        if (event.type === "message.complete" || event.type === "error") {
-          this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
-          break;
-        }
-
-        // Get next event with timeout
-        event = await nextWithTimeout(eventStream, activityTimeoutMs);
+    while (!completed) {
+      if (!this.sessionId) {
+        throw new Error("No session ID");
       }
-    } finally {
-      // Close the stream to abort the subscription
-      eventStream.close();
+      const activeSessionId = this.sessionId;
+
+      // Subscribe to events BEFORE sending the prompt.
+      // IMPORTANT: We must await the subscription to ensure the SSE connection is established
+      // before sending the prompt. This prevents a race condition where events are emitted
+      // by the server before we're ready to receive them.
+      log.debug("[LoopEngine] runIteration: About to subscribe to events");
+      this.emitLog("debug", "Subscribing to AI response stream");
+      const eventStream = await this.backend.subscribeToEvents(activeSessionId);
+      log.debug("[LoopEngine] runIteration: Subscription established, got event stream");
+
+      try {
+        // Now send prompt asynchronously (subscription is definitely active)
+        log.debug("[LoopEngine] runIteration: About to send prompt async");
+        this.emitLog("info", "Sending prompt to AI agent...");
+        await this.backend.sendPromptAsync(activeSessionId, prompt);
+        log.debug("[LoopEngine] runIteration: sendPromptAsync completed");
+
+        log.debug("[LoopEngine] runIteration: About to start event iteration loop");
+        
+        // Calculate activity timeout
+        const activityTimeoutMs = (this.config.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds) * 1000;
+        
+        let event: AgentEvent | null = await nextWithTimeout(eventStream, activityTimeoutMs);
+        while (event !== null) {
+          log.trace("[LoopEngine] runIteration: Received event", { type: event.type });
+          // Check if aborted
+          if (this.aborted) {
+            if (this.injectionPending) {
+              this.emitLog("info", "Iteration interrupted for pending message injection");
+            } else {
+              this.emitLog("info", "Iteration aborted by user");
+            }
+            break;
+          }
+
+          // Update last activity timestamp
+          this.updateState({ lastActivityAt: createTimestamp() });
+
+          // Delegate event processing to the handler
+          await this.processAgentEvent(event, ctx);
+
+          if (event.type === "error" && ctx.error && this.isSessionNotFoundError(ctx.error)) {
+            throw new Error(ctx.error);
+          }
+
+          // If message is complete or error occurred, stop listening
+          if (event.type === "message.complete" || event.type === "error") {
+            this.emitLog("debug", `Breaking out of event stream: ${event.type}`);
+            break;
+          }
+
+          // Get next event with timeout
+          event = await nextWithTimeout(eventStream, activityTimeoutMs);
+        }
+
+        completed = true;
+      } catch (error) {
+        const message = String(error);
+        if (!hasRetriedMissingSession && this.isSessionNotFoundError(message)) {
+          hasRetriedMissingSession = true;
+          this.emitLog("warn", "Session not found during prompt execution - recreating session and retrying once", {
+            sessionId: activeSessionId,
+            error: message,
+          });
+          await this.recreateSessionAfterSessionLoss(message);
+          this.resetIterationContextForRetry(ctx);
+          continue;
+        }
+
+        throw error;
+      } finally {
+        // Close the stream to abort the subscription
+        eventStream.close();
+      }
     }
 
     this.emitLog("debug", "Exited event stream loop", { outcome: ctx.outcome, error: ctx.error });
+  }
+
+  /**
+   * Detect if an error indicates that an ACP session no longer exists remotely.
+   */
+  private isSessionNotFoundError(message: string): boolean {
+    const normalized = message.toLowerCase();
+    return (
+      (normalized.includes("session") && normalized.includes("not found")) ||
+      normalized.includes("unknown session")
+    );
+  }
+
+  /**
+   * Reset transient per-iteration state before retrying a prompt with a new session.
+   */
+  private resetIterationContextForRetry(ctx: IterationContext): void {
+    ctx.responseContent = "";
+    ctx.reasoningContent = "";
+    ctx.messageCount = 0;
+    ctx.toolCallCount = 0;
+    ctx.outcome = "continue";
+    ctx.error = undefined;
+    ctx.currentMessageId = null;
+    ctx.toolCalls.clear();
+    ctx.currentResponseLogId = null;
+    ctx.currentResponseLogContent = "";
+    ctx.currentReasoningLogId = null;
+    ctx.currentReasoningLogContent = "";
+  }
+
+  /**
+   * Recreate the current ACP session after remote session loss.
+   */
+  private async recreateSessionAfterSessionLoss(reason: string): Promise<void> {
+    const previousSessionId = this.sessionId;
+    this.emitLog("warn", "Recreating AI session after session loss", {
+      reason,
+      previousSessionId,
+    });
+    this.sessionId = null;
+    this.updateState({ session: undefined });
+    await this.setupSession();
+    this.emitLog("info", "AI session recreated", {
+      previousSessionId,
+      newSessionId: this.sessionId,
+    });
   }
 
   /**

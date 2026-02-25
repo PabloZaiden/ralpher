@@ -1761,6 +1761,138 @@ describe("StopPatternDetector", () => {
     });
   });
 
+  describe("session recovery", () => {
+    test("reconnectSession recreates a missing persisted session", async () => {
+      const loop = createTestLoop();
+      loop.state.status = "planning";
+      loop.state.planMode = {
+        active: true,
+        feedbackRounds: 1,
+        planningFolderCleared: false,
+        isPlanReady: true,
+      };
+      loop.state.git = {
+        originalBranch: "master",
+        workingBranch: "ralph/test-loop",
+        worktreePath: testDir,
+        commits: [],
+      };
+      loop.state.session = {
+        id: "stale-session",
+        serverUrl: "ssh://example:22",
+      };
+
+      let connected = false;
+      let createdSessionCount = 0;
+      const lookedUpSessionIds: string[] = [];
+
+      mockBackend = {
+        ...createMockBackend([]),
+        isConnected(): boolean {
+          return connected;
+        },
+        async connect(_config: BackendConnectionConfig): Promise<void> {
+          connected = true;
+        },
+        async createSession(options: CreateSessionOptions): Promise<AgentSession> {
+          createdSessionCount += 1;
+          return {
+            id: `new-session-${createdSessionCount}`,
+            title: options.title,
+            createdAt: new Date().toISOString(),
+          };
+        },
+        async getSession(sessionId: string): Promise<AgentSession | null> {
+          lookedUpSessionIds.push(sessionId);
+          return null;
+        },
+      } as LoopBackend;
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.reconnectSession();
+
+      expect(lookedUpSessionIds).toEqual(["stale-session"]);
+      expect(createdSessionCount).toBe(1);
+      expect(engine.state.session?.id).toBe("new-session-1");
+    });
+
+    test("recreates the session and retries once on session-not-found prompt errors", async () => {
+      const loop = createTestLoop();
+      let connected = false;
+      let createdSessionCount = 0;
+      let pendingPromptSession: string | null = null;
+      let streamAttempt = 0;
+      const promptSessions: string[] = [];
+
+      mockBackend = {
+        ...createMockBackend([]),
+        isConnected(): boolean {
+          return connected;
+        },
+        async connect(_config: BackendConnectionConfig): Promise<void> {
+          connected = true;
+        },
+        async createSession(options: CreateSessionOptions): Promise<AgentSession> {
+          createdSessionCount += 1;
+          return {
+            id: `session-${createdSessionCount}`,
+            title: options.title,
+            createdAt: new Date().toISOString(),
+          };
+        },
+        async sendPromptAsync(sessionId: string, _prompt: PromptInput): Promise<void> {
+          promptSessions.push(sessionId);
+          pendingPromptSession = sessionId;
+        },
+        async subscribeToEvents(sessionId: string): Promise<EventStream<AgentEvent>> {
+          const { stream, push, end } = createEventStream<AgentEvent>();
+
+          (async () => {
+            let attempts = 0;
+            while (pendingPromptSession !== sessionId && attempts < 100) {
+              await new Promise((resolve) => setTimeout(resolve, 10));
+              attempts++;
+            }
+            pendingPromptSession = null;
+
+            streamAttempt += 1;
+            if (streamAttempt === 1) {
+              push({ type: "error", message: `Session ${sessionId} not found` });
+              end();
+              return;
+            }
+
+            push({ type: "message.start", messageId: `msg-${Date.now()}` });
+            push({ type: "message.delta", content: "Recovered response <promise>COMPLETE</promise>" });
+            push({ type: "message.complete", content: "Recovered response <promise>COMPLETE</promise>" });
+            end();
+          })();
+
+          return stream;
+        },
+      } as LoopBackend;
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService,
+        eventEmitter: emitter,
+      });
+
+      await engine.start();
+
+      expect(promptSessions).toEqual(["session-1", "session-2"]);
+      expect(engine.state.session?.id).toBe("session-2");
+      expect(engine.state.status).toBe("completed");
+    }, 10000);
+  });
+
   describe("abortSessionOnly", () => {
     test("emits loop.session_aborted event", async () => {
       const loop = createTestLoop();
