@@ -8,13 +8,42 @@ type PrivateBackend = {
   sessionSubscribers: Map<string, Set<(event: unknown) => void>>;
   pendingPermissionRequests: Map<string, { rpcId: number; options: Array<{ optionId: string; kind?: string }> }>;
   toolCallNames: Map<string, string>;
+  sessionPromptSequences: Map<string, number>;
   connected: boolean;
   process: { stdin: { write: (line: string) => void } } | null;
   replyToPermission(requestId: string, response: string): Promise<void>;
+  sendRpcRequest<T>(
+    method: string,
+    params: Record<string, unknown>,
+    timeoutMs?: number,
+  ): Promise<T>;
+  sendPromptAsync(
+    sessionId: string,
+    prompt: { parts: Array<{ type: "text"; text: string }> },
+  ): Promise<void>;
 };
 
 function getBackend(): PrivateBackend {
   return new OpenCodeBackend() as unknown as PrivateBackend;
+}
+
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+} {
+  let resolveFn!: (value: T) => void;
+  let rejectFn!: (error: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolveFn = resolve;
+    rejectFn = reject;
+  });
+
+  return {
+    promise,
+    resolve: resolveFn,
+    reject: rejectFn,
+  };
 }
 
 describe("OpenCodeBackend ACP parsing", () => {
@@ -123,6 +152,64 @@ describe("OpenCodeBackend ACP parsing", () => {
       output: { content: "/tmp" },
     });
     expect(backend.toolCallNames.has("call-1")).toBe(false);
+  });
+
+  test("maps failed tool_call_update to tool.complete (non-fatal)", () => {
+    const backend = getBackend();
+    const sessionId = "session-2b";
+    const events: Array<Record<string, unknown>> = [];
+
+    backend.sessionSubscribers.set(
+      sessionId,
+      new Set([
+        (event: unknown) => {
+          events.push(event as Record<string, unknown>);
+        },
+      ]),
+    );
+
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId,
+        update: {
+          sessionUpdate: "tool_call",
+          toolCallId: "call-fail-1",
+          kind: "read",
+          rawInput: { path: "/tmp/missing.txt" },
+        },
+      },
+    });
+
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId,
+        update: {
+          sessionUpdate: "tool_call_update",
+          toolCallId: "call-fail-1",
+          status: "failed",
+          rawOutput: { message: "file not found" },
+        },
+      },
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events[0]).toMatchObject({
+      type: "tool.start",
+      toolName: "read",
+    });
+    expect(events[1]).toEqual({
+      type: "tool.complete",
+      toolName: "read",
+      output: {
+        message: "file not found",
+        status: "failed",
+        error: "file not found",
+      },
+    });
   });
 
   test("emits todo.updated when tool_call input carries checklist todos", () => {
@@ -303,5 +390,58 @@ describe("OpenCodeBackend ACP parsing", () => {
         },
       },
     });
+  });
+
+  test("ignores stale message.complete from previous async prompt", async () => {
+    const backend = getBackend();
+    const sessionId = "session-stale";
+    const events: Array<Record<string, unknown>> = [];
+
+    backend.connected = true;
+    backend.process = {
+      stdin: {
+        write: () => {
+          // no-op
+        },
+      },
+    };
+    backend.sessionSubscribers.set(
+      sessionId,
+      new Set([
+        (event: unknown) => {
+          events.push(event as Record<string, unknown>);
+        },
+      ]),
+    );
+
+    const firstPrompt = createDeferred<unknown>();
+    const secondPrompt = createDeferred<unknown>();
+    let promptCallCount = 0;
+    backend.sendRpcRequest = ((method: string) => {
+      if (method !== "session/prompt") {
+        return Promise.resolve({}) as Promise<unknown>;
+      }
+      promptCallCount += 1;
+      return promptCallCount === 1 ? firstPrompt.promise : secondPrompt.promise;
+    }) as PrivateBackend["sendRpcRequest"];
+
+    await backend.sendPromptAsync(sessionId, { parts: [{ type: "text", text: "first" }] });
+    await backend.sendPromptAsync(sessionId, { parts: [{ type: "text", text: "second" }] });
+
+    firstPrompt.resolve({ stopReason: "end_turn" });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(events).toHaveLength(0);
+
+    secondPrompt.resolve({ stopReason: "end_turn" });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(events).toEqual([
+      {
+        type: "message.complete",
+        content: "",
+      },
+    ]);
   });
 });

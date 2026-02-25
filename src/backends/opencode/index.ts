@@ -328,6 +328,9 @@ export class OpenCodeBackend implements Backend {
   /** Track whether message.start has been emitted for active prompt per session */
   private sessionMessageStarted = new Map<string, boolean>();
 
+  /** Monotonic per-session prompt sequence to ignore stale async completions */
+  private sessionPromptSequences = new Map<string, number>();
+
   /** Cache sessions and model discovery results */
   private sessionCache = new Map<string, AgentSession>();
   private modelCache = new Map<string, ModelInfo[]>();
@@ -435,6 +438,7 @@ export class OpenCodeBackend implements Backend {
 
     this.sessionSubscribers.clear();
     this.sessionMessageStarted.clear();
+    this.sessionPromptSequences.clear();
     this.sessionCache.clear();
     this.modelCache.clear();
     this.pendingPermissionRequests.clear();
@@ -767,22 +771,38 @@ export class OpenCodeBackend implements Backend {
         updateObj["state"],
       );
 
-      if (status === "completed" || status === "success") {
+      if (
+        status === "completed"
+        || status === "success"
+        || status === "failed"
+        || status === "error"
+        || status === "cancelled"
+        || status === "canceled"
+      ) {
+        const rawOutput = isRecord(updateObj["rawOutput"]) ? updateObj["rawOutput"] : {};
+        const errorMessage = firstString(content["error"], updateObj["error"], rawOutput["message"]);
+        const baseOutput = content["output"] ?? updateObj["output"] ?? updateObj["rawOutput"] ?? content["content"] ?? updateObj["content"];
+        const isFailure = status === "failed" || status === "error";
+        const output = isFailure
+          ? isRecord(baseOutput)
+            ? {
+              ...baseOutput,
+              status,
+              ...(errorMessage ? { error: errorMessage } : {}),
+            }
+            : {
+              status,
+              ...(errorMessage ? { error: errorMessage } : {}),
+              ...(baseOutput !== undefined ? { output: baseOutput } : {}),
+            }
+          : baseOutput ?? {};
+
         this.emitSessionEvent(sessionId, {
           type: "tool.complete",
           toolName,
-          output: content["output"] ?? updateObj["output"] ?? updateObj["rawOutput"] ?? content["content"] ?? updateObj["content"] ?? {},
+          output,
         });
         this.maybeEmitTodoUpdateFromToolPayload(sessionId, updateObj, content);
-        if (toolCallId) {
-          this.toolCallNames.delete(toolCallId);
-        }
-      } else if (status === "failed" || status === "error") {
-        const rawOutput = isRecord(updateObj["rawOutput"]) ? updateObj["rawOutput"] : {};
-        this.emitSessionEvent(sessionId, {
-          type: "error",
-          message: firstString(content["error"], updateObj["error"], rawOutput["message"]) ?? `Tool ${toolName} failed`,
-        });
         if (toolCallId) {
           this.toolCallNames.delete(toolCallId);
         }
@@ -1088,6 +1108,7 @@ export class OpenCodeBackend implements Backend {
     this.sessionCache.delete(id);
     this.sessionSubscribers.delete(id);
     this.sessionMessageStarted.delete(id);
+    this.sessionPromptSequences.delete(id);
     this.sessionTodoSnapshots.delete(id);
   }
 
@@ -1187,21 +1208,31 @@ export class OpenCodeBackend implements Backend {
   async sendPromptAsync(sessionId: string, prompt: PromptInput): Promise<void> {
     this.ensureConnected();
     this.sessionMessageStarted.set(sessionId, false);
+    const sequence = (this.sessionPromptSequences.get(sessionId) ?? 0) + 1;
+    this.sessionPromptSequences.set(sessionId, sequence);
 
     void this.sendRpcRequest("session/prompt", this.buildPromptParams(sessionId, prompt))
       .then(() => {
+        if (this.sessionPromptSequences.get(sessionId) !== sequence) {
+          return;
+        }
         this.emitSessionEvent(sessionId, {
           type: "message.complete",
           content: "",
         });
         this.sessionMessageStarted.delete(sessionId);
+        this.sessionPromptSequences.delete(sessionId);
       })
       .catch((error) => {
+        if (this.sessionPromptSequences.get(sessionId) !== sequence) {
+          return;
+        }
         this.emitSessionEvent(sessionId, {
           type: "error",
           message: String(error),
         });
         this.sessionMessageStarted.delete(sessionId);
+        this.sessionPromptSequences.delete(sessionId);
       });
   }
 
