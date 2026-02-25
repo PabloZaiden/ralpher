@@ -332,6 +332,9 @@ export class OpenCodeBackend implements Backend {
   /** Monotonic per-session prompt sequence to ignore stale async completions */
   private sessionPromptSequences = new Map<string, number>();
 
+  /** Whether the active async prompt has produced meaningful activity */
+  private sessionPromptHasActivity = new Map<string, boolean>();
+
   /** Cache sessions and model discovery results */
   private sessionCache = new Map<string, AgentSession>();
   private modelCache = new Map<string, ModelInfo[]>();
@@ -440,6 +443,7 @@ export class OpenCodeBackend implements Backend {
     this.sessionSubscribers.clear();
     this.sessionMessageStarted.clear();
     this.sessionPromptSequences.clear();
+    this.sessionPromptHasActivity.clear();
     this.sessionCache.clear();
     this.modelCache.clear();
     this.pendingPermissionRequests.clear();
@@ -644,6 +648,9 @@ export class OpenCodeBackend implements Backend {
           return;
         }
         const hasActivePrompt = this.sessionPromptSequences.has(sessionId);
+        if (hasActivePrompt && (status === "busy" || status === "retry")) {
+          this.sessionPromptHasActivity.set(sessionId, true);
+        }
         this.emitSessionEvent(sessionId, {
           type: "session.status",
           sessionId,
@@ -651,13 +658,15 @@ export class OpenCodeBackend implements Backend {
           attempt: getNumber(message.params["attempt"]),
           message: getString(message.params["message"]),
         });
-        if (status === "idle" && hasActivePrompt) {
+        const hasPromptActivity = this.sessionPromptHasActivity.get(sessionId) ?? false;
+        if (status === "idle" && hasActivePrompt && hasPromptActivity) {
           this.emitSessionEvent(sessionId, {
             type: "message.complete",
             content: "",
           });
           this.sessionMessageStarted.delete(sessionId);
           this.sessionPromptSequences.delete(sessionId);
+          this.sessionPromptHasActivity.delete(sessionId);
         }
         return;
       }
@@ -712,6 +721,9 @@ export class OpenCodeBackend implements Backend {
     }
 
     if (updateType === "agent_message_chunk") {
+      if (this.sessionPromptSequences.has(sessionId)) {
+        this.sessionPromptHasActivity.set(sessionId, true);
+      }
       const text = getString(content["text"]) ?? "";
       if (!this.sessionMessageStarted.get(sessionId)) {
         this.sessionMessageStarted.set(sessionId, true);
@@ -730,6 +742,9 @@ export class OpenCodeBackend implements Backend {
     }
 
     if (updateType === "agent_thought_chunk") {
+      if (this.sessionPromptSequences.has(sessionId)) {
+        this.sessionPromptHasActivity.set(sessionId, true);
+      }
       const text = getString(content["text"]) ?? "";
       if (text.length > 0) {
         this.emitSessionEvent(sessionId, {
@@ -741,6 +756,9 @@ export class OpenCodeBackend implements Backend {
     }
 
     if (updateType === "tool_call") {
+      if (this.sessionPromptSequences.has(sessionId)) {
+        this.sessionPromptHasActivity.set(sessionId, true);
+      }
       const toolCallId = firstString(updateObj["toolCallId"], content["toolCallId"]);
       const toolName = firstString(
         content["toolName"],
@@ -764,6 +782,9 @@ export class OpenCodeBackend implements Backend {
     }
 
     if (updateType === "tool_call_update") {
+      if (this.sessionPromptSequences.has(sessionId)) {
+        this.sessionPromptHasActivity.set(sessionId, true);
+      }
       const toolCallId = firstString(updateObj["toolCallId"], content["toolCallId"]);
       const toolName = firstString(
         content["toolName"],
@@ -1119,6 +1140,7 @@ export class OpenCodeBackend implements Backend {
     this.sessionSubscribers.delete(id);
     this.sessionMessageStarted.delete(id);
     this.sessionPromptSequences.delete(id);
+    this.sessionPromptHasActivity.delete(id);
     this.sessionTodoSnapshots.delete(id);
   }
 
@@ -1221,6 +1243,7 @@ export class OpenCodeBackend implements Backend {
     this.sessionMessageStarted.set(sessionId, false);
     const sequence = (this.sessionPromptSequences.get(sessionId) ?? 0) + 1;
     this.sessionPromptSequences.set(sessionId, sequence);
+    this.sessionPromptHasActivity.set(sessionId, false);
 
     void this.sendRpcRequest("session/prompt", this.buildPromptParams(sessionId, prompt), PROMPT_REQUEST_TIMEOUT_MS)
       .then(() => {
@@ -1233,6 +1256,7 @@ export class OpenCodeBackend implements Backend {
         });
         this.sessionMessageStarted.delete(sessionId);
         this.sessionPromptSequences.delete(sessionId);
+        this.sessionPromptHasActivity.delete(sessionId);
       })
       .catch((error) => {
         if (this.sessionPromptSequences.get(sessionId) !== sequence) {
@@ -1251,6 +1275,7 @@ export class OpenCodeBackend implements Backend {
         });
         this.sessionMessageStarted.delete(sessionId);
         this.sessionPromptSequences.delete(sessionId);
+        this.sessionPromptHasActivity.delete(sessionId);
       });
   }
 

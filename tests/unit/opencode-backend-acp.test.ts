@@ -392,9 +392,65 @@ describe("OpenCodeBackend ACP parsing", () => {
     });
   });
 
-  test("emits message.complete when session becomes idle with an active prompt", () => {
+  test("emits message.complete when session becomes idle after prompt activity", () => {
     const backend = getBackend();
     const sessionId = "session-idle-complete";
+    const events: Array<Record<string, unknown>> = [];
+
+    backend.sessionSubscribers.set(
+      sessionId,
+      new Set([
+        (event: unknown) => {
+          events.push(event as Record<string, unknown>);
+        },
+      ]),
+    );
+    backend.sessionPromptSequences.set(sessionId, 1);
+
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/status",
+      params: {
+        sessionId,
+        status: "busy",
+      },
+    });
+
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/status",
+      params: {
+        sessionId,
+        status: "idle",
+      },
+    });
+
+    expect(events).toEqual([
+      {
+        type: "session.status",
+        sessionId,
+        status: "busy",
+        attempt: undefined,
+        message: undefined,
+      },
+      {
+        type: "session.status",
+        sessionId,
+        status: "idle",
+        attempt: undefined,
+        message: undefined,
+      },
+      {
+        type: "message.complete",
+        content: "",
+      },
+    ]);
+    expect(backend.sessionPromptSequences.has(sessionId)).toBe(false);
+  });
+
+  test("does not emit message.complete for idle status before prompt activity", () => {
+    const backend = getBackend();
+    const sessionId = "session-idle-no-activity";
     const events: Array<Record<string, unknown>> = [];
 
     backend.sessionSubscribers.set(
@@ -424,12 +480,8 @@ describe("OpenCodeBackend ACP parsing", () => {
         attempt: undefined,
         message: undefined,
       },
-      {
-        type: "message.complete",
-        content: "",
-      },
     ]);
-    expect(backend.sessionPromptSequences.has(sessionId)).toBe(false);
+    expect(backend.sessionPromptSequences.has(sessionId)).toBe(true);
   });
 
   test("does not emit error for session/prompt timeout in async mode", async () => {
@@ -466,6 +518,90 @@ describe("OpenCodeBackend ACP parsing", () => {
     await Promise.resolve();
 
     expect(events).toEqual([]);
+  });
+
+  test("recovers after prompt error and only completes next prompt after activity", async () => {
+    const backend = getBackend();
+    const sessionId = "session-error-recovery";
+    const events: Array<Record<string, unknown>> = [];
+
+    backend.connected = true;
+    backend.process = {
+      stdin: {
+        write: () => {
+          // no-op
+        },
+      },
+    };
+    backend.sessionSubscribers.set(
+      sessionId,
+      new Set([
+        (event: unknown) => {
+          events.push(event as Record<string, unknown>);
+        },
+      ]),
+    );
+
+    const secondPrompt = createDeferred<unknown>();
+    let promptCallCount = 0;
+    backend.sendRpcRequest = ((method: string) => {
+      if (method !== "session/prompt") {
+        return Promise.resolve({}) as Promise<unknown>;
+      }
+      promptCallCount += 1;
+      if (promptCallCount === 1) {
+        return Promise.reject(new Error("Backend exploded"));
+      }
+      return secondPrompt.promise;
+    }) as PrivateBackend["sendRpcRequest"];
+
+    await backend.sendPromptAsync(sessionId, { parts: [{ type: "text", text: "first" }] });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(events.some((event) => event["type"] === "error")).toBe(true);
+
+    events.length = 0;
+    await backend.sendPromptAsync(sessionId, { parts: [{ type: "text", text: "second" }] });
+
+    // Idle can arrive before the next response starts; that must not complete the turn.
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/status",
+      params: {
+        sessionId,
+        status: "idle",
+      },
+    });
+    expect(events.filter((event) => event["type"] === "message.complete")).toHaveLength(0);
+
+    // Real activity for the new prompt, then idle completion.
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId,
+        update: {
+          sessionUpdate: "agent_message_chunk",
+          content: { text: "Doing real work" },
+        },
+      },
+    });
+    backend.handleRpcMessage({
+      jsonrpc: "2.0",
+      method: "session/status",
+      params: {
+        sessionId,
+        status: "idle",
+      },
+    });
+
+    expect(events.some((event) => event["type"] === "message.delta" && event["content"] === "Doing real work")).toBe(true);
+    expect(events.filter((event) => event["type"] === "message.complete")).toHaveLength(1);
+
+    secondPrompt.resolve({ stopReason: "end_turn" });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(events.filter((event) => event["type"] === "message.complete")).toHaveLength(1);
   });
 
   test("ignores stale message.complete from previous async prompt", async () => {
