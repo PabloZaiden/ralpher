@@ -385,4 +385,51 @@ describe("AcpBackend process exit handling", () => {
       (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
     }
   });
+
+  test("includes auth hint for sshpass exit code 5", async () => {
+    const originalSpawn = Bun.spawn;
+    let resolveExit: (code: number) => void = () => {};
+    const exited = new Promise<number>((resolve) => {
+      resolveExit = resolve;
+    });
+
+    const fakeProcess = {
+      stdin: {
+        write: () => {
+          resolveExit(5);
+        },
+      },
+      stdout: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      stderr: new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.close();
+        },
+      }),
+      exited,
+    } as unknown as Bun.Subprocess;
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((..._args: unknown[]) => {
+      return fakeProcess;
+    }) as unknown as typeof Bun.spawn;
+
+    const backend = new AcpBackend();
+    try {
+      await expect(
+        backend.connect({
+          mode: "spawn",
+          provider: "copilot",
+          transport: "ssh",
+          command: "sshpass",
+          args: ["-p", "secret", "ssh", "user@host", "--", "copilot", "--acp"],
+          directory: "/workspaces/remote-path",
+        }),
+      ).rejects.toThrow("sshpass reported authentication failure");
+    } finally {
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+    }
+  });
 });
