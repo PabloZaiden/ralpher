@@ -9,5 +9,4 @@ curl -fsSL https://opencode.ai/install | bash
 curl -fsSL https://gh.io/copilot-install | bash
 
 # install sshpass
-apt-get update && apt-get install -y sshpass
-
+sudo apt-get update && sudo apt-get install -y sshpass
