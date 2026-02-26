@@ -37,7 +37,7 @@ function quoteShell(value: string): string {
 }
 
 export function buildSshRemoteShellCommand(remoteCommand: string): string {
-  const wrappedRemoteCommand = `if [ -f ~/.bashrc ]; then source ~/.bashrc >/dev/null 2>&1; fi; ${remoteCommand}`;
+  const wrappedRemoteCommand = `if [ -f ~/.profile ]; then source ~/.profile >/dev/null 2>&1; fi; ${remoteCommand}`;
   return `bash -lc ${quoteShell(wrappedRemoteCommand)}`;
 }
 
