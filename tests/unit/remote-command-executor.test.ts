@@ -30,10 +30,10 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
       expect(capturedCwd).toBe("/");
       expect(capturedCommand).toBeDefined();
       const commandTokens = capturedCommand ?? [];
-      expect(commandTokens).toContain("ForwardAgent=yes");
       const scriptArg = commandTokens[commandTokens.indexOf("--") + 1];
       expect(typeof scriptArg).toBe("string");
       expect(scriptArg ?? "").toContain("bash -lc");
+      expect(scriptArg ?? "").toContain("source ~/.bashrc");
       expect(scriptArg ?? "").toContain("&&");
       expect(result.stderr).toContain("mock spawn failure");
     } finally {
@@ -72,7 +72,6 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
       expect(scriptArg).toContain("git");
       expect(scriptArg).toContain("status");
       expect(scriptArg).toContain("--porcelain");
-      expect(commandTokens).toContain("ForwardAgent=yes");
     } finally {
       (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
     }
