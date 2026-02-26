@@ -36,6 +36,11 @@ function quoteShell(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
+export function buildSshRemoteShellCommand(remoteCommand: string): string {
+  const wrappedRemoteCommand = `if [ -f ~/.bashrc ]; then source ~/.bashrc >/dev/null 2>&1; fi; ${remoteCommand}`;
+  return `bash -lc ${quoteShell(wrappedRemoteCommand)}`;
+}
+
 /**
  * CommandExecutorImpl executes commands either locally or over SSH.
  * Commands are queued to ensure only one runs at a time per executor instance.
@@ -200,8 +205,7 @@ export class CommandExecutorImpl implements CommandExecutor {
       quoteShell(command),
       ...args.map((arg) => quoteShell(arg)),
     ].join(" ");
-    const wrappedRemoteCommand = `if [ -f ~/.bashrc ]; then source ~/.bashrc >/dev/null 2>&1; fi; ${remoteCommand}`;
-    const remoteShellCommand = `bash -lc ${quoteShell(wrappedRemoteCommand)}`;
+    const remoteShellCommand = buildSshRemoteShellCommand(remoteCommand);
 
     const sshArgs = [
       "-o",
