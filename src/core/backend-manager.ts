@@ -17,7 +17,7 @@ import {
 import { loopEventEmitter } from "./event-emitter";
 import type { LoopEvent } from "../types/events";
 import type { CommandExecutor } from "./command-executor";
-import { CommandExecutorImpl } from "./remote-command-executor";
+import { CommandExecutorImpl, buildSshRemoteShellCommand } from "./remote-command-executor";
 import { GitService } from "./git-service";
 import { log } from "./logger";
 
@@ -53,10 +53,6 @@ function getProviderAcpCommand(provider: "opencode" | "copilot"): { command: str
   return { command: "opencode", args: ["acp"] };
 }
 
-function quoteShell(value: string): string {
-  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
-}
-
 function deriveExecutionSettings(settings: ServerSettings): DerivedExecutionSettings {
   if (settings.agent.transport === "ssh") {
     return {
@@ -75,7 +71,7 @@ function buildAgentRuntimeCommand(settings: ServerSettings): { command: string; 
   const provider = settings.agent.provider;
   const providerCommand = getProviderAcpCommand(provider);
   const providerInvocation = [providerCommand.command, ...providerCommand.args].join(" ");
-  const remoteCommand = `bash -lc ${quoteShell(providerInvocation)}`;
+  const remoteCommand = buildSshRemoteShellCommand(providerInvocation);
 
   if (settings.agent.transport === "stdio") {
     return providerCommand;
