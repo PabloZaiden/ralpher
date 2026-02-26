@@ -54,6 +54,6 @@ describe("buildConnectionConfig SSH command options", () => {
     expect(args[args.length - 1]).toContain("bash -lc");
     expect(args[args.length - 1]).toContain("copilot");
     expect(args[args.length - 1]).toContain("--acp");
-    expect(args[args.length - 1]).toContain("source ~/.bashrc");
+    expect(args[args.length - 1]).toContain("source ~/.profile");
   });
 });
