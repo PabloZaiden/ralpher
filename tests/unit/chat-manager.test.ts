@@ -121,6 +121,40 @@ describe("LoopManager - Chat Mode", () => {
       expect(updated!.state.status).toMatch(/completed|max_iterations/);
     });
 
+    test("preserves user message history across turns and reload", async () => {
+      const loop = await ctx.manager.createChat({
+        ...testModelFields,
+        directory: ctx.workDir,
+        prompt: "First user message",
+        workspaceId: testWorkspaceId,
+      });
+
+      await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"]);
+
+      await ctx.manager.sendChatMessage(loop.config.id, "Second user message");
+      await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"], 15000);
+
+      const inMemoryLoop = await ctx.manager.getLoop(loop.config.id);
+      const inMemoryUserMessages = (inMemoryLoop!.state.messages ?? []).filter((message) => message.role === "user");
+      expect(inMemoryUserMessages.map((message) => message.content)).toEqual([
+        "First user message",
+        "Second user message",
+      ]);
+      expect(new Set(inMemoryUserMessages.map((message) => message.id)).size).toBe(2);
+
+      // Simulate a refresh-after-restart path by forcing a DB load.
+      // @ts-expect-error - accessing private field for test purposes
+      ctx.manager.engines.delete(loop.config.id);
+
+      const persistedLoop = await ctx.manager.getLoop(loop.config.id);
+      const persistedUserMessages = (persistedLoop!.state.messages ?? []).filter((message) => message.role === "user");
+      expect(persistedUserMessages.map((message) => message.content)).toEqual([
+        "First user message",
+        "Second user message",
+      ]);
+      expect(new Set(persistedUserMessages.map((message) => message.id)).size).toBe(2);
+    });
+
     test("rejects sending message to a non-chat loop", async () => {
       // Create a regular loop (not a chat) and manually set it to completed
       // to avoid needing to run the engine

@@ -313,6 +313,55 @@ describe("User Message Logging", () => {
       expect(userMsgEvents[0]!.message.content).toBe("Please also add tests");
     });
 
+    test("injected messages from separate runs keep unique persisted IDs", async () => {
+      const loop = createLoop({
+        mode: "loop",
+        prompt: "Original goal",
+        maxIterations: 1,
+      });
+      loop.state.git = {
+        originalBranch: "main",
+        workingBranch: "ralph/test",
+        worktreePath: testDir,
+        commits: [],
+      };
+      loop.state.pendingPrompt = "First injected message";
+      const backend = createMockBackend([
+        "Run one done <promise>COMPLETE</promise>",
+        "Run two done <promise>COMPLETE</promise>",
+      ]);
+
+      const firstEngine = new LoopEngine({
+        loop,
+        backend,
+        gitService,
+        eventEmitter: emitter,
+        skipGitSetup: true,
+      });
+      await firstEngine.start();
+
+      // Simulate jumpstart-like restart with a new injected message.
+      loop.state.status = "stopped";
+      loop.state.completedAt = undefined;
+      loop.state.pendingPrompt = "Second injected message";
+
+      const secondEngine = new LoopEngine({
+        loop,
+        backend,
+        gitService,
+        eventEmitter: emitter,
+        skipGitSetup: true,
+      });
+      await secondEngine.start();
+
+      const persistedUserMessages = (loop.state.messages ?? []).filter((message) => message.role === "user");
+      expect(persistedUserMessages.map((message) => message.content)).toEqual([
+        "First injected message",
+        "Second injected message",
+      ]);
+      expect(new Set(persistedUserMessages.map((message) => message.id)).size).toBe(2);
+    });
+
     test("first execution uses deterministic 'initial-goal' ID suffix", async () => {
       const loop = createLoop({
         mode: "loop",

@@ -2180,9 +2180,14 @@ When the updated plan is ready, end your response with:
     const userMessage = this.loop.state.pendingPrompt;
 
     // Log the user's chat message so it appears in the conversation thread.
-    // For the first message, pendingPrompt is undefined — use config.prompt instead.
+    // For the first message, pendingPrompt is undefined — use config.prompt and
+    // a stable deterministic ID. For follow-up chat turns, use a unique suffix
+    // because currentIteration resets to 1 every turn in chat mode.
     const messageToLog = userMessage ?? this.config.prompt;
-    this.emitUserMessage(messageToLog);
+    const userMessageIdSuffix = userMessage
+      ? `chat-turn-${crypto.randomUUID()}`
+      : "initial-goal";
+    this.emitUserMessage(messageToLog, userMessageIdSuffix);
 
     // Clear the pending prompt after consumption
     this.updateState({ pendingPrompt: undefined });
@@ -2217,7 +2222,7 @@ When the updated plan is ready, end your response with:
     // On the first iteration (no pending prompt), log the original goal.
     // On subsequent iterations with an injected message, log that message.
     if (userMessage) {
-      this.emitUserMessage(userMessage);
+      this.emitUserMessage(userMessage, `injected-${crypto.randomUUID()}`);
       this.emitLog("info", "User injected a new message", {
         originalGoal: this.config.prompt.slice(0, 50) + (this.config.prompt.length > 50 ? "..." : ""),
         userMessage: userMessage.slice(0, 50) + (userMessage.length > 50 ? "..." : ""),
