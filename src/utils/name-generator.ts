@@ -49,7 +49,7 @@ export function sanitizeLoopName(name: string): string {
  * Generate a fallback name from the prompt using simple heuristics.
  * Extracts key words from the first 100 chars of the prompt.
  */
-function generateFallbackName(prompt: string): string {
+export function generateFallbackName(prompt: string): string {
   // Take first 100 chars, split by spaces, take first 8 words
   const words = prompt
     .slice(0, 100)

@@ -30,7 +30,7 @@ import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
 import { log } from "./logger";
 import { sanitizeBranchName } from "../utils";
-import { generateLoopName } from "../utils/name-generator";
+import { generateLoopName, generateFallbackName } from "../utils/name-generator";
 import { assertValidTransition } from "./loop-state-machine";
 
 /**
@@ -127,18 +127,23 @@ export class LoopManager {
     options: Pick<CreateLoopOptions, "draft" | "prompt" | "directory" | "workspaceId">,
     timestamp: string
   ): Promise<string> {
-    // For drafts, skip AI title generation and use prompt-based fallback
+    // For drafts, skip AI title generation and use heuristic fallback
     // This avoids backend interference issues and makes draft creation faster
     if (options.draft) {
-      const fallbackName = options.prompt.slice(0, 50).trim();
-      const name = fallbackName || `Draft ${timestamp.slice(0, 10)}`;
-      log.debug("createLoop - Using prompt-based name for draft", { generatedName: name });
+      const name = generateFallbackName(options.prompt) || `Draft ${timestamp.slice(0, 10)}`;
+      log.debug("createLoop - Using heuristic name for draft", { generatedName: name });
       return name;
     }
 
     // For non-drafts, use AI-based title generation
+    // First check if the workspace backend is connected
+    const backend = backendManager.getBackend(options.workspaceId);
+    if (!backend.isConnected()) {
+      log.warn("generateName - Backend not connected, using heuristic fallback");
+      return generateFallbackName(options.prompt);
+    }
+
     try {
-      const backend = backendManager.getBackend(options.workspaceId);
       const tempSession = await backend.createSession({
         title: "Loop Name Generation",
         directory: options.directory,
@@ -161,18 +166,9 @@ export class LoopManager {
         }
       }
     } catch (error) {
-      // If name generation fails, use prompt-based fallback
-      log.warn(`Failed to generate loop name: ${String(error)}, using fallback`);
-      const fallbackName = options.prompt.slice(0, 50).trim();
-      if (fallbackName) {
-        return fallbackName;
-      }
-      // Ultimate fallback if prompt is empty
-      const ts = new Date().toISOString()
-        .replace(/[T:.]/g, "-")
-        .replace(/Z$/, "")
-        .slice(0, 19);
-      return `loop-${ts}`;
+      // If name generation fails, use heuristic fallback
+      log.warn(`Failed to generate loop name: ${String(error)}, using heuristic fallback`);
+      return generateFallbackName(options.prompt);
     }
   }
 

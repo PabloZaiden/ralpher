@@ -3,7 +3,7 @@
  */
 
 import { describe, test, expect, mock } from "bun:test";
-import { generateLoopName, sanitizeLoopName } from "../../src/utils/name-generator";
+import { generateLoopName, sanitizeLoopName, generateFallbackName } from "../../src/utils/name-generator";
 import type { BackendInterface } from "../../src/utils/name-generator";
 import type { AgentResponse } from "../../src/backends/types";
 
@@ -63,6 +63,56 @@ describe("sanitizeLoopName", () => {
 
   test("preserves special characters except markdown", () => {
     expect(sanitizeLoopName("Add feature (v2) - urgent!")).toBe("Add feature (v2) - urgent!");
+  });
+});
+
+describe("generateFallbackName", () => {
+  test("extracts key words from prompt", () => {
+    const name = generateFallbackName("Add user authentication with OAuth and JWT tokens");
+    expect(name).toContain("Add");
+    expect(name).toContain("user");
+    expect(name).toContain("authentication");
+  });
+
+  test("skips words shorter than 3 characters", () => {
+    const name = generateFallbackName("I am a big fan of it");
+    // "I", "am", "a", "of", "it" are all <= 2 chars, should be skipped
+    expect(name).toContain("big");
+    expect(name).toContain("fan");
+    expect(name).not.toContain(" a ");
+  });
+
+  test("limits to 8 words", () => {
+    const name = generateFallbackName(
+      "word1abc word2abc word3abc word4abc word5abc word6abc word7abc word8abc word9abc word10abc"
+    );
+    const words = name.split(" ");
+    expect(words.length).toBeLessThanOrEqual(8);
+  });
+
+  test("uses first 100 chars of prompt", () => {
+    const longPrompt = "word ".repeat(50); // 250 chars
+    const name = generateFallbackName(longPrompt);
+    expect(name).toBeTruthy();
+    expect(name.length).toBeLessThanOrEqual(100);
+  });
+
+  test("returns timestamp-based name for very short words", () => {
+    const name = generateFallbackName("a b c");
+    expect(name).toMatch(/^Loop \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  });
+
+  test("returns timestamp-based name for empty prompt", () => {
+    const name = generateFallbackName("");
+    expect(name).toMatch(/^Loop \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  });
+
+  test("preserves original casing", () => {
+    const name = generateFallbackName("Fix LoginPage rendering issue");
+    expect(name).toContain("Fix");
+    expect(name).toContain("LoginPage");
+    expect(name).toContain("rendering");
+    expect(name).toContain("issue");
   });
 });
 
