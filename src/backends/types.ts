@@ -54,6 +54,8 @@ export interface CreateSessionOptions {
   title?: string;
   /** Working directory */
   directory: string;
+  /** Default model for the session (modelID string sent to ACP) */
+  model?: string;
 }
 
 /**
@@ -66,6 +68,8 @@ export interface AgentSession {
   title?: string;
   /** Creation timestamp (ISO) */
   createdAt: string;
+  /** Model reported by the ACP server for this session (if available) */
+  model?: string;
 }
 
 /**

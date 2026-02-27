@@ -999,11 +999,19 @@ export class LoopEngine {
     const session = await this.backend.createSession({
       title: `Ralph Loop: ${this.config.name}`,
       directory: this.workingDirectory,
+      model: this.config.model?.modelID,
     });
-    log.debug("[LoopEngine] setupSession: Session created", { sessionId: session.id });
+    log.debug("[LoopEngine] setupSession: Session created", {
+      sessionId: session.id,
+      requestedModel: this.config.model?.modelID ?? "default",
+      reportedModel: session.model ?? "not reported by ACP",
+    });
 
     this.sessionId = session.id;
-    this.emitLog("info", `AI session created`, { sessionId: session.id });
+    this.emitLog("info", `AI session created`, {
+      sessionId: session.id,
+      model: this.config.model?.modelID ?? "default",
+    });
 
     // Store session info for remote transports.
     const connectionConfig = buildConnectionConfig(settings, this.workingDirectory);
