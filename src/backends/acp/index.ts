@@ -1170,6 +1170,12 @@ export class AcpBackend implements Backend {
 
   private buildPromptParams(sessionId: string, prompt: PromptInput): Record<string, unknown> {
     const modelID = prompt.model?.modelID;
+    log.debug("[AcpBackend] Building prompt params", {
+      sessionId,
+      model: modelID ?? "default",
+      providerID: prompt.model?.providerID ?? "none",
+      variant: prompt.model?.variant ?? "none",
+    });
     return {
       sessionId,
       prompt: this.buildPromptParts(prompt),
@@ -1184,11 +1190,13 @@ export class AcpBackend implements Backend {
     log.debug("[AcpBackend] Creating session", {
       directory: options.directory,
       hasTitle: !!options.title,
+      model: options.model ?? "default",
     });
     const result = await this.sendRpcRequest<unknown>("session/new", {
       cwd: options.directory,
       mcpServers: [],
       ...(options.title ? { title: options.title } : {}),
+      ...(options.model ? { model: options.model } : {}),
     });
 
     if (!isRecord(result)) {
@@ -1206,6 +1214,12 @@ export class AcpBackend implements Backend {
       time: { created: Date.now() },
     });
 
+    // Parse model info from ACP response if available
+    const responseModel = getString(result["model"]) ?? getString(result["defaultModel"]);
+    if (responseModel) {
+      session.model = responseModel;
+    }
+
     this.sessionCache.set(id, session);
 
     const models = this.parseModelsFromSessionResult(result);
@@ -1216,6 +1230,8 @@ export class AcpBackend implements Backend {
     log.debug("[AcpBackend] Session created", {
       sessionId: session.id,
       modelsDiscovered: models.length,
+      requestedModel: options.model ?? "default",
+      reportedModel: responseModel ?? "none",
     });
 
     return session;
