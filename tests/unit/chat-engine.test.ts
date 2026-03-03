@@ -125,6 +125,7 @@ describe("LoopEngine - Chat Mode", () => {
       async setConfigOption(_sessionId: string, _configId: string, _value: string) {
         return [];
       },
+      async setSessionModel(_sessionId: string, _modelId: string) {},
     };
 
     return backend;

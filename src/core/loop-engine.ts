@@ -94,6 +94,7 @@ export interface LoopBackend {
   replyToPermission: AcpBackend["replyToPermission"];
   replyToQuestion: AcpBackend["replyToQuestion"];
   setConfigOption: AcpBackend["setConfigOption"];
+  setSessionModel: AcpBackend["setSessionModel"];
 }
 
 /**
@@ -1727,20 +1728,32 @@ export class LoopEngine {
 
     // Set the model via ACP config options if we have an active session
     if (this.sessionId) {
+      // Try session/set_config_option first (newer ACP spec)
       try {
         await this.backend.setConfigOption(this.sessionId, "model", newModelID);
         this.emitLog("info", "Model changed via config option", {
           model: newModelID,
           sessionId: this.sessionId,
         });
+        return;
+      } catch {
+        log.debug("[LoopEngine] session/set_config_option not supported, trying session/set_model");
+      }
+
+      // Fall back to session/set_model (used by OpenCode and other agents)
+      try {
+        await this.backend.setSessionModel(this.sessionId, newModelID);
+        this.emitLog("info", "Model changed via session/set_model", {
+          model: newModelID,
+          sessionId: this.sessionId,
+        });
       } catch (error) {
-        // If set_config_option fails, the agent may not support it.
-        // The model will still be sent per-prompt via buildPromptParams().
-        log.warn("[LoopEngine] Failed to set model via config option, will use per-prompt model", {
+        // If neither method works, the model will still be sent per-prompt.
+        log.warn("[LoopEngine] Failed to set model via config option or set_model, will use per-prompt model", {
           error: String(error),
           model: newModelID,
         });
-        this.emitLog("warn", "Could not set model via config option — will use per-prompt model override", {
+        this.emitLog("warn", "Could not set model via ACP — will use per-prompt model override", {
           model: newModelID,
           error: String(error),
         });
@@ -1750,7 +1763,8 @@ export class LoopEngine {
 
   /**
    * Set the model via ACP session config options after session creation.
-   * Only calls set_config_option if the desired model differs from the agent's default.
+   * Tries session/set_config_option first, then falls back to session/set_model
+   * for agents (like OpenCode) that use the older model API.
    */
   private async setModelViaConfigOption(session: import("../backends/types").AgentSession): Promise<void> {
     const desiredModel = this.config.model?.modelID;
@@ -1764,20 +1778,33 @@ export class LoopEngine {
       return;
     }
 
+    // Try session/set_config_option first (newer ACP spec)
     try {
       await this.backend.setConfigOption(this.sessionId, "model", desiredModel);
       this.emitLog("info", "Model configured via session config option", {
         model: desiredModel,
         sessionId: this.sessionId,
       });
+      return;
+    } catch {
+      log.debug("[LoopEngine] session/set_config_option not supported, trying session/set_model");
+    }
+
+    // Fall back to session/set_model (used by OpenCode and other agents)
+    try {
+      await this.backend.setSessionModel(this.sessionId, desiredModel);
+      this.emitLog("info", "Model configured via session/set_model", {
+        model: desiredModel,
+        sessionId: this.sessionId,
+      });
     } catch (error) {
-      // If the agent doesn't support config options, fall back gracefully.
+      // If neither method works, fall back gracefully.
       // The model will still be sent per-prompt via buildPromptParams().
-      log.warn("[LoopEngine] Failed to set model via config option after session creation", {
+      log.warn("[LoopEngine] Failed to set model via config option or set_model after session creation", {
         error: String(error),
         model: desiredModel,
       });
-      this.emitLog("debug", "Config option for model not supported — will use per-prompt model override", {
+      this.emitLog("debug", "Model setting not supported — will use per-prompt model override", {
         model: desiredModel,
       });
     }

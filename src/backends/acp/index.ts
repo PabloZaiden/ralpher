@@ -1331,7 +1331,10 @@ export class AcpBackend implements Backend {
 
     // Fallback: parse model info from legacy fields if no config options
     if (!session.model) {
-      const responseModel = getString(result["model"]) ?? getString(result["defaultModel"]);
+      // Try models.currentModelId (used by OpenCode)
+      const modelsObj = isRecord(result["models"]) ? result["models"] : null;
+      const currentModelId = modelsObj ? getString(modelsObj["currentModelId"]) : null;
+      const responseModel = currentModelId ?? getString(result["model"]) ?? getString(result["defaultModel"]);
       if (responseModel) {
         session.model = responseModel;
       }
@@ -1391,6 +1394,28 @@ export class AcpBackend implements Backend {
     });
 
     return configOptions;
+  }
+
+  /**
+   * Set the model for a session via the session/set_model RPC method.
+   * This is used as a fallback for agents (like OpenCode) that don't support
+   * session/set_config_option but implement the older session/set_model method.
+   */
+  async setSessionModel(sessionId: string, modelId: string): Promise<void> {
+    log.debug("[AcpBackend] Setting session model via session/set_model", { sessionId, modelId });
+
+    await this.sendRpcRequest<unknown>("session/set_model", {
+      sessionId,
+      modelId,
+    });
+
+    // Update the cached session with the new model
+    const cached = this.sessionCache.get(sessionId);
+    if (cached) {
+      cached.model = modelId;
+    }
+
+    log.debug("[AcpBackend] Session model set", { sessionId, modelId });
   }
 
   /**

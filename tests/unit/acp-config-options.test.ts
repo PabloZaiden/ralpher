@@ -154,3 +154,48 @@ describe("Model selection via config options flow", () => {
     expect(modelOption).toBeUndefined();
   });
 });
+
+describe("OpenCode models.currentModelId parsing", () => {
+  test("currentModelId is extracted from models object in session response", () => {
+    // Simulates how OpenCode returns model info in session/new response
+    const result: Record<string, unknown> = {
+      sessionId: "sess-123",
+      models: {
+        currentModelId: "anthropic/claude-sonnet-4",
+        availableModels: [
+          { modelId: "anthropic/claude-sonnet-4", name: "Anthropic/Claude Sonnet 4" },
+          { modelId: "openai/gpt-5.2", name: "OpenAI/GPT-5.2" },
+        ],
+      },
+    };
+
+    // This mimics the parsing logic in createSession
+    const modelsObj = typeof result["models"] === "object" && result["models"] !== null
+      ? result["models"] as Record<string, unknown>
+      : null;
+    const currentModelId = modelsObj && typeof modelsObj["currentModelId"] === "string"
+      ? modelsObj["currentModelId"]
+      : null;
+
+    expect(currentModelId).toBe("anthropic/claude-sonnet-4");
+  });
+
+  test("falls back to model field when models object has no currentModelId", () => {
+    const result: Record<string, unknown> = {
+      sessionId: "sess-123",
+      model: "gpt-5.2",
+    };
+
+    const modelsObj = typeof result["models"] === "object" && result["models"] !== null
+      ? result["models"] as Record<string, unknown>
+      : null;
+    const currentModelId = modelsObj && typeof modelsObj["currentModelId"] === "string"
+      ? modelsObj["currentModelId"]
+      : null;
+    const responseModel = currentModelId
+      ?? (typeof result["model"] === "string" ? result["model"] : null)
+      ?? (typeof result["defaultModel"] === "string" ? result["defaultModel"] : null);
+
+    expect(responseModel).toBe("gpt-5.2");
+  });
+});

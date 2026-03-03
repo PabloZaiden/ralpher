@@ -249,6 +249,9 @@ export interface Backend {
   /** Set a session config option (per ACP session-config-options spec) */
   setConfigOption(sessionId: string, configId: string, value: string): Promise<ConfigOption[]>;
 
+  /** Set the model via session/set_model (fallback for agents without config options) */
+  setSessionModel(sessionId: string, modelId: string): Promise<void>;
+
   // ============================================
   // Manager methods (used by BackendManager)
   // ============================================

@@ -442,3 +442,12 @@ describe("AcpBackend setConfigOption", () => {
     ).rejects.toThrow("Not connected");
   });
 });
+
+describe("AcpBackend setSessionModel", () => {
+  test("throws when setSessionModel called before connect", async () => {
+    const backend = new AcpBackend();
+    await expect(
+      backend.setSessionModel("session-1", "anthropic/claude-sonnet-4")
+    ).rejects.toThrow("Not connected");
+  });
+});
