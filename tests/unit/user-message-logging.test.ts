@@ -113,6 +113,8 @@ describe("User Message Logging", () => {
 
       async replyToPermission(_requestId: string, _response: string): Promise<void> {},
       async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {},
+      async setConfigOption(_sessionId: string, _configId: string, _value: string) { return []; },
+      async setSessionModel(_sessionId: string, _modelId: string) {},
     };
 
     return backend;

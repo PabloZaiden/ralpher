@@ -169,6 +169,12 @@ export class MockAcpBackend implements Backend {
     // Mock - no-op
   }
 
+  async setConfigOption(_sessionId: string, _configId: string, _value: string) {
+    return [];
+  }
+
+  async setSessionModel(_sessionId: string, _modelId: string) {}
+
   // ============================================
   // Backend-specific methods (used by BackendManager)
   // ============================================
@@ -342,6 +348,12 @@ export class NeverCompletingMockBackend implements Backend {
     // No-op
   }
 
+  async setConfigOption(_sessionId: string, _configId: string, _value: string) {
+    return [];
+  }
+
+  async setSessionModel(_sessionId: string, _modelId: string) {}
+
   // Backend-specific methods
   getSdkClient(): null {
     return null;
@@ -477,6 +489,12 @@ export class PlanModeMockBackend implements Backend {
   async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
     // No-op
   }
+
+  async setConfigOption(_sessionId: string, _configId: string, _value: string) {
+    return [];
+  }
+
+  async setSessionModel(_sessionId: string, _modelId: string) {}
 
   // Backend-specific methods
   getSdkClient(): null {

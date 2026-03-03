@@ -231,6 +231,12 @@ export class ConfigurableMockBackend implements LoopBackend {
     // Mock - no-op
   }
 
+  async setConfigOption(_sessionId: string, _configId: string, _value: string) {
+    return [];
+  }
+
+  async setSessionModel(_sessionId: string, _modelId: string) {}
+
   // OpenCode-specific methods
   getSdkClient(): null {
     return null;

@@ -93,6 +93,8 @@ export interface LoopBackend {
   subscribeToEvents: AcpBackend["subscribeToEvents"];
   replyToPermission: AcpBackend["replyToPermission"];
   replyToQuestion: AcpBackend["replyToQuestion"];
+  setConfigOption: AcpBackend["setConfigOption"];
+  setSessionModel: AcpBackend["setSessionModel"];
 }
 
 /**
@@ -999,11 +1001,23 @@ export class LoopEngine {
     const session = await this.backend.createSession({
       title: `Ralph Loop: ${this.config.name}`,
       directory: this.workingDirectory,
+      model: this.config.model?.modelID,
     });
-    log.debug("[LoopEngine] setupSession: Session created", { sessionId: session.id });
+    log.debug("[LoopEngine] setupSession: Session created", {
+      sessionId: session.id,
+      requestedModel: this.config.model?.modelID ?? "default",
+      reportedModel: session.model ?? "not reported by ACP",
+    });
 
     this.sessionId = session.id;
-    this.emitLog("info", `AI session created`, { sessionId: session.id });
+
+    // Set model via ACP config options if a specific model is requested
+    await this.setModelViaConfigOption(session);
+
+    this.emitLog("info", `AI session created`, {
+      sessionId: session.id,
+      model: this.config.model?.modelID ?? "default",
+    });
 
     // Store session info for remote transports.
     const connectionConfig = buildConnectionConfig(settings, this.workingDirectory);
@@ -1531,6 +1545,9 @@ export class LoopEngine {
    * through all agent events until the message completes or an error occurs.
    */
   private async executeIterationPrompt(ctx: IterationContext): Promise<void> {
+    // Handle pending model change via ACP config options (works for all agents)
+    await this.handlePendingModelChange();
+
     // Build the prompt
     log.debug("[LoopEngine] runIteration: Building prompt");
     this.emitLog("debug", "Building prompt for AI agent");
@@ -1680,6 +1697,117 @@ export class LoopEngine {
       previousSessionId,
       newSessionId: this.sessionId,
     });
+  }
+
+  /**
+   * Handle pending model changes via ACP session config options.
+   * Uses session/set_config_option to change the model without process restart.
+   * Works for all ACP agents (copilot, opencode, and future ones).
+   */
+  private async handlePendingModelChange(): Promise<void> {
+    const pendingModel = this.loop.state.pendingModel;
+    if (!pendingModel) {
+      return;
+    }
+
+    const currentModelID = this.config.model?.modelID;
+    const newModelID = pendingModel.modelID;
+    if (currentModelID === newModelID) {
+      this.updateState({ pendingModel: undefined });
+      return;
+    }
+
+    this.emitLog("info", "Model change detected — setting via config option", {
+      previousModel: currentModelID ?? "default",
+      newModel: newModelID,
+    });
+
+    // Update config.model
+    this.config.model = pendingModel;
+    this.updateState({ pendingModel: undefined });
+
+    // Set the model via ACP config options if we have an active session
+    if (this.sessionId) {
+      // Try session/set_config_option first (newer ACP spec)
+      try {
+        await this.backend.setConfigOption(this.sessionId, "model", newModelID);
+        this.emitLog("info", "Model changed via config option", {
+          model: newModelID,
+          sessionId: this.sessionId,
+        });
+        return;
+      } catch {
+        log.debug("[LoopEngine] session/set_config_option not supported, trying session/set_model");
+      }
+
+      // Fall back to session/set_model (used by OpenCode and other agents)
+      try {
+        await this.backend.setSessionModel(this.sessionId, newModelID);
+        this.emitLog("info", "Model changed via session/set_model", {
+          model: newModelID,
+          sessionId: this.sessionId,
+        });
+      } catch (error) {
+        // If neither method works, the model will still be sent per-prompt.
+        log.warn("[LoopEngine] Failed to set model via config option or set_model, will use per-prompt model", {
+          error: String(error),
+          model: newModelID,
+        });
+        this.emitLog("warn", "Could not set model via ACP — will use per-prompt model override", {
+          model: newModelID,
+          error: String(error),
+        });
+      }
+    }
+  }
+
+  /**
+   * Set the model via ACP session config options after session creation.
+   * Tries session/set_config_option first, then falls back to session/set_model
+   * for agents (like OpenCode) that use the older model API.
+   */
+  private async setModelViaConfigOption(session: import("../backends/types").AgentSession): Promise<void> {
+    const desiredModel = this.config.model?.modelID;
+    if (!desiredModel || !this.sessionId) {
+      return;
+    }
+
+    // Check if the session already has the desired model
+    if (session.model === desiredModel) {
+      log.debug("[LoopEngine] Session already using desired model", { model: desiredModel });
+      return;
+    }
+
+    // Try session/set_config_option first (newer ACP spec)
+    try {
+      await this.backend.setConfigOption(this.sessionId, "model", desiredModel);
+      this.emitLog("info", "Model configured via session config option", {
+        model: desiredModel,
+        sessionId: this.sessionId,
+      });
+      return;
+    } catch {
+      log.debug("[LoopEngine] session/set_config_option not supported, trying session/set_model");
+    }
+
+    // Fall back to session/set_model (used by OpenCode and other agents)
+    try {
+      await this.backend.setSessionModel(this.sessionId, desiredModel);
+      this.emitLog("info", "Model configured via session/set_model", {
+        model: desiredModel,
+        sessionId: this.sessionId,
+      });
+    } catch (error) {
+      // If neither method works, fall back gracefully.
+      // The model will still be sent per-prompt via buildPromptParams().
+      log.warn("[LoopEngine] Failed to set model via config option or set_model after session creation", {
+        error: String(error),
+        model: desiredModel,
+      });
+      this.emitLog("debug", "Model setting not supported — will use per-prompt model override", {
+        model: desiredModel,
+      });
+    }
   }
 
   /**

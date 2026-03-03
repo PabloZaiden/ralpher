@@ -5,6 +5,10 @@ import { AcpBackend } from "../../src/backends/acp";
 type PrivateBackend = {
   handleRpcMessage(message: unknown): void;
   parseModelsFromSessionResult(result: unknown): unknown;
+  buildPromptParams(sessionId: string, prompt: {
+    parts: Array<{ type: "text"; text: string }>;
+    model?: { providerID: string; modelID: string; variant?: string };
+  }): Record<string, unknown>;
   sessionSubscribers: Map<string, Set<(event: unknown) => void>>;
   pendingPermissionRequests: Map<string, { rpcId: number; options: Array<{ optionId: string; kind?: string }> }>;
   toolCallNames: Map<string, string>;
@@ -769,5 +773,41 @@ describe("AcpBackend ACP parsing", () => {
         content: "",
       },
     ]);
+  });
+
+  test("buildPromptParams includes model when provided", () => {
+    const backend = getBackend();
+    const params = backend.buildPromptParams("session-1", {
+      parts: [{ type: "text", text: "Hello" }],
+      model: { providerID: "anthropic", modelID: "claude-sonnet-4.6", variant: "thinking" },
+    });
+
+    expect(params).toMatchObject({
+      sessionId: "session-1",
+      model: "claude-sonnet-4.6",
+    });
+    expect(params["prompt"]).toEqual([{ type: "text", text: "Hello" }]);
+  });
+
+  test("buildPromptParams omits model when not provided", () => {
+    const backend = getBackend();
+    const params = backend.buildPromptParams("session-1", {
+      parts: [{ type: "text", text: "Hello" }],
+    });
+
+    expect(params).toMatchObject({
+      sessionId: "session-1",
+    });
+    expect(params["model"]).toBeUndefined();
+  });
+
+  test("buildPromptParams includes model with empty variant", () => {
+    const backend = getBackend();
+    const params = backend.buildPromptParams("session-1", {
+      parts: [{ type: "text", text: "Hello" }],
+      model: { providerID: "copilot", modelID: "gpt-5.3-codex", variant: "" },
+    });
+
+    expect(params["model"]).toBe("gpt-5.3-codex");
   });
 });
