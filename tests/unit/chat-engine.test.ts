@@ -121,6 +121,10 @@ describe("LoopEngine - Chat Mode", () => {
       async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
         // No-op
       },
+
+      async setConfigOption(_sessionId: string, _configId: string, _value: string) {
+        return [];
+      },
     };
 
     return backend;

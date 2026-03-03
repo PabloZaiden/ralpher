@@ -57,3 +57,55 @@ describe("buildConnectionConfig SSH command options", () => {
     expect(args[args.length - 1]).toContain("source ~/.profile");
   });
 });
+
+describe("buildConnectionConfig does not embed model in CLI args", () => {
+  test("copilot stdio does not include --model flag", () => {
+    const config = buildConnectionConfig(
+      {
+        agent: {
+          provider: "copilot",
+          transport: "stdio",
+        },
+      },
+      "/workspaces/project",
+    );
+    const args = config.args ?? [];
+    expect(config.command).toBe("copilot");
+    expect(args).toContain("--acp");
+    expect(args).not.toContain("--model");
+  });
+
+  test("copilot SSH remote command does not include --model flag", () => {
+    const config = buildConnectionConfig(
+      {
+        agent: {
+          provider: "copilot",
+          transport: "ssh",
+          hostname: "remote.example.com",
+          port: 22,
+          username: "alice",
+        },
+      },
+      "/workspaces/project",
+    );
+    const args = config.args ?? [];
+    const remoteCommand = args[args.length - 1] ?? "";
+    expect(remoteCommand).toContain("copilot --acp");
+    expect(remoteCommand).not.toContain("--model");
+  });
+
+  test("opencode stdio does not include --model flag", () => {
+    const config = buildConnectionConfig(
+      {
+        agent: {
+          provider: "opencode",
+          transport: "stdio",
+        },
+      },
+      "/workspaces/project",
+    );
+    const args = config.args ?? [];
+    expect(config.command).toBe("opencode");
+    expect(args).not.toContain("--model");
+  });
+});

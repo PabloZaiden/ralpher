@@ -18,6 +18,7 @@ import type {
   AgentEvent,
   Backend,
   ConnectionInfo,
+  ConfigOption,
 } from "../types";
 import { createEventStream, type EventStream } from "../../utils/event-stream";
 
@@ -807,6 +808,26 @@ export class AcpBackend implements Backend {
       return;
     }
 
+    // Handle config_options_update from the agent (ACP session-config-options spec)
+    if (updateType === "config_options_update") {
+      const configOptions = this.parseConfigOptions(updateObj);
+      if (configOptions.length > 0) {
+        const cached = this.sessionCache.get(sessionId);
+        if (cached) {
+          cached.configOptions = configOptions;
+          const modelOption = configOptions.find((o) => o.category === "model" || o.id === "model");
+          if (modelOption) {
+            cached.model = modelOption.currentValue;
+          }
+        }
+        log.debug("[AcpBackend] Config options updated by agent", {
+          sessionId,
+          options: configOptions.map((o) => `${o.id}=${o.currentValue}`),
+        });
+      }
+      return;
+    }
+
     if (updateType === "agent_message_chunk") {
       if (this.sessionPromptSequences.has(sessionId)) {
         this.sessionPromptHasActivity.set(sessionId, true);
@@ -1161,6 +1182,78 @@ export class AcpBackend implements Backend {
     });
   }
 
+  /**
+   * Parse ACP configOptions from a session response.
+   * Returns an array of ConfigOption objects per the ACP session-config-options spec.
+   */
+  private parseConfigOptions(result: unknown): ConfigOption[] {
+    if (!isRecord(result)) {
+      return [];
+    }
+
+    const rawOptions = result["configOptions"];
+    if (!Array.isArray(rawOptions)) {
+      return [];
+    }
+
+    const parsed: ConfigOption[] = [];
+    for (const item of rawOptions) {
+      if (!isRecord(item)) {
+        continue;
+      }
+
+      const id = getString(item["id"]);
+      const name = getString(item["name"]);
+      const type = getString(item["type"]);
+      const currentValue = getString(item["currentValue"]);
+      if (!id || !name || !type || !currentValue) {
+        continue;
+      }
+
+      const rawValues = Array.isArray(item["options"]) ? item["options"] : [];
+      const options = rawValues
+        .filter((v): v is Record<string, unknown> => isRecord(v))
+        .filter((v) => getString(v["value"]) && getString(v["name"]))
+        .map((v) => ({
+          value: getString(v["value"])!,
+          name: getString(v["name"])!,
+          ...(getString(v["description"]) ? { description: getString(v["description"])! } : {}),
+        }));
+
+      parsed.push({
+        id,
+        name,
+        type,
+        currentValue,
+        options,
+        ...(getString(item["description"]) ? { description: getString(item["description"])! } : {}),
+        ...(getString(item["category"]) ? { category: getString(item["category"])! } : {}),
+      });
+    }
+
+    return parsed;
+  }
+
+  /**
+   * Extract model info from configOptions (category "model").
+   * This provides model discovery via the ACP session-config-options spec.
+   */
+  private parseModelsFromConfigOptions(configOptions: ConfigOption[]): ModelInfo[] {
+    const modelOption = configOptions.find((opt) => opt.category === "model" || opt.id === "model");
+    if (!modelOption) {
+      return [];
+    }
+
+    return modelOption.options.map((opt) => ({
+      providerID: inferProviderID(opt.value),
+      providerName: inferProviderID(opt.value),
+      modelID: opt.value,
+      modelName: opt.name,
+      connected: true,
+      variants: [""],
+    }));
+  }
+
   private buildPromptParts(prompt: PromptInput): Array<Record<string, string>> {
     return prompt.parts.map((part) => ({
       type: "text",
@@ -1185,6 +1278,7 @@ export class AcpBackend implements Backend {
 
   /**
    * Create a new session.
+   * Model is NOT passed in session/new params — use setConfigOption() after creation.
    */
   async createSession(options: CreateSessionOptions): Promise<AgentSession> {
     log.debug("[AcpBackend] Creating session", {
@@ -1196,7 +1290,6 @@ export class AcpBackend implements Backend {
       cwd: options.directory,
       mcpServers: [],
       ...(options.title ? { title: options.title } : {}),
-      ...(options.model ? { model: options.model } : {}),
     });
 
     if (!isRecord(result)) {
@@ -1214,27 +1307,90 @@ export class AcpBackend implements Backend {
       time: { created: Date.now() },
     });
 
-    // Parse model info from ACP response if available
-    const responseModel = getString(result["model"]) ?? getString(result["defaultModel"]);
-    if (responseModel) {
-      session.model = responseModel;
+    // Parse configOptions from session/new response (ACP session-config-options spec)
+    const configOptions = this.parseConfigOptions(result);
+    if (configOptions.length > 0) {
+      session.configOptions = configOptions;
+      log.debug("[AcpBackend] Session config options discovered", {
+        sessionId: id,
+        options: configOptions.map((o) => `${o.id}=${o.currentValue}`),
+      });
+
+      // Extract model info from config options
+      const configModels = this.parseModelsFromConfigOptions(configOptions);
+      if (configModels.length > 0) {
+        this.modelCache.set(options.directory, configModels);
+      }
+
+      // Extract current model from config options
+      const modelOption = configOptions.find((o) => o.category === "model" || o.id === "model");
+      if (modelOption) {
+        session.model = modelOption.currentValue;
+      }
+    }
+
+    // Fallback: parse model info from legacy fields if no config options
+    if (!session.model) {
+      const responseModel = getString(result["model"]) ?? getString(result["defaultModel"]);
+      if (responseModel) {
+        session.model = responseModel;
+      }
     }
 
     this.sessionCache.set(id, session);
 
-    const models = this.parseModelsFromSessionResult(result);
-    if (models.length > 0) {
-      this.modelCache.set(options.directory, models);
+    // Fallback: parse models from legacy fields if none from config options
+    if (!this.modelCache.has(options.directory)) {
+      const models = this.parseModelsFromSessionResult(result);
+      if (models.length > 0) {
+        this.modelCache.set(options.directory, models);
+      }
     }
 
     log.debug("[AcpBackend] Session created", {
       sessionId: session.id,
-      modelsDiscovered: models.length,
+      configOptionsCount: configOptions.length,
       requestedModel: options.model ?? "default",
-      reportedModel: responseModel ?? "none",
+      reportedModel: session.model ?? "none",
     });
 
     return session;
+  }
+
+  /**
+   * Set a session config option (per ACP session-config-options spec).
+   * Sends session/set_config_option and returns the updated config options.
+   */
+  async setConfigOption(sessionId: string, configId: string, value: string): Promise<ConfigOption[]> {
+    log.debug("[AcpBackend] Setting config option", { sessionId, configId, value });
+
+    const result = await this.sendRpcRequest<unknown>("session/set_config_option", {
+      sessionId,
+      configId,
+      value,
+    });
+
+    // Parse the updated config options from the response
+    const configOptions = this.parseConfigOptions(result);
+
+    // Update the cached session with new config options
+    const cached = this.sessionCache.get(sessionId);
+    if (cached) {
+      cached.configOptions = configOptions;
+      const modelOption = configOptions.find((o) => o.category === "model" || o.id === "model");
+      if (modelOption) {
+        cached.model = modelOption.currentValue;
+      }
+    }
+
+    log.debug("[AcpBackend] Config option set", {
+      sessionId,
+      configId,
+      value,
+      updatedOptions: configOptions.map((o) => `${o.id}=${o.currentValue}`),
+    });
+
+    return configOptions;
   }
 
   /**
@@ -1491,6 +1647,14 @@ export class AcpBackend implements Backend {
       cwd: directory,
       mcpServers: [],
     });
+
+    // Try config options first, then fall back to legacy fields
+    const configOptions = this.parseConfigOptions(result);
+    const configModels = this.parseModelsFromConfigOptions(configOptions);
+    if (configModels.length > 0) {
+      this.modelCache.set(directory, configModels);
+      return configModels;
+    }
 
     const models = this.parseModelsFromSessionResult(result);
     if (models.length > 0) {

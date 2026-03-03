@@ -93,6 +93,7 @@ export interface LoopBackend {
   subscribeToEvents: AcpBackend["subscribeToEvents"];
   replyToPermission: AcpBackend["replyToPermission"];
   replyToQuestion: AcpBackend["replyToQuestion"];
+  setConfigOption: AcpBackend["setConfigOption"];
 }
 
 /**
@@ -1008,6 +1009,10 @@ export class LoopEngine {
     });
 
     this.sessionId = session.id;
+
+    // Set model via ACP config options if a specific model is requested
+    await this.setModelViaConfigOption(session);
+
     this.emitLog("info", `AI session created`, {
       sessionId: session.id,
       model: this.config.model?.modelID ?? "default",
@@ -1539,6 +1544,9 @@ export class LoopEngine {
    * through all agent events until the message completes or an error occurs.
    */
   private async executeIterationPrompt(ctx: IterationContext): Promise<void> {
+    // Handle pending model change via ACP config options (works for all agents)
+    await this.handlePendingModelChange();
+
     // Build the prompt
     log.debug("[LoopEngine] runIteration: Building prompt");
     this.emitLog("debug", "Building prompt for AI agent");
@@ -1688,6 +1696,91 @@ export class LoopEngine {
       previousSessionId,
       newSessionId: this.sessionId,
     });
+  }
+
+  /**
+   * Handle pending model changes via ACP session config options.
+   * Uses session/set_config_option to change the model without process restart.
+   * Works for all ACP agents (copilot, opencode, and future ones).
+   */
+  private async handlePendingModelChange(): Promise<void> {
+    const pendingModel = this.loop.state.pendingModel;
+    if (!pendingModel) {
+      return;
+    }
+
+    const currentModelID = this.config.model?.modelID;
+    const newModelID = pendingModel.modelID;
+    if (currentModelID === newModelID) {
+      this.updateState({ pendingModel: undefined });
+      return;
+    }
+
+    this.emitLog("info", "Model change detected — setting via config option", {
+      previousModel: currentModelID ?? "default",
+      newModel: newModelID,
+    });
+
+    // Update config.model
+    this.config.model = pendingModel;
+    this.updateState({ pendingModel: undefined });
+
+    // Set the model via ACP config options if we have an active session
+    if (this.sessionId) {
+      try {
+        await this.backend.setConfigOption(this.sessionId, "model", newModelID);
+        this.emitLog("info", "Model changed via config option", {
+          model: newModelID,
+          sessionId: this.sessionId,
+        });
+      } catch (error) {
+        // If set_config_option fails, the agent may not support it.
+        // The model will still be sent per-prompt via buildPromptParams().
+        log.warn("[LoopEngine] Failed to set model via config option, will use per-prompt model", {
+          error: String(error),
+          model: newModelID,
+        });
+        this.emitLog("warn", "Could not set model via config option — will use per-prompt model override", {
+          model: newModelID,
+          error: String(error),
+        });
+      }
+    }
+  }
+
+  /**
+   * Set the model via ACP session config options after session creation.
+   * Only calls set_config_option if the desired model differs from the agent's default.
+   */
+  private async setModelViaConfigOption(session: import("../backends/types").AgentSession): Promise<void> {
+    const desiredModel = this.config.model?.modelID;
+    if (!desiredModel || !this.sessionId) {
+      return;
+    }
+
+    // Check if the session already has the desired model
+    if (session.model === desiredModel) {
+      log.debug("[LoopEngine] Session already using desired model", { model: desiredModel });
+      return;
+    }
+
+    try {
+      await this.backend.setConfigOption(this.sessionId, "model", desiredModel);
+      this.emitLog("info", "Model configured via session config option", {
+        model: desiredModel,
+        sessionId: this.sessionId,
+      });
+    } catch (error) {
+      // If the agent doesn't support config options, fall back gracefully.
+      // The model will still be sent per-prompt via buildPromptParams().
+      log.warn("[LoopEngine] Failed to set model via config option after session creation", {
+        error: String(error),
+        model: desiredModel,
+      });
+      this.emitLog("debug", "Config option for model not supported — will use per-prompt model override", {
+        model: desiredModel,
+      });
+    }
   }
 
   /**

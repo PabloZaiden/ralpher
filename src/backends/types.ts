@@ -59,6 +59,39 @@ export interface CreateSessionOptions {
 }
 
 /**
+ * A value option within a config option (per ACP session-config-options spec).
+ */
+export interface ConfigOptionValue {
+  /** Value identifier used when setting this option */
+  value: string;
+  /** Human-readable name */
+  name: string;
+  /** Optional description */
+  description?: string;
+}
+
+/**
+ * A session-level configuration option (per ACP session-config-options spec).
+ * Agents return these in the session/new response and in config_options_update notifications.
+ */
+export interface ConfigOption {
+  /** Unique identifier for this option (e.g. "model", "mode") */
+  id: string;
+  /** Human-readable label */
+  name: string;
+  /** Optional description */
+  description?: string;
+  /** Semantic category for UX (e.g. "model", "mode", "thought_level") */
+  category?: string;
+  /** Input control type (currently only "select") */
+  type: string;
+  /** Currently selected value */
+  currentValue: string;
+  /** Available values */
+  options: ConfigOptionValue[];
+}
+
+/**
  * Represents a session in the agent backend.
  */
 export interface AgentSession {
@@ -70,6 +103,8 @@ export interface AgentSession {
   createdAt: string;
   /** Model reported by the ACP server for this session (if available) */
   model?: string;
+  /** Config options returned by the agent (per ACP session-config-options spec) */
+  configOptions?: ConfigOption[];
 }
 
 /**
@@ -210,6 +245,9 @@ export interface Backend {
 
   /** Reply to a question request */
   replyToQuestion(requestId: string, answers: string[][]): Promise<void>;
+
+  /** Set a session config option (per ACP session-config-options spec) */
+  setConfigOption(sessionId: string, configId: string, value: string): Promise<ConfigOption[]>;
 
   // ============================================
   // Manager methods (used by BackendManager)

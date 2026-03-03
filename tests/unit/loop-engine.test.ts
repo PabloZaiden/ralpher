@@ -148,6 +148,10 @@ describe("StopPatternDetector", () => {
       async replyToQuestion(_requestId: string, _answers: string[][]): Promise<void> {
         // No-op for basic mock
       },
+
+      async setConfigOption(_sessionId: string, _configId: string, _value: string) {
+        return [];
+      },
     };
   }
 
