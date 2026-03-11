@@ -13,6 +13,7 @@ import { backendManager } from "./backend-manager";
 const log = createLogger("core:ssh-terminal-bridge");
 const TMUX_READY_POLL_INTERVAL_MS = 100;
 const DEFAULT_TMUX_READY_TIMEOUT_MS = 15_000;
+const DEFAULT_SSH_TERM = "xterm-256color";
 
 export interface SshTerminalBridgeOptions {
   onOutput: (chunk: string) => void;
@@ -39,6 +40,15 @@ export function buildAttachCommand(session: SshSession): string {
     `tmux set-option -t ${sessionName} status off;`,
     `exec tmux attach-session -t ${sessionName}`,
   ].join(" ");
+}
+
+function buildSpawnEnv(extraEnv?: Record<string, string>): NodeJS.ProcessEnv {
+  const configuredTerm = process.env["TERM"]?.trim();
+  return {
+    ...process.env,
+    ...extraEnv,
+    TERM: configuredTerm && configuredTerm.length > 0 ? configuredTerm : DEFAULT_SSH_TERM,
+  };
 }
 
 function buildSshSpawnConfig(workspace: Workspace, session: SshSession): {
@@ -70,17 +80,16 @@ function buildSshSpawnConfig(workspace: Workspace, session: SshSession): {
     return {
       command: "sshpass",
       args: ["-e", "ssh", ...sharedArgs("password")],
-      env: {
-        ...process.env,
+      env: buildSpawnEnv({
         SSHPASS: settings.password,
-      },
+      }),
     };
   }
 
   return {
     command: "ssh",
     args: sharedArgs("batch"),
-    env: process.env,
+    env: buildSpawnEnv(),
   };
 }
 

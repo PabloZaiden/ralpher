@@ -74,10 +74,14 @@ const actualChildProcessModule = await import("node:child_process");
 
 let currentProc: MockChildProcess | null = null;
 let spawnCount = 0;
+let lastSpawnCommand: string[] | null = null;
+let lastSpawnEnv: NodeJS.ProcessEnv | undefined;
 mock.module("node:child_process", () => ({
   ...actualChildProcessModule,
-  spawn: () => {
+  spawn: (command: string, args: string[], options?: { env?: NodeJS.ProcessEnv }) => {
     spawnCount += 1;
+    lastSpawnCommand = [command, ...args];
+    lastSpawnEnv = options?.env;
     currentProc = new MockChildProcess();
     return currentProc as unknown as ReturnType<typeof actualChildProcessModule.spawn>;
   },
@@ -137,6 +141,8 @@ describe("SshTerminalBridge", () => {
 
     spawnCount = 0;
     currentProc = null;
+    lastSpawnCommand = null;
+    lastSpawnEnv = undefined;
     workspace = createTestWorkspace("/workspaces/example");
     session = createTestSession(workspace.id, workspace.directory);
     await createWorkspace(workspace);
@@ -182,6 +188,54 @@ describe("SshTerminalBridge", () => {
     expect(command).toContain("tmux new-session -d -s 'ralpher-session-1' -c '/workspaces/example';");
     expect(command).toContain("tmux set-option -t 'ralpher-session-1' status off;");
     expect(command).toContain("exec tmux attach-session -t 'ralpher-session-1'");
+  });
+
+  test("uses a fallback TERM when the server environment does not define one", async () => {
+    const previousTerm = process.env["TERM"];
+    delete process.env["TERM"];
+
+    try {
+      const bridge = new SshTerminalBridge(session.config.id, {
+        onOutput: () => {},
+      });
+
+      await bridge.connect();
+
+      expect(lastSpawnCommand?.[0]).toBe("ssh");
+      expect(lastSpawnEnv?.["TERM"]).toBe("xterm-256color");
+
+      await bridge.dispose();
+    } finally {
+      if (previousTerm === undefined) {
+        delete process.env["TERM"];
+      } else {
+        process.env["TERM"] = previousTerm;
+      }
+    }
+  });
+
+  test("preserves an existing TERM when opening the SSH terminal", async () => {
+    const previousTerm = process.env["TERM"];
+    process.env["TERM"] = "screen-256color";
+
+    try {
+      const bridge = new SshTerminalBridge(session.config.id, {
+        onOutput: () => {},
+      });
+
+      await bridge.connect();
+
+      expect(lastSpawnCommand?.[0]).toBe("ssh");
+      expect(lastSpawnEnv?.["TERM"]).toBe("screen-256color");
+
+      await bridge.dispose();
+    } finally {
+      if (previousTerm === undefined) {
+        delete process.env["TERM"];
+      } else {
+        process.env["TERM"] = previousTerm;
+      }
+    }
   });
 
   test("marks startup probe failures as failed and tears down the SSH process", async () => {
