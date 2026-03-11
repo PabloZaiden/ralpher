@@ -46,6 +46,7 @@ RUN mkdir -p /app/data && chown -R ralpher:ralpher /app/data
 ENV NODE_ENV=production
 ENV RALPHER_PORT=8080
 ENV RALPHER_DATA_DIR=/app/data
+ENV TERM=xterm-256color
 
 # Expose port 8080 (non-root user cannot bind to privileged ports)
 EXPOSE 8080
