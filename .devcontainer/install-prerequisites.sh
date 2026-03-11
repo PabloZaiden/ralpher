@@ -8,5 +8,5 @@ curl -fsSL https://opencode.ai/install | bash
 # install copilot-cli
 curl -fsSL https://gh.io/copilot-install | bash
 
-# install sshpass
-sudo apt-get update && sudo apt-get install -y sshpass
+# install sshpass and tmux
+sudo apt-get update && sudo apt-get install -y sshpass tmux

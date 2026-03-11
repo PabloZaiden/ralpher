@@ -22,6 +22,7 @@ describe("buildConnectionConfig SSH command options", () => {
     expect(config.command).toBe("sshpass");
     expect(args).toContain("ssh");
     expect(args).toContain("NumberOfPasswordPrompts=1");
+    expect(args).toContain("PreferredAuthentications=password,keyboard-interactive");
     expect(args).toContain("ConnectTimeout=10");
     expect(args).toContain("StrictHostKeyChecking=no");
     expect(args).toContain("UserKnownHostsFile=/dev/null");
@@ -55,6 +56,30 @@ describe("buildConnectionConfig SSH command options", () => {
     expect(args[args.length - 1]).toContain("copilot");
     expect(args[args.length - 1]).toContain("--acp");
     expect(args[args.length - 1]).toContain("source ~/.profile");
+  });
+
+  test("uses an explicit identity file when one is configured", () => {
+    const config = buildConnectionConfig(
+      {
+        agent: {
+          provider: "copilot",
+          transport: "ssh",
+          hostname: "remote.example.com",
+          port: 22,
+          username: "alice",
+          identityFile: "/tmp/test-key",
+        },
+      },
+      "/workspaces/project",
+    );
+    const args = config.args ?? [];
+
+    expect(config.command).toBe("ssh");
+    expect(args).toContain("IdentityAgent=none");
+    expect(args).toContain("IdentitiesOnly=yes");
+    const identityFileIndex = args.indexOf("-i");
+    expect(identityFileIndex).toBeGreaterThanOrEqual(0);
+    expect(args[identityFileIndex + 1]).toBe("/tmp/test-key");
   });
 });
 

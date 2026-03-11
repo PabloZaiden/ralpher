@@ -101,16 +101,20 @@ function parseServerSettings(jsonString: string | null): ServerSettings {
               : typeof agent["port"] === "number"
                 ? agent["port"]
                 : 22,
-          username:
-            typeof agent["username"] === "string"
-              ? agent["username"]
-              : typeof execution["user"] === "string"
-                ? execution["user"]
-                : undefined,
-          password: typeof agent["password"] === "string" ? agent["password"] : undefined,
-        },
-      };
-    }
+           username:
+             typeof agent["username"] === "string"
+               ? agent["username"]
+               : typeof execution["user"] === "string"
+                 ? execution["user"]
+                 : undefined,
+           password: typeof agent["password"] === "string" ? agent["password"] : undefined,
+           identityFile:
+             typeof agent["identityFile"] === "string" && agent["identityFile"].trim().length > 0
+               ? agent["identityFile"]
+               : undefined,
+         },
+       };
+     }
 
     return {
       agent: {

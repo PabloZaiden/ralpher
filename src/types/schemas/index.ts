@@ -55,3 +55,9 @@ export {
   SetLogLevelRequestSchema,
   SetDashboardViewModeRequestSchema,
 } from "./preferences";
+
+// SSH session schemas
+export {
+  CreateSshSessionRequestSchema,
+  UpdateSshSessionRequestSchema,
+} from "./ssh-session";

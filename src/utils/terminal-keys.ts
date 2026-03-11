@@ -1,0 +1,211 @@
+/**
+ * Helpers for encoding terminal key presses and modifier combinations.
+ */
+
+export interface TerminalModifierState {
+  ctrl: boolean;
+  alt: boolean;
+  shift: boolean;
+}
+
+export type TmuxShortcut =
+  | "split-pane"
+  | "next-pane"
+  | "resize-pane-up"
+  | "resize-pane-down";
+
+export type TerminalSpecialKey =
+  | "ArrowUp"
+  | "ArrowDown"
+  | "ArrowLeft"
+  | "ArrowRight"
+  | "Escape"
+  | "Tab"
+  | "Enter"
+  | "Backspace"
+  | "Space";
+
+const ESC = "\u001b";
+const CSI = `${ESC}[`;
+const TMUX_PREFIX = "\u0002";
+
+export const defaultTerminalModifiers: TerminalModifierState = {
+  ctrl: false,
+  alt: false,
+  shift: false,
+};
+
+export function hasActiveTerminalModifiers(modifiers: TerminalModifierState): boolean {
+  return modifiers.ctrl || modifiers.alt || modifiers.shift;
+}
+
+function getModifierParameter(modifiers: TerminalModifierState): number {
+  let parameter = 1;
+  if (modifiers.shift) {
+    parameter += 1;
+  }
+  if (modifiers.alt) {
+    parameter += 2;
+  }
+  if (modifiers.ctrl) {
+    parameter += 4;
+  }
+  return parameter;
+}
+
+function withAltPrefix(value: string, modifiers: TerminalModifierState): string {
+  return modifiers.alt ? `${ESC}${value}` : value;
+}
+
+function encodeArrowKey(key: "A" | "B" | "C" | "D", modifiers: TerminalModifierState): string {
+  if (!hasActiveTerminalModifiers(modifiers)) {
+    return `${CSI}${key}`;
+  }
+  return `${CSI}1;${getModifierParameter(modifiers)}${key}`;
+}
+
+function encodeCtrlCharacter(character: string): string | null {
+  if (character.length !== 1) {
+    return null;
+  }
+
+  const upperCharacter = character.toUpperCase();
+  if (upperCharacter >= "A" && upperCharacter <= "Z") {
+    return String.fromCharCode(upperCharacter.charCodeAt(0) - 64);
+  }
+
+  switch (character) {
+    case "@":
+    case " ":
+      return "\u0000";
+    case "[":
+      return "\u001b";
+    case "\\":
+      return "\u001c";
+    case "]":
+      return "\u001d";
+    case "^":
+      return "\u001e";
+    case "_":
+      return "\u001f";
+    case "?":
+      return "\u007f";
+    default:
+      return null;
+  }
+}
+
+export function encodeTerminalInput(
+  key: TerminalSpecialKey | string,
+  modifiers: TerminalModifierState = defaultTerminalModifiers,
+): string | null {
+  switch (key) {
+    case "ArrowUp":
+      return encodeArrowKey("A", modifiers);
+    case "ArrowDown":
+      return encodeArrowKey("B", modifiers);
+    case "ArrowRight":
+      return encodeArrowKey("C", modifiers);
+    case "ArrowLeft":
+      return encodeArrowKey("D", modifiers);
+    case "Tab":
+      if (!hasActiveTerminalModifiers(modifiers)) {
+        return "\t";
+      }
+      if (modifiers.shift && !modifiers.ctrl && !modifiers.alt) {
+        return `${CSI}Z`;
+      }
+      return `${CSI}1;${getModifierParameter(modifiers)}Z`;
+    case "Enter":
+      return withAltPrefix("\r", modifiers);
+    case "Backspace":
+      return withAltPrefix("\u007f", modifiers);
+    case "Escape":
+      return modifiers.alt ? `${ESC}${ESC}` : ESC;
+    case "Space":
+      if (modifiers.ctrl) {
+        const value = "\u0000";
+        return modifiers.alt ? `${ESC}${value}` : value;
+      }
+      return withAltPrefix(" ", modifiers);
+    default:
+      if (key.length !== 1) {
+        return null;
+      }
+
+      const shiftedKey = modifiers.shift ? key.toUpperCase() : key;
+      if (modifiers.ctrl) {
+        const ctrlValue = encodeCtrlCharacter(shiftedKey);
+        if (!ctrlValue) {
+          return null;
+        }
+        return modifiers.alt ? `${ESC}${ctrlValue}` : ctrlValue;
+      }
+
+      return withAltPrefix(shiftedKey, modifiers);
+  }
+}
+
+export function encodeTerminalDataInput(
+  data: string,
+  modifiers: TerminalModifierState = defaultTerminalModifiers,
+): string | null {
+  if (!hasActiveTerminalModifiers(modifiers)) {
+    return data;
+  }
+
+  switch (data) {
+    case `${CSI}A`:
+    case `${ESC}OA`:
+      return encodeTerminalInput("ArrowUp", modifiers);
+    case `${CSI}B`:
+    case `${ESC}OB`:
+      return encodeTerminalInput("ArrowDown", modifiers);
+    case `${CSI}C`:
+    case `${ESC}OC`:
+      return encodeTerminalInput("ArrowRight", modifiers);
+    case `${CSI}D`:
+    case `${ESC}OD`:
+      return encodeTerminalInput("ArrowLeft", modifiers);
+    case "\t":
+      return encodeTerminalInput("Tab", modifiers);
+    case "\r":
+      return encodeTerminalInput("Enter", modifiers);
+    case "\u007f":
+      return encodeTerminalInput("Backspace", modifiers);
+    case ESC:
+      return encodeTerminalInput("Escape", modifiers);
+    case " ":
+      return encodeTerminalInput("Space", modifiers);
+    default:
+      if (data.length !== 1) {
+        return null;
+      }
+      return encodeTerminalInput(data, modifiers);
+  }
+}
+
+export function encodeTmuxShortcut(shortcut: TmuxShortcut): string | null {
+  switch (shortcut) {
+    case "split-pane":
+      return `${TMUX_PREFIX}"`;
+    case "next-pane":
+      return `${TMUX_PREFIX}o`;
+    case "resize-pane-up": {
+      const resizeUp = encodeTerminalInput("ArrowUp", {
+        ctrl: true,
+        alt: false,
+        shift: false,
+      });
+      return resizeUp ? `${TMUX_PREFIX}${resizeUp}` : null;
+    }
+    case "resize-pane-down": {
+      const resizeDown = encodeTerminalInput("ArrowDown", {
+        ctrl: true,
+        alt: false,
+        shift: false,
+      });
+      return resizeDown ? `${TMUX_PREFIX}${resizeDown}` : null;
+    }
+  }
+}

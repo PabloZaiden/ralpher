@@ -5,6 +5,8 @@
 export { useWebSocket, useGlobalEvents, useLoopEvents, type WebSocketConnectionStatus, type UseWebSocketOptions, type UseWebSocketResult } from "./useWebSocket";
 export { useLoops, type UseLoopsResult, type CreateLoopResult } from "./useLoops";
 export { useLoop, type UseLoopResult } from "./useLoop";
+export { useSshSessions, type UseSshSessionsResult } from "./useSshSessions";
+export { useSshSession, type UseSshSessionResult } from "./useSshSession";
 export { useWorkspaceServerSettings, type UseWorkspaceServerSettingsResult } from "./useWorkspaceServerSettings";
 export { useMarkdownPreference, type UseMarkdownPreferenceResult } from "./useMarkdownPreference";
 export { useLogLevelPreference, type UseLogLevelPreferenceResult } from "./useLogLevelPreference";

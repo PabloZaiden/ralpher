@@ -59,6 +59,7 @@ export interface Migration {
  */
 const KNOWN_TABLE_NAMES = new Set([
   "loops",
+  "ssh_sessions",
   "workspaces",
   "preferences",
   "review_comments",
@@ -99,7 +100,39 @@ export function tableExists(db: Database, tableName: string): boolean {
  * Note: Legacy migrations (v1-v16) were removed in a clean-cut reset.
  * Their schema changes are now part of the base schema in database.ts.
  */
-export const migrations: Migration[] = [];
+export const migrations: Migration[] = [
+  {
+    version: 1,
+    name: "create_ssh_sessions",
+    up: (db) => {
+      if (!tableExists(db, "ssh_sessions")) {
+        db.run(`
+          CREATE TABLE ssh_sessions (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            workspace_id TEXT NOT NULL,
+            directory TEXT NOT NULL,
+            remote_session_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'ready',
+            last_connected_at TEXT,
+            error_message TEXT,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+          )
+        `);
+      }
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_ssh_sessions_workspace_id
+        ON ssh_sessions(workspace_id)
+      `);
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_ssh_sessions_created_at
+        ON ssh_sessions(created_at DESC)
+      `);
+    },
+  },
+];
 
 /**
  * Create the schema_migrations table if it doesn't exist.

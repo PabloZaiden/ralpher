@@ -38,6 +38,8 @@ export interface BackendConnectionConfig {
   username?: string;
   /** SSH password (optional) */
   password?: string;
+  /** SSH identity file path (optional) */
+  identityFile?: string;
   /** Derived command for ACP transport */
   command?: string;
   /** Derived command args for ACP transport */

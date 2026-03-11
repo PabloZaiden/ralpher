@@ -33,6 +33,7 @@ const SshAgentSettingsSchema = z.object({
   port: z.number().int().min(1).max(65535).optional(),
   username: z.string().optional(),
   password: z.string().optional(),
+  identityFile: z.string().min(1).optional(),
 });
 
 /**
@@ -126,4 +127,3 @@ export type ServerSettings = z.infer<typeof ServerSettingsSchema>;
 export type WorkspaceConfig = z.infer<typeof WorkspaceConfigSchema>;
 export type WorkspaceExportData = z.infer<typeof WorkspaceExportSchema>;
 export type WorkspaceImportRequest = z.infer<typeof WorkspaceImportRequestSchema>;
-

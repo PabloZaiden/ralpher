@@ -106,8 +106,45 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
       const commandTokens = capturedCommand ?? [];
       expect(commandTokens[0]).toBe("sshpass");
       expect(commandTokens).toContain("-e");
+      expect(commandTokens).toContain("NumberOfPasswordPrompts=1");
+      expect(commandTokens).toContain("PreferredAuthentications=password,keyboard-interactive");
       expect(commandTokens).not.toContain("top-secret");
       expect(capturedEnv?.["SSHPASS"]).toBe("top-secret");
+    } finally {
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+    }
+  });
+
+  test("uses an explicit identity file when configured for SSH auth", async () => {
+    const originalSpawn = Bun.spawn;
+    let capturedCommand: string[] | undefined;
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((...args: unknown[]) => {
+      const command = (args.length === 1
+        ? (args[0] as { cmd?: string[] } | undefined)?.cmd
+        : args[0]) as string[] | undefined;
+      capturedCommand = command;
+      throw new Error("mock spawn failure");
+    }) as unknown as typeof Bun.spawn;
+
+    try {
+      const executor = new CommandExecutorImpl({
+        provider: "ssh",
+        directory: "/workspaces/remote-only-path",
+        host: "127.0.0.1",
+        identityFile: "/tmp/test-key",
+      });
+
+      const result = await executor.exec("pwd", []);
+      expect(result.success).toBe(false);
+
+      const commandTokens = capturedCommand ?? [];
+      expect(commandTokens[0]).toBe("ssh");
+      expect(commandTokens).toContain("IdentityAgent=none");
+      expect(commandTokens).toContain("IdentitiesOnly=yes");
+      const identityFileIndex = commandTokens.indexOf("-i");
+      expect(identityFileIndex).toBeGreaterThanOrEqual(0);
+      expect(commandTokens[identityFileIndex + 1]).toBe("/tmp/test-key");
     } finally {
       (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
     }

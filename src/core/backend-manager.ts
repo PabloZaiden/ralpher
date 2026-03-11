@@ -17,7 +17,11 @@ import {
 import { loopEventEmitter } from "./event-emitter";
 import type { LoopEvent } from "../types/events";
 import type { CommandExecutor } from "./command-executor";
-import { CommandExecutorImpl, buildSshRemoteShellCommand } from "./remote-command-executor";
+import {
+  CommandExecutorImpl,
+  buildSshCommandArgs,
+  buildSshRemoteShellCommand,
+} from "./remote-command-executor";
 import { GitService } from "./git-service";
 import { log } from "./logger";
 
@@ -44,6 +48,7 @@ interface DerivedExecutionSettings {
   port?: number;
   user?: string;
   password?: string;
+  identityFile?: string;
 }
 
 function getProviderAcpCommand(provider: "opencode" | "copilot"): { command: string; args: string[] } {
@@ -55,13 +60,14 @@ function getProviderAcpCommand(provider: "opencode" | "copilot"): { command: str
 
 function deriveExecutionSettings(settings: ServerSettings): DerivedExecutionSettings {
   if (settings.agent.transport === "ssh") {
-    return {
-      provider: "ssh",
-      host: settings.agent.hostname,
-      port: settings.agent.port ?? 22,
-      user: settings.agent.username?.trim() || undefined,
-      password: settings.agent.password?.trim() || undefined,
-    };
+      return {
+        provider: "ssh",
+        host: settings.agent.hostname,
+        port: settings.agent.port ?? 22,
+        user: settings.agent.username?.trim() || undefined,
+        password: settings.agent.password?.trim() || undefined,
+        identityFile: settings.agent.identityFile?.trim() || undefined,
+      };
   }
 
   return { provider: "local" };
@@ -80,36 +86,25 @@ function buildAgentRuntimeCommand(settings: ServerSettings): { command: string; 
   const sshTarget = settings.agent.username?.trim()
     ? `${settings.agent.username.trim()}@${settings.agent.hostname}`
     : settings.agent.hostname;
-  const sshArgs = [
-    "-o",
-    "ConnectTimeout=10",
-    "-o",
-    "StrictHostKeyChecking=no",
-    "-o",
-    "UserKnownHostsFile=/dev/null",
-    "-o",
-    "LogLevel=ERROR",
-    "-o",
-    "ServerAliveInterval=15",
-    "-o",
-    "ServerAliveCountMax=1",
-    "-p",
-    String(settings.agent.port ?? 22),
-    sshTarget,
-    "--",
+  const password = settings.agent.password?.trim();
+  const sshArgs = buildSshCommandArgs({
+    authMode: password ? "password" : "batch",
+    port: settings.agent.port ?? 22,
+    target: sshTarget,
     remoteCommand,
-  ];
+    identityFile: settings.agent.identityFile,
+  });
 
-  if (settings.agent.password && settings.agent.password.trim().length > 0) {
+  if (password) {
     return {
       command: "sshpass",
-      args: ["-p", settings.agent.password, "ssh", "-o", "NumberOfPasswordPrompts=1", ...sshArgs],
+      args: ["-p", password, "ssh", ...sshArgs],
     };
   }
 
   return {
     command: "ssh",
-    args: ["-o", "BatchMode=yes", ...sshArgs],
+    args: sshArgs,
   };
 }
 
@@ -197,6 +192,7 @@ export function buildConnectionConfig(settings: ServerSettings, directory: strin
     port: sshAgent?.port ?? (sshAgent ? 22 : undefined),
     username: sshAgent?.username?.trim() || undefined,
     password: sshAgent?.password,
+    identityFile: sshAgent?.identityFile?.trim() || undefined,
     command: derivedCommand.command,
     args: derivedCommand.args,
     directory,
@@ -576,6 +572,7 @@ class BackendManager {
         port: execution.port,
         user: execution.user,
         password: execution.password,
+        identityFile: execution.identityFile,
         timeoutMs: this.connectionTimeoutMs,
       });
 
@@ -804,6 +801,7 @@ class BackendManager {
       port: execution.port,
       user: execution.user,
       password: execution.password,
+      identityFile: execution.identityFile,
     });
   }
 

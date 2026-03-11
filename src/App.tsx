@@ -7,12 +7,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Dashboard } from "./components/Dashboard";
 import { LoopDetails } from "./components/LoopDetails";
 import { LogLevelInitializer } from "./components/LogLevelInitializer";
+import { SshSessionDetails } from "./components/SshSessionDetails";
 import "./index.css";
 
 type Route =
   | { view: "dashboard" }
   | { view: "loop"; loopId: string }
-  | { view: "chat"; chatId: string };
+  | { view: "chat"; chatId: string }
+  | { view: "ssh"; sshSessionId: string };
 
 /**
  * Parse the current URL hash into a route.
@@ -33,6 +35,13 @@ function parseHash(): Route {
       return { view: "chat", chatId };
     }
   }
+
+  if (hash.startsWith("/ssh/")) {
+    const sshSessionId = hash.slice(5);
+    if (sshSessionId) {
+      return { view: "ssh", sshSessionId };
+    }
+  }
   
   return { view: "dashboard" };
 }
@@ -45,6 +54,8 @@ function navigateTo(route: Route) {
     window.location.hash = "/";
   } else if (route.view === "loop") {
     window.location.hash = `/loop/${route.loopId}`;
+  } else if (route.view === "ssh") {
+    window.location.hash = `/ssh/${route.sshSessionId}`;
   } else {
     window.location.hash = `/chat/${route.chatId}`;
   }
@@ -76,6 +87,10 @@ export function App() {
     navigateTo({ view: "dashboard" });
   }, []);
 
+  const handleSelectSshSession = useCallback((sshSessionId: string) => {
+    navigateTo({ view: "ssh", sshSessionId });
+  }, []);
+
   // Render the current view
   if (route.view === "loop") {
     return (
@@ -99,11 +114,23 @@ export function App() {
     );
   }
 
+  if (route.view === "ssh") {
+    return (
+      <LogLevelInitializer>
+        <SshSessionDetails
+          sshSessionId={route.sshSessionId}
+          onBack={handleBack}
+        />
+      </LogLevelInitializer>
+    );
+  }
+
   return (
     <LogLevelInitializer>
       <Dashboard
         onSelectLoop={handleSelectLoop}
         onSelectChat={handleSelectChat}
+        onSelectSshSession={handleSelectSshSession}
       />
     </LogLevelInitializer>
   );

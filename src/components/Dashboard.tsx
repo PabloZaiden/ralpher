@@ -3,7 +3,7 @@
  * Orchestrates data fetching, modal state, and loop grouping via extracted hooks and components.
  */
 
-import { useLoops, useWorkspaces, useViewModePreference } from "../hooks";
+import { useLoops, useSshSessions, useWorkspaces, useViewModePreference } from "../hooks";
 import { useWorkspaceServerSettings } from "../hooks";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useDashboardModals } from "../hooks/useDashboardModals";
@@ -11,15 +11,20 @@ import { useLoopGrouping } from "../hooks/useLoopGrouping";
 import { DashboardHeader } from "./DashboardHeader";
 import { LoopGrid } from "./LoopGrid";
 import { DashboardModals } from "./DashboardModals";
+import { CreateSshSessionModal } from "./CreateSshSessionModal";
+import { SshSessionSection } from "./SshSessionSection";
+import { useState } from "react";
 
 export interface DashboardProps {
   /** Callback when a loop is selected */
   onSelectLoop?: (loopId: string) => void;
   /** Callback when a chat is selected */
   onSelectChat?: (chatId: string) => void;
+  /** Callback when an SSH session is selected */
+  onSelectSshSession?: (sessionId: string) => void;
 }
 
-export function Dashboard({ onSelectLoop, onSelectChat }: DashboardProps) {
+export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: DashboardProps) {
   const {
     loops,
     loading,
@@ -30,6 +35,13 @@ export function Dashboard({ onSelectLoop, onSelectChat }: DashboardProps) {
 
     updateLoop,
   } = useLoops();
+  const {
+    sessions,
+    loading: sshSessionsLoading,
+    error: sshSessionsError,
+    createSession,
+  } = useSshSessions();
+  const [showCreateSshSessionModal, setShowCreateSshSessionModal] = useState(false);
 
   const {
     workspaces,
@@ -87,6 +99,14 @@ export function Dashboard({ onSelectLoop, onSelectChat }: DashboardProps) {
         onOpenCreateWorkspace={() => modals.setShowCreateWorkspaceModal(true)}
         onOpenCreateLoop={() => modals.handleOpenCreateLoop()}
         onOpenCreateChat={() => modals.handleOpenCreateChat()}
+        onOpenCreateSshSession={() => setShowCreateSshSessionModal(true)}
+      />
+
+      <SshSessionSection
+        sessions={sessions}
+        loading={sshSessionsLoading}
+        error={sshSessionsError}
+        onSelect={(sessionId) => onSelectSshSession?.(sessionId)}
       />
 
       <LoopGrid
@@ -166,6 +186,16 @@ export function Dashboard({ onSelectLoop, onSelectChat }: DashboardProps) {
         showCreateWorkspaceModal={modals.showCreateWorkspaceModal}
         onCloseCreateWorkspaceModal={() => modals.setShowCreateWorkspaceModal(false)}
         onCreateWorkspace={createWorkspace}
+      />
+
+      <CreateSshSessionModal
+        isOpen={showCreateSshSessionModal}
+        onClose={() => setShowCreateSshSessionModal(false)}
+        onCreate={createSession}
+        workspaces={workspaces}
+        workspacesLoading={workspacesLoading}
+        workspaceError={workspaceError}
+        onCreated={(sessionId) => onSelectSshSession?.(sessionId)}
       />
     </div>
   );

@@ -15,6 +15,8 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   clickable?: boolean;
   /** Whether to add padding */
   padding?: boolean;
+  /** Additional classes for the content wrapper */
+  bodyClassName?: string;
   /** Children content */
   children?: ReactNode;
 }
@@ -25,6 +27,7 @@ export function Card({
   headerActions,
   clickable = false,
   padding = true,
+  bodyClassName = "",
   children,
   className = "",
   ...props
@@ -58,7 +61,7 @@ export function Card({
         </div>
       )}
       {children && (
-        <div className={padding ? "p-4" : ""}>{children}</div>
+        <div className={`${padding ? "p-4" : ""} ${bodyClassName}`.trim()}>{children}</div>
       )}
     </div>
   );

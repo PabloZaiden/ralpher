@@ -24,6 +24,7 @@ import { settingsRoutes } from "./settings";
 import { gitRoutes } from "./git";
 import { workspacesRoutes } from "./workspaces";
 import { agentsMdRoutes } from "./agents-md";
+import { sshSessionsRoutes } from "./ssh-sessions";
 
 /**
  * All API routes combined.
@@ -49,6 +50,7 @@ export const apiRoutes = {
   ...gitRoutes,
   ...workspacesRoutes,
   ...agentsMdRoutes,
+  ...sshSessionsRoutes,
 };
 
 // Re-export individual route modules
@@ -60,4 +62,5 @@ export * from "./settings";
 export * from "./git";
 export * from "./workspaces";
 export * from "./agents-md";
+export * from "./ssh-sessions";
 export * from "./websocket";
