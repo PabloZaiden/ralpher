@@ -3,6 +3,8 @@
  */
 
 export * from "./loop";
+export * from "./ssh-session";
+export * from "./ssh-session-events";
 export * from "./events";
 export * from "./api";
 export * from "./workspace";

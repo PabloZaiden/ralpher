@@ -4,7 +4,7 @@
  * No external dependencies - uses native patterns.
  */
 
-import type { LoopEvent } from "../types";
+import type { LoopEvent, SshSessionEvent } from "../types";
 import { log } from "./logger";
 
 type EventHandler<T> = (event: T) => void;
@@ -70,3 +70,8 @@ export class SimpleEventEmitter<T = LoopEvent> {
  * Used by WebSocket handlers to broadcast events to clients.
  */
 export const loopEventEmitter = new SimpleEventEmitter<LoopEvent>();
+
+/**
+ * Global event emitter instance for SSH session events.
+ */
+export const sshSessionEventEmitter = new SimpleEventEmitter<SshSessionEvent>();

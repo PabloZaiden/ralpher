@@ -1,0 +1,162 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
+import { ensureDataDirectories, getDatabase } from "../../src/persistence/database";
+import { apiRoutes } from "../../src/api";
+import { backendManager } from "../../src/core/backend-manager";
+import { createMockBackend } from "../mocks/mock-backend";
+import { TestCommandExecutor } from "../mocks/mock-executor";
+import { serve, type Server } from "bun";
+import { join } from "path";
+import { mkdtemp, rm } from "fs/promises";
+import { tmpdir } from "os";
+
+class SshSessionTestExecutor extends TestCommandExecutor {
+  override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
+    if (command === "tmux" && args[0] === "-V") {
+      return {
+        success: true,
+        stdout: "tmux 3.4\n",
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    if (command === "tmux" && args[0] === "kill-session") {
+      return {
+        success: true,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    return await super.exec(command, args, options);
+  }
+}
+
+describe("SSH sessions API integration", () => {
+  let dataDir: string;
+  let workDir: string;
+  let server: Server<unknown>;
+  let baseUrl: string;
+
+  beforeAll(async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "ralpher-ssh-sessions-data-"));
+    workDir = await mkdtemp(join(tmpdir(), "ralpher-ssh-sessions-work-"));
+    process.env["RALPHER_DATA_DIR"] = dataDir;
+
+    await ensureDataDirectories();
+    await Bun.$`git init ${workDir}`.quiet();
+    await Bun.$`git -C ${workDir} config user.email "test@test.com"`.quiet();
+    await Bun.$`git -C ${workDir} config user.name "Test User"`.quiet();
+    await Bun.$`touch ${workDir}/README.md`.quiet();
+    await Bun.$`git -C ${workDir} add .`.quiet();
+    await Bun.$`git -C ${workDir} commit -m "Initial commit"`.quiet();
+
+    backendManager.setBackendForTesting(createMockBackend());
+    backendManager.setExecutorFactoryForTesting(() => new SshSessionTestExecutor());
+
+    server = serve({
+      port: 0,
+      routes: {
+        ...apiRoutes,
+      },
+    });
+    baseUrl = server.url.toString().replace(/\/$/, "");
+  });
+
+  afterAll(async () => {
+    server.stop();
+    backendManager.resetForTesting();
+    await rm(dataDir, { recursive: true, force: true });
+    await rm(workDir, { recursive: true, force: true });
+    delete process.env["RALPHER_DATA_DIR"];
+  });
+
+  beforeEach(() => {
+    const db = getDatabase();
+    db.run("DELETE FROM ssh_sessions");
+    db.run("DELETE FROM loops WHERE workspace_id IS NOT NULL");
+    db.run("DELETE FROM workspaces");
+  });
+
+  async function createWorkspace(transport: "ssh" | "stdio" = "ssh") {
+    const response = await fetch(`${baseUrl}/api/workspaces`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "SSH Workspace",
+        directory: workDir,
+        serverSettings: transport === "ssh"
+          ? {
+              agent: {
+                provider: "opencode",
+                transport: "ssh",
+                hostname: "localhost",
+                username: "tester",
+              },
+            }
+          : {
+              agent: {
+                provider: "opencode",
+                transport: "stdio",
+              },
+            },
+      }),
+    });
+    expect(response.ok).toBe(true);
+    return await response.json() as { id: string };
+  }
+
+  test("creates, lists, fetches, and deletes an SSH session", async () => {
+    const workspace = await createWorkspace("ssh");
+
+    const createResponse = await fetch(`${baseUrl}/api/ssh-sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: workspace.id,
+        name: "My SSH Session",
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { config: { id: string; name: string } };
+    expect(created.config.name).toBe("My SSH Session");
+
+    const listResponse = await fetch(`${baseUrl}/api/ssh-sessions`);
+    expect(listResponse.ok).toBe(true);
+    const sessions = await listResponse.json() as Array<{ config: { id: string } }>;
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.config.id).toBe(created.config.id);
+
+    const getResponse = await fetch(`${baseUrl}/api/ssh-sessions/${created.config.id}`);
+    expect(getResponse.ok).toBe(true);
+    const fetched = await getResponse.json() as { config: { remoteSessionName: string } };
+    expect(fetched.config.remoteSessionName).toContain("ralpher-");
+
+    const deleteResponse = await fetch(`${baseUrl}/api/ssh-sessions/${created.config.id}`, {
+      method: "DELETE",
+    });
+    expect(deleteResponse.ok).toBe(true);
+
+    const listAfterDelete = await fetch(`${baseUrl}/api/ssh-sessions`);
+    expect(listAfterDelete.ok).toBe(true);
+    expect(await listAfterDelete.json()).toEqual([]);
+  });
+
+  test("rejects session creation for non-ssh workspaces", async () => {
+    const workspace = await createWorkspace("stdio");
+
+    const response = await fetch(`${baseUrl}/api/ssh-sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: workspace.id,
+        name: "Invalid Session",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    const data = await response.json() as { message: string };
+    expect(data.message).toContain("ssh transport");
+  });
+});
+

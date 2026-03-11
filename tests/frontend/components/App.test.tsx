@@ -9,7 +9,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor, act } from "../helpers/render";
-import { createLoop, createWorkspace } from "../helpers/factories";
+import { createLoop, createSshSession, createWorkspace } from "../helpers/factories";
 import { App } from "@/App";
 
 const api = createMockApi();
@@ -20,6 +20,7 @@ function setupDefaultApi() {
   // Dashboard needs: loops, workspaces, config, health, last-model, preferences
   api.get("/api/loops", () => []);
   api.get("/api/workspaces", () => []);
+  api.get("/api/ssh-sessions", () => []);
   api.get("/api/config", () => ({ remoteOnly: false }));
   api.get("/api/health", () => ({ status: "ok", version: "1.0.0" }));
   api.get("/api/preferences/last-model", () => null);
@@ -31,6 +32,9 @@ function setupDefaultApi() {
   api.get("/api/models", () => []);
   api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
   api.get("/api/loops/:id/diff", () => []);
+  api.get("/api/ssh-sessions/:id", (req) =>
+    createSshSession({ config: { id: req.params["id"]!, name: `SSH ${req.params["id"]!}` } }),
+  );
 }
 
 beforeEach(() => {
@@ -59,6 +63,7 @@ describe("default route", () => {
     });
     // Dashboard shows "New Loop" button
     expect(getByText("New Loop")).toBeTruthy();
+    expect(getByText("New Loop")).toBeTruthy();
   });
 
   test("renders Dashboard when hash is #/", async () => {
@@ -69,6 +74,7 @@ describe("default route", () => {
     await waitFor(() => {
       expect(getByText("Ralpher")).toBeTruthy();
     });
+    expect(getByText("New Loop")).toBeTruthy();
     expect(getByText("New Loop")).toBeTruthy();
   });
 });
@@ -99,6 +105,18 @@ describe("loop details route", () => {
 
     await waitFor(() => {
       expect(getByText("My Test Loop")).toBeTruthy();
+    });
+  });
+});
+
+describe("ssh session route", () => {
+  test("renders SshSessionDetails when hash is #/ssh/:id", async () => {
+    window.location.hash = "/ssh/test-ssh-123";
+
+    const { getByText } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByText("SSH test-ssh-123")).toBeTruthy();
     });
   });
 });

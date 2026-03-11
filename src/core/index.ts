@@ -7,3 +7,4 @@ export * from "./event-emitter";
 export * from "./git-service";
 export * from "./loop-engine";
 export * from "./loop-manager";
+export * from "./ssh-session-manager";

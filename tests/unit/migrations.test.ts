@@ -19,6 +19,11 @@ import {
   tableExists,
 } from "../../src/persistence/migrations";
 
+function nextMigrationVersion(offset = 1): number {
+  const highestExisting = migrations.reduce((max, migration) => Math.max(max, migration.version), 0);
+  return highestExisting + offset;
+}
+
 describe("migration infrastructure", () => {
   let tempDir: string;
   let db: Database;
@@ -73,9 +78,9 @@ describe("migration infrastructure", () => {
     });
 
     test("returns 0 when no migrations are defined", () => {
-      expect(migrations.length).toBe(0);
+      expect(migrations.length).toBeGreaterThan(0);
       const applied = runMigrations(db);
-      expect(applied).toBe(0);
+      expect(applied).toBe(migrations.length);
     });
 
     test("is idempotent - safe to call multiple times", () => {
@@ -113,6 +118,7 @@ describe("migration infrastructure", () => {
     test("works for all known table names", () => {
       // Create all known tables
       db.run("CREATE TABLE loops (id TEXT PRIMARY KEY)");
+      db.run("CREATE TABLE ssh_sessions (id TEXT PRIMARY KEY)");
       db.run("CREATE TABLE workspaces (id TEXT PRIMARY KEY)");
       db.run("CREATE TABLE preferences (key TEXT PRIMARY KEY)");
       db.run("CREATE TABLE review_comments (id TEXT PRIMARY KEY)");
@@ -120,6 +126,7 @@ describe("migration infrastructure", () => {
 
       // All should work without throwing
       expect(getTableColumns(db, "loops")).toContain("id");
+      expect(getTableColumns(db, "ssh_sessions")).toContain("id");
       expect(getTableColumns(db, "workspaces")).toContain("id");
       expect(getTableColumns(db, "preferences")).toContain("key");
       expect(getTableColumns(db, "review_comments")).toContain("id");
@@ -152,8 +159,9 @@ describe("migration infrastructure", () => {
 
       // Temporarily add a mock migration
       const originalLength = migrations.length;
+      const version = nextMigrationVersion();
       migrations.push({
-        version: 1,
+        version,
         name: "test_add_description",
         up: (database) => {
           const columns = getTableColumns(database, "loops");
@@ -165,17 +173,17 @@ describe("migration infrastructure", () => {
 
       try {
         const applied = runMigrations(db);
-        expect(applied).toBe(1);
+        expect(applied).toBe(originalLength + 1);
 
         // Verify the column was added
         const columns = getTableColumns(db, "loops");
         expect(columns).toContain("description");
 
         // Verify schema version
-        expect(getSchemaVersion(db)).toBe(1);
+        expect(getSchemaVersion(db)).toBe(version);
 
         // Verify schema_migrations has the record
-        const record = db.query("SELECT * FROM schema_migrations WHERE version = 1").get() as {
+        const record = db.query(`SELECT * FROM schema_migrations WHERE version = ${version}`).get() as {
           version: number;
           name: string;
           applied_at: string;
@@ -194,8 +202,9 @@ describe("migration infrastructure", () => {
 
       let callCount = 0;
       const originalLength = migrations.length;
+      const version = nextMigrationVersion();
       migrations.push({
-        version: 1,
+        version,
         name: "test_counting",
         up: () => {
           callCount++;
@@ -221,25 +230,28 @@ describe("migration infrastructure", () => {
       const originalLength = migrations.length;
 
       // Add migrations in reverse order
+      const version1 = nextMigrationVersion();
+      const version2 = nextMigrationVersion(2);
+      const version3 = nextMigrationVersion(3);
       migrations.push({
-        version: 3,
+        version: version3,
         name: "third",
         up: () => { appliedOrder.push(3); },
       });
       migrations.push({
-        version: 1,
+        version: version1,
         name: "first",
         up: () => { appliedOrder.push(1); },
       });
       migrations.push({
-        version: 2,
+        version: version2,
         name: "second",
         up: () => { appliedOrder.push(2); },
       });
 
       try {
         const applied = runMigrations(db);
-        expect(applied).toBe(3);
+        expect(applied).toBe(originalLength + 3);
         expect(appliedOrder).toEqual([1, 2, 3]);
       } finally {
         migrations.length = originalLength;
@@ -250,8 +262,10 @@ describe("migration infrastructure", () => {
       db.run("CREATE TABLE loops (id TEXT PRIMARY KEY)");
 
       const originalLength = migrations.length;
+      const goodVersion = nextMigrationVersion();
+      const badVersion = nextMigrationVersion(2);
       migrations.push({
-        version: 1,
+        version: goodVersion,
         name: "good_migration",
         up: (database) => {
           const columns = getTableColumns(database, "loops");
@@ -261,7 +275,7 @@ describe("migration infrastructure", () => {
         },
       });
       migrations.push({
-        version: 2,
+        version: badVersion,
         name: "bad_migration",
         up: () => {
           throw new Error("Migration failed deliberately");
@@ -274,7 +288,7 @@ describe("migration infrastructure", () => {
         // Good migration should have been applied (it ran in its own transaction)
         const columns = getTableColumns(db, "loops");
         expect(columns).toContain("good_column");
-        expect(getSchemaVersion(db)).toBe(1);
+        expect(getSchemaVersion(db)).toBe(goodVersion);
       } finally {
         migrations.length = originalLength;
       }

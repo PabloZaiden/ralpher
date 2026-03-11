@@ -22,9 +22,10 @@
  */
 
 import type { ServerWebSocket } from "bun";
-import { loopEventEmitter } from "../core/event-emitter";
+import { loopEventEmitter, sshSessionEventEmitter } from "../core/event-emitter";
+import { SshTerminalBridge } from "../core/ssh-terminal-bridge";
 import { createLogger } from "../core/logger";
-import type { LoopEvent } from "../types";
+import type { LoopEvent, SshSessionEvent } from "../types";
 
 const log = createLogger("api:websocket");
 
@@ -41,8 +42,14 @@ const activeConnections = new Set<ServerWebSocket<WebSocketData>>();
 export interface WebSocketData {
   /** Optional loop ID to filter events - only events for this loop are sent */
   loopId?: string;
-  /** Unsubscribe function for event emitter cleanup */
-  unsubscribe?: () => void;
+  /** Optional SSH session ID to filter session events or attach a terminal */
+  sshSessionId?: string;
+  /** Whether this socket is a terminal transport socket */
+  terminalMode?: boolean;
+  /** Active terminal bridge for terminal-mode sockets */
+  terminalBridge?: SshTerminalBridge;
+  /** Unsubscribe functions for event emitter cleanup */
+  unsubscribers?: Array<() => void>;
 }
 
 /**
@@ -59,7 +66,7 @@ export const websocketHandlers = {
    * @param ws - The WebSocket connection
    */
   open(ws: ServerWebSocket<WebSocketData>) {
-    const { loopId } = ws.data;
+    const { loopId, sshSessionId, terminalMode } = ws.data;
 
     // Enforce connection limit — close oldest connection if at capacity
     if (activeConnections.size >= MAX_CONNECTIONS) {
@@ -80,11 +87,52 @@ export const websocketHandlers = {
       activeConnections: activeConnections.size,
     });
 
-    // Send initial connection confirmation
-    ws.send(JSON.stringify({ type: "connected", loopId: loopId ?? null }));
+    // Terminal sockets attach directly to SSH/tmux and do not subscribe to app events.
+    if (terminalMode && sshSessionId) {
+      const bridge = new SshTerminalBridge(sshSessionId, {
+        onOutput: (chunk) => {
+          try {
+            ws.send(JSON.stringify({ type: "terminal.output", data: chunk }));
+          } catch (sendError) {
+            log.trace("Failed to send terminal output", { error: String(sendError), sshSessionId });
+          }
+        },
+        onError: (error) => {
+          try {
+            ws.send(JSON.stringify({ type: "terminal.error", message: String(error) }));
+          } catch (sendError) {
+            log.trace("Failed to send terminal error", { error: String(sendError), sshSessionId });
+          }
+        },
+        onExit: (code, signal) => {
+          try {
+            ws.send(JSON.stringify({
+              type: "terminal.closed",
+              code,
+              signal,
+            }));
+          } catch (sendError) {
+            log.trace("Failed to send terminal close event", { error: String(sendError), sshSessionId });
+          }
+        },
+      });
+      ws.data.terminalBridge = bridge;
+      ws.send(JSON.stringify({ type: "terminal.connected", sshSessionId }));
+      void bridge.connect().catch(async (error: Error) => {
+        try {
+          ws.send(JSON.stringify({ type: "terminal.error", message: String(error) }));
+        } catch (sendError) {
+          log.trace("Failed to send terminal startup error", { error: String(sendError), sshSessionId });
+        }
+        await bridge.dispose();
+      });
+      return;
+    }
 
-    // Subscribe to events
-    const unsubscribe = loopEventEmitter.subscribe((event: LoopEvent) => {
+    // Send initial connection confirmation
+    ws.send(JSON.stringify({ type: "connected", loopId: loopId ?? null, sshSessionId: sshSessionId ?? null }));
+
+    const loopUnsubscribe = loopEventEmitter.subscribe((event: LoopEvent) => {
       // Filter by loopId if specified
       if (loopId && "loopId" in event && event.loopId !== loopId) {
         return;
@@ -97,8 +145,19 @@ export const websocketHandlers = {
       }
     });
 
-    // Store unsubscribe function for cleanup
-    ws.data.unsubscribe = unsubscribe;
+    const sshSessionUnsubscribe = sshSessionEventEmitter.subscribe((event: SshSessionEvent) => {
+      if (sshSessionId && event.sshSessionId !== sshSessionId) {
+        return;
+      }
+
+      try {
+        ws.send(JSON.stringify(event));
+      } catch (sendError) {
+        log.trace("Failed to send SSH session event to WebSocket client", { error: String(sendError) });
+      }
+    });
+
+    ws.data.unsubscribers = [loopUnsubscribe, sshSessionUnsubscribe];
   },
 
   /**
@@ -114,7 +173,28 @@ export const websocketHandlers = {
     // Parse message if needed for future commands
     try {
       const data = JSON.parse(typeof message === "string" ? message : message.toString());
-      
+
+      if (ws.data.terminalMode && ws.data.terminalBridge) {
+        if (data.type === "terminal.input" && typeof data.data === "string") {
+          ws.data.terminalBridge.sendInput(data.data);
+          return;
+        }
+        if (
+          data.type === "terminal.resize" &&
+          typeof data.cols === "number" &&
+          typeof data.rows === "number"
+        ) {
+          void ws.data.terminalBridge.resize(data.cols, data.rows).catch((error: Error) => {
+            try {
+              ws.send(JSON.stringify({ type: "terminal.error", message: String(error) }));
+            } catch (sendError) {
+              log.trace("Failed to send terminal resize error", { error: String(sendError) });
+            }
+          });
+          return;
+        }
+      }
+
       // Handle ping/pong for keep-alive
       if (data.type === "ping") {
         ws.send(JSON.stringify({ type: "pong" }));
@@ -138,10 +218,16 @@ export const websocketHandlers = {
       activeConnections: activeConnections.size,
     });
 
-    // Unsubscribe from events
-    if (ws.data.unsubscribe) {
-      ws.data.unsubscribe();
-      ws.data.unsubscribe = undefined;
+    if (ws.data.terminalBridge) {
+      void ws.data.terminalBridge.dispose();
+      ws.data.terminalBridge = undefined;
+    }
+
+    if (ws.data.unsubscribers) {
+      for (const unsubscribe of ws.data.unsubscribers) {
+        unsubscribe();
+      }
+      ws.data.unsubscribers = undefined;
     }
   },
 
@@ -157,10 +243,15 @@ export const websocketHandlers = {
     log.error("WebSocket error:", error);
     // Remove from active connections
     activeConnections.delete(ws);
-    // Cleanup subscription
-    if (ws.data.unsubscribe) {
-      ws.data.unsubscribe();
-      ws.data.unsubscribe = undefined;
+    if (ws.data.terminalBridge) {
+      void ws.data.terminalBridge.dispose();
+      ws.data.terminalBridge = undefined;
+    }
+    if (ws.data.unsubscribers) {
+      for (const unsubscribe of ws.data.unsubscribers) {
+        unsubscribe();
+      }
+      ws.data.unsubscribers = undefined;
     }
   },
 };

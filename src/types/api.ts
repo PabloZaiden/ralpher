@@ -18,6 +18,8 @@ import {
   AddressCommentsRequestSchema,
   SendChatMessageRequestSchema,
   CreateChatRequestSchema,
+  CreateSshSessionRequestSchema,
+  UpdateSshSessionRequestSchema,
 } from "./schemas";
 import type { z } from "zod";
 
@@ -74,6 +76,11 @@ export interface ModelInfo {
 export type CreateLoopRequest = z.infer<typeof CreateLoopRequestSchema>;
 
 /**
+ * Request body for POST /api/ssh-sessions.
+ */
+export type CreateSshSessionRequest = z.infer<typeof CreateSshSessionRequestSchema>;
+
+/**
  * Request body for PATCH /api/loops/:id endpoint.
  * All fields are optional - only provided fields are updated.
  * 
@@ -81,6 +88,11 @@ export type CreateLoopRequest = z.infer<typeof CreateLoopRequestSchema>;
  * single source of truth for both validation and TypeScript types.
  */
 export type UpdateLoopRequest = z.infer<typeof UpdateLoopRequestSchema>;
+
+/**
+ * Request body for PATCH /api/ssh-sessions/:id.
+ */
+export type UpdateSshSessionRequest = z.infer<typeof UpdateSshSessionRequestSchema>;
 
 /**
  * Request body for POST /api/loops/:id/address-comments endpoint.

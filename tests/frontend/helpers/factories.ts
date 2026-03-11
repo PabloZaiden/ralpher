@@ -8,6 +8,7 @@
 import type { Loop, LoopConfig, LoopState, LoopStatus, ModelConfig, TodoItem } from "@/types/loop";
 import type { GitConfig, GitState, GitCommit, IterationSummary, LoopLogEntry, PersistedMessage, PersistedToolCall, LoopError, SessionInfo } from "@/types/loop";
 import type { Workspace } from "@/types/workspace";
+import type { SshSession } from "@/types/ssh-session";
 import type { BranchInfo, ModelInfo, FileDiff } from "@/types/api";
 import type { MessageData, ToolCallData, LoopEvent } from "@/types/events";
 import type { ServerSettings } from "@/types/settings";
@@ -141,6 +142,29 @@ export function createSessionInfo(overrides?: Partial<SessionInfo>): SessionInfo
     id: nextId(),
     serverUrl: "http://localhost:3000",
     ...overrides,
+  };
+}
+
+export function createSshSession(overrides?: {
+  config?: Partial<SshSession["config"]>;
+  state?: Partial<SshSession["state"]>;
+}): SshSession {
+  const id = overrides?.config?.id ?? nextId();
+  return {
+    config: {
+      id,
+      name: "SSH Session",
+      workspaceId: "workspace-1",
+      directory: "/workspaces/test-project",
+      remoteSessionName: `ralpher-${id.replace(/-/g, "").slice(0, 24)}`,
+      createdAt: isoNow(),
+      updatedAt: isoNow(),
+      ...overrides?.config,
+    },
+    state: {
+      status: "ready",
+      ...overrides?.state,
+    },
   };
 }
 
