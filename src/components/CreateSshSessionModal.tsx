@@ -62,7 +62,6 @@ export function CreateSshSessionModal({
       if (!session) {
         return;
       }
-      toast.success("SSH session created.");
       onClose();
       onCreated(session.config.id);
     } catch (error) {

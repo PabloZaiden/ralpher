@@ -106,7 +106,6 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         sessions={sessions}
         loading={sshSessionsLoading}
         error={sshSessionsError}
-        onCreate={() => setShowCreateSshSessionModal(true)}
         onSelect={(sessionId) => onSelectSshSession?.(sessionId)}
       />
 

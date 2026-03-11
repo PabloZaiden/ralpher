@@ -15,7 +15,11 @@ function mapSessionError(error: unknown): Response {
   if (message.includes("not found")) {
     return errorResponse("not_found", message, 404);
   }
-  if (message.includes("ssh transport") || message.includes("tmux")) {
+  if (
+    message.includes("ssh transport")
+    || message.includes("tmux is not available")
+    || message.includes("tmux is not installed")
+  ) {
     return errorResponse("invalid_session_configuration", message, 400);
   }
   return errorResponse("ssh_session_error", message, 500);
@@ -94,4 +98,3 @@ export const sshSessionsRoutes = {
     },
   },
 };
-

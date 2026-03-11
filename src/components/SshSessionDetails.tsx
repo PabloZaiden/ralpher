@@ -80,7 +80,7 @@ function CompactBar({
 const touchButtonClassName = "min-h-[28px] shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[11px]";
 
 export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsProps) {
-  const { error: showErrorToast, success: showSuccessToast } = useToast();
+  const { error: showErrorToast } = useToast();
   const { session, loading, error, deleteSession } = useSshSession(sshSessionId);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -234,6 +234,17 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
     pendingOutputRef.current = [];
   }, []);
 
+  const markTerminalReady = useCallback(() => {
+    if (terminalReadyRef.current) {
+      return;
+    }
+    terminalReadyRef.current = true;
+    lastSentResizeRef.current = null;
+    setSocketStatus("open");
+    scheduleResize();
+    flushPendingOutput();
+  }, [flushPendingOutput, scheduleResize]);
+
   const resetTerminalModifiers = useCallback(() => {
     setTerminalModifiers(defaultTerminalModifiers);
   }, []);
@@ -289,6 +300,13 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
     }
   }, [resetTerminalModifiers, sendTerminalInput, showErrorToast]);
 
+  const sendTerminalTextShortcut = useCallback((data: string) => {
+    const didSend = sendTerminalInput(data);
+    if (didSend) {
+      resetTerminalModifiers();
+    }
+  }, [resetTerminalModifiers, sendTerminalInput]);
+
   const sendTerminalKeystroke = useCallback((data: string) => {
     const modifiers = terminalModifiersRef.current;
     if (!hasActiveTerminalModifiers(modifiers)) {
@@ -330,14 +348,13 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
         message?: string;
       };
       if (data.type === "terminal.connected") {
-        terminalReadyRef.current = true;
-        lastSentResizeRef.current = null;
-        setSocketStatus("open");
-        scheduleResize();
-        flushPendingOutput();
+        markTerminalReady();
       }
       if (data.type === "terminal.output" && data.data) {
-        if (!terminalReadyRef.current || !terminalRef.current) {
+        if (!terminalReadyRef.current) {
+          markTerminalReady();
+        }
+        if (!terminalRef.current) {
           pendingOutputRef.current.push(data.data);
         } else {
           terminalRef.current.write(data.data);
@@ -363,7 +380,7 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
       lastSentResizeRef.current = null;
       setSocketStatus("closed");
     };
-  }, [flushPendingOutput, scheduleResize, terminalUrl, showErrorToast]);
+  }, [markTerminalReady, terminalUrl, showErrorToast]);
 
   useEffect(() => {
     if (!terminalContainerRef.current || terminalRef.current) {
@@ -450,7 +467,6 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
     if (!success) {
       return;
     }
-    showSuccessToast("SSH session deleted.");
     setShowDeleteConfirm(false);
     onBack();
   }
@@ -532,8 +548,8 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
           summary={touchControlsSummary}
         >
           <div className="flex flex-col gap-2">
-            <div className="-mx-1 overflow-x-auto px-1 pb-1">
-              <div className="flex min-w-max items-center gap-1">
+            <div className="px-1 pb-1" data-testid="ssh-touch-controls-layout">
+              <div className="flex flex-wrap items-center gap-1" data-testid="ssh-touch-controls-buttons">
                 <Button
                   variant={terminalModifiers.ctrl ? "primary" : "secondary"}
                   size="xs"
@@ -686,12 +702,42 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
                 >
                   Pane ↓
                 </Button>
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendTerminalTextShortcut("sudo apt update && sudo apt install neovim")}
+                >
+                  Install Neovim
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendTerminalTextShortcut("nvim\n")}
+                >
+                  Neovim
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendTerminalTextShortcut(":Ntree\n")}
+                >
+                  Ntree
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendTerminalTextShortcut(":q\n")}
+                >
+                  :q
+                </Button>
               </div>
             </div>
 
-            <div className="text-[11px] text-gray-500 dark:text-gray-400">
-              Modifiers apply to the next touch button or typed key. Ctrl+C and tmux helpers send ready-made shortcuts.
-            </div>
           </div>
         </CompactBar>
 

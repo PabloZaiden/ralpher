@@ -63,7 +63,7 @@ describe("default route", () => {
     });
     // Dashboard shows "New Loop" button
     expect(getByText("New Loop")).toBeTruthy();
-    expect(getByText("New Loop")).toBeTruthy();
+    expect(document.body.textContent?.match(/New SSH Session/g)?.length).toBe(1);
   });
 
   test("renders Dashboard when hash is #/", async () => {
@@ -74,7 +74,6 @@ describe("default route", () => {
     await waitFor(() => {
       expect(getByText("Ralpher")).toBeTruthy();
     });
-    expect(getByText("New Loop")).toBeTruthy();
     expect(getByText("New Loop")).toBeTruthy();
   });
 });

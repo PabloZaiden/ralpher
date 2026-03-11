@@ -115,6 +115,8 @@ export class SshTerminalBridge {
   private closing = false;
   private ready = false;
   private connectPromise: Promise<void> | null = null;
+  private closePromise: Promise<void> | null = null;
+  private skipCloseStatusUpdate = false;
   private startupError: string | undefined;
 
   constructor(
@@ -123,20 +125,30 @@ export class SshTerminalBridge {
   ) {}
 
   async connect(): Promise<void> {
+    if (this.ready && this.proc && this.proc.exitCode === null && this.proc.signalCode === null) {
+      return;
+    }
     if (this.connectPromise) {
       return await this.connectPromise;
     }
 
-    this.connectPromise = this.connectInternal();
+    const pendingConnect = this.connectInternal();
+    this.connectPromise = pendingConnect;
     try {
-      await this.connectPromise;
-    } catch (error) {
-      this.connectPromise = null;
-      throw error;
+      await pendingConnect;
+    } finally {
+      if (this.connectPromise === pendingConnect) {
+        this.connectPromise = null;
+      }
     }
   }
 
   private async connectInternal(): Promise<void> {
+    this.closing = false;
+    this.ready = false;
+    this.skipCloseStatusUpdate = false;
+    this.startupError = undefined;
+
     this.session = await sshSessionManager.getSession(this.sessionId);
     if (!this.session) {
       throw new Error(`SSH session not found: ${this.sessionId}`);
@@ -160,33 +172,71 @@ export class SshTerminalBridge {
     proc.stdout.setEncoding("utf8");
     proc.stderr.setEncoding("utf8");
 
+    this.closePromise = new Promise((resolve) => {
+      proc.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
+        void (async () => {
+          this.ready = false;
+          this.proc = null;
+          const skipStatusUpdate = this.skipCloseStatusUpdate;
+          this.skipCloseStatusUpdate = false;
+          const nextStatus = this.closing ? "disconnected" : code === 0 ? "disconnected" : "failed";
+          const error = !this.closing && code !== 0
+            ? `SSH terminal exited with code ${String(code)}${signal ? ` (${signal})` : ""}`
+            : undefined;
+          if (error) {
+            this.startupError = error;
+          }
+
+          try {
+            if (!skipStatusUpdate) {
+              await sshSessionManager.markStatus(this.sessionId, nextStatus, error);
+            }
+          } catch (statusError) {
+            log.error("Failed to update SSH session status after terminal close", {
+              sessionId: this.sessionId,
+              error: String(statusError),
+            });
+          } finally {
+            this.options.onExit?.(code, signal);
+            this.closePromise = null;
+            resolve();
+          }
+        })();
+      });
+    });
+
     proc.stdout.on("data", (chunk: string) => {
       this.options.onOutput(chunk);
     });
     proc.stderr.on("data", (chunk: string) => {
       this.options.onOutput(chunk);
     });
-    proc.on("error", async (error: Error) => {
+    proc.on("error", (error: Error) => {
       this.startupError = String(error);
       this.options.onError?.(error);
-      await sshSessionManager.markStatus(this.sessionId, "failed", String(error));
-    });
-    proc.on("close", async (code: number | null, signal: NodeJS.Signals | null) => {
-      this.ready = false;
-      const nextStatus = this.closing ? "disconnected" : code === 0 ? "disconnected" : "failed";
-      const error = !this.closing && code !== 0
-        ? `SSH terminal exited with code ${String(code)}${signal ? ` (${signal})` : ""}`
-        : undefined;
-      if (error) {
-        this.startupError = error;
-      }
-      await sshSessionManager.markStatus(this.sessionId, nextStatus, error);
-      this.options.onExit?.(code, signal);
     });
 
-    await this.waitForRemoteSessionReady();
-    this.ready = true;
-    await sshSessionManager.markStatus(this.sessionId, "connected");
+    try {
+      await this.waitForRemoteSessionReady();
+      this.ready = true;
+      await sshSessionManager.markStatus(this.sessionId, "connected");
+    } catch (error) {
+      const startupError = error instanceof Error ? error : new Error(String(error));
+      this.ready = false;
+      this.startupError = startupError.message;
+
+      if (!this.closing) {
+        this.options.onError?.(startupError);
+        await sshSessionManager.markStatus(this.sessionId, "failed", startupError.message);
+        this.skipCloseStatusUpdate = true;
+      }
+
+      if (this.proc && this.proc.exitCode === null && this.proc.signalCode === null) {
+        this.proc.kill("SIGTERM");
+      }
+      await this.waitForClose();
+      throw startupError;
+    }
   }
 
   sendInput(data: string): void {
@@ -259,19 +309,26 @@ export class SshTerminalBridge {
     throw new Error(`Timed out waiting for tmux session ${this.session.config.remoteSessionName} to become ready`);
   }
 
+  private async waitForClose(): Promise<void> {
+    if (this.closePromise) {
+      await this.closePromise;
+    }
+  }
+
   async dispose(): Promise<void> {
     this.closing = true;
     this.ready = false;
     if (!this.proc) {
-      if (this.sessionId) {
-        await sshSessionManager.markStatus(this.sessionId, "disconnected");
-      }
+      this.connectPromise = null;
       return;
     }
 
     const proc = this.proc;
-    this.proc = null;
-    proc.kill("SIGTERM");
+    if (proc.exitCode === null && proc.signalCode === null) {
+      proc.kill("SIGTERM");
+    }
+    await this.waitForClose();
+    this.connectPromise = null;
     log.debug("Disposed SSH terminal bridge", { sessionId: this.sessionId });
   }
 }

@@ -3,13 +3,12 @@
  */
 
 import type { SshSession } from "../types";
-import { Badge, Button, Card } from "./common";
+import { Badge, Card } from "./common";
 
 export interface SshSessionSectionProps {
   sessions: SshSession[];
   loading: boolean;
   error: string | null;
-  onCreate: () => void;
   onSelect: (sessionId: string) => void;
 }
 
@@ -32,20 +31,11 @@ export function SshSessionSection({
   sessions,
   loading,
   error,
-  onCreate,
   onSelect,
 }: SshSessionSectionProps) {
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900">
-      <Card
-        title="SSH Sessions"
-        description="Persistent tmux-backed terminals for SSH workspaces."
-        headerActions={(
-          <Button variant="secondary" size="sm" onClick={onCreate}>
-            New SSH Session
-          </Button>
-        )}
-      >
+      <Card title="SSH Sessions">
         {loading ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">Loading SSH sessions...</p>
         ) : error ? (
@@ -90,4 +80,3 @@ export function SshSessionSection({
     </div>
   );
 }
-

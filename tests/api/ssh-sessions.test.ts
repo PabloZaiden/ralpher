@@ -31,6 +31,34 @@ class SshSessionTestExecutor extends TestCommandExecutor {
   }
 }
 
+class MissingTmuxExecutor extends SshSessionTestExecutor {
+  override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
+    if (command === "tmux" && args[0] === "-V") {
+      return {
+        success: false,
+        stdout: "",
+        stderr: "tmux missing",
+        exitCode: 127,
+      };
+    }
+    return await super.exec(command, args, options);
+  }
+}
+
+class FailingTmuxKillExecutor extends SshSessionTestExecutor {
+  override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
+    if (command === "tmux" && args[0] === "kill-session") {
+      return {
+        success: false,
+        stdout: "",
+        stderr: "Failed to kill remote tmux session",
+        exitCode: 1,
+      };
+    }
+    return await super.exec(command, args, options);
+  }
+}
+
 describe("SSH sessions API integration", () => {
   let dataDir: string;
   let workDir: string;
@@ -75,6 +103,7 @@ describe("SSH sessions API integration", () => {
     db.run("DELETE FROM ssh_sessions");
     db.run("DELETE FROM loops WHERE workspace_id IS NOT NULL");
     db.run("DELETE FROM workspaces");
+    backendManager.setExecutorFactoryForTesting(() => new SshSessionTestExecutor());
   });
 
   async function createWorkspace(transport: "ssh" | "stdio" = "ssh") {
@@ -158,5 +187,50 @@ describe("SSH sessions API integration", () => {
     const data = await response.json() as { message: string };
     expect(data.message).toContain("ssh transport");
   });
-});
 
+  test("treats missing tmux as invalid session configuration", async () => {
+    backendManager.setExecutorFactoryForTesting(() => new MissingTmuxExecutor());
+    const workspace = await createWorkspace("ssh");
+
+    const response = await fetch(`${baseUrl}/api/ssh-sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: workspace.id,
+        name: "Needs Tmux",
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    const data = await response.json() as { error: string; message: string };
+    expect(data.error).toBe("invalid_session_configuration");
+    expect(data.message).toContain("tmux is not available");
+  });
+
+  test("treats tmux cleanup failures as server errors", async () => {
+    const workspace = await createWorkspace("ssh");
+
+    const createResponse = await fetch(`${baseUrl}/api/ssh-sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: workspace.id,
+        name: "Cleanup Failure",
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { config: { id: string } };
+
+    backendManager.setExecutorFactoryForTesting(() => new FailingTmuxKillExecutor());
+
+    const deleteResponse = await fetch(`${baseUrl}/api/ssh-sessions/${created.config.id}`, {
+      method: "DELETE",
+    });
+
+    expect(deleteResponse.status).toBe(500);
+    const data = await deleteResponse.json() as { error: string; message: string };
+    expect(data.error).toBe("ssh_session_error");
+    expect(data.message).toContain("Failed to kill remote tmux session");
+  });
+});

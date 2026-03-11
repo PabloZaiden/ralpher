@@ -77,7 +77,7 @@ describe("migration infrastructure", () => {
       expect(tableExists(db, "schema_migrations")).toBe(true);
     });
 
-    test("returns 0 when no migrations are defined", () => {
+    test("applies all pending migrations and returns the applied count", () => {
       expect(migrations.length).toBeGreaterThan(0);
       const applied = runMigrations(db);
       expect(applied).toBe(migrations.length);

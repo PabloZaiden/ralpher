@@ -50,13 +50,14 @@ export class SshSessionManager {
     await touchWorkspace(workspace.id);
 
     const now = new Date().toISOString();
+    const sessionId = crypto.randomUUID();
     const session: SshSession = {
       config: {
-        id: crypto.randomUUID(),
+        id: sessionId,
         name: request.name.trim(),
         workspaceId: workspace.id,
         directory: workspace.directory,
-        remoteSessionName: buildRemoteSessionName(crypto.randomUUID()),
+        remoteSessionName: buildRemoteSessionName(sessionId),
         createdAt: now,
         updatedAt: now,
       },
@@ -64,7 +65,6 @@ export class SshSessionManager {
         status: "ready",
       },
     };
-    session.config.remoteSessionName = buildRemoteSessionName(session.config.id);
 
     await saveSshSession(session);
     sshSessionEventEmitter.emit({
@@ -152,7 +152,11 @@ export class SshSessionManager {
     const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
     const result = await executor.exec("tmux", ["-V"], { cwd: workspace.directory });
     if (!result.success) {
-      throw new Error(result.stderr.trim() || result.stdout.trim() || "tmux is not available on the remote host");
+      const detail = result.stderr.trim() || result.stdout.trim();
+      const message = detail
+        ? `tmux is not available on the remote host: ${detail}`
+        : "tmux is not available on the remote host";
+      throw new Error(message);
     }
     log.debug("Validated tmux availability", {
       workspaceId: workspace.id,
@@ -171,4 +175,3 @@ export class SshSessionManager {
 }
 
 export const sshSessionManager = new SshSessionManager();
-
