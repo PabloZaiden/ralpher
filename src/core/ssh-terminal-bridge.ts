@@ -24,7 +24,7 @@ function quoteShell(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
-function buildAttachCommand(session: SshSession): string {
+export function buildAttachCommand(session: SshSession): string {
   const directory = quoteShell(session.config.directory);
   const sessionName = quoteShell(session.config.remoteSessionName);
   return [
@@ -35,6 +35,7 @@ function buildAttachCommand(session: SshSession): string {
     `if ! tmux has-session -t ${sessionName} 2>/dev/null; then`,
     `tmux new-session -d -s ${sessionName} -c ${directory};`,
     "fi;",
+    `tmux set-option -t ${sessionName} status off;`,
     `exec tmux attach-session -t ${sessionName}`,
   ].join(" ");
 }
