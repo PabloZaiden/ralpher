@@ -22,6 +22,7 @@ describe("buildConnectionConfig SSH command options", () => {
     expect(config.command).toBe("sshpass");
     expect(args).toContain("ssh");
     expect(args).toContain("NumberOfPasswordPrompts=1");
+    expect(args).toContain("PreferredAuthentications=password,keyboard-interactive");
     expect(args).toContain("ConnectTimeout=10");
     expect(args).toContain("StrictHostKeyChecking=no");
     expect(args).toContain("UserKnownHostsFile=/dev/null");

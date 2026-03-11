@@ -32,6 +32,8 @@ export interface CommandExecutorConfig {
   timeoutMs?: number;
 }
 
+type SshAuthMode = "batch" | "password";
+
 function quoteShell(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
@@ -39,6 +41,47 @@ function quoteShell(value: string): string {
 export function buildSshRemoteShellCommand(remoteCommand: string): string {
   const wrappedRemoteCommand = `if [ -f ~/.profile ]; then source ~/.profile >/dev/null 2>&1; fi; ${remoteCommand}`;
   return `bash -lc ${quoteShell(wrappedRemoteCommand)}`;
+}
+
+function getSshAuthArgs(authMode: SshAuthMode): string[] {
+  if (authMode === "password") {
+    return [
+      "-o",
+      "NumberOfPasswordPrompts=1",
+      "-o",
+      "PreferredAuthentications=password,keyboard-interactive",
+    ];
+  }
+
+  return ["-o", "BatchMode=yes"];
+}
+
+export function buildSshCommandArgs(options: {
+  authMode: SshAuthMode;
+  port: number;
+  target: string;
+  remoteCommand: string;
+}): string[] {
+  return [
+    ...getSshAuthArgs(options.authMode),
+    "-o",
+    "ConnectTimeout=10",
+    "-o",
+    "StrictHostKeyChecking=no",
+    "-o",
+    "UserKnownHostsFile=/dev/null",
+    "-o",
+    "LogLevel=ERROR",
+    "-o",
+    "ServerAliveInterval=15",
+    "-o",
+    "ServerAliveCountMax=1",
+    "-p",
+    String(options.port),
+    options.target,
+    "--",
+    options.remoteCommand,
+  ];
 }
 
 /**
@@ -206,38 +249,38 @@ export class CommandExecutorImpl implements CommandExecutor {
       ...args.map((arg) => quoteShell(arg)),
     ].join(" ");
     const remoteShellCommand = buildSshRemoteShellCommand(remoteCommand);
-
-    const sshArgs = [
-      "-o",
-      "ConnectTimeout=10",
-      "-o",
-      "StrictHostKeyChecking=no",
-      "-o",
-      "UserKnownHostsFile=/dev/null",
-      "-o",
-      "LogLevel=ERROR",
-      "-o",
-      "ServerAliveInterval=15",
-      "-o",
-      "ServerAliveCountMax=1",
-      "-p",
-      String(this.port),
-      this.user ? `${this.user}@${this.host}` : this.host,
-      "--",
-      remoteShellCommand,
-    ];
+    const sshTarget = this.user ? `${this.user}@${this.host}` : this.host;
 
     if (this.password && this.password.trim().length > 0) {
       return await this.execLocal(
         "sshpass",
-        ["-e", "ssh", "-o", "NumberOfPasswordPrompts=1", ...sshArgs],
+        [
+          "-e",
+          "ssh",
+          ...buildSshCommandArgs({
+            authMode: "password",
+            port: this.port,
+            target: sshTarget,
+            remoteCommand: remoteShellCommand,
+          }),
+        ],
         "/",
         timeoutMs,
         { SSHPASS: this.password },
       );
     }
 
-    return await this.execLocal("ssh", ["-o", "BatchMode=yes", ...sshArgs], "/", timeoutMs);
+    return await this.execLocal(
+      "ssh",
+      buildSshCommandArgs({
+        authMode: "batch",
+        port: this.port,
+        target: sshTarget,
+        remoteCommand: remoteShellCommand,
+      }),
+      "/",
+      timeoutMs,
+    );
   }
 
   async fileExists(path: string): Promise<boolean> {

@@ -17,7 +17,11 @@ import {
 import { loopEventEmitter } from "./event-emitter";
 import type { LoopEvent } from "../types/events";
 import type { CommandExecutor } from "./command-executor";
-import { CommandExecutorImpl, buildSshRemoteShellCommand } from "./remote-command-executor";
+import {
+  CommandExecutorImpl,
+  buildSshCommandArgs,
+  buildSshRemoteShellCommand,
+} from "./remote-command-executor";
 import { GitService } from "./git-service";
 import { log } from "./logger";
 
@@ -80,36 +84,24 @@ function buildAgentRuntimeCommand(settings: ServerSettings): { command: string; 
   const sshTarget = settings.agent.username?.trim()
     ? `${settings.agent.username.trim()}@${settings.agent.hostname}`
     : settings.agent.hostname;
-  const sshArgs = [
-    "-o",
-    "ConnectTimeout=10",
-    "-o",
-    "StrictHostKeyChecking=no",
-    "-o",
-    "UserKnownHostsFile=/dev/null",
-    "-o",
-    "LogLevel=ERROR",
-    "-o",
-    "ServerAliveInterval=15",
-    "-o",
-    "ServerAliveCountMax=1",
-    "-p",
-    String(settings.agent.port ?? 22),
-    sshTarget,
-    "--",
+  const password = settings.agent.password?.trim();
+  const sshArgs = buildSshCommandArgs({
+    authMode: password ? "password" : "batch",
+    port: settings.agent.port ?? 22,
+    target: sshTarget,
     remoteCommand,
-  ];
+  });
 
-  if (settings.agent.password && settings.agent.password.trim().length > 0) {
+  if (password) {
     return {
       command: "sshpass",
-      args: ["-p", settings.agent.password, "ssh", "-o", "NumberOfPasswordPrompts=1", ...sshArgs],
+      args: ["-p", password, "ssh", ...sshArgs],
     };
   }
 
   return {
     command: "ssh",
-    args: ["-o", "BatchMode=yes", ...sshArgs],
+    args: sshArgs,
   };
 }
 

@@ -106,6 +106,8 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
       const commandTokens = capturedCommand ?? [];
       expect(commandTokens[0]).toBe("sshpass");
       expect(commandTokens).toContain("-e");
+      expect(commandTokens).toContain("NumberOfPasswordPrompts=1");
+      expect(commandTokens).toContain("PreferredAuthentications=password,keyboard-interactive");
       expect(commandTokens).not.toContain("top-secret");
       expect(capturedEnv?.["SSHPASS"]).toBe("top-secret");
     } finally {
