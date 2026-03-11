@@ -9,6 +9,7 @@ class MockTerminal {
   rows = 24;
   dataHandler: ((data: string) => void) | null = null;
   writes: string[] = [];
+  focusCalls = 0;
 
   constructor() {
     lastTerminal = this;
@@ -16,7 +17,9 @@ class MockTerminal {
 
   loadAddon() {}
   open() {}
-  focus() {}
+  focus() {
+    this.focusCalls += 1;
+  }
   write(data: string) {
     this.writes.push(data);
   }
@@ -156,6 +159,49 @@ describe("SshSessionDetails", () => {
     });
   });
 
+  test("keeps the terminal mounted, refocuses it, and sends no input until a real key", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Modifier Stability" } }),
+    );
+
+    const { getByText, user } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-mobile-modifier-stability" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Modifier Stability")).toBeTruthy();
+    });
+
+    await waitFor(() => {
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.connected",
+        sshSessionId: "ssh-mobile-modifier-stability",
+      });
+    });
+
+    await user.click(getByText("Touch controls"));
+
+    const initialTerminal = lastTerminal;
+    const initialFocusCalls = initialTerminal?.focusCalls ?? 0;
+    const initialInputMessages = terminalConnection.sentMessages.filter((message) =>
+      message.includes("\"type\":\"terminal.input\"")
+    );
+
+    await user.click(getByText("Ctrl"));
+
+    expect(lastTerminal).toBe(initialTerminal);
+    expect(lastTerminal?.focusCalls).toBe(initialFocusCalls + 1);
+    expect(
+      terminalConnection.sentMessages.filter((message) => message.includes("\"type\":\"terminal.input\"")),
+    ).toEqual(initialInputMessages);
+  });
+
   test("supports shift-tab from the touch controls", async () => {
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Shift Tab" } }),
@@ -190,6 +236,95 @@ describe("SshSessionDetails", () => {
       expect(terminalConnection.sentMessages).toContain(JSON.stringify({
         type: "terminal.input",
         data: "\u001b[Z",
+      }));
+    });
+  });
+
+  test("sends a Ctrl+C touch shortcut", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Ctrl C" } }),
+    );
+
+    const { getByText, user } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-mobile-ctrl-c" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Ctrl C")).toBeTruthy();
+    });
+
+    await waitFor(() => {
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.connected",
+        sshSessionId: "ssh-mobile-ctrl-c",
+      });
+    });
+
+    await user.click(getByText("Touch controls"));
+    await user.click(getByText("Ctrl+C"));
+
+    await waitFor(() => {
+      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+        type: "terminal.input",
+        data: "\u0003",
+      }));
+    });
+  });
+
+  test("sends tmux helper shortcuts from touch controls", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Tmux Helpers" } }),
+    );
+
+    const { getByText, user } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-mobile-3" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Tmux Helpers")).toBeTruthy();
+    });
+
+    await waitFor(() => {
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.connected",
+        sshSessionId: "ssh-mobile-3",
+      });
+    });
+
+    await user.click(getByText("Touch controls"));
+    await user.click(getByText("Split"));
+    await user.click(getByText("Next"));
+    await user.click(getByText("Pane ↑"));
+    await user.click(getByText("Pane ↓"));
+
+    await waitFor(() => {
+      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+        type: "terminal.input",
+        data: "\u0002\"",
+      }));
+      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+        type: "terminal.input",
+        data: "\u0002o",
+      }));
+      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+        type: "terminal.input",
+        data: "\u0002\u001b[1;5A",
+      }));
+      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+        type: "terminal.input",
+        data: "\u0002\u001b[1;5B",
       }));
     });
   });

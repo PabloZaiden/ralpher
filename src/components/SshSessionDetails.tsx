@@ -12,9 +12,11 @@ import {
   defaultTerminalModifiers,
   encodeTerminalDataInput,
   encodeTerminalInput,
+  encodeTmuxShortcut,
   hasActiveTerminalModifiers,
   type TerminalModifierState,
   type TerminalSpecialKey,
+  type TmuxShortcut,
 } from "../utils/terminal-keys";
 
 function getStatusVariant(status: string) {
@@ -75,6 +77,8 @@ function CompactBar({
   );
 }
 
+const touchButtonClassName = "min-h-[28px] shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[11px]";
+
 export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsProps) {
   const { error: showErrorToast, success: showSuccessToast } = useToast();
   const { session, loading, error, deleteSession } = useSshSession(sshSessionId);
@@ -83,6 +87,7 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
   const fitAddonRef = useRef<FitAddon | null>(null);
   const terminalSocketRef = useRef<WebSocket | null>(null);
   const terminalReadyRef = useRef(false);
+  const terminalModifiersRef = useRef<TerminalModifierState>(defaultTerminalModifiers);
   const pendingOutputRef = useRef<string[]>([]);
   const resizeAnimationFrameRef = useRef<number | null>(null);
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
@@ -131,11 +136,19 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
           </Badge>
         )}
         <span className="hidden min-w-0 truncate text-xs text-gray-500 dark:text-gray-400 sm:block">
-          Next touch or keyboard key uses modifiers
+          Touch keys and tmux shortcuts
         </span>
       </div>
     );
   }, [activeModifierLabel, terminalModifiers]);
+
+  useEffect(() => {
+    terminalModifiersRef.current = terminalModifiers;
+  }, [terminalModifiers]);
+
+  const focusTerminal = useCallback(() => {
+    terminalRef.current?.focus();
+  }, []);
 
   const sendTerminalPayload = useCallback((
     payload: Record<string, unknown>,
@@ -150,10 +163,10 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
 
     terminalSocketRef.current.send(JSON.stringify(payload));
     if (options?.focusTerminal ?? true) {
-      terminalRef.current?.focus();
+      focusTerminal();
     }
     return true;
-  }, [showErrorToast]);
+  }, [focusTerminal, showErrorToast]);
 
   const sendTerminalInput = useCallback((data: string, options?: { notifyOnFailure?: boolean }): boolean => {
     return sendTerminalPayload({
@@ -230,7 +243,8 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
       ...current,
       [modifier]: !current[modifier],
     }));
-  }, []);
+    focusTerminal();
+  }, [focusTerminal]);
 
   const sendEncodedTerminalKey = useCallback((key: TerminalSpecialKey | string) => {
     const encoded = encodeTerminalInput(key, terminalModifiers);
@@ -245,12 +259,43 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
     }
   }, [resetTerminalModifiers, sendTerminalInput, terminalModifiers, showErrorToast]);
 
+  const sendTmuxShortcut = useCallback((shortcut: TmuxShortcut) => {
+    const encoded = encodeTmuxShortcut(shortcut);
+    if (!encoded) {
+      showErrorToast("That tmux shortcut is not supported.");
+      return;
+    }
+
+    const didSend = sendTerminalInput(encoded);
+    if (didSend) {
+      resetTerminalModifiers();
+    }
+  }, [resetTerminalModifiers, sendTerminalInput, showErrorToast]);
+
+  const sendCtrlC = useCallback(() => {
+    const encoded = encodeTerminalInput("c", {
+      ctrl: true,
+      alt: false,
+      shift: false,
+    });
+    if (!encoded) {
+      showErrorToast("Ctrl+C is not supported.");
+      return;
+    }
+
+    const didSend = sendTerminalInput(encoded);
+    if (didSend) {
+      resetTerminalModifiers();
+    }
+  }, [resetTerminalModifiers, sendTerminalInput, showErrorToast]);
+
   const sendTerminalKeystroke = useCallback((data: string) => {
-    if (!hasActiveTerminalModifiers(terminalModifiers)) {
+    const modifiers = terminalModifiersRef.current;
+    if (!hasActiveTerminalModifiers(modifiers)) {
       return sendTerminalInput(data, { notifyOnFailure: false });
     }
 
-    const encoded = encodeTerminalDataInput(data, terminalModifiers);
+    const encoded = encodeTerminalDataInput(data, modifiers);
     if (!encoded) {
       showErrorToast("That key combination is not supported.");
       return;
@@ -260,7 +305,7 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
     if (didSend) {
       resetTerminalModifiers();
     }
-  }, [resetTerminalModifiers, sendTerminalInput, showErrorToast, terminalModifiers]);
+  }, [resetTerminalModifiers, sendTerminalInput, showErrorToast]);
 
   const connectTerminal = useCallback(() => {
     terminalSocketRef.current?.close();
@@ -485,78 +530,167 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
           expanded={touchControlsExpanded}
           onToggle={() => setTouchControlsExpanded((current) => !current)}
           summary={touchControlsSummary}
-          contentClassName="max-h-48 overflow-y-auto sm:max-h-56"
         >
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap gap-1.5">
-              <Button
-                variant={terminalModifiers.ctrl ? "primary" : "secondary"}
-                size="xs"
-                aria-pressed={terminalModifiers.ctrl}
-                onClick={() => toggleTerminalModifier("ctrl")}
-              >
-                Ctrl
-              </Button>
-              <Button
-                variant={terminalModifiers.alt ? "primary" : "secondary"}
-                size="xs"
-                aria-pressed={terminalModifiers.alt}
-                onClick={() => toggleTerminalModifier("alt")}
-              >
-                Alt
-              </Button>
-              <Button
-                variant={terminalModifiers.shift ? "primary" : "secondary"}
-                size="xs"
-                aria-pressed={terminalModifiers.shift}
-                onClick={() => toggleTerminalModifier("shift")}
-              >
-                Shift
-              </Button>
-              {hasActiveTerminalModifiers(terminalModifiers) && (
-                <Button variant="ghost" size="xs" onClick={resetTerminalModifiers}>
-                  Clear modifiers
+          <div className="flex flex-col gap-2">
+            <div className="-mx-1 overflow-x-auto px-1 pb-1">
+              <div className="flex min-w-max items-center gap-1">
+                <Button
+                  variant={terminalModifiers.ctrl ? "primary" : "secondary"}
+                  size="xs"
+                  className={touchButtonClassName}
+                  aria-pressed={terminalModifiers.ctrl}
+                  onClick={() => toggleTerminalModifier("ctrl")}
+                >
+                  Ctrl
                 </Button>
-              )}
+                <Button
+                  variant={terminalModifiers.alt ? "primary" : "secondary"}
+                  size="xs"
+                  className={touchButtonClassName}
+                  aria-pressed={terminalModifiers.alt}
+                  onClick={() => toggleTerminalModifier("alt")}
+                >
+                  Alt
+                </Button>
+                <Button
+                  variant={terminalModifiers.shift ? "primary" : "secondary"}
+                  size="xs"
+                  className={touchButtonClassName}
+                  aria-pressed={terminalModifiers.shift}
+                  onClick={() => toggleTerminalModifier("shift")}
+                >
+                  Shift
+                </Button>
+                {hasActiveTerminalModifiers(terminalModifiers) && (
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    className={touchButtonClassName}
+                    onClick={resetTerminalModifiers}
+                  >
+                    Clear
+                  </Button>
+                )}
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendEncodedTerminalKey("Escape")}
+                >
+                  Esc
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendEncodedTerminalKey("Tab")}
+                >
+                  Tab
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendEncodedTerminalKey("Enter")}
+                >
+                  Enter
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  aria-label="Backspace"
+                  onClick={() => sendEncodedTerminalKey("Backspace")}
+                >
+                  Bksp
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendEncodedTerminalKey("Space")}
+                >
+                  Space
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={sendCtrlC}
+                >
+                  Ctrl+C
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendEncodedTerminalKey("ArrowUp")}
+                >
+                  ↑
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendEncodedTerminalKey("ArrowLeft")}
+                >
+                  ←
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendEncodedTerminalKey("ArrowDown")}
+                >
+                  ↓
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendEncodedTerminalKey("ArrowRight")}
+                >
+                  →
+                </Button>
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendTmuxShortcut("split-pane")}
+                >
+                  Split
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendTmuxShortcut("next-pane")}
+                >
+                  Next
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendTmuxShortcut("resize-pane-up")}
+                >
+                  Pane ↑
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendTmuxShortcut("resize-pane-down")}
+                >
+                  Pane ↓
+                </Button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5 lg:grid-cols-9">
-              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("Escape")}>
-                Esc
-              </Button>
-              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("Tab")}>
-                Tab
-              </Button>
-              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("Enter")}>
-                Enter
-              </Button>
-              <Button
-                variant="secondary"
-                size="xs"
-                aria-label="Backspace"
-                onClick={() => sendEncodedTerminalKey("Backspace")}
-              >
-                Bksp
-              </Button>
-              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("Space")}>
-                Space
-              </Button>
-              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("ArrowUp")}>
-                ↑
-              </Button>
-              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("ArrowLeft")}>
-                ←
-              </Button>
-              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("ArrowDown")}>
-                ↓
-              </Button>
-              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("ArrowRight")}>
-                →
-              </Button>
-            </div>
-
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              Active modifiers apply to the next touch button or typed terminal key, then clear automatically.
+            <div className="text-[11px] text-gray-500 dark:text-gray-400">
+              Modifiers apply to the next touch button or typed key. Ctrl+C and tmux helpers send ready-made shortcuts.
             </div>
           </div>
         </CompactBar>
