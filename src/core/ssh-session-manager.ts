@@ -5,6 +5,7 @@
 import type { CreateSshSessionRequest, SshSession, SshSessionStatus, UpdateSshSessionRequest, Workspace } from "../types";
 import { getWorkspace, touchWorkspace } from "../persistence/workspaces";
 import {
+  countSshSessionsByWorkspace,
   deleteSshSession,
   getSshSession,
   listSshSessions,
@@ -14,6 +15,7 @@ import {
 import { backendManager } from "./backend-manager";
 import { createLogger } from "./logger";
 import { sshSessionEventEmitter } from "./event-emitter";
+import { buildDefaultSshSessionName } from "../utils";
 
 const log = createLogger("core:ssh-session-manager");
 
@@ -49,12 +51,16 @@ export class SshSessionManager {
     await this.ensureTmuxAvailable(workspace);
     await touchWorkspace(workspace.id);
 
+    const requestedName = request.name?.trim();
+    const sessionName = requestedName && requestedName.length > 0
+      ? requestedName
+      : await this.buildDefaultSessionName(workspace);
     const now = new Date().toISOString();
     const sessionId = crypto.randomUUID();
     const session: SshSession = {
       config: {
         id: sessionId,
-        name: request.name.trim(),
+        name: sessionName,
         workspaceId: workspace.id,
         directory: workspace.directory,
         remoteSessionName: buildRemoteSessionName(sessionId),
@@ -163,6 +169,11 @@ export class SshSessionManager {
       directory: workspace.directory,
       version: result.stdout.trim(),
     });
+  }
+
+  private async buildDefaultSessionName(workspace: Workspace): Promise<string> {
+    const existingSessionCount = await countSshSessionsByWorkspace(workspace.id);
+    return buildDefaultSshSessionName(workspace.name, existingSessionCount);
   }
 
   private async requireSession(id: string): Promise<SshSession> {

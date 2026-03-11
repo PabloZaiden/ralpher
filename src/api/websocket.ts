@@ -97,6 +97,13 @@ export const websocketHandlers = {
             log.trace("Failed to send terminal output", { error: String(sendError), sshSessionId });
           }
         },
+        onClipboardCopy: (text) => {
+          try {
+            ws.send(JSON.stringify({ type: "terminal.clipboard", text }));
+          } catch (sendError) {
+            log.trace("Failed to send terminal clipboard event", { error: String(sendError), sshSessionId });
+          }
+        },
         onError: (error) => {
           try {
             ws.send(JSON.stringify({ type: "terminal.error", message: String(error) }));
