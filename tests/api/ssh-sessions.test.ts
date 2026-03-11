@@ -106,13 +106,18 @@ describe("SSH sessions API integration", () => {
     backendManager.setExecutorFactoryForTesting(() => new SshSessionTestExecutor());
   });
 
-  async function createWorkspace(transport: "ssh" | "stdio" = "ssh") {
+  async function createWorkspace(options: {
+    transport?: "ssh" | "stdio";
+    name?: string;
+    directory?: string;
+  } = {}) {
+    const transport = options.transport ?? "ssh";
     const response = await fetch(`${baseUrl}/api/workspaces`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: "SSH Workspace",
-        directory: workDir,
+        name: options.name ?? "SSH Workspace",
+        directory: options.directory ?? workDir,
         serverSettings: transport === "ssh"
           ? {
               agent: {
@@ -135,7 +140,7 @@ describe("SSH sessions API integration", () => {
   }
 
   test("creates, lists, fetches, and deletes an SSH session", async () => {
-    const workspace = await createWorkspace("ssh");
+    const workspace = await createWorkspace({ transport: "ssh" });
 
     const createResponse = await fetch(`${baseUrl}/api/ssh-sessions`, {
       method: "POST",
@@ -171,8 +176,61 @@ describe("SSH sessions API integration", () => {
     expect(await listAfterDelete.json()).toEqual([]);
   });
 
+  test("generates default SSH session names from the workspace name and workspace session count", async () => {
+    const workspace = await createWorkspace({ transport: "ssh" });
+    const otherWorkspaceDir = await mkdtemp(join(tmpdir(), "ralpher-ssh-sessions-work-"));
+    try {
+      await Bun.$`git init ${otherWorkspaceDir}`.quiet();
+      await Bun.$`git -C ${otherWorkspaceDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${otherWorkspaceDir} config user.name "Test User"`.quiet();
+      await Bun.$`touch ${otherWorkspaceDir}/README.md`.quiet();
+      await Bun.$`git -C ${otherWorkspaceDir} add .`.quiet();
+      await Bun.$`git -C ${otherWorkspaceDir} commit -m "Initial commit"`.quiet();
+      const secondWorkspace = await createWorkspace({
+        transport: "ssh",
+        name: "Other Workspace",
+        directory: otherWorkspaceDir,
+      });
+
+      const firstCreateResponse = await fetch(`${baseUrl}/api/ssh-sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+        }),
+      });
+      expect(firstCreateResponse.status).toBe(201);
+      const firstCreated = await firstCreateResponse.json() as { config: { name: string } };
+      expect(firstCreated.config.name).toBe("SSH Workspace 1");
+
+      const secondCreateResponse = await fetch(`${baseUrl}/api/ssh-sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+        }),
+      });
+      expect(secondCreateResponse.status).toBe(201);
+      const secondCreated = await secondCreateResponse.json() as { config: { name: string } };
+      expect(secondCreated.config.name).toBe("SSH Workspace 2");
+
+      const otherWorkspaceCreateResponse = await fetch(`${baseUrl}/api/ssh-sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: secondWorkspace.id,
+        }),
+      });
+      expect(otherWorkspaceCreateResponse.status).toBe(201);
+      const otherWorkspaceCreated = await otherWorkspaceCreateResponse.json() as { config: { name: string } };
+      expect(otherWorkspaceCreated.config.name).toBe("Other Workspace 1");
+    } finally {
+      await rm(otherWorkspaceDir, { recursive: true, force: true });
+    }
+  });
+
   test("rejects session creation for non-ssh workspaces", async () => {
-    const workspace = await createWorkspace("stdio");
+    const workspace = await createWorkspace({ transport: "stdio" });
 
     const response = await fetch(`${baseUrl}/api/ssh-sessions`, {
       method: "POST",
@@ -190,7 +248,7 @@ describe("SSH sessions API integration", () => {
 
   test("treats missing tmux as invalid session configuration", async () => {
     backendManager.setExecutorFactoryForTesting(() => new MissingTmuxExecutor());
-    const workspace = await createWorkspace("ssh");
+    const workspace = await createWorkspace({ transport: "ssh" });
 
     const response = await fetch(`${baseUrl}/api/ssh-sessions`, {
       method: "POST",
@@ -208,7 +266,7 @@ describe("SSH sessions API integration", () => {
   });
 
   test("treats tmux cleanup failures as server errors", async () => {
-    const workspace = await createWorkspace("ssh");
+    const workspace = await createWorkspace({ transport: "ssh" });
 
     const createResponse = await fetch(`${baseUrl}/api/ssh-sessions`, {
       method: "POST",

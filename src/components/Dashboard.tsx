@@ -192,6 +192,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         isOpen={showCreateSshSessionModal}
         onClose={() => setShowCreateSshSessionModal(false)}
         onCreate={createSession}
+        sessions={sessions}
         workspaces={workspaces}
         workspacesLoading={workspacesLoading}
         workspaceError={workspaceError}

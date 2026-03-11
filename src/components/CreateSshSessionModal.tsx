@@ -3,15 +3,17 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import type { SshSession, Workspace } from "../types";
+import type { CreateSshSessionRequest, SshSession, Workspace } from "../types";
 import { Modal, Button } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
 import { useToast } from "../hooks";
+import { buildDefaultSshSessionName } from "../utils";
 
 export interface CreateSshSessionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreate: (request: { workspaceId: string; name: string }) => Promise<SshSession | null>;
+  onCreate: (request: CreateSshSessionRequest) => Promise<SshSession | null>;
+  sessions: SshSession[];
   workspaces: Workspace[];
   workspacesLoading: boolean;
   workspaceError: string | null;
@@ -22,6 +24,7 @@ export function CreateSshSessionModal({
   isOpen,
   onClose,
   onCreate,
+  sessions,
   workspaces,
   workspacesLoading,
   workspaceError,
@@ -32,20 +35,42 @@ export function CreateSshSessionModal({
     () => workspaces.filter((workspace) => workspace.serverSettings.agent.transport === "ssh"),
     [workspaces],
   );
-  const [name, setName] = useState("SSH Session");
+  const [name, setName] = useState("");
+  const [nameTouched, setNameTouched] = useState(false);
   const [workspaceId, setWorkspaceId] = useState<string | undefined>(sshWorkspaces[0]?.id);
   const [directory, setDirectory] = useState(sshWorkspaces[0]?.directory ?? "");
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const selectedWorkspace = useMemo(
+    () => sshWorkspaces.find((workspace) => workspace.id === workspaceId),
+    [sshWorkspaces, workspaceId],
+  );
+  const defaultName = useMemo(() => {
+    if (!selectedWorkspace) {
+      return "";
+    }
+    const existingSessionCount = sessions.filter((session) => {
+      return session.config.workspaceId === selectedWorkspace.id;
+    }).length;
+    return buildDefaultSshSessionName(selectedWorkspace.name, existingSessionCount);
+  }, [selectedWorkspace, sessions]);
 
   useEffect(() => {
     if (!isOpen) {
       return;
     }
-    setName("SSH Session");
-    setWorkspaceId(sshWorkspaces[0]?.id);
-    setDirectory(sshWorkspaces[0]?.directory ?? "");
+    const initialWorkspace = sshWorkspaces[0];
+    setWorkspaceId(initialWorkspace?.id);
+    setDirectory(initialWorkspace?.directory ?? "");
+    setNameTouched(false);
   }, [isOpen, sshWorkspaces]);
+
+  useEffect(() => {
+    if (!isOpen || nameTouched) {
+      return;
+    }
+    setName(defaultName);
+  }, [defaultName, isOpen, nameTouched]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -55,9 +80,10 @@ export function CreateSshSessionModal({
     }
     try {
       setSubmitting(true);
+      const trimmedName = name.trim();
       const session = await onCreate({
         workspaceId,
-        name: name.trim(),
+        ...(nameTouched && trimmedName.length > 0 ? { name: trimmedName } : {}),
       });
       if (!session) {
         return;
@@ -97,6 +123,7 @@ export function CreateSshSessionModal({
           onSelect={(selectedId, selectedDirectory) => {
             setWorkspaceId(selectedId ?? undefined);
             setDirectory(selectedDirectory);
+            setNameTouched(false);
           }}
           error={workspaceError}
         />
@@ -110,13 +137,16 @@ export function CreateSshSessionModal({
             htmlFor="ssh-session-name"
             className="block text-sm font-medium text-gray-700 dark:text-gray-300"
           >
-            Session name <span className="text-red-500">*</span>
+            Session name
           </label>
           <input
             id="ssh-session-name"
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameTouched(true);
+            }}
             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
           />
         </div>

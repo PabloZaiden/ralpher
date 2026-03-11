@@ -4,6 +4,8 @@ import { createMockWebSocket } from "../helpers/mock-websocket";
 import { createSshSession } from "../helpers/factories";
 import { act, renderWithUser, waitFor } from "../helpers/render";
 
+let clipboardWrites: string[] = [];
+
 class MockTerminal {
   cols = 80;
   rows = 24;
@@ -69,6 +71,7 @@ describe("SshSessionDetails", () => {
     ws.reset();
     ws.install();
     lastTerminal = null;
+    clipboardWrites = [];
   });
 
   afterEach(() => {
@@ -550,6 +553,44 @@ describe("SshSessionDetails", () => {
       expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
       expect(getByText("Touch controls")).toBeTruthy();
       expect(lastTerminal).not.toBeNull();
+    });
+  });
+
+  test("copies terminal clipboard messages to the browser clipboard", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Clipboard" } }),
+    );
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails
+        sshSessionId="ssh-clipboard-1"
+        onBack={() => {}}
+        copyTextToClipboard={async (text) => {
+          clipboardWrites.push(text);
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Clipboard")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await waitFor(() => {
+      expect(terminalConnection.isOpen).toBe(true);
+    });
+
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.clipboard",
+        text: "copied from remote",
+      });
+    });
+
+    await waitFor(() => {
+      expect(clipboardWrites).toEqual(["copied from remote"]);
     });
   });
 });

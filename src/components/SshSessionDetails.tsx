@@ -18,6 +18,7 @@ import {
   type TerminalSpecialKey,
   type TmuxShortcut,
 } from "../utils/terminal-keys";
+import { writeTextToClipboard } from "../utils";
 
 function getStatusVariant(status: string) {
   switch (status) {
@@ -37,6 +38,7 @@ function getStatusVariant(status: string) {
 export interface SshSessionDetailsProps {
   sshSessionId: string;
   onBack: () => void;
+  copyTextToClipboard?: (text: string) => Promise<void>;
 }
 
 interface CompactBarProps {
@@ -79,7 +81,11 @@ function CompactBar({
 
 const touchButtonClassName = "min-h-[28px] shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[11px]";
 
-export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsProps) {
+export function SshSessionDetails({
+  sshSessionId,
+  onBack,
+  copyTextToClipboard = writeTextToClipboard,
+}: SshSessionDetailsProps) {
   const { error: showErrorToast } = useToast();
   const { session, loading, error, deleteSession } = useSshSession(sshSessionId);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
@@ -341,14 +347,27 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
     terminalSocketRef.current = ws;
 
     ws.onopen = () => {};
+    const copyTerminalClipboardText = async (text: string) => {
+      try {
+        await copyTextToClipboard(text);
+      } catch (error) {
+        showErrorToast(`Failed to copy terminal text to the clipboard: ${String(error)}`);
+      } finally {
+        focusTerminal();
+      }
+    };
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data) as {
         type: string;
         data?: string;
         message?: string;
+        text?: string;
       };
       if (data.type === "terminal.connected") {
         markTerminalReady();
+      }
+      if (data.type === "terminal.clipboard" && typeof data.text === "string") {
+        void copyTerminalClipboardText(data.text);
       }
       if (data.type === "terminal.output" && data.data) {
         if (!terminalReadyRef.current) {
@@ -380,7 +399,7 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
       lastSentResizeRef.current = null;
       setSocketStatus("closed");
     };
-  }, [markTerminalReady, terminalUrl, showErrorToast]);
+  }, [copyTextToClipboard, focusTerminal, markTerminalReady, terminalUrl, showErrorToast]);
 
   useEffect(() => {
     if (!terminalContainerRef.current || terminalRef.current) {
@@ -420,7 +439,7 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
     fitAddonRef.current = fitAddon;
     flushPendingOutput();
 
-    const disposable = terminal.onData((data) => {
+    const disposable = terminal.onData((data: string) => {
       void sendTerminalKeystroke(data);
     });
 

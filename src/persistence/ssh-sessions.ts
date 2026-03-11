@@ -108,9 +108,16 @@ export async function listSshSessionsByWorkspace(workspaceId: string): Promise<S
   return rows.map(rowToSshSession);
 }
 
+export async function countSshSessionsByWorkspace(workspaceId: string): Promise<number> {
+  const db = getDatabase();
+  const row = db.query("SELECT COUNT(*) AS count FROM ssh_sessions WHERE workspace_id = ?").get(workspaceId) as {
+    count?: number;
+  } | null;
+  return row?.count ?? 0;
+}
+
 export async function deleteSshSession(id: string): Promise<boolean> {
   const db = getDatabase();
   const result = db.run("DELETE FROM ssh_sessions WHERE id = ?", [id]);
   return result.changes > 0;
 }
-
