@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   defaultTerminalModifiers,
+  encodeTerminalDataInput,
   encodeTerminalInput,
   hasActiveTerminalModifiers,
 } from "../../src/utils/terminal-keys";
@@ -32,5 +33,12 @@ describe("terminal key encoding", () => {
   test("supports control-space and rejects unsupported multi-character keys", () => {
     expect(encodeTerminalInput("Space", { ctrl: true, alt: false, shift: false })).toBe("\u0000");
     expect(encodeTerminalInput("ab", defaultTerminalModifiers)).toBeNull();
+  });
+
+  test("encodes raw terminal data with active modifiers", () => {
+    expect(encodeTerminalDataInput("c", { ctrl: true, alt: false, shift: false })).toBe("\u0003");
+    expect(encodeTerminalDataInput("\t", { ctrl: false, alt: false, shift: true })).toBe("\u001b[Z");
+    expect(encodeTerminalDataInput("\u001b[A", { ctrl: false, alt: true, shift: false })).toBe("\u001b[1;3A");
+    expect(encodeTerminalDataInput("c", defaultTerminalModifiers)).toBe("c");
   });
 });

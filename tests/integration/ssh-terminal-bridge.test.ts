@@ -36,6 +36,17 @@ async function commandExists(command: string): Promise<boolean> {
   return result.exitCode === 0;
 }
 
+async function runQuiet(command: string[]): Promise<void> {
+  const proc = Bun.spawn(command, {
+    stdout: "ignore",
+    stderr: "pipe",
+  });
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    throw new Error(await new Response(proc.stderr).text());
+  }
+}
+
 const canRunRealSshBridge = async () =>
   await commandExists("sshd")
   && await commandExists("ssh")
@@ -84,10 +95,10 @@ describe("SshTerminalBridge integration", () => {
     await Bun.$`git -C ${workspaceDir} add .`.quiet();
     await Bun.$`git -C ${workspaceDir} commit -m "Initial commit"`.quiet();
 
-    await Bun.$`ssh-keygen -q -t rsa -N "" -f ${join(sshDir, "id_rsa")}`.quiet();
+    await runQuiet(["ssh-keygen", "-q", "-t", "rsa", "-N", "", "-f", join(sshDir, "id_rsa")]);
     const publicKey = await readFile(join(sshDir, "id_rsa.pub"), "utf8");
     await writeFile(join(sshDir, "authorized_keys"), publicKey, { mode: 0o600 });
-    await Bun.$`ssh-keygen -q -t rsa -N "" -f ${join(serverDir, "ssh_host_rsa_key")}`.quiet();
+    await runQuiet(["ssh-keygen", "-q", "-t", "rsa", "-N", "", "-f", join(serverDir, "ssh_host_rsa_key")]);
 
     const usernameResult = await Bun.$`whoami`.text();
     const username = usernameResult.trim();
@@ -172,15 +183,18 @@ describe("SshTerminalBridge integration", () => {
       });
 
       await bridge.connect();
+      await bridge.resize(120, 32);
+      bridge.sendInput("printf 'SSH_BRIDGE_SIZE:'; stty size; printf ':DONE\\n'\n");
       bridge.sendInput("echo SSH_BRIDGE_OK\n");
 
       for (let attempt = 0; attempt < 50; attempt++) {
-        if (output.includes("SSH_BRIDGE_OK")) {
+        if (output.includes("SSH_BRIDGE_OK") && output.includes("SSH_BRIDGE_SIZE:32 120:DONE")) {
           break;
         }
         await Bun.sleep(100);
       }
 
+      expect(output).toContain("SSH_BRIDGE_SIZE:32 120:DONE");
       expect(output).toContain("SSH_BRIDGE_OK");
       await bridge.dispose();
     } finally {

@@ -117,8 +117,13 @@ export const websocketHandlers = {
         },
       });
       ws.data.terminalBridge = bridge;
-      ws.send(JSON.stringify({ type: "terminal.connected", sshSessionId }));
-      void bridge.connect().catch(async (error: Error) => {
+      void bridge.connect().then(() => {
+        try {
+          ws.send(JSON.stringify({ type: "terminal.connected", sshSessionId }));
+        } catch (sendError) {
+          log.trace("Failed to send terminal ready event", { error: String(sendError), sshSessionId });
+        }
+      }).catch(async (error: Error) => {
         try {
           ws.send(JSON.stringify({ type: "terminal.error", message: String(error) }));
         } catch (sendError) {
@@ -185,11 +190,10 @@ export const websocketHandlers = {
           typeof data.rows === "number"
         ) {
           void ws.data.terminalBridge.resize(data.cols, data.rows).catch((error: Error) => {
-            try {
-              ws.send(JSON.stringify({ type: "terminal.error", message: String(error) }));
-            } catch (sendError) {
-              log.trace("Failed to send terminal resize error", { error: String(sendError) });
-            }
+            log.debug("Ignoring SSH terminal resize error", {
+              sshSessionId: ws.data.sshSessionId,
+              error: String(error),
+            });
           });
           return;
         }

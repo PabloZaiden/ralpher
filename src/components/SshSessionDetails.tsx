@@ -2,7 +2,7 @@
  * Dedicated SSH session terminal view.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
@@ -10,6 +10,7 @@ import { Badge, Button, Card, ConfirmModal } from "./common";
 import { useSshSession, useToast } from "../hooks";
 import {
   defaultTerminalModifiers,
+  encodeTerminalDataInput,
   encodeTerminalInput,
   hasActiveTerminalModifiers,
   type TerminalModifierState,
@@ -36,17 +37,60 @@ export interface SshSessionDetailsProps {
   onBack: () => void;
 }
 
+interface CompactBarProps {
+  title: string;
+  expanded: boolean;
+  onToggle: () => void;
+  summary: ReactNode;
+  children: ReactNode;
+  contentClassName?: string;
+}
+
+function CompactBar({
+  title,
+  expanded,
+  onToggle,
+  summary,
+  children,
+  contentClassName = "",
+}: CompactBarProps) {
+  return (
+    <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
+        aria-expanded={expanded}
+      >
+        <span className="shrink-0 text-[11px] text-gray-500 dark:text-gray-400">{expanded ? "▼" : "▶"}</span>
+        <span className="shrink-0 text-xs font-semibold text-gray-900 dark:text-gray-100">{title}</span>
+        <div className="min-w-0 flex-1">{summary}</div>
+      </button>
+      {expanded && (
+        <div className={`border-t border-gray-200 px-3 py-2 dark:border-gray-700 ${contentClassName}`.trim()}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsProps) {
-  const toast = useToast();
-  const { session, loading, error, refresh, deleteSession } = useSshSession(sshSessionId);
+  const { error: showErrorToast, success: showSuccessToast } = useToast();
+  const { session, loading, error, deleteSession } = useSshSession(sshSessionId);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const terminalSocketRef = useRef<WebSocket | null>(null);
+  const terminalReadyRef = useRef(false);
+  const pendingOutputRef = useRef<string[]>([]);
+  const resizeAnimationFrameRef = useRef<number | null>(null);
+  const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const [socketStatus, setSocketStatus] = useState<"connecting" | "open" | "closed">("connecting");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [sessionInfoExpanded, setSessionInfoExpanded] = useState(false);
+  const [touchControlsExpanded, setTouchControlsExpanded] = useState(false);
   const [terminalModifiers, setTerminalModifiers] = useState<TerminalModifierState>(defaultTerminalModifiers);
-  const [customKeyInput, setCustomKeyInput] = useState("");
 
   const terminalUrl = useMemo(
     () => `/api/ssh-terminal?sshSessionId=${encodeURIComponent(sshSessionId)}`,
@@ -59,14 +103,47 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
       terminalModifiers.shift ? "Shift" : null,
     ].filter(Boolean).join(" + ");
   }, [terminalModifiers]);
+  const sessionInfoSummary = useMemo(() => {
+    if (!session) {
+      return null;
+    }
+    return (
+      <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden text-xs text-gray-500 dark:text-gray-400">
+        <span className="min-w-0 truncate font-mono">{session.config.remoteSessionName}</span>
+        {session.state.error && (
+          <Badge variant="error" className="shrink-0">
+            error
+          </Badge>
+        )}
+      </div>
+    );
+  }, [session]);
+  const touchControlsSummary = useMemo(() => {
+    return (
+      <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden">
+        {hasActiveTerminalModifiers(terminalModifiers) ? (
+          <Badge variant="info" className="shrink-0">
+            Next: {activeModifierLabel}
+          </Badge>
+        ) : (
+          <Badge variant="default" className="shrink-0">
+            Modifiers off
+          </Badge>
+        )}
+        <span className="hidden min-w-0 truncate text-xs text-gray-500 dark:text-gray-400 sm:block">
+          Next touch or keyboard key uses modifiers
+        </span>
+      </div>
+    );
+  }, [activeModifierLabel, terminalModifiers]);
 
   const sendTerminalPayload = useCallback((
     payload: Record<string, unknown>,
     options?: { focusTerminal?: boolean; notifyOnFailure?: boolean },
   ): boolean => {
-    if (terminalSocketRef.current?.readyState !== WebSocket.OPEN) {
+    if (terminalSocketRef.current?.readyState !== WebSocket.OPEN || !terminalReadyRef.current) {
       if (options?.notifyOnFailure ?? true) {
-        toast.error("Terminal is not connected.");
+        showErrorToast("Terminal is still connecting.");
       }
       return false;
     }
@@ -76,7 +153,7 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
       terminalRef.current?.focus();
     }
     return true;
-  }, [toast]);
+  }, [showErrorToast]);
 
   const sendTerminalInput = useCallback((data: string, options?: { notifyOnFailure?: boolean }): boolean => {
     return sendTerminalPayload({
@@ -85,17 +162,64 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
     }, options);
   }, [sendTerminalPayload]);
 
-  const sendResize = useCallback(() => {
-    if (!terminalRef.current || !fitAddonRef.current) {
+  const performResize = useCallback(() => {
+    const terminal = terminalRef.current;
+    const fitAddon = fitAddonRef.current;
+    const container = terminalContainerRef.current;
+    if (!terminal || !fitAddon || !container) {
       return;
     }
-    fitAddonRef.current.fit();
-    void sendTerminalPayload({
+
+    fitAddon.fit();
+    if (terminal.cols <= 0 || terminal.rows <= 0) {
+      return;
+    }
+
+    const nextSize = {
+      cols: terminal.cols,
+      rows: terminal.rows,
+    };
+    const previousSize = lastSentResizeRef.current;
+    if (
+      previousSize &&
+      previousSize.cols === nextSize.cols &&
+      previousSize.rows === nextSize.rows
+    ) {
+      return;
+    }
+
+    const didSend = sendTerminalPayload({
       type: "terminal.resize",
-      cols: terminalRef.current.cols,
-      rows: terminalRef.current.rows,
+      ...nextSize,
     }, { focusTerminal: false, notifyOnFailure: false });
+    if (didSend) {
+      lastSentResizeRef.current = nextSize;
+    }
   }, [sendTerminalPayload]);
+
+  const scheduleResize = useCallback(() => {
+    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+      performResize();
+      return;
+    }
+    if (resizeAnimationFrameRef.current !== null) {
+      return;
+    }
+    resizeAnimationFrameRef.current = window.requestAnimationFrame(() => {
+      resizeAnimationFrameRef.current = null;
+      performResize();
+    });
+  }, [performResize]);
+
+  const flushPendingOutput = useCallback(() => {
+    if (!terminalRef.current || pendingOutputRef.current.length === 0) {
+      return;
+    }
+    for (const chunk of pendingOutputRef.current) {
+      terminalRef.current.write(chunk);
+    }
+    pendingOutputRef.current = [];
+  }, []);
 
   const resetTerminalModifiers = useCallback(() => {
     setTerminalModifiers(defaultTerminalModifiers);
@@ -111,7 +235,7 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
   const sendEncodedTerminalKey = useCallback((key: TerminalSpecialKey | string) => {
     const encoded = encodeTerminalInput(key, terminalModifiers);
     if (!encoded) {
-      toast.error("That key combination is not supported.");
+      showErrorToast("That key combination is not supported.");
       return;
     }
 
@@ -119,54 +243,82 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
     if (didSend) {
       resetTerminalModifiers();
     }
-  }, [resetTerminalModifiers, sendTerminalInput, terminalModifiers, toast]);
+  }, [resetTerminalModifiers, sendTerminalInput, terminalModifiers, showErrorToast]);
 
-  const handleCustomKeySend = useCallback(() => {
-    if (!customKeyInput) {
-      toast.error("Enter a key to send.");
+  const sendTerminalKeystroke = useCallback((data: string) => {
+    if (!hasActiveTerminalModifiers(terminalModifiers)) {
+      return sendTerminalInput(data, { notifyOnFailure: false });
+    }
+
+    const encoded = encodeTerminalDataInput(data, terminalModifiers);
+    if (!encoded) {
+      showErrorToast("That key combination is not supported.");
       return;
     }
 
-    sendEncodedTerminalKey(customKeyInput);
-    setCustomKeyInput("");
-  }, [customKeyInput, sendEncodedTerminalKey, toast]);
+    const didSend = sendTerminalInput(encoded, { notifyOnFailure: false });
+    if (didSend) {
+      resetTerminalModifiers();
+    }
+  }, [resetTerminalModifiers, sendTerminalInput, showErrorToast, terminalModifiers]);
 
   const connectTerminal = useCallback(() => {
     terminalSocketRef.current?.close();
+    terminalReadyRef.current = false;
+    pendingOutputRef.current = [];
+    lastSentResizeRef.current = null;
+    if (resizeAnimationFrameRef.current !== null && typeof window !== "undefined") {
+      window.cancelAnimationFrame(resizeAnimationFrameRef.current);
+      resizeAnimationFrameRef.current = null;
+    }
     setSocketStatus("connecting");
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const ws = new WebSocket(`${protocol}//${window.location.host}${terminalUrl}`);
     terminalSocketRef.current = ws;
 
-    ws.onopen = () => {
-      setSocketStatus("open");
-      sendResize();
-    };
+    ws.onopen = () => {};
     ws.onmessage = (event) => {
       const data = JSON.parse(event.data) as {
         type: string;
         data?: string;
         message?: string;
       };
+      if (data.type === "terminal.connected") {
+        terminalReadyRef.current = true;
+        lastSentResizeRef.current = null;
+        setSocketStatus("open");
+        scheduleResize();
+        flushPendingOutput();
+      }
       if (data.type === "terminal.output" && data.data) {
-        terminalRef.current?.write(data.data);
+        if (!terminalReadyRef.current || !terminalRef.current) {
+          pendingOutputRef.current.push(data.data);
+        } else {
+          terminalRef.current.write(data.data);
+        }
       }
       if (data.type === "terminal.error" && data.message) {
         terminalRef.current?.writeln(`\r\n${data.message}`);
-        toast.error(data.message);
+        showErrorToast(data.message);
       }
       if (data.type === "terminal.closed") {
+        terminalReadyRef.current = false;
+        lastSentResizeRef.current = null;
         setSocketStatus("closed");
       }
     };
     ws.onclose = () => {
+      terminalReadyRef.current = false;
+      lastSentResizeRef.current = null;
       setSocketStatus("closed");
     };
     ws.onerror = () => {
+      terminalReadyRef.current = false;
+      lastSentResizeRef.current = null;
       setSocketStatus("closed");
     };
-  }, [sendResize, terminalUrl, toast]);
+  }, [flushPendingOutput, scheduleResize, terminalUrl, showErrorToast]);
 
   useEffect(() => {
     if (!terminalContainerRef.current || terminalRef.current) {
@@ -184,25 +336,43 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(terminalContainerRef.current);
+    const terminalElement = terminal.element;
+    if (terminalElement) {
+      terminalElement.style.width = "100%";
+      terminalElement.style.height = "100%";
+
+      const viewport = terminalElement.querySelector<HTMLElement>(".xterm-viewport");
+      if (viewport) {
+        viewport.style.width = "100%";
+        viewport.style.height = "100%";
+      }
+
+      const screen = terminalElement.querySelector<HTMLElement>(".xterm-screen");
+      if (screen) {
+        screen.style.width = "100%";
+        screen.style.height = "100%";
+      }
+    }
     terminal.focus();
     terminalRef.current = terminal;
     fitAddonRef.current = fitAddon;
+    flushPendingOutput();
 
     const disposable = terminal.onData((data) => {
-      void sendTerminalInput(data, { notifyOnFailure: false });
+      void sendTerminalKeystroke(data);
     });
 
-    sendResize();
+    scheduleResize();
 
     const onWindowResize = () => {
-      sendResize();
+      scheduleResize();
     };
     window.addEventListener("resize", onWindowResize);
 
     let resizeObserver: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(() => {
-        sendResize();
+        scheduleResize();
       });
       resizeObserver.observe(terminalContainerRef.current);
     }
@@ -211,15 +381,20 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
       disposable.dispose();
       resizeObserver?.disconnect();
       window.removeEventListener("resize", onWindowResize);
+      if (resizeAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeAnimationFrameRef.current);
+        resizeAnimationFrameRef.current = null;
+      }
       terminal.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sendResize, sendTerminalInput]);
+  }, [flushPendingOutput, scheduleResize, sendTerminalKeystroke, session?.config.id]);
 
   useEffect(() => {
     connectTerminal();
     return () => {
+      terminalReadyRef.current = false;
       terminalSocketRef.current?.close();
       terminalSocketRef.current = null;
     };
@@ -230,12 +405,12 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
     if (!success) {
       return;
     }
-    toast.success("SSH session deleted.");
+    showSuccessToast("SSH session deleted.");
     setShowDeleteConfirm(false);
     onBack();
   }
 
-  if (loading) {
+  if (loading && !session) {
     return <div className="p-6 text-gray-500 dark:text-gray-400">Loading SSH session...</div>;
   }
 
@@ -249,174 +424,151 @@ export function SshSessionDetails({ sshSessionId, onBack }: SshSessionDetailsPro
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900">
-      <div className="border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-800 px-4 sm:px-6 lg:px-8 py-4">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <Button variant="ghost" onClick={onBack}>← Back</Button>
-            <h1 className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
+    <div className="h-full min-h-0 flex flex-col bg-gray-50 dark:bg-gray-900">
+      <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-800">
+        <div className="flex flex-wrap items-center justify-between gap-1.5">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            <Button variant="ghost" size="xs" onClick={onBack}>← Back</Button>
+            <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
               {session.config.name}
             </h1>
-            <div className="mt-2 flex items-center gap-2">
-              <Badge variant={getStatusVariant(session.state.status)}>
-                {session.state.status}
-              </Badge>
-              <Badge variant={socketStatus === "open" ? "success" : socketStatus === "connecting" ? "info" : "warning"}>
-                terminal {socketStatus}
-              </Badge>
-            </div>
+            <Badge variant={getStatusVariant(session.state.status)}>
+              {session.state.status}
+            </Badge>
+            <Badge variant={socketStatus === "open" ? "success" : socketStatus === "connecting" ? "info" : "warning"}>
+              {socketStatus}
+            </Badge>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="secondary" onClick={() => void refresh()}>
-              Refresh
-            </Button>
-            <Button variant="secondary" onClick={connectTerminal}>
-              Reconnect Terminal
-            </Button>
-            <Button variant="danger" onClick={() => setShowDeleteConfirm(true)}>
+          <div className="flex items-center gap-1.5">
+            <Button variant="danger" size="xs" onClick={() => setShowDeleteConfirm(true)}>
               Delete Session
             </Button>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[320px_1fr] gap-4 p-4 sm:p-6">
-        <Card title="Session Info">
-          <dl className="space-y-3 text-sm">
-            <div>
+      <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden p-2 sm:p-3">
+        <CompactBar
+          title="Session Info"
+          expanded={sessionInfoExpanded}
+          onToggle={() => setSessionInfoExpanded((current) => !current)}
+          summary={sessionInfoSummary}
+        >
+          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+            <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">Workspace ID</dt>
-              <dd className="font-mono text-gray-900 dark:text-gray-100 break-all">{session.config.workspaceId}</dd>
+              <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.workspaceId}</dd>
             </div>
-            <div>
+            <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">Directory</dt>
-              <dd className="font-mono text-gray-900 dark:text-gray-100 break-all">{session.config.directory}</dd>
+              <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.directory}</dd>
             </div>
-            <div>
+            <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">tmux session</dt>
-              <dd className="font-mono text-gray-900 dark:text-gray-100 break-all">{session.config.remoteSessionName}</dd>
+              <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.remoteSessionName}</dd>
             </div>
-            <div>
+            <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">Last connected</dt>
               <dd className="text-gray-900 dark:text-gray-100">{session.state.lastConnectedAt ?? "Never"}</dd>
             </div>
             {session.state.error && (
-              <div>
+              <div className="min-w-0 sm:col-span-2">
                 <dt className="text-gray-500 dark:text-gray-400">Last error</dt>
-                <dd className="text-red-600 dark:text-red-400 break-words">{session.state.error}</dd>
+                <dd className="break-words text-red-600 dark:text-red-400">{session.state.error}</dd>
               </div>
             )}
           </dl>
-        </Card>
+        </CompactBar>
 
-        <Card title="Terminal" padding={false} className="min-h-0 flex flex-col">
-          <div className="border-b border-gray-200 dark:border-gray-700 px-4 py-3">
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-200">Touch controls</span>
-                {hasActiveTerminalModifiers(terminalModifiers) ? (
-                  <Badge variant="info">Next key: {activeModifierLabel}</Badge>
-                ) : (
-                  <Badge variant="default">Modifiers off</Badge>
-                )}
-                {hasActiveTerminalModifiers(terminalModifiers) && (
-                  <Button variant="ghost" size="sm" onClick={resetTerminalModifiers}>
-                    Clear modifiers
-                  </Button>
-                )}
-              </div>
+        <CompactBar
+          title="Touch controls"
+          expanded={touchControlsExpanded}
+          onToggle={() => setTouchControlsExpanded((current) => !current)}
+          summary={touchControlsSummary}
+          contentClassName="max-h-48 overflow-y-auto sm:max-h-56"
+        >
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                variant={terminalModifiers.ctrl ? "primary" : "secondary"}
+                size="xs"
+                aria-pressed={terminalModifiers.ctrl}
+                onClick={() => toggleTerminalModifier("ctrl")}
+              >
+                Ctrl
+              </Button>
+              <Button
+                variant={terminalModifiers.alt ? "primary" : "secondary"}
+                size="xs"
+                aria-pressed={terminalModifiers.alt}
+                onClick={() => toggleTerminalModifier("alt")}
+              >
+                Alt
+              </Button>
+              <Button
+                variant={terminalModifiers.shift ? "primary" : "secondary"}
+                size="xs"
+                aria-pressed={terminalModifiers.shift}
+                onClick={() => toggleTerminalModifier("shift")}
+              >
+                Shift
+              </Button>
+              {hasActiveTerminalModifiers(terminalModifiers) && (
+                <Button variant="ghost" size="xs" onClick={resetTerminalModifiers}>
+                  Clear modifiers
+                </Button>
+              )}
+            </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant={terminalModifiers.ctrl ? "primary" : "secondary"}
-                  size="sm"
-                  aria-pressed={terminalModifiers.ctrl}
-                  onClick={() => toggleTerminalModifier("ctrl")}
-                >
-                  Ctrl
-                </Button>
-                <Button
-                  variant={terminalModifiers.alt ? "primary" : "secondary"}
-                  size="sm"
-                  aria-pressed={terminalModifiers.alt}
-                  onClick={() => toggleTerminalModifier("alt")}
-                >
-                  Alt
-                </Button>
-                <Button
-                  variant={terminalModifiers.shift ? "primary" : "secondary"}
-                  size="sm"
-                  aria-pressed={terminalModifiers.shift}
-                  onClick={() => toggleTerminalModifier("shift")}
-                >
-                  Shift
-                </Button>
-              </div>
+            <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-5 lg:grid-cols-9">
+              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("Escape")}>
+                Esc
+              </Button>
+              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("Tab")}>
+                Tab
+              </Button>
+              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("Enter")}>
+                Enter
+              </Button>
+              <Button
+                variant="secondary"
+                size="xs"
+                aria-label="Backspace"
+                onClick={() => sendEncodedTerminalKey("Backspace")}
+              >
+                Bksp
+              </Button>
+              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("Space")}>
+                Space
+              </Button>
+              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("ArrowUp")}>
+                ↑
+              </Button>
+              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("ArrowLeft")}>
+                ←
+              </Button>
+              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("ArrowDown")}>
+                ↓
+              </Button>
+              <Button variant="secondary" size="xs" onClick={() => sendEncodedTerminalKey("ArrowRight")}>
+                →
+              </Button>
+            </div>
 
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-8">
-                <Button variant="secondary" size="sm" onClick={() => sendEncodedTerminalKey("Escape")}>
-                  Esc
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => sendEncodedTerminalKey("Tab")}>
-                  Tab
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => sendEncodedTerminalKey("Enter")}>
-                  Enter
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => sendEncodedTerminalKey("Backspace")}>
-                  Backspace
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => sendEncodedTerminalKey("Space")}>
-                  Space
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => sendEncodedTerminalKey("ArrowUp")}>
-                  ↑
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => sendEncodedTerminalKey("ArrowLeft")}>
-                  ←
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => sendEncodedTerminalKey("ArrowDown")}>
-                  ↓
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => sendEncodedTerminalKey("ArrowRight")}>
-                  →
-                </Button>
-              </div>
-
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <label className="flex-1">
-                  <span className="mb-1 block text-sm text-gray-600 dark:text-gray-300">
-                    Send a key with the active modifiers
-                  </span>
-                  <input
-                    type="text"
-                    inputMode="text"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    spellCheck={false}
-                    maxLength={1}
-                    value={customKeyInput}
-                    onChange={(event) => setCustomKeyInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        handleCustomKeySend();
-                      }
-                    }}
-                    placeholder="a"
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                  />
-                </label>
-                <div className="flex items-end">
-                  <Button variant="secondary" onClick={handleCustomKeySend}>
-                    Send Key
-                  </Button>
-                </div>
-              </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              Active modifiers apply to the next touch button or typed terminal key, then clear automatically.
             </div>
           </div>
+        </CompactBar>
+
+        <Card
+          padding={false}
+          className="min-h-0 flex flex-1 flex-col overflow-hidden"
+          bodyClassName="min-h-0 flex flex-1 flex-col"
+        >
           <div
             ref={terminalContainerRef}
-            className="flex-1 min-h-[400px] bg-gray-900 rounded-b-lg overflow-hidden"
+            className="min-h-0 flex-1 overflow-hidden rounded-lg bg-gray-900 w-full [&>.xterm]:h-full [&>.xterm]:w-full [&_.xterm-screen]:h-full [&_.xterm-screen]:w-full [&_.xterm-viewport]:h-full [&_.xterm-viewport]:w-full"
           />
         </Card>
       </div>

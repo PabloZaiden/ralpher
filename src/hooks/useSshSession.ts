@@ -2,7 +2,7 @@
  * Hook for a single SSH session detail view.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SshSession, SshSessionEvent, UpdateSshSessionRequest } from "../types";
 import { useWebSocket } from "./useWebSocket";
 
@@ -19,10 +19,13 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
   const [session, setSession] = useState<SshSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const initialLoadDoneRef = useRef(false);
 
-  const refresh = useCallback(async () => {
+  const refreshInternal = useCallback(async (showLoading: boolean) => {
     try {
-      setLoading(true);
+      if (showLoading) {
+        setLoading(true);
+      }
       setError(null);
       const response = await fetch(`/api/ssh-sessions/${sessionId}`);
       if (!response.ok) {
@@ -31,12 +34,17 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
       }
       const data = await response.json() as SshSession;
       setSession(data);
+      initialLoadDoneRef.current = true;
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
     }
   }, [sessionId]);
+
+  const refresh = useCallback(async () => {
+    await refreshInternal(!initialLoadDoneRef.current);
+  }, [refreshInternal]);
 
   const handleEvent = useCallback((event: SshSessionEvent | { type?: string; sshSessionId?: string }) => {
     if (!event.type?.startsWith("ssh_session.")) {
@@ -49,8 +57,8 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
       setSession(null);
       return;
     }
-    void refresh();
-  }, [refresh, sessionId]);
+    void refreshInternal(false);
+  }, [refreshInternal, sessionId]);
 
   useWebSocket<SshSessionEvent>({
     url: `/api/ws?sshSessionId=${encodeURIComponent(sessionId)}`,
@@ -97,6 +105,13 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
   }, [sessionId]);
 
   useEffect(() => {
+    initialLoadDoneRef.current = false;
+    setSession(null);
+    setLoading(true);
+    setError(null);
+  }, [sessionId]);
+
+  useEffect(() => {
     void refresh();
   }, [refresh]);
 
@@ -109,4 +124,3 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
     deleteSession,
   };
 }
-

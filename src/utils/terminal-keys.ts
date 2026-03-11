@@ -138,3 +138,42 @@ export function encodeTerminalInput(
       return withAltPrefix(shiftedKey, modifiers);
   }
 }
+
+export function encodeTerminalDataInput(
+  data: string,
+  modifiers: TerminalModifierState = defaultTerminalModifiers,
+): string | null {
+  if (!hasActiveTerminalModifiers(modifiers)) {
+    return data;
+  }
+
+  switch (data) {
+    case `${CSI}A`:
+    case `${ESC}OA`:
+      return encodeTerminalInput("ArrowUp", modifiers);
+    case `${CSI}B`:
+    case `${ESC}OB`:
+      return encodeTerminalInput("ArrowDown", modifiers);
+    case `${CSI}C`:
+    case `${ESC}OC`:
+      return encodeTerminalInput("ArrowRight", modifiers);
+    case `${CSI}D`:
+    case `${ESC}OD`:
+      return encodeTerminalInput("ArrowLeft", modifiers);
+    case "\t":
+      return encodeTerminalInput("Tab", modifiers);
+    case "\r":
+      return encodeTerminalInput("Enter", modifiers);
+    case "\u007f":
+      return encodeTerminalInput("Backspace", modifiers);
+    case ESC:
+      return encodeTerminalInput("Escape", modifiers);
+    case " ":
+      return encodeTerminalInput("Space", modifiers);
+    default:
+      if (data.length !== 1) {
+        return null;
+      }
+      return encodeTerminalInput(data, modifiers);
+  }
+}
