@@ -151,6 +151,14 @@ describe("SshTerminalBridge", () => {
           exitCode: 0,
         };
       }
+      if (command === "tmux" && args[0] === "display-message") {
+        return {
+          success: true,
+          stdout: "1\n",
+          stderr: "",
+          exitCode: 0,
+        };
+      }
       return {
         success: true,
         stdout: "",
@@ -229,5 +237,48 @@ describe("SshTerminalBridge", () => {
 
     await bridge.connect();
     expect(spawnCount).toBe(2);
+  });
+
+  test("treats live stdout as a readiness fallback when tmux probing lags", async () => {
+    execImpl = async (command: string, args: string[]) => {
+      if (command === "tmux" && args[0] === "-V") {
+        return {
+          success: true,
+          stdout: "tmux 3.4\n",
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      if (command === "tmux" && args[0] === "display-message") {
+        return {
+          success: false,
+          stdout: "",
+          stderr: "session missing",
+          exitCode: 1,
+        };
+      }
+      return {
+        success: true,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+      };
+    };
+
+    const outputChunks: string[] = [];
+    const bridge = new SshTerminalBridge(session.config.id, {
+      onOutput: (chunk) => {
+        outputChunks.push(chunk);
+      },
+      readyTimeoutMs: 500,
+    });
+
+    const connectPromise = bridge.connect();
+    await Bun.sleep(0);
+
+    currentProc?.stdout.emit("data", "tester@host:~$ ");
+
+    await expect(connectPromise).resolves.toBeUndefined();
+    expect(outputChunks).toContain("tester@host:~$ ");
   });
 });

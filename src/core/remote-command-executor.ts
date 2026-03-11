@@ -28,6 +28,8 @@ export interface CommandExecutorConfig {
   user?: string;
   /** SSH password (optional, uses sshpass) */
   password?: string;
+  /** SSH identity file path (optional) */
+  identityFile?: string;
   /** Default timeout in milliseconds */
   timeoutMs?: number;
 }
@@ -61,9 +63,21 @@ export function buildSshCommandArgs(options: {
   port: number;
   target: string;
   remoteCommand: string;
+  identityFile?: string;
 }): string[] {
+  const identityFile = options.identityFile?.trim();
   return [
     ...getSshAuthArgs(options.authMode),
+    ...(identityFile
+      ? [
+          "-o",
+          "IdentityAgent=none",
+          "-o",
+          "IdentitiesOnly=yes",
+          "-i",
+          identityFile,
+        ]
+      : []),
     "-o",
     "ConnectTimeout=10",
     "-o",
@@ -95,6 +109,7 @@ export class CommandExecutorImpl implements CommandExecutor {
   private readonly port: number;
   private readonly user?: string;
   private readonly password?: string;
+  private readonly identityFile?: string;
   private readonly defaultTimeoutMs: number;
 
   /** Queue of pending commands */
@@ -114,6 +129,7 @@ export class CommandExecutorImpl implements CommandExecutor {
     this.port = config.port ?? 22;
     this.user = config.user;
     this.password = config.password;
+    this.identityFile = config.identityFile?.trim() || undefined;
     this.defaultTimeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
@@ -262,6 +278,7 @@ export class CommandExecutorImpl implements CommandExecutor {
             port: this.port,
             target: sshTarget,
             remoteCommand: remoteShellCommand,
+            identityFile: this.identityFile,
           }),
         ],
         "/",
@@ -277,6 +294,7 @@ export class CommandExecutorImpl implements CommandExecutor {
         port: this.port,
         target: sshTarget,
         remoteCommand: remoteShellCommand,
+        identityFile: this.identityFile,
       }),
       "/",
       timeoutMs,

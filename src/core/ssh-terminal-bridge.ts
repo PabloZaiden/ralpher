@@ -12,12 +12,13 @@ import { backendManager } from "./backend-manager";
 
 const log = createLogger("core:ssh-terminal-bridge");
 const TMUX_READY_POLL_INTERVAL_MS = 100;
-const TMUX_READY_TIMEOUT_MS = 10_000;
+const DEFAULT_TMUX_READY_TIMEOUT_MS = 15_000;
 
 export interface SshTerminalBridgeOptions {
   onOutput: (chunk: string) => void;
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
   onError?: (error: Error) => void;
+  readyTimeoutMs?: number;
 }
 
 function quoteShell(value: string): string {
@@ -61,6 +62,7 @@ function buildSshSpawnConfig(workspace: Workspace, session: SshSession): {
       port: settings.port ?? 22,
       target,
       remoteCommand,
+      identityFile: settings.identityFile,
     }),
   ];
 
@@ -118,6 +120,7 @@ export class SshTerminalBridge {
   private closePromise: Promise<void> | null = null;
   private skipCloseStatusUpdate = false;
   private startupError: string | undefined;
+  private receivedStdout = false;
 
   constructor(
     private readonly sessionId: string,
@@ -148,6 +151,7 @@ export class SshTerminalBridge {
     this.ready = false;
     this.skipCloseStatusUpdate = false;
     this.startupError = undefined;
+    this.receivedStdout = false;
 
     this.session = await sshSessionManager.getSession(this.sessionId);
     if (!this.session) {
@@ -206,6 +210,9 @@ export class SshTerminalBridge {
     });
 
     proc.stdout.on("data", (chunk: string) => {
+      if (chunk.length > 0) {
+        this.receivedStdout = true;
+      }
       this.options.onOutput(chunk);
     });
     proc.stderr.on("data", (chunk: string) => {
@@ -282,7 +289,7 @@ export class SshTerminalBridge {
     }
 
     const executor = await backendManager.getCommandExecutorAsync(this.workspace.id, this.workspace.directory);
-    const deadline = Date.now() + TMUX_READY_TIMEOUT_MS;
+    const deadline = Date.now() + (this.options.readyTimeoutMs ?? DEFAULT_TMUX_READY_TIMEOUT_MS);
     while (Date.now() < deadline) {
       if (!this.proc) {
         throw new Error("SSH terminal is not connected");
@@ -292,14 +299,22 @@ export class SshTerminalBridge {
       }
 
       const result = await executor.exec("tmux", [
-        "has-session",
+        "display-message",
+        "-p",
         "-t",
         this.session.config.remoteSessionName,
+        "#{session_attached}",
       ], {
         cwd: this.workspace.directory,
         timeout: 1_000,
       });
-      if (result.success) {
+      if (result.success && Number.parseInt(result.stdout.trim(), 10) > 0) {
+        return;
+      }
+      if (this.receivedStdout) {
+        log.debug("Treating live terminal output as readiness fallback", {
+          sessionId: this.sessionId,
+        });
         return;
       }
 
