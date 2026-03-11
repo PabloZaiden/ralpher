@@ -17,6 +17,7 @@ const DEFAULT_SSH_TERM = "xterm-256color";
 const OSC_52_SEQUENCE_START = "\u001b]52;";
 const OSC_SEQUENCE_BELL = "\u0007";
 const OSC_SEQUENCE_STRING_TERMINATOR = "\u001b\\";
+const MAX_PENDING_OSC_SEQUENCE_BYTES = 1024 * 1024;
 
 export interface SshTerminalBridgeOptions {
   onOutput: (chunk: string) => void;
@@ -393,13 +394,26 @@ export class SshTerminalBridge {
   private handleOutputChunk(chunk: string, stream: "stdout" | "stderr"): void {
     const buffer = (stream === "stdout" ? this.stdoutBuffer : this.stderrBuffer) + chunk;
     const parsed = extractClipboardSequences(buffer);
-    if (stream === "stdout") {
-      this.stdoutBuffer = parsed.remainder;
-    } else {
-      this.stderrBuffer = parsed.remainder;
+    let visibleOutput = parsed.visibleOutput;
+    let remainder = parsed.remainder;
+    const remainderBytes = Buffer.byteLength(remainder, "utf8");
+    if (remainder.length > 0 && remainderBytes > MAX_PENDING_OSC_SEQUENCE_BYTES) {
+      log.warn("Flushing oversized OSC 52 buffer", {
+        sessionId: this.sessionId,
+        stream,
+        bufferedBytes: remainderBytes,
+        limitBytes: MAX_PENDING_OSC_SEQUENCE_BYTES,
+      });
+      visibleOutput += remainder;
+      remainder = "";
     }
-    if (parsed.visibleOutput.length > 0) {
-      this.options.onOutput(parsed.visibleOutput);
+    if (stream === "stdout") {
+      this.stdoutBuffer = remainder;
+    } else {
+      this.stderrBuffer = remainder;
+    }
+    if (visibleOutput.length > 0) {
+      this.options.onOutput(visibleOutput);
     }
     for (const clipboardText of parsed.clipboardCopies) {
       this.options.onClipboardCopy?.(clipboardText);

@@ -20,10 +20,14 @@ export async function writeTextToClipboard(text: string): Promise<void> {
   textarea.style.opacity = "0";
   textarea.style.pointerEvents = "none";
   document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
-  const didCopy = document.execCommand("copy");
-  textarea.remove();
+  let didCopy = false;
+  try {
+    textarea.focus();
+    textarea.select();
+    didCopy = document.execCommand("copy");
+  } finally {
+    textarea.remove();
+  }
   if (!didCopy) {
     throw new Error("Browser clipboard access is unavailable.");
   }

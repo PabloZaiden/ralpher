@@ -377,4 +377,26 @@ describe("SshTerminalBridge", () => {
     expect(outputChunks).toEqual(["before ", " after"]);
     expect(clipboardCopies).toEqual(["copied text"]);
   });
+
+  test("flushes oversized unterminated OSC 52 buffers as raw output", async () => {
+    const outputChunks: string[] = [];
+    const clipboardCopies: string[] = [];
+    const bridge = new SshTerminalBridge(session.config.id, {
+      onOutput: (chunk) => {
+        outputChunks.push(chunk);
+      },
+      onClipboardCopy: (text) => {
+        clipboardCopies.push(text);
+      },
+    });
+
+    await bridge.connect();
+
+    const oversizedSequence = "\u001b]52;c;" + "a".repeat(1024 * 1024 + 1);
+    currentProc?.stdout.emit("data", oversizedSequence);
+    currentProc?.stdout.emit("data", "after");
+
+    expect(outputChunks).toEqual([oversizedSequence, "after"]);
+    expect(clipboardCopies).toEqual([]);
+  });
 });
