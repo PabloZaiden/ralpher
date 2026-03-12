@@ -8,7 +8,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
-import { renderWithUser, waitFor } from "../helpers/render";
+import { renderWithUser, waitFor, within } from "../helpers/render";
 import {
   createLoopWithStatus,
   createWorkspace,
@@ -195,6 +195,47 @@ describe("draft workflow scenario", () => {
     await waitFor(() => {
       const calls = api.calls("/api/loops/:id/draft/start", "POST");
       expect(calls.length).toBeGreaterThan(0);
+    });
+  });
+
+  test("edit draft modal can delete an existing draft", async () => {
+    setupBaseApi();
+    const draft = draftLoop();
+    api.get("/api/loops", () => [draft]);
+    api.get("/api/workspaces", () => [WORKSPACE]);
+    api.delete("/api/loops/:id", () => ({ success: true }));
+
+    const { getByText, getByRole, queryByRole, user } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByText("My Draft")).toBeTruthy();
+    });
+
+    await user.click(getByText("My Draft"));
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Edit Draft Loop" })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: "Delete Draft" }));
+
+    await waitFor(() => {
+      expect(getByText('Are you sure you want to delete "My Draft"? The draft will be marked as deleted and can be purged later if needed.')).toBeTruthy();
+    });
+
+    const dialogs = document.querySelectorAll('[role="dialog"]');
+    expect(dialogs.length).toBe(1);
+
+    const dialog = getByRole("dialog", { name: "Edit Draft Loop" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete Draft" }));
+
+    await waitFor(() => {
+      const calls = api.calls("/api/loops/:id", "DELETE");
+      expect(calls.length).toBeGreaterThan(0);
+    });
+
+    await waitFor(() => {
+      expect(queryByRole("heading", { name: "Edit Draft Loop" })).toBeNull();
     });
   });
 
