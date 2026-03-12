@@ -15,7 +15,7 @@ import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
 import type { BranchInfo } from "../types";
 import { createLogger } from "../core/logger";
-import { errorResponse, resolveWorkspaceForDirectory } from "./helpers";
+import { errorResponse, normalizeDirectoryPath, resolveWorkspaceForDirectory } from "./helpers";
 
 const log = createLogger("api:git");
 
@@ -40,19 +40,21 @@ export interface DefaultBranchResponse {
 /**
  * Get a GitService configured for the current execution provider.
  * Uses deterministic command execution (local/SSH), independent of agent transport.
+ * This helper never throws for missing or ambiguous workspaces; lookup failures
+ * are returned as `Response` objects from `resolveWorkspaceForDirectory()`.
  * 
  * @param directory - The directory containing the git repository
  * @param workspaceId - Optional workspace ID used to disambiguate identical directories
- * @returns Configured GitService instance
- * @throws Error if no workspace is found for the directory
+ * @returns Configured GitService instance on success, or an error Response
  */
 async function getGitService(directory: string, workspaceId?: string | null): Promise<GitService | Response> {
-  log.debug("Getting GitService for directory", { directory, workspaceId });
-  const workspace = await resolveWorkspaceForDirectory(directory, workspaceId);
+  const normalizedDirectory = normalizeDirectoryPath(directory);
+  log.debug("Getting GitService for directory", { directory: normalizedDirectory, workspaceId });
+  const workspace = await resolveWorkspaceForDirectory(normalizedDirectory, workspaceId);
   if (workspace instanceof Response) {
     return workspace;
   }
-  const executor = await backendManager.getCommandExecutorAsync(workspace.id, directory);
+  const executor = await backendManager.getCommandExecutorAsync(workspace.id, normalizedDirectory);
   log.debug("GitService created", { workspaceId: workspace.id });
   return GitService.withExecutor(executor);
 }
@@ -75,18 +77,19 @@ async function validateGitRequest(req: Request): Promise<
     return errorResponse("missing_parameter", "directory query parameter is required");
   }
 
-  const git = await getGitService(directory, workspaceId);
+  const normalizedDirectory = normalizeDirectoryPath(directory);
+  const git = await getGitService(normalizedDirectory, workspaceId);
   if (git instanceof Response) {
     return git;
   }
 
-  const isGitRepo = await git.isGitRepo(directory);
+  const isGitRepo = await git.isGitRepo(normalizedDirectory);
   if (!isGitRepo) {
-    log.debug("Directory is not a git repository", { directory });
+    log.debug("Directory is not a git repository", { directory: normalizedDirectory });
     return errorResponse("not_git_repo", "Directory is not a git repository");
   }
 
-  return { git, directory };
+  return { git, directory: normalizedDirectory };
 }
 
 /**
@@ -104,9 +107,12 @@ export const gitRoutes = {
    * 
    * Query Parameters:
    * - directory (required): Path to the git repository
+   * - workspaceId (optional): Workspace ID used to disambiguate shared directories
    * 
    * Errors:
-   * - 400: Missing directory parameter or not a git repo
+   * - 400: Missing directory parameter, directory mismatch, or not a git repo
+   * - 404: Workspace not found
+   * - 409: Multiple workspaces use this directory and workspaceId was not provided
    * - 500: Git command error
    * 
    * @returns BranchesResponse with currentBranch and branches array
@@ -145,9 +151,12 @@ export const gitRoutes = {
    * 
    * Query Parameters:
    * - directory (required): Path to the git repository
+   * - workspaceId (optional): Workspace ID used to disambiguate shared directories
    * 
    * Errors:
-   * - 400: Missing directory parameter or not a git repo
+   * - 400: Missing directory parameter, directory mismatch, or not a git repo
+   * - 404: Workspace not found
+   * - 409: Multiple workspaces use this directory and workspaceId was not provided
    * - 500: Git command error
    * 
    * @returns DefaultBranchResponse with defaultBranch

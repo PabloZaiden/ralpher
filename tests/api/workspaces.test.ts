@@ -400,6 +400,27 @@ describe("Workspace API Integration", () => {
       expect(data.name).toBe("Find By Directory Test");
     });
 
+    test("trims incidental whitespace from the directory query", async () => {
+      const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Whitespace Lookup Test",
+          directory: testWorkDir,
+        }),
+      });
+      const workspace = await createResponse.json();
+
+      const response = await fetch(
+        `${baseUrl}/api/workspaces/by-directory?directory=${encodeURIComponent(`  ${testWorkDir}  `)}`
+      );
+      expect(response.ok).toBe(true);
+      const data = await response.json();
+
+      expect(data.id).toBe(workspace.id);
+      expect(data.directory).toBe(testWorkDir);
+    });
+
     test("returns 404 for non-existent directory", async () => {
       const response = await fetch(
         `${baseUrl}/api/workspaces/by-directory?directory=${encodeURIComponent("/non/existent/path")}`

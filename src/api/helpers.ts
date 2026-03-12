@@ -35,6 +35,13 @@ export function successResponse(data: Record<string, unknown> = {}): Response {
 }
 
 /**
+ * Normalize a directory string received through API inputs.
+ */
+export function normalizeDirectoryPath(directory: string): string {
+  return directory.trim();
+}
+
+/**
  * Look up a workspace by ID and return it, or return a 404 error response.
  *
  * This helper eliminates the repeated pattern of:
@@ -62,12 +69,14 @@ export async function resolveWorkspaceForDirectory(
   directory: string,
   workspaceId?: string | null,
 ): Promise<Workspace | Response> {
+  const normalizedDirectory = normalizeDirectoryPath(directory);
+
   if (workspaceId) {
     const workspace = await getWorkspace(workspaceId);
     if (!workspace) {
       return errorResponse("workspace_not_found", "Workspace not found", 404);
     }
-    if (workspace.directory !== directory) {
+    if (normalizeDirectoryPath(workspace.directory) !== normalizedDirectory) {
       return errorResponse(
         "workspace_directory_mismatch",
         "workspaceId does not match the requested directory",
@@ -77,9 +86,13 @@ export async function resolveWorkspaceForDirectory(
     return workspace;
   }
 
-  const matches = await listWorkspacesByDirectory(directory);
+  const matches = await listWorkspacesByDirectory(normalizedDirectory);
   if (matches.length === 0) {
-    return errorResponse("workspace_not_found", `No workspace found for directory: ${directory}`, 404);
+    return errorResponse(
+      "workspace_not_found",
+      `No workspace found for directory: ${normalizedDirectory}`,
+      404,
+    );
   }
   if (matches.length > 1) {
     return errorResponse(

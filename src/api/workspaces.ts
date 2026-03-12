@@ -27,7 +27,12 @@ import { getDefaultServerSettings } from "../types/settings";
 import type { Workspace, WorkspaceImportResult } from "../types/workspace";
 import type { WorkspaceExportData } from "../types/schemas";
 import { parseAndValidate } from "./validation";
-import { requireWorkspace, errorResponse, resolveWorkspaceForDirectory } from "./helpers";
+import {
+  requireWorkspace,
+  errorResponse,
+  normalizeDirectoryPath,
+  resolveWorkspaceForDirectory,
+} from "./helpers";
 import {
   CreateWorkspaceRequestSchema,
   UpdateWorkspaceRequestSchema,
@@ -57,42 +62,45 @@ async function importWorkspacesWithValidation(
   };
 
   for (const config of data.workspaces) {
+    const name = config.name.trim();
+    const directory = config.directory.trim();
+
     // Check if a workspace with this directory already exists
     const serverSettings = config.serverSettings ?? getDefaultServerSettings();
-    const existing = await getWorkspaceByDirectoryAndServerSettings(config.directory, serverSettings);
+    const existing = await getWorkspaceByDirectoryAndServerSettings(directory, serverSettings);
     if (existing) {
       log.debug("Skipping workspace import - directory already exists", {
-        name: config.name,
-        directory: config.directory,
+        name,
+        directory,
         existingId: existing.id,
       });
       result.skipped++;
-        result.details.push({
-          name: config.name,
-          directory: config.directory,
-          status: "skipped",
-          reason: `A workspace already exists for directory ${config.directory} on this server target`,
-        });
-        continue;
-      }
+      result.details.push({
+        name,
+        directory,
+        status: "skipped",
+        reason: `A workspace already exists for directory ${directory} on this server target`,
+      });
+      continue;
+    }
 
-      // Validate directory on the remote server (same validation as POST /api/workspaces)
-      try {
+    // Validate directory on the remote server (same validation as POST /api/workspaces)
+    try {
       const validation = await backendManager.validateRemoteDirectory(
         serverSettings,
-        config.directory,
+        directory,
       );
 
       if (!validation.success) {
         log.warn("Import: failed to validate remote directory", {
-          name: config.name,
-          directory: config.directory,
+          name,
+          directory,
           error: validation.error,
         });
         result.failed++;
         result.details.push({
-          name: config.name,
-          directory: config.directory,
+          name,
+          directory,
           status: "failed",
           reason: `Failed to validate directory: ${validation.error}`,
         });
@@ -101,13 +109,13 @@ async function importWorkspacesWithValidation(
 
       if (validation.directoryExists === false) {
         log.warn("Import: directory does not exist on remote server", {
-          name: config.name,
-          directory: config.directory,
+          name,
+          directory,
         });
         result.failed++;
         result.details.push({
-          name: config.name,
-          directory: config.directory,
+          name,
+          directory,
           status: "failed",
           reason: "Directory does not exist on the remote server",
         });
@@ -116,13 +124,13 @@ async function importWorkspacesWithValidation(
 
       if (!validation.isGitRepo) {
         log.warn("Import: directory is not a git repository", {
-          name: config.name,
-          directory: config.directory,
+          name,
+          directory,
         });
         result.failed++;
         result.details.push({
-          name: config.name,
-          directory: config.directory,
+          name,
+          directory,
           status: "failed",
           reason: "Directory is not a git repository",
         });
@@ -130,14 +138,14 @@ async function importWorkspacesWithValidation(
       }
     } catch (error) {
       log.warn("Import: unexpected error during directory validation", {
-        name: config.name,
-        directory: config.directory,
+        name,
+        directory,
         error: String(error),
       });
       result.failed++;
       result.details.push({
-        name: config.name,
-        directory: config.directory,
+        name,
+        directory,
         status: "failed",
         reason: `Validation error: ${String(error)}`,
       });
@@ -148,8 +156,8 @@ async function importWorkspacesWithValidation(
     const now = new Date().toISOString();
     const workspace: Workspace = {
       id: crypto.randomUUID(),
-      name: config.name,
-      directory: config.directory,
+      name,
+      directory,
       serverSettings,
       createdAt: now,
       updatedAt: now,
@@ -377,6 +385,16 @@ export const workspacesRoutes = {
 
   /**
    * GET /api/workspaces/by-directory?directory=... - Get workspace by directory
+   *
+   * Query Parameters:
+   * - directory (required): Directory path to resolve
+   * - workspaceId (optional): Workspace ID used to disambiguate shared directories
+   *
+   * Errors:
+   * - 400: Missing directory parameter or workspaceId/directory mismatch
+   * - 404: No workspace found for the directory
+   * - 409: Multiple workspaces use this directory and workspaceId was not provided
+   * - 500: Failed to read workspace data
    */
   "/api/workspaces/by-directory": {
     async GET(req: Request) {
@@ -389,15 +407,16 @@ export const workspacesRoutes = {
       }
 
       try {
+        const normalizedDirectory = normalizeDirectoryPath(directory);
         if (workspaceId) {
-          const workspace = await resolveWorkspaceForDirectory(directory, workspaceId);
+          const workspace = await resolveWorkspaceForDirectory(normalizedDirectory, workspaceId);
           if (workspace instanceof Response) {
             return workspace;
           }
           return Response.json(workspace);
         }
 
-        const matches = await listWorkspacesByDirectory(directory);
+        const matches = await listWorkspacesByDirectory(normalizedDirectory);
         if (matches.length === 0) {
           return errorResponse("workspace_not_found", "No workspace found for this directory", 404);
         }

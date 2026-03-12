@@ -139,6 +139,17 @@ describe("Git API Integration", () => {
       );
       expect(res.status).toBe(200);
     });
+
+    test("trims incidental whitespace from directory queries", async () => {
+      const res = await fetch(
+        `${baseUrl}/api/git/branches?directory=${encodeURIComponent(`  ${testWorkDir}  `)}&workspaceId=${encodeURIComponent("git-test-workspace")}`
+      );
+      expect(res.status).toBe(200);
+
+      const body = await res.json();
+      expect(body.currentBranch).toBeTruthy();
+      expect(Array.isArray(body.branches)).toBe(true);
+    });
   });
 
   // ==========================================================================
