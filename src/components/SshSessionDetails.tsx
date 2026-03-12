@@ -754,6 +754,23 @@ export function SshSessionDetails({
                 >
                   :q
                 </Button>
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendTerminalTextShortcut("curl https://raw.githubusercontent.com/sinelaw/fresh/refs/heads/master/scripts/install.sh | sh")}
+                >
+                  Install fresh
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  onClick={() => sendTerminalTextShortcut("fresh\n")}
+                >
+                  Fresh
+                </Button>
               </div>
             </div>
 

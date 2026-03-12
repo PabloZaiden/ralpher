@@ -311,6 +311,8 @@ describe("SshSessionDetails", () => {
     await user.click(getByText("Neovim"));
     await user.click(getByText("Ntree"));
     await user.click(getByText(":q"));
+    await user.click(getByText("Install fresh"));
+    await user.click(getByText("Fresh"));
 
     await waitFor(() => {
       expect(terminalConnection.sentMessages).toContain(JSON.stringify({
@@ -328,6 +330,14 @@ describe("SshSessionDetails", () => {
       expect(terminalConnection.sentMessages).toContain(JSON.stringify({
         type: "terminal.input",
         data: ":q\n",
+      }));
+      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+        type: "terminal.input",
+        data: "curl https://raw.githubusercontent.com/sinelaw/fresh/refs/heads/master/scripts/install.sh | sh",
+      }));
+      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+        type: "terminal.input",
+        data: "fresh\n",
       }));
     });
   });
@@ -359,7 +369,7 @@ describe("SshSessionDetails", () => {
     expect(buttons.className).not.toContain("min-w-max");
   });
 
-  test("keeps neovim-related touch controls grouped at the end after a separator", async () => {
+  test("keeps neovim and fresh touch controls grouped at the end after separators", async () => {
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Neovim Group" } }),
     );
@@ -380,13 +390,17 @@ describe("SshSessionDetails", () => {
     );
     const separators = buttons.querySelectorAll("span[aria-hidden='true']");
 
-    expect(buttonLabels.slice(-4)).toEqual([
+    expect(buttonLabels.slice(-6, -2)).toEqual([
       "Install Neovim",
       "Neovim",
       "Ntree",
       ":q",
     ]);
-    expect(separators).toHaveLength(3);
+    expect(buttonLabels.slice(-2)).toEqual([
+      "Install fresh",
+      "Fresh",
+    ]);
+    expect(separators).toHaveLength(4);
   });
 
   test("sends tmux helper shortcuts from touch controls", async () => {
