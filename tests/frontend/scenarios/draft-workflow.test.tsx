@@ -8,7 +8,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
-import { renderWithUser, waitFor } from "../helpers/render";
+import { renderWithUser, waitFor, within } from "../helpers/render";
 import {
   createLoopWithStatus,
   createWorkspace,
@@ -220,16 +220,14 @@ describe("draft workflow scenario", () => {
     await user.click(getByRole("button", { name: "Delete Draft" }));
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Delete Draft?" })).toBeTruthy();
+      expect(getByText('Are you sure you want to delete "My Draft"? The draft will be marked as deleted and can be purged later if needed.')).toBeTruthy();
     });
 
-    const confirmDeleteButtons = document.querySelectorAll("button");
-    const confirmDeleteButton = Array.from(confirmDeleteButtons).filter(
-      (button) => button.textContent?.includes("Delete Draft"),
-    ).at(-1);
-    expect(confirmDeleteButton).toBeTruthy();
+    const dialogs = document.querySelectorAll('[role="dialog"]');
+    expect(dialogs.length).toBe(1);
 
-    await user.click(confirmDeleteButton!);
+    const dialog = getByRole("dialog", { name: "Edit Draft Loop" });
+    await user.click(within(dialog).getByRole("button", { name: "Delete Draft" }));
 
     await waitFor(() => {
       const calls = api.calls("/api/loops/:id", "DELETE");
