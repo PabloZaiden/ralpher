@@ -193,6 +193,19 @@ describe("Modal", () => {
   });
 
   describe("size", () => {
+    test("applies viewport height constraints with tighter mobile spacing", () => {
+      const { getByRole } = renderWithUser(
+        <Modal isOpen={true} onClose={() => {}} title="Title">
+          <p>Content</p>
+        </Modal>
+      );
+      const dialog = getByRole("dialog");
+      expect(dialog.className).toContain("max-h-[calc(100vh-1.5rem)]");
+      expect(dialog.className).toContain("max-h-[calc(100dvh-1.5rem)]");
+      expect(dialog.className).toContain("sm:max-h-[calc(100vh-2.5rem)]");
+      expect(dialog.className).toContain("sm:max-h-[calc(100dvh-2.5rem)]");
+    });
+
     test("applies md size class by default", () => {
       const { getByRole } = renderWithUser(
         <Modal isOpen={true} onClose={() => {}} title="Title">
