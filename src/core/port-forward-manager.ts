@@ -8,6 +8,7 @@ import type { PortForward, Workspace } from "../types";
 import { getWorkspace, touchWorkspace } from "../persistence/workspaces";
 import {
   deletePortForward,
+  findPortForwardByWorkspaceAndRemotePort,
   getPortForward,
   listPortForwardsByLoopId,
   listPortForwardsBySshSessionId,
@@ -21,10 +22,12 @@ import { buildSshCommandArgs } from "./remote-command-executor";
 
 const log = createLogger("core:port-forward-manager");
 const LOCAL_FORWARD_HOST = "127.0.0.1";
+const REMOTE_FORWARD_HOST = "localhost";
 const STARTUP_GRACE_MS = 300;
 const STOP_TIMEOUT_MS = 2_000;
 const LOCAL_PORT_RESERVATION_RETRY_LIMIT = 5;
-const RESERVED_STATUSES = new Set<PortForward["state"]["status"]>(["starting", "active", "stopping"]);
+const ACTIVE_PORT_FORWARD_STATUSES: Array<PortForward["state"]["status"]> = ["starting", "active", "stopping"];
+const RESERVED_STATUSES = new Set<PortForward["state"]["status"]>(ACTIVE_PORT_FORWARD_STATUSES);
 
 type PortForwardSpawnFactory = (options: {
   command: string;
@@ -38,15 +41,31 @@ interface RuntimeHandle {
   deleting: boolean;
 }
 
-function buildSshTarget(workspace: Workspace): string {
+function getSshWorkspaceSettings(workspace: Workspace) {
   const settings = workspace.serverSettings.agent;
   if (settings.transport !== "ssh") {
     throw new Error("Port forwarding requires a workspace configured with ssh transport");
   }
 
+  return settings;
+}
+
+function getWorkspaceSshHost(workspace: Workspace): string {
+  const hostname = getSshWorkspaceSettings(workspace).hostname.trim();
+  if (!hostname) {
+    throw new Error("Port forwarding requires a workspace configured with an ssh hostname");
+  }
+
+  return hostname;
+}
+
+function buildSshTarget(workspace: Workspace): string {
+  const settings = getSshWorkspaceSettings(workspace);
+  const hostname = getWorkspaceSshHost(workspace);
+
   return settings.username?.trim()
-    ? `${settings.username.trim()}@${settings.hostname}`
-    : settings.hostname;
+    ? `${settings.username.trim()}@${hostname}`
+    : hostname;
 }
 
 function buildSpawnConfig(workspace: Workspace, forward: PortForward): {
@@ -54,10 +73,7 @@ function buildSpawnConfig(workspace: Workspace, forward: PortForward): {
   args: string[];
   env: NodeJS.ProcessEnv;
 } {
-  const settings = workspace.serverSettings.agent;
-  if (settings.transport !== "ssh") {
-    throw new Error("Port forwarding requires a workspace configured with ssh transport");
-  }
+  const settings = getSshWorkspaceSettings(workspace);
 
   const sharedArgs = (authMode: "batch" | "password") => [
     "-N",
@@ -207,6 +223,27 @@ function isActiveLocalPortConstraintError(error: unknown): boolean {
     || message.includes("idx_forwarded_ports_local_port_active");
 }
 
+function isActiveWorkspaceRemotePortConstraintError(error: unknown): boolean {
+  const message = String(error);
+  return message.includes("UNIQUE constraint failed: forwarded_ports.workspace_id, forwarded_ports.remote_port")
+    || message.includes("idx_forwarded_ports_workspace_remote_port_active");
+}
+
+function buildDuplicateRemotePortError(remotePort: number): Error {
+  return new Error(`Port ${remotePort} is already being forwarded for this workspace`);
+}
+
+async function assertWorkspaceRemotePortAvailable(workspaceId: string, remotePort: number): Promise<void> {
+  const existing = await findPortForwardByWorkspaceAndRemotePort(
+    workspaceId,
+    remotePort,
+    ACTIVE_PORT_FORWARD_STATUSES,
+  );
+  if (existing) {
+    throw buildDuplicateRemotePortError(remotePort);
+  }
+}
+
 async function waitForProcessExit(child: ChildProcess, timeoutMs: number): Promise<void> {
   if (child.exitCode !== null) {
     return;
@@ -273,7 +310,6 @@ export class PortForwardManager {
 
   async createLoopPortForward(options: {
     loopId: string;
-    remoteHost: string;
     remotePort: number;
   }): Promise<PortForward> {
     await this.initialize();
@@ -287,10 +323,8 @@ export class PortForwardManager {
     if (!workspace) {
       throw new Error(`Workspace not found: ${loop.config.workspaceId}`);
     }
-    if (workspace.serverSettings.agent.transport !== "ssh") {
-      throw new Error("Port forwarding requires a workspace configured with ssh transport");
-    }
 
+    await assertWorkspaceRemotePortAvailable(workspace.id, options.remotePort);
     await touchWorkspace(workspace.id);
     const { sshSessionManager } = await import("./ssh-session-manager");
     const linkedSession = await sshSessionManager.getSessionByLoopId(options.loopId);
@@ -298,7 +332,7 @@ export class PortForwardManager {
       loopId: options.loopId,
       workspaceId: workspace.id,
       sshSessionId: linkedSession?.config.id,
-      remoteHost: options.remoteHost.trim(),
+      remoteHost: REMOTE_FORWARD_HOST,
       remotePort: options.remotePort,
     });
     this.emitForwardCreated(forward);
@@ -526,6 +560,9 @@ export class PortForwardManager {
         await savePortForward(forward);
         return forward;
       } catch (error) {
+        if (isActiveWorkspaceRemotePortConstraintError(error)) {
+          throw buildDuplicateRemotePortError(options.remotePort);
+        }
         if (!isActiveLocalPortConstraintError(error) || attempt === LOCAL_PORT_RESERVATION_RETRY_LIMIT - 1) {
           throw error;
         }

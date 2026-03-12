@@ -296,6 +296,48 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 6,
+    name: "enforce_unique_active_workspace_remote_ports",
+    up: (db) => {
+      if (!tableExists(db, "forwarded_ports")) {
+        return;
+      }
+
+      db.run(`
+        UPDATE forwarded_ports
+        SET
+          status = 'stopped',
+          pid = NULL,
+          connected_at = NULL,
+          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+          error_message = COALESCE(
+            error_message,
+            'Stopped during duplicate port-forward cleanup'
+          )
+        WHERE status IN ('starting', 'active', 'stopping')
+          AND EXISTS (
+            SELECT 1
+            FROM forwarded_ports AS newer
+            WHERE newer.workspace_id = forwarded_ports.workspace_id
+              AND newer.remote_port = forwarded_ports.remote_port
+              AND newer.status IN ('starting', 'active', 'stopping')
+              AND (
+                newer.created_at > forwarded_ports.created_at
+                OR (
+                  newer.created_at = forwarded_ports.created_at
+                  AND newer.id > forwarded_ports.id
+                )
+              )
+          )
+      `);
+      db.run(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_forwarded_ports_workspace_remote_port_active
+        ON forwarded_ports(workspace_id, remote_port)
+        WHERE status IN ('starting', 'active', 'stopping')
+      `);
+    },
+  },
 ];
 
 /**

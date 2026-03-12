@@ -340,6 +340,205 @@ describe("migration infrastructure", () => {
         );
       }).toThrow();
     });
+
+    test("enforces one active remote port per workspace for forwarded ports", () => {
+      db.run(`
+        CREATE TABLE schema_migrations (
+          version INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          applied_at TEXT NOT NULL
+        )
+      `);
+      for (const migration of migrations.filter((migration) => migration.version < 6)) {
+        db.run(
+          "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+          [migration.version, migration.name, "2025-01-01T00:00:00.000Z"],
+        );
+      }
+      db.run(`
+        CREATE TABLE forwarded_ports (
+          id TEXT PRIMARY KEY,
+          loop_id TEXT NOT NULL,
+          workspace_id TEXT NOT NULL,
+          ssh_session_id TEXT,
+          remote_host TEXT NOT NULL,
+          remote_port INTEGER NOT NULL,
+          local_port INTEGER NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'starting',
+          pid INTEGER,
+          connected_at TEXT,
+          error_message TEXT
+        )
+      `);
+      db.run(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_forwarded_ports_local_port_active
+        ON forwarded_ports(local_port)
+        WHERE status IN ('starting', 'active', 'stopping')
+      `);
+      db.run(
+        `INSERT INTO forwarded_ports (
+          id,
+          loop_id,
+          workspace_id,
+          remote_host,
+          remote_port,
+          local_port,
+          created_at,
+          updated_at,
+          status,
+          pid,
+          connected_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "forward-older",
+          "loop-1",
+          "workspace-1",
+          "localhost",
+          3000,
+          43001,
+          "2025-01-01T00:00:00.000Z",
+          "2025-01-01T00:00:00.000Z",
+          "active",
+          12345,
+          "2025-01-01T00:00:01.000Z",
+        ],
+      );
+      db.run(
+        `INSERT INTO forwarded_ports (
+          id,
+          loop_id,
+          workspace_id,
+          remote_host,
+          remote_port,
+          local_port,
+          created_at,
+          updated_at,
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "forward-newer",
+          "loop-2",
+          "workspace-1",
+          "localhost",
+          3000,
+          43002,
+          "2025-01-02T00:00:00.000Z",
+          "2025-01-02T00:00:00.000Z",
+          "active",
+        ],
+      );
+
+      runMigrations(db);
+
+      const rows = db.query(
+        "SELECT id, status, pid, connected_at, error_message FROM forwarded_ports ORDER BY id ASC",
+      ).all() as Array<{
+        id: string;
+        status: string;
+        pid: number | null;
+        connected_at: string | null;
+        error_message: string | null;
+      }>;
+      expect(rows).toEqual([
+        {
+          id: "forward-newer",
+          status: "active",
+          pid: null,
+          connected_at: null,
+          error_message: null,
+        },
+        {
+          id: "forward-older",
+          status: "stopped",
+          pid: null,
+          connected_at: null,
+          error_message: "Stopped during duplicate port-forward cleanup",
+        },
+      ]);
+
+      expect(() => {
+        db.run(
+          `INSERT INTO forwarded_ports (
+            id,
+            loop_id,
+            workspace_id,
+            remote_host,
+            remote_port,
+            local_port,
+            created_at,
+            updated_at,
+            status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            "forward-duplicate-active",
+            "loop-3",
+            "workspace-1",
+            "localhost",
+            3000,
+            43003,
+            "2025-01-03T00:00:00.000Z",
+            "2025-01-03T00:00:00.000Z",
+            "active",
+          ],
+        );
+      }).toThrow();
+
+      expect(() => {
+        db.run(
+          `INSERT INTO forwarded_ports (
+            id,
+            loop_id,
+            workspace_id,
+            remote_host,
+            remote_port,
+            local_port,
+            created_at,
+            updated_at,
+            status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            "forward-stopped",
+            "loop-4",
+            "workspace-1",
+            "localhost",
+            3000,
+            43004,
+            "2025-01-03T00:00:00.000Z",
+            "2025-01-03T00:00:00.000Z",
+            "stopped",
+          ],
+        );
+      }).not.toThrow();
+
+      expect(() => {
+        db.run(
+          `INSERT INTO forwarded_ports (
+            id,
+            loop_id,
+            workspace_id,
+            remote_host,
+            remote_port,
+            local_port,
+            created_at,
+            updated_at,
+            status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            "forward-other-workspace",
+            "loop-5",
+            "workspace-2",
+            "localhost",
+            3000,
+            43005,
+            "2025-01-03T00:00:00.000Z",
+            "2025-01-03T00:00:00.000Z",
+            "active",
+          ],
+        );
+      }).not.toThrow();
+    });
   });
 
   describe("getTableColumns", () => {

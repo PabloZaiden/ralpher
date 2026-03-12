@@ -41,7 +41,7 @@ describe("PortForwardManager", () => {
 
     const sshSettings = getDefaultServerSettings(true);
     if (sshSettings.agent.transport === "ssh") {
-      sshSettings.agent.hostname = "localhost";
+      sshSettings.agent.hostname = "workspace.example.com";
       sshSettings.agent.username = "tester";
     }
 
@@ -117,12 +117,44 @@ describe("PortForwardManager", () => {
 
     const created = await portForwardManager.createLoopPortForward({
       loopId: loop.config.id,
-      remoteHost: "127.0.0.1",
       remotePort: 3000,
     });
     createdForwardId = created.config.id;
 
     expect(created.config.localPort).toBe(41002);
+    expect(created.config.remoteHost).toBe("localhost");
     expect(created.state.status).toBe("active");
+  });
+
+  test("rejects duplicate remote ports for the same workspace", async () => {
+    const firstLoop = await manager.createLoop({
+      ...modelFields,
+      directory: workDir,
+      prompt: "Create first forwarded port",
+      workspaceId,
+      planMode: false,
+      useWorktree: true,
+    });
+    const secondLoop = await manager.createLoop({
+      ...modelFields,
+      directory: workDir,
+      prompt: "Create duplicate forwarded port",
+      workspaceId,
+      planMode: false,
+      useWorktree: true,
+    });
+
+    const firstForward = await portForwardManager.createLoopPortForward({
+      loopId: firstLoop.config.id,
+      remotePort: 3000,
+    });
+    createdForwardId = firstForward.config.id;
+
+    await expect(
+      portForwardManager.createLoopPortForward({
+        loopId: secondLoop.config.id,
+        remotePort: 3000,
+      }),
+    ).rejects.toThrow("Port 3000 is already being forwarded for this workspace");
   });
 });

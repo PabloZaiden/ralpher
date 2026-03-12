@@ -134,6 +134,28 @@ export async function listPortForwardsByStatuses(
   return rows.map(rowToPortForward);
 }
 
+export async function findPortForwardByWorkspaceAndRemotePort(
+  workspaceId: string,
+  remotePort: number,
+  statuses: Array<PortForward["state"]["status"]>,
+): Promise<PortForward | null> {
+  if (statuses.length === 0) {
+    return null;
+  }
+
+  const db = getDatabase();
+  const placeholders = statuses.map(() => "?").join(", ");
+  const row = db.query(
+    `SELECT * FROM forwarded_ports
+     WHERE workspace_id = ?
+       AND remote_port = ?
+       AND status IN (${placeholders})
+     ORDER BY created_at DESC
+     LIMIT 1`,
+  ).get(workspaceId, remotePort, ...statuses) as Record<string, unknown> | null;
+  return row ? rowToPortForward(row) : null;
+}
+
 export async function deletePortForward(id: string): Promise<boolean> {
   const db = getDatabase();
   const result = db.run("DELETE FROM forwarded_ports WHERE id = ?", [id]);

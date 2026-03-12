@@ -183,7 +183,6 @@ describe("SshSessionManager loop-linked sessions", () => {
 
     const forward = await portForwardManager.createLoopPortForward({
       loopId: loop.config.id,
-      remoteHost: "127.0.0.1",
       remotePort: 3000,
     });
 
@@ -217,7 +216,6 @@ describe("SshSessionManager loop-linked sessions", () => {
     const session = await sshSessionManager.getOrCreateLoopSession(loop.config.id);
     const forward = await portForwardManager.createLoopPortForward({
       loopId: loop.config.id,
-      remoteHost: "127.0.0.1",
       remotePort: 3000,
     });
 

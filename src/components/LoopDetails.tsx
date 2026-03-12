@@ -193,7 +193,6 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [newForwardPort, setNewForwardPort] = useState("");
-  const [newForwardHost, setNewForwardHost] = useState("127.0.0.1");
   const [creatingForward, setCreatingForward] = useState(false);
 
   // Function to fetch review comments
@@ -522,7 +521,6 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
     try {
       const forward = await createForward({
         remotePort,
-        remoteHost: newForwardHost.trim() || "127.0.0.1",
       });
       if (!forward) {
         toast.error("Failed to create port forward");
@@ -1339,16 +1337,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                             <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                               Expose a remote service through a Ralpher URL in a new browser window.
                             </div>
-                            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                              <label className="text-sm">
-                                <span className="mb-1 block text-gray-500 dark:text-gray-400">Remote host</span>
-                                <input
-                                  value={newForwardHost}
-                                  onChange={(e) => setNewForwardHost(e.target.value)}
-                                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                                  placeholder="127.0.0.1"
-                                />
-                              </label>
+                            <div className="mt-3">
                               <label className="text-sm">
                                 <span className="mb-1 block text-gray-500 dark:text-gray-400">Remote port</span>
                                 <input
@@ -1356,7 +1345,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                                   onChange={(e) => setNewForwardPort(e.target.value)}
                                   className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                                   inputMode="numeric"
-                                  placeholder="3000"
+                                  placeholder=""
                                 />
                               </label>
                             </div>

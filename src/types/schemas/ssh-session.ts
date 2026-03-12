@@ -15,5 +15,4 @@ export const UpdateSshSessionRequestSchema = z.object({
 
 export const CreatePortForwardRequestSchema = z.object({
   remotePort: z.number().int().min(1).max(65535),
-  remoteHost: z.string().trim().min(1).default("127.0.0.1"),
 });

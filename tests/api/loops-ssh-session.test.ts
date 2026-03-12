@@ -6,6 +6,7 @@ import { serve, type Server } from "bun";
 import { apiRoutes } from "../../src/api";
 import { closeDatabase, ensureDataDirectories, getDatabase } from "../../src/persistence/database";
 import { backendManager } from "../../src/core/backend-manager";
+import { loopManager } from "../../src/core/loop-manager";
 import { createMockBackend } from "../mocks/mock-backend";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 
@@ -64,6 +65,7 @@ describe("Loop SSH session API integration", () => {
 
   afterAll(async () => {
     server.stop();
+    loopManager.resetForTesting();
     backendManager.resetForTesting();
     closeDatabase();
     await rm(dataDir, { recursive: true, force: true });
@@ -72,6 +74,7 @@ describe("Loop SSH session API integration", () => {
   });
 
   beforeEach(() => {
+    loopManager.resetForTesting();
     const db = getDatabase();
     db.run("DELETE FROM forwarded_ports");
     db.run("DELETE FROM ssh_sessions");
@@ -81,6 +84,7 @@ describe("Loop SSH session API integration", () => {
   });
 
   afterEach(async () => {
+    loopManager.resetForTesting();
     if (workDir) {
       await rm(workDir, { recursive: true, force: true });
       workDir = "";
