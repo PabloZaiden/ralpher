@@ -1054,6 +1054,9 @@ describe("Plan Mode - Open SSH acceptance", () => {
 
     const result = await ctx.manager.acceptPlan(loopId, { mode: "open_ssh" });
     expect(result.mode).toBe("open_ssh");
+    if (result.mode !== "open_ssh") {
+      throw new Error(`Expected open_ssh mode, received ${result.mode}`);
+    }
     expect(result.sshSession.config.loopId).toBe(loopId);
 
     const loopData = await waitForLoopStatus(ctx.manager, loopId, ["completed"]);
