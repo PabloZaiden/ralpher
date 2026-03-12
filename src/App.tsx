@@ -98,6 +98,7 @@ export function App() {
         <LoopDetails
           loopId={route.loopId}
           onBack={handleBack}
+          onSelectSshSession={handleSelectSshSession}
         />
       </LogLevelInitializer>
     );
@@ -109,6 +110,7 @@ export function App() {
         <LoopDetails
           loopId={route.chatId}
           onBack={handleBack}
+          onSelectSshSession={handleSelectSshSession}
         />
       </LogLevelInitializer>
     );

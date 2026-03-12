@@ -12,6 +12,7 @@ const ALLOWED_SSH_SESSION_COLUMNS = new Set([
   "id",
   "name",
   "workspace_id",
+  "loop_id",
   "directory",
   "remote_session_name",
   "created_at",
@@ -34,6 +35,7 @@ function sshSessionToRow(session: SshSession): Record<string, unknown> {
     id: session.config.id,
     name: session.config.name,
     workspace_id: session.config.workspaceId,
+    loop_id: session.config.loopId ?? null,
     directory: session.config.directory,
     remote_session_name: session.config.remoteSessionName,
     created_at: session.config.createdAt,
@@ -50,6 +52,7 @@ function rowToSshSession(row: Record<string, unknown>): SshSession {
       id: row["id"] as string,
       name: row["name"] as string,
       workspaceId: row["workspace_id"] as string,
+      loopId: (row["loop_id"] as string | null) ?? undefined,
       directory: row["directory"] as string,
       remoteSessionName: row["remote_session_name"] as string,
       createdAt: row["created_at"] as string,
@@ -106,6 +109,14 @@ export async function listSshSessionsByWorkspace(workspaceId: string): Promise<S
     "SELECT * FROM ssh_sessions WHERE workspace_id = ? ORDER BY created_at DESC",
   ).all(workspaceId) as Record<string, unknown>[];
   return rows.map(rowToSshSession);
+}
+
+export async function getSshSessionByLoopId(loopId: string): Promise<SshSession | null> {
+  const db = getDatabase();
+  const row = db.query(
+    "SELECT * FROM ssh_sessions WHERE loop_id = ? LIMIT 1",
+  ).get(loopId) as Record<string, unknown> | null;
+  return row ? rowToSshSession(row) : null;
 }
 
 export async function countSshSessionsByWorkspace(workspaceId: string): Promise<number> {

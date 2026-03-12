@@ -7,3 +7,8 @@ export function buildDefaultSshSessionName(workspaceName: string, existingSessio
   const normalizedCount = Math.max(0, Math.floor(existingSessionCount));
   return `${normalizedWorkspaceName} ${String(normalizedCount + 1)}`;
 }
+
+export function buildLoopSshSessionName(loopName: string): string {
+  const normalizedLoopName = loopName.trim() || "Loop";
+  return `${normalizedLoopName} SSH`;
+}

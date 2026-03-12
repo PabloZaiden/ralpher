@@ -191,6 +191,78 @@ describe("migration infrastructure", () => {
       };
       expect(loopRow.workspace_id).toBe("ws-1");
     });
+
+    test("adds loop_id to ssh_sessions and enforces one session per loop", () => {
+      db.run(`
+        CREATE TABLE ssh_sessions (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          workspace_id TEXT NOT NULL,
+          directory TEXT NOT NULL,
+          remote_session_name TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'ready',
+          last_connected_at TEXT,
+          error_message TEXT
+        )
+      `);
+
+      runMigrations(db);
+
+      expect(getTableColumns(db, "ssh_sessions")).toContain("loop_id");
+      db.run(
+        `INSERT INTO ssh_sessions (
+          id,
+          name,
+          workspace_id,
+          loop_id,
+          directory,
+          remote_session_name,
+          created_at,
+          updated_at,
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "ssh-1",
+          "Linked Session",
+          "workspace-1",
+          "loop-1",
+          "/tmp/worktree",
+          "ralpher-ssh1",
+          "2025-01-01T00:00:00.000Z",
+          "2025-01-01T00:00:00.000Z",
+          "ready",
+        ],
+      );
+
+      expect(() => {
+        db.run(
+          `INSERT INTO ssh_sessions (
+            id,
+            name,
+            workspace_id,
+            loop_id,
+            directory,
+            remote_session_name,
+            created_at,
+            updated_at,
+            status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            "ssh-2",
+            "Duplicate Linked Session",
+            "workspace-1",
+            "loop-1",
+            "/tmp/worktree",
+            "ralpher-ssh2",
+            "2025-01-01T00:00:00.000Z",
+            "2025-01-01T00:00:00.000Z",
+            "ready",
+          ],
+        );
+      }).toThrow();
+    });
   });
 
   describe("getTableColumns", () => {

@@ -13,6 +13,8 @@ import {
   discardLoopApi,
   deleteLoopApi,
   purgeLoopApi,
+  getLoopSshSessionApi,
+  getOrCreateLoopSshSessionApi,
   markMergedApi,
   setPendingPromptApi,
   clearPendingPromptApi,
@@ -23,6 +25,7 @@ import {
   clearPendingApi,
   addressReviewCommentsApi,
 } from "@/hooks/loopActions";
+import { createSshSession } from "../helpers/factories";
 
 const LOOP_ID = "test-loop-123";
 
@@ -185,6 +188,38 @@ describe("purgeLoopApi", () => {
     });
 
     await expect(purgeLoopApi(LOOP_ID)).rejects.toThrow("Failed to purge loop");
+  });
+});
+
+describe("loop SSH session APIs", () => {
+  test("getLoopSshSessionApi calls GET /api/loops/:id/ssh-session", async () => {
+    const session = createSshSession({ config: { loopId: LOOP_ID } });
+    api.get(`/api/loops/${LOOP_ID}/ssh-session`, () => session);
+
+    const result = await getLoopSshSessionApi(LOOP_ID);
+
+    expect(result).toEqual(session);
+    expect(api.calls(`/api/loops/${LOOP_ID}/ssh-session`, "GET")).toHaveLength(1);
+  });
+
+  test("getOrCreateLoopSshSessionApi calls POST /api/loops/:id/ssh-session", async () => {
+    const session = createSshSession({ config: { loopId: LOOP_ID } });
+    api.post(`/api/loops/${LOOP_ID}/ssh-session`, () => session, 200);
+
+    const result = await getOrCreateLoopSshSessionApi(LOOP_ID);
+
+    expect(result).toEqual(session);
+    expect(api.calls(`/api/loops/${LOOP_ID}/ssh-session`, "POST")).toHaveLength(1);
+  });
+
+  test("getOrCreateLoopSshSessionApi surfaces API errors", async () => {
+    api.post(`/api/loops/${LOOP_ID}/ssh-session`, () => {
+      throw new MockApiError(400, { message: "SSH sessions require a workspace configured with ssh transport" });
+    }, 200);
+
+    await expect(getOrCreateLoopSshSessionApi(LOOP_ID)).rejects.toThrow(
+      "SSH sessions require a workspace configured with ssh transport",
+    );
   });
 });
 
