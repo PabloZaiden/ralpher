@@ -29,13 +29,18 @@ describe("Plan Mode API Integration", () => {
   let currentWorkspaceId: string;
 
   // Helper to get or create a workspace for a directory
-  async function getOrCreateWorkspace(directory: string, name?: string): Promise<string> {
+  async function getOrCreateWorkspace(
+    directory: string,
+    name?: string,
+    serverSettings?: Record<string, unknown>,
+  ): Promise<string> {
     const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: name || directory.split("/").pop() || "Test",
         directory,
+        serverSettings,
       }),
     });
     const data = await createResponse.json();
@@ -443,6 +448,55 @@ describe("Plan Mode API Integration", () => {
       // Wait for status transition from planning
       loop = await waitForStatus(id, ["running", "completed", "max_iterations", "stopped"]);
       expect(["running", "completed", "max_iterations", "stopped"]).toContain(loop.state.status);
+    });
+
+    test("accepts the plan in open_ssh mode and returns the linked ssh session", async () => {
+      const sshWorkDir = await createTestWorkDir();
+      try {
+        const sshWorkspaceId = await getOrCreateWorkspace(sshWorkDir, "SSH Test Workspace", {
+          agent: {
+            provider: "opencode",
+            transport: "ssh",
+            hostname: "localhost",
+            username: "tester",
+          },
+        });
+
+        const createResponse = await fetch(`${baseUrl}/api/loops`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: "Create a plan",
+            workspaceId: sshWorkspaceId,
+            maxIterations: 1,
+            planMode: true,
+            model: testModel,
+            useWorktree: true,
+          }),
+        });
+
+        expect(createResponse.status).toBe(201);
+        const response = await createResponse.json();
+        const id = response.config.id;
+        await waitForPlanReady(id);
+
+        const acceptResponse = await fetch(`${baseUrl}/api/loops/${id}/plan/accept`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "open_ssh" }),
+        });
+
+        expect(acceptResponse.status).toBe(200);
+        const data = await acceptResponse.json();
+        expect(data.success).toBe(true);
+        expect(data.mode).toBe("open_ssh");
+        expect(data.sshSession?.config?.loopId).toBe(id);
+
+        const loop = await waitForStatus(id, ["completed"]);
+        expect((loop["state"] as { status: string }).status).toBe("completed");
+      } finally {
+        await rm(sshWorkDir, { recursive: true, force: true });
+      }
     });
 
     test("does not clear planning folder on accept", async () => {

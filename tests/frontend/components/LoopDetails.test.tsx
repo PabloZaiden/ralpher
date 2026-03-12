@@ -52,7 +52,7 @@ function setupDefaultApi(loopOverrides?: Parameters<typeof createLoopWithStatus>
   api.delete("/api/loops/:id/pending", () => ({ success: true }));
   api.put("/api/loops/:id", () => loop);
   api.post("/api/loops/:id/plan/feedback", () => ({ success: true }));
-  api.post("/api/loops/:id/plan/accept", () => ({ success: true }));
+  api.post("/api/loops/:id/plan/accept", () => ({ success: true, mode: "start_loop" }), 200);
   api.post("/api/loops/:id/plan/discard", () => ({ success: true }));
 
   return loop;
@@ -504,7 +504,7 @@ describe("actions tab content", () => {
     });
   });
 
-  test("planning loops show the connect via ssh action and navigate to the SSH session", async () => {
+  test("planning loops replace connect via ssh with accept plan and open ssh", async () => {
     const loop = createLoopWithStatus("planning", {
       config: { id: LOOP_ID, name: "Planning Loop" },
       state: {
@@ -526,7 +526,10 @@ describe("actions tab content", () => {
     api.get("/api/models", () => []);
     api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
     api.get("/api/preferences/log-level", () => ({ level: "info" }));
-    api.post("/api/loops/:id/ssh-session", () => session, 200);
+    api.post("/api/loops/:id/plan/accept", (req) => {
+      expect(req.body).toEqual({ mode: "open_ssh" });
+      return { success: true, mode: "open_ssh", sshSession: session };
+    }, 200);
 
     let selectedSessionId: string | null = null;
     const { getByText, user } = renderWithUser(
@@ -538,7 +541,8 @@ describe("actions tab content", () => {
     });
 
     await user.click(getByText("Actions"));
-    await user.click(getByText("Connect via ssh"));
+    expect(() => getByText("Connect via ssh")).toThrow();
+    await user.click(getByText("Accept Plan & Open SSH"));
 
     await waitFor(() => {
       expect(selectedSessionId).toBe("ssh-loop-1");

@@ -446,11 +446,26 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
     }
   }
 
+  function navigateToSshSession(sshSessionId: string) {
+    if (onSelectSshSession) {
+      onSelectSshSession(sshSessionId);
+    } else {
+      window.location.hash = `/ssh/${sshSessionId}`;
+    }
+  }
+
   // Handle accept plan
-  async function handleAcceptPlan() {
+  async function handleAcceptPlan(mode: "start_loop" | "open_ssh" = "start_loop") {
     setPlanActionSubmitting(true);
     try {
-      await acceptPlan();
+      const result = await acceptPlan(mode);
+      if (!result.success) {
+        toast.error(mode === "open_ssh" ? "Failed to accept plan and open ssh" : "Failed to accept plan");
+        return;
+      }
+      if (result.mode === "open_ssh") {
+        navigateToSshSession(result.sshSession.config.id);
+      }
     } finally {
       setPlanActionSubmitting(false);
     }
@@ -479,11 +494,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
         toast.error("Failed to connect via ssh");
         return;
       }
-      if (onSelectSshSession) {
-        onSelectSshSession(session.config.id);
-      } else {
-        window.location.hash = `/ssh/${session.config.id}`;
-      }
+      navigateToSshSession(session.config.id);
     } finally {
       setSshConnecting(false);
     }
@@ -1193,9 +1204,8 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                       <div className="max-w-md space-y-2">
                         {isPlanning ? (
                           <>
-                            {connectSshAction}
                             <button
-                              onClick={handleAcceptPlan}
+                              onClick={() => handleAcceptPlan("start_loop")}
                               disabled={planActionSubmitting || !isPlanReady || !planContent?.content?.trim()}
                               className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                             >
@@ -1209,6 +1219,26 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                                 <div className="text-xs text-gray-500 dark:text-gray-400">
                                   {isPlanReady
                                     ? "Accept the plan and begin loop execution"
+                                    : "Waiting for AI to finish writing the plan..."}
+                                </div>
+                              </div>
+                              <span className="text-gray-400 dark:text-gray-500">→</span>
+                            </button>
+                            <button
+                              onClick={() => handleAcceptPlan("open_ssh")}
+                              disabled={planActionSubmitting || !isPlanReady || !planContent?.content?.trim()}
+                              className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                                <span className="text-sky-600 dark:text-sky-400 text-sm">⌁</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                  {planActionSubmitting ? "Accepting..." : "Accept Plan & Open SSH"}
+                                </div>
+                                <div className="text-xs text-gray-500 dark:text-gray-400">
+                                  {isPlanReady
+                                    ? "Accept the plan, mark the loop complete, and open its SSH session"
                                     : "Waiting for AI to finish writing the plan..."}
                                 </div>
                               </div>

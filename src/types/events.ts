@@ -462,8 +462,9 @@ export interface LoopPlanFeedbackSentEvent {
 }
 
 /**
- * Emitted when a plan is accepted and execution begins.
- * The loop transitions from "planning" to "running" status.
+ * Emitted when a plan is accepted.
+ * The loop transitions from "planning" to either "running" or "completed",
+ * depending on whether execution starts immediately or control is handed off via SSH.
  */
 export interface LoopPlanAcceptedEvent {
   type: "loop.plan.accepted";

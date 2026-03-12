@@ -19,6 +19,7 @@ export {
   UpdateLoopRequestSchema,
   AddressCommentsRequestSchema,
   PlanFeedbackRequestSchema,
+  PlanAcceptRequestSchema,
   PendingPromptRequestSchema,
   SetPendingRequestSchema,
   StartDraftRequestSchema,

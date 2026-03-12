@@ -14,6 +14,7 @@ import {
   createLoopWithStatus,
   createWorkspace,
   createModelInfo,
+  createSshSession,
 } from "../helpers/factories";
 import { App } from "@/App";
 
@@ -212,7 +213,7 @@ describe("plan mode scenario", () => {
     const loop = planningLoop(true);
     setupApi(loop, "## Final Plan\nAll steps defined");
 
-    api.post("/api/loops/:id/plan/accept", () => ({ success: true }));
+    api.post("/api/loops/:id/plan/accept", () => ({ success: true, mode: "start_loop" }), 200);
 
     window.location.hash = `/loop/${LOOP_ID}`;
     const { getByText, user } = renderWithUser(<App />);
@@ -248,6 +249,45 @@ describe("plan mode scenario", () => {
     await waitFor(() => {
       const calls = api.calls("/api/loops/:id/plan/accept", "POST");
       expect(calls.length).toBeGreaterThan(0);
+    });
+  });
+
+  test("accept plan and open ssh navigates straight to the ssh route", async () => {
+    const loop = planningLoop(true);
+    setupApi(loop, "## Final Plan\nAll steps defined");
+    const sshSession = createSshSession({ config: { id: "ssh-plan-1", loopId: LOOP_ID } });
+
+    api.post("/api/loops/:id/plan/accept", (req) => {
+      expect(req.body).toEqual({ mode: "open_ssh" });
+      return { success: true, mode: "open_ssh", sshSession };
+    }, 200);
+    api.get("/api/ssh-sessions/:id", () => sshSession);
+    api.get("/api/ssh-sessions/:id/output", () => ({ output: "", seq: 0 }));
+
+    window.location.hash = `/loop/${LOOP_ID}`;
+    const { getByText, user } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByText("Plan Loop")).toBeTruthy();
+    });
+
+    await waitFor(() => {
+      expect(getByText(/Final Plan/)).toBeTruthy();
+    });
+
+    const actionsTab = Array.from(document.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Actions",
+    );
+    expect(actionsTab).toBeTruthy();
+    await user.click(actionsTab!);
+
+    await waitFor(() => {
+      expect(getByText("Accept Plan & Open SSH")).toBeTruthy();
+    });
+    await user.click(getByText("Accept Plan & Open SSH"));
+
+    await waitFor(() => {
+      expect(window.location.hash).toBe("#/ssh/ssh-plan-1");
     });
   });
 

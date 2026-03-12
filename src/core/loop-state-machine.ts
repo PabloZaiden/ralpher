@@ -28,11 +28,12 @@ const TRANSITION_TABLE: Record<LoopStatus, ReadonlySet<LoopStatus>> = {
   draft: new Set(["idle", "planning", "deleted"]),
 
   // planning: AI is generating a plan, awaiting user approval
-  // → running: plan accepted (acceptPlan)
+  // → running: plan accepted for execution (acceptPlan start_loop)
+  // → completed: plan accepted directly into manual SSH handoff (acceptPlan open_ssh)
   // → stopped: user stops during planning
   // → failed: unrecoverable error during planning
   // → deleted: delete during planning
-  planning: new Set(["running", "stopped", "failed", "deleted"]),
+  planning: new Set(["running", "completed", "stopped", "failed", "deleted"]),
 
   // starting: engine is initializing (git branch, session setup)
   // → running: initialization complete, first iteration begins
