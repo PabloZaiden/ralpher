@@ -8,6 +8,7 @@ import { useWorkspaceServerSettings } from "../hooks";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useDashboardModals } from "../hooks/useDashboardModals";
 import { useLoopGrouping } from "../hooks/useLoopGrouping";
+import { CollapsibleSection } from "./common";
 import { DashboardHeader } from "./DashboardHeader";
 import { LoopGrid } from "./LoopGrid";
 import { DashboardModals } from "./DashboardModals";
@@ -102,28 +103,39 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         onOpenCreateSshSession={() => setShowCreateSshSessionModal(true)}
       />
 
-      <SshSessionSection
-        sessions={sessions}
-        loading={sshSessionsLoading}
-        error={sshSessionsError}
-        onSelect={(sessionId) => onSelectSshSession?.(sessionId)}
-      />
+      <main className="flex-1 min-h-0 overflow-auto dark-scrollbar">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 safe-area-bottom space-y-8">
+          <section className="border-b border-gray-200 pb-6 dark:border-gray-800">
+            <CollapsibleSection
+              title="SSH Sessions"
+              count={sessions.length}
+              idPrefix="ssh-sessions"
+            >
+              <SshSessionSection
+                sessions={sessions}
+                loading={sshSessionsLoading}
+                error={sshSessionsError}
+                onSelect={(sessionId) => onSelectSshSession?.(sessionId)}
+              />
+            </CollapsibleSection>
+          </section>
 
-      <LoopGrid
-        loops={loops}
-        loading={loading}
-        error={error}
-        viewMode={viewMode}
-        workspaceGroups={workspaceGroups}
-        unassignedLoops={unassignedLoops}
-        unassignedStatusGroups={unassignedStatusGroups}
-        onSelectLoop={handleSelectItem}
-        onEditDraft={modals.handleEditDraft}
-
-        onRename={(loopId) => modals.setRenameModal({ open: true, loopId })}
-        onOpenWorkspaceSettings={(workspaceId) => modals.setWorkspaceSettingsModal({ open: true, workspaceId })}
-        onDeleteWorkspace={deleteWorkspace}
-      />
+          <LoopGrid
+            loops={loops}
+            loading={loading}
+            error={error}
+            viewMode={viewMode}
+            workspaceGroups={workspaceGroups}
+            unassignedLoops={unassignedLoops}
+            unassignedStatusGroups={unassignedStatusGroups}
+            onSelectLoop={handleSelectItem}
+            onEditDraft={modals.handleEditDraft}
+            onRename={(loopId) => modals.setRenameModal({ open: true, loopId })}
+            onOpenWorkspaceSettings={(workspaceId) => modals.setWorkspaceSettingsModal({ open: true, workspaceId })}
+            onDeleteWorkspace={deleteWorkspace}
+          />
+        </div>
+      </main>
 
       <DashboardModals
         loops={loops}

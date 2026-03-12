@@ -113,7 +113,7 @@ export function LoopGrid({
   }
 
   return (
-    <main className="flex-1 min-h-0 overflow-auto px-4 sm:px-6 lg:px-8 py-8 safe-area-bottom">
+    <div>
       {/* Error display */}
       {error && (
         <div className="mb-6 rounded-md bg-red-50 dark:bg-red-900/20 p-4">
@@ -263,7 +263,7 @@ export function LoopGrid({
         loading={deletingWorkspace}
         variant="danger"
       />
-    </main>
+    </div>
   );
 }
 
