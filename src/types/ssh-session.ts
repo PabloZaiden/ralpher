@@ -16,6 +16,16 @@ export type SshSessionStatus =
   | "failed";
 
 /**
+ * Runtime status for a forwarded port.
+ */
+export type PortForwardStatus =
+  | "starting"
+  | "active"
+  | "stopping"
+  | "stopped"
+  | "failed";
+
+/**
  * Persistent SSH session configuration.
  */
 export interface SshSessionConfig {
@@ -55,4 +65,50 @@ export interface SshSessionState {
 export interface SshSession {
   config: SshSessionConfig;
   state: SshSessionState;
+}
+
+/**
+ * Persistent forwarded-port configuration.
+ */
+export interface PortForwardConfig {
+  /** Unique identifier (UUID v4) */
+  id: string;
+  /** Loop that owns this forward */
+  loopId: string;
+  /** Workspace that owns this forward */
+  workspaceId: string;
+  /** Optional linked SSH session */
+  sshSessionId?: string;
+  /** Remote host reachable from the SSH target */
+  remoteHost: string;
+  /** Remote port exposed through the tunnel */
+  remotePort: number;
+  /** Local Ralpher-host listener port reserved for the tunnel */
+  localPort: number;
+  /** ISO 8601 timestamp of when the forward was created */
+  createdAt: string;
+  /** ISO 8601 timestamp of the last configuration update */
+  updatedAt: string;
+}
+
+/**
+ * Persistent forwarded-port runtime state.
+ */
+export interface PortForwardState {
+  /** Current lifecycle status */
+  status: PortForwardStatus;
+  /** Local tunnel process ID when known */
+  pid?: number;
+  /** ISO 8601 timestamp of when the tunnel became active */
+  connectedAt?: string;
+  /** Last recorded error */
+  error?: string;
+}
+
+/**
+ * Combined forwarded-port object returned by the API.
+ */
+export interface PortForward {
+  config: PortForwardConfig;
+  state: PortForwardState;
 }

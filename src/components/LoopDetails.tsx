@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { FileDiff, FileContentResponse, ModelInfo } from "../types";
 import type { ReviewComment, ModelConfig } from "../types/loop";
-import { useLoop, useMarkdownPreference, useToast } from "../hooks";
+import { useLoop, useLoopPortForwards, useMarkdownPreference, useToast } from "../hooks";
 import { Badge, Button, ConfirmModal, getStatusBadgeVariant, EditIcon } from "./common";
 import { LogViewer } from "./LogViewer";
 import { TodoViewer } from "./TodoViewer";
@@ -29,6 +29,7 @@ import {
   canJumpstart,
   getEntityLabel,
 } from "../utils";
+import { writeTextToClipboard } from "../utils";
 import { log } from "../lib/logger";
 
 export interface LoopDetailsProps {
@@ -139,6 +140,13 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
   // Markdown rendering preference
   const { enabled: markdownEnabled } = useMarkdownPreference();
   const toast = useToast();
+  const {
+    forwards,
+    loading: forwardsLoading,
+    error: forwardsError,
+    createForward,
+    deleteForward,
+  } = useLoopPortForwards(loopId);
 
   const [activeTab, setActiveTab] = useState<TabId>("log");
   const [planContent, setPlanContent] = useState<FileContentResponse | null>(null);
@@ -184,6 +192,9 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
   // Models state for LoopActionBar
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [newForwardPort, setNewForwardPort] = useState("");
+  const [newForwardHost, setNewForwardHost] = useState("127.0.0.1");
+  const [creatingForward, setCreatingForward] = useState(false);
 
   // Function to fetch review comments
   const fetchReviewComments = useCallback(async () => {
@@ -498,6 +509,54 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
     } finally {
       setSshConnecting(false);
     }
+  }
+
+  async function handleCreateForward() {
+    const remotePort = Number(newForwardPort);
+    if (!Number.isInteger(remotePort) || remotePort < 1 || remotePort > 65535) {
+      toast.error("Enter a valid remote port between 1 and 65535");
+      return;
+    }
+
+    setCreatingForward(true);
+    try {
+      const forward = await createForward({
+        remotePort,
+        remoteHost: newForwardHost.trim() || "127.0.0.1",
+      });
+      if (!forward) {
+        toast.error("Failed to create port forward");
+        return;
+      }
+      setNewForwardPort("");
+      toast.success(`Forwarded ${forward.config.remoteHost}:${forward.config.remotePort}`);
+    } finally {
+      setCreatingForward(false);
+    }
+  }
+
+  async function handleDeleteForward(forwardId: string) {
+    const success = await deleteForward(forwardId);
+    if (!success) {
+      toast.error("Failed to delete port forward");
+      return;
+    }
+    toast.success("Port forward deleted");
+  }
+
+  async function handleCopyForwardUrl(forwardId: string) {
+    const relativeUrl = `/loop/${loopId}/port/${forwardId}/`;
+    const absoluteUrl = `${window.location.origin}${relativeUrl}`;
+    try {
+      await writeTextToClipboard(absoluteUrl);
+      toast.success("Forward URL copied");
+    } catch (error) {
+      toast.error(`Failed to copy URL: ${String(error)}`);
+    }
+  }
+
+  function handleOpenForward(forwardId: string) {
+    window.open(`/loop/${loopId}/port/${forwardId}/`, "_blank", "noopener,noreferrer");
   }
 
   if (loading && !loop) {
@@ -856,6 +915,79 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                           </div>
                         </div>
                       </div>
+
+                      <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                        <div className="flex items-center justify-between gap-3 mb-3">
+                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Port Forwards</h4>
+                          {forwardsLoading && (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">Refreshing...</span>
+                          )}
+                        </div>
+                        {forwardsError && (
+                          <p className="mb-3 text-sm text-red-600 dark:text-red-400">{forwardsError}</p>
+                        )}
+                        {forwards.length === 0 ? (
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            No forwarded ports yet. Create one from the Actions tab.
+                          </p>
+                        ) : (
+                          <div className="space-y-3">
+                            {forwards.map((forward) => (
+                              <div
+                                key={forward.config.id}
+                                className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900"
+                              >
+                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                  <div className="space-y-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant={forward.state.status === "active" ? "success" : forward.state.status === "failed" ? "error" : "warning"}>
+                                        {forward.state.status}
+                                      </Badge>
+                                      <span className="font-mono text-sm text-gray-900 dark:text-gray-100">
+                                        {forward.config.remoteHost}:{forward.config.remotePort}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-gray-500 dark:text-gray-400 font-mono break-all">
+                                      {window.location.origin}/loop/{loopId}/port/{forward.config.id}/
+                                    </div>
+                                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                                      Local listener: {forward.config.localPort}
+                                    </div>
+                                    {forward.state.error && (
+                                      <div className="text-xs text-red-600 dark:text-red-400">
+                                        {forward.state.error}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleOpenForward(forward.config.id)}
+                                      disabled={forward.state.status !== "active"}
+                                    >
+                                      Open
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="secondary"
+                                      onClick={() => handleCopyForwardUrl(forward.config.id)}
+                                    >
+                                      Copy URL
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="danger"
+                                      onClick={() => handleDeleteForward(forward.config.id)}
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -1201,8 +1333,43 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
 
                   {activeTab === "actions" && (
                     <div className="p-4 flex-1 overflow-auto dark-scrollbar">
-                      <div className="max-w-md space-y-2">
-                        {isPlanning ? (
+                        <div className="max-w-md space-y-2">
+                          <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Forward a Port</div>
+                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              Expose a remote service through a Ralpher URL in a new browser window.
+                            </div>
+                            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                              <label className="text-sm">
+                                <span className="mb-1 block text-gray-500 dark:text-gray-400">Remote host</span>
+                                <input
+                                  value={newForwardHost}
+                                  onChange={(e) => setNewForwardHost(e.target.value)}
+                                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                                  placeholder="127.0.0.1"
+                                />
+                              </label>
+                              <label className="text-sm">
+                                <span className="mb-1 block text-gray-500 dark:text-gray-400">Remote port</span>
+                                <input
+                                  value={newForwardPort}
+                                  onChange={(e) => setNewForwardPort(e.target.value)}
+                                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                                  inputMode="numeric"
+                                  placeholder="3000"
+                                />
+                              </label>
+                            </div>
+                            <Button
+                              className="mt-3"
+                              onClick={handleCreateForward}
+                              disabled={creatingForward}
+                            >
+                              {creatingForward ? "Creating..." : "Create Port Forward"}
+                            </Button>
+                          </div>
+
+                          {isPlanning ? (
                           <>
                             <button
                               onClick={() => handleAcceptPlan("start_loop")}

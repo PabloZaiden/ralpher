@@ -7,6 +7,7 @@ export { useLoops, type UseLoopsResult, type CreateLoopResult } from "./useLoops
 export { useLoop, type UseLoopResult } from "./useLoop";
 export { useSshSessions, type UseSshSessionsResult } from "./useSshSessions";
 export { useSshSession, type UseSshSessionResult } from "./useSshSession";
+export { useLoopPortForwards, type UseLoopPortForwardsResult } from "./useLoopPortForwards";
 export { useWorkspaceServerSettings, type UseWorkspaceServerSettingsResult } from "./useWorkspaceServerSettings";
 export { useMarkdownPreference, type UseMarkdownPreferenceResult } from "./useMarkdownPreference";
 export { useLogLevelPreference, type UseLogLevelPreferenceResult } from "./useLogLevelPreference";
@@ -23,6 +24,9 @@ export { useViewModePreference, type UseViewModePreferenceResult, type Dashboard
 export {
   acceptLoopApi,
   pushLoopApi,
+  createLoopPortForwardApi,
+  deleteLoopPortForwardApi,
+  listLoopPortForwardsApi,
   updateBranchApi,
   discardLoopApi,
   deleteLoopApi,
@@ -38,6 +42,7 @@ export {
   addressReviewCommentsApi,
   setPendingApi,
   clearPendingApi,
+  type CreatePortForwardRequest,
   type AcceptLoopResult,
   type PushLoopResult,
   type AddressCommentsResult,

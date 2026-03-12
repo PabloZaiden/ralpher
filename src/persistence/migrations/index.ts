@@ -63,6 +63,7 @@ export interface Migration {
 const KNOWN_TABLE_NAMES = new Set([
   "loops",
   "ssh_sessions",
+  "forwarded_ports",
   "workspaces",
   "preferences",
   "review_comments",
@@ -251,6 +252,47 @@ export const migrations: Migration[] = [
         CREATE UNIQUE INDEX IF NOT EXISTS idx_ssh_sessions_loop_id_unique
         ON ssh_sessions(loop_id)
         WHERE loop_id IS NOT NULL
+      `);
+    },
+  },
+  {
+    version: 5,
+    name: "create_forwarded_ports",
+    up: (db) => {
+      if (!tableExists(db, "forwarded_ports")) {
+        db.run(`
+          CREATE TABLE forwarded_ports (
+            id TEXT PRIMARY KEY,
+            loop_id TEXT NOT NULL,
+            workspace_id TEXT NOT NULL,
+            ssh_session_id TEXT,
+            remote_host TEXT NOT NULL,
+            remote_port INTEGER NOT NULL,
+            local_port INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'starting',
+            pid INTEGER,
+            connected_at TEXT,
+            error_message TEXT,
+            FOREIGN KEY (loop_id) REFERENCES loops(id) ON DELETE CASCADE,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+            FOREIGN KEY (ssh_session_id) REFERENCES ssh_sessions(id) ON DELETE CASCADE
+          )
+        `);
+      }
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_forwarded_ports_loop_id
+        ON forwarded_ports(loop_id, created_at DESC)
+      `);
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_forwarded_ports_ssh_session_id
+        ON forwarded_ports(ssh_session_id)
+      `);
+      db.run(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_forwarded_ports_local_port_active
+        ON forwarded_ports(local_port)
+        WHERE status IN ('starting', 'active', 'stopping')
       `);
     },
   },

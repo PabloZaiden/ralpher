@@ -6,6 +6,7 @@
 import { serve, type Server } from "bun";
 import index from "./index.html";
 import { apiRoutes } from "./api";
+import { portForwardProxyRoutes } from "./api/port-forwards";
 import { ensureDataDirectories } from "./persistence/database";
 import { backendManager } from "./core/backend-manager";
 import { websocketHandlers, type WebSocketData } from "./api/websocket";
@@ -39,6 +40,7 @@ try {
     routes: {
       // API routes
       ...apiRoutes,
+      ...portForwardProxyRoutes,
 
       // WebSocket endpoint for real-time events
       "/api/ws": (req: Request, server: Server<WebSocketData>) => {

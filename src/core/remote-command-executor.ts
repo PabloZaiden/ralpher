@@ -62,7 +62,7 @@ export function buildSshCommandArgs(options: {
   authMode: SshAuthMode;
   port: number;
   target: string;
-  remoteCommand: string;
+  remoteCommand?: string;
   identityFile?: string;
 }): string[] {
   const identityFile = options.identityFile?.trim();
@@ -93,8 +93,12 @@ export function buildSshCommandArgs(options: {
     "-p",
     String(options.port),
     options.target,
-    "--",
-    options.remoteCommand,
+    ...(options.remoteCommand
+      ? [
+          "--",
+          options.remoteCommand,
+        ]
+      : []),
   ];
 }
 
