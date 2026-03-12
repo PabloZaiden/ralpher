@@ -346,13 +346,28 @@ describe("sendPlanFeedbackApi", () => {
 // ─── acceptPlanApi ───────────────────────────────────────────────────────────
 
 describe("acceptPlanApi", () => {
-  test("calls POST /api/loops/:id/plan/accept and returns true", async () => {
-    api.post(`/api/loops/${LOOP_ID}/plan/accept`, () => ({ success: true }));
+  test("posts start_loop mode and returns the start-loop result", async () => {
+    api.post(`/api/loops/${LOOP_ID}/plan/accept`, (req) => {
+      expect(req.body).toEqual({ mode: "start_loop" });
+      return { success: true, mode: "start_loop" };
+    }, 200);
 
     const result = await acceptPlanApi(LOOP_ID);
 
-    expect(result).toBe(true);
+    expect(result).toEqual({ success: true, mode: "start_loop" });
     expect(api.calls(`/api/loops/${LOOP_ID}/plan/accept`, "POST")).toHaveLength(1);
+  });
+
+  test("posts open_ssh mode and returns the linked ssh session", async () => {
+    const session = createSshSession({ config: { id: "ssh-1", loopId: LOOP_ID } });
+    api.post(`/api/loops/${LOOP_ID}/plan/accept`, (req) => {
+      expect(req.body).toEqual({ mode: "open_ssh" });
+      return { success: true, mode: "open_ssh", sshSession: session };
+    }, 200);
+
+    const result = await acceptPlanApi(LOOP_ID, "open_ssh");
+
+    expect(result).toEqual({ success: true, mode: "open_ssh", sshSession: session });
   });
 
   test("throws error with message from error response", async () => {

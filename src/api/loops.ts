@@ -32,8 +32,9 @@ import type {
   ReviewHistoryResponse,
   GetCommentsResponse,
   SendChatMessageResponse,
+  PlanAcceptResponse,
 } from "../types/api";
-import { parseAndValidate } from "./validation";
+import { parseAndValidate, validateRequest } from "./validation";
 import {
   errorResponse,
   normalizeDirectoryPath,
@@ -49,6 +50,7 @@ import {
   PendingPromptRequestSchema,
   SetPendingRequestSchema,
   PlanFeedbackRequestSchema,
+  PlanAcceptRequestSchema,
   AddressCommentsRequestSchema,
   CreateChatRequestSchema,
   SendChatMessageRequestSchema,
@@ -1036,18 +1038,41 @@ export const loopsControlRoutes = {
 
   "/api/loops/:id/plan/accept": {
     /**
-     * POST /api/loops/:id/plan/accept - Accept the plan and start execution.
+     * POST /api/loops/:id/plan/accept - Accept the plan and either start execution or open SSH.
      * 
      * Accepts the current plan and transitions the loop from planning status
-     * to running. The loop will begin executing the accepted plan.
+     * to running or completed, depending on the chosen acceptance mode.
      * Only works for loops in planning status.
      * 
      * @returns Success response
      */
     async POST(req: Request & { params: { id: string } }): Promise<Response> {
       try {
-        await loopManager.acceptPlan(req.params.id);
-        return successResponse();
+        const bodyText = await req.text();
+        let body: z.infer<typeof PlanAcceptRequestSchema> = {};
+
+        if (bodyText.trim()) {
+          let bodyJson: unknown;
+          try {
+            bodyJson = JSON.parse(bodyText);
+          } catch {
+            return errorResponse("invalid_json", "Request body must be valid JSON", 400);
+          }
+
+          const validationResult = validateRequest(PlanAcceptRequestSchema, bodyJson);
+          if (!validationResult.success) {
+            return validationResult.response;
+          }
+          body = validationResult.data;
+        }
+
+        const result = await loopManager.acceptPlan(req.params.id, {
+          mode: body.mode,
+        });
+        const response: PlanAcceptResponse = result.mode === "open_ssh"
+          ? { success: true, mode: result.mode, sshSession: result.sshSession }
+          : { success: true, mode: result.mode };
+        return Response.json(response);
       } catch (error) {
         const errorMsg = String(error);
         if (errorMsg.includes("not running")) {

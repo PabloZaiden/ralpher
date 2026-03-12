@@ -11,6 +11,7 @@ import type {
   ModelConfig,
 } from "../types/loop";
 import type { LoopEvent } from "../types/events";
+import type { SshSession } from "../types/ssh-session";
 import { createTimestamp } from "../types/events";
 import { createInitialState, DEFAULT_LOOP_CONFIG } from "../types/loop";
 import {
@@ -85,6 +86,19 @@ export interface CreateLoopOptions {
 export interface StartLoopOptions {
   // Reserved for future options
 }
+
+export interface AcceptPlanOptions {
+  mode?: "start_loop" | "open_ssh";
+}
+
+export type AcceptPlanResult =
+  | {
+      mode: "start_loop";
+    }
+  | {
+      mode: "open_ssh";
+      sshSession: SshSession;
+    };
 
 /**
  * Result of accepting a loop.
@@ -515,10 +529,11 @@ export class LoopManager {
    * Accept a plan and transition to execution mode.
    * Reuses the same session from plan creation.
    */
-  async acceptPlan(loopId: string): Promise<void> {
+  async acceptPlan(loopId: string, options: AcceptPlanOptions = {}): Promise<AcceptPlanResult> {
     // If engine doesn't exist, attempt to recover it from persisted state.
     // This handles the case where the server was restarted while a loop was in planning mode.
     const engine = this.engines.get(loopId) ?? await this.recoverPlanningEngine(loopId);
+    const mode = options.mode ?? "start_loop";
 
     // Verify loop is in planning status
     if (engine.state.status !== "planning") {
@@ -537,15 +552,19 @@ export class LoopManager {
     // Store the plan session info before transitioning
     const planSessionId = engine.state.session?.id;
     const planServerUrl = engine.state.session?.serverUrl;
+    const now = createTimestamp();
 
     // Git branch and worktree already exist from startPlanMode() — no setup needed here.
 
-    // Update state to transition from planning to running
     // Mark plan mode as no longer active but preserve all existing planMode fields
     // (especially isPlanReady and planContent which may have been set by the planning iteration)
-    assertValidTransition(engine.state.status, "running", "acceptPlan");
+    const targetStatus = mode === "open_ssh" ? "completed" : "running";
+    assertValidTransition(engine.state.status, targetStatus, "acceptPlan");
     const updatedState: Partial<LoopState> = {
-      status: "running",
+      status: targetStatus,
+      startedAt: engine.state.startedAt ?? now,
+      completedAt: mode === "open_ssh" ? now : engine.state.completedAt,
+      pendingPrompt: mode === "open_ssh" ? undefined : engine.state.pendingPrompt,
       planMode: {
         ...engine.state.planMode,
         active: false,
@@ -571,22 +590,37 @@ Follow the standard loop execution flow:
 
 <promise>COMPLETE</promise>`;
 
-    engine.setPendingPrompt(executionPrompt);
-
     // Emit plan accepted event
     this.emitter.emit({
       type: "loop.plan.accepted",
       loopId,
-      timestamp: createTimestamp(),
+      timestamp: now,
     });
+
+    if (mode === "open_ssh") {
+      this.emitter.emit({
+        type: "loop.ssh_handoff",
+        loopId,
+        totalIterations: engine.state.currentIteration,
+        timestamp: now,
+      });
+
+      const sshSession = await sshSessionManager.getOrCreateLoopSession(loopId);
+      return {
+        mode,
+        sshSession,
+      };
+    }
 
     // Emit loop started event
     this.emitter.emit({
       type: "loop.started",
       loopId,
       iteration: 0,
-      timestamp: createTimestamp(),
+      timestamp: now,
     });
+
+    engine.setPendingPrompt(executionPrompt);
 
     // Start the execution loop (fire-and-forget, same pattern as engine.start()).
     // This is a long-running process that runs AI iterations for minutes to hours.
@@ -596,6 +630,10 @@ Follow the standard loop execution flow:
     engine.continueExecution().catch((error) => {
       log.error(`Loop ${loopId} execution after plan acceptance failed:`, String(error));
     });
+
+    return {
+      mode,
+    };
   }
 
   /**

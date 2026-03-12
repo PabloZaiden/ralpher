@@ -9,8 +9,9 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { createMockApi, MockApiError } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
-import { createLoop, createLoopWithStatus } from "../helpers/factories";
+import { createLoop, createLoopWithStatus, createSshSession } from "../helpers/factories";
 import { useLoop } from "@/hooks/useLoop";
+import type { AcceptPlanResult } from "@/hooks/loopActions";
 import type { Loop } from "@/types/loop";
 
 const LOOP_ID = "test-loop-1";
@@ -805,17 +806,48 @@ describe("plan mode actions", () => {
 
   test("acceptPlan calls API and refreshes", async () => {
     setupLoop();
-    api.post("/api/loops/:id/plan/accept", () => ({ success: true }));
+    api.post("/api/loops/:id/plan/accept", (req) => {
+      expect(req.body).toEqual({ mode: "start_loop" });
+      return { success: true, mode: "start_loop" };
+    }, 200);
 
     const { result } = renderHook(() => useLoop(LOOP_ID));
     await waitForLoad(result);
 
-    let success = false;
+    let response!: AcceptPlanResult;
     await act(async () => {
-      success = await result.current.acceptPlan();
+      response = await result.current.acceptPlan();
     });
 
-    expect(success).toBe(true);
+    if (response.success === false) {
+      throw new Error("Expected acceptPlan to succeed");
+    }
+    const successResponse = response as Exclude<AcceptPlanResult, { success: false }>;
+    expect(successResponse.mode).toBe("start_loop");
+  });
+
+  test("acceptPlan returns linked ssh session for open_ssh mode", async () => {
+    setupLoop();
+    const returnedSession = createSshSession({ config: { id: "ssh-session-1", loopId: LOOP_ID } });
+    api.post("/api/loops/:id/plan/accept", (req) => {
+      expect(req.body).toEqual({ mode: "open_ssh" });
+      return { success: true, mode: "open_ssh", sshSession: returnedSession };
+    }, 200);
+
+    const { result } = renderHook(() => useLoop(LOOP_ID));
+    await waitForLoad(result);
+
+    let response!: AcceptPlanResult;
+    await act(async () => {
+      response = await result.current.acceptPlan("open_ssh");
+    });
+
+    if (response.success === false) {
+      throw new Error("Expected acceptPlan open_ssh to succeed");
+    }
+    const successResponse = response as Extract<AcceptPlanResult, { mode: "open_ssh" }>;
+    expect(successResponse.mode).toBe("open_ssh");
+    expect(successResponse.sshSession).toEqual(returnedSession);
   });
 
   test("discardPlan calls API and sets loop to null", async () => {

@@ -35,10 +35,11 @@ import {
   updateBranchApi,
   sendChatMessageApi,
   getOrCreateLoopSshSessionApi,
-  type AcceptLoopResult,
-  type PushLoopResult,
-  type AddressCommentsResult,
-  type SetPendingResult,
+    type AcceptLoopResult,
+    type AcceptPlanResult,
+    type PushLoopResult,
+    type AddressCommentsResult,
+    type SetPendingResult,
 } from "./loopActions";
 import { createLogger } from "../lib/logger";
 
@@ -106,8 +107,8 @@ export interface UseLoopResult {
   getStatusFile: () => Promise<FileContentResponse>;
   /** Send feedback to refine the plan (only works when loop is in planning status) */
   sendPlanFeedback: (feedback: string) => Promise<boolean>;
-  /** Accept the plan and start the loop execution (only works when loop is in planning status) */
-  acceptPlan: () => Promise<boolean>;
+  /** Accept the plan via the requested mode (only works when loop is in planning status) */
+  acceptPlan: (mode?: "start_loop" | "open_ssh") => Promise<AcceptPlanResult>;
   /** Discard the plan and delete the loop (only works when loop is in planning status) */
   discardPlan: () => Promise<boolean>;
   /** Address reviewer comments (only works for pushed/merged loops with reviewMode.addressable = true) */
@@ -229,6 +230,7 @@ export function useLoop(loopId: string): UseLoopResult {
       case "loop.started":
       case "loop.stopped":
       case "loop.completed":
+      case "loop.ssh_handoff":
       case "loop.accepted":
       case "loop.pushed":
       case "loop.discarded":
@@ -592,19 +594,24 @@ export function useLoop(loopId: string): UseLoopResult {
   );
 
   // Accept the plan and start the loop execution
-  const acceptPlan = useCallback(async (): Promise<boolean> => {
-    log.debug("Accepting plan", { loopId });
-    try {
-      await acceptPlanApi(loopId);
-      await refresh();
-      log.info("Plan accepted", { loopId });
-      return true;
-    } catch (err) {
-      log.error("Failed to accept plan", { loopId, error: String(err) });
-      setError(String(err));
-      return false;
-    }
-  }, [loopId, refresh]);
+  const acceptPlan = useCallback(
+    async (mode: "start_loop" | "open_ssh" = "start_loop"): Promise<AcceptPlanResult> => {
+      log.debug("Accepting plan", { loopId, mode });
+      try {
+        const result = await acceptPlanApi(loopId, mode);
+        await refresh();
+        if (result.success) {
+          log.info("Plan accepted", { loopId, mode: result.mode });
+        }
+        return result;
+      } catch (err) {
+        log.error("Failed to accept plan", { loopId, mode, error: String(err) });
+        setError(String(err));
+        return { success: false };
+      }
+    },
+    [loopId, refresh],
+  );
 
   // Discard the plan and delete the loop
   const discardPlan = useCallback(async (): Promise<boolean> => {

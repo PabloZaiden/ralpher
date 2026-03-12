@@ -41,7 +41,7 @@ const ALL_STATUSES: LoopStatus[] = [
 const EXPECTED_TRANSITIONS: Record<LoopStatus, LoopStatus[]> = {
   idle: ["starting", "planning", "draft", "deleted"],
   draft: ["idle", "planning", "deleted"],
-  planning: ["running", "stopped", "failed", "deleted"],
+  planning: ["running", "completed", "stopped", "failed", "deleted"],
   starting: ["running", "failed", "stopped", "deleted"],
   running: ["completed", "stopped", "failed", "max_iterations", "deleted"],
   waiting: ["running", "completed", "stopped", "failed", "max_iterations", "deleted"],

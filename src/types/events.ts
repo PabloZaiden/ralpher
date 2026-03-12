@@ -105,6 +105,7 @@ export type LoopEvent =
   | LoopLogEvent
   | LoopGitCommitEvent
   | LoopCompletedEvent
+  | LoopSshHandoffEvent
   | LoopStoppedEvent
   | LoopSessionAbortedEvent
   | LoopErrorEvent
@@ -295,6 +296,20 @@ export interface LoopCompletedEvent {
 }
 
 /**
+ * Emitted when a plan is accepted and control is handed off directly via SSH.
+ * This path skips autonomous execution while moving the loop to a completed state.
+ */
+export interface LoopSshHandoffEvent {
+  type: "loop.ssh_handoff";
+  /** ID of the loop that was handed off */
+  loopId: string;
+  /** Total number of iterations executed before the handoff */
+  totalIterations: number;
+  /** ISO 8601 timestamp */
+  timestamp: string;
+}
+
+/**
  * Emitted when a loop is manually stopped by the user.
  */
 export interface LoopStoppedEvent {
@@ -462,8 +477,9 @@ export interface LoopPlanFeedbackSentEvent {
 }
 
 /**
- * Emitted when a plan is accepted and execution begins.
- * The loop transitions from "planning" to "running" status.
+ * Emitted when a plan is accepted.
+ * The loop transitions from "planning" to either "running" or "completed",
+ * depending on whether execution starts immediately or control is handed off via SSH.
  */
 export interface LoopPlanAcceptedEvent {
   type: "loop.plan.accepted";

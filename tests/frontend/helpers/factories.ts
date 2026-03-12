@@ -492,6 +492,15 @@ export function createLoopCompletedEvent(loopId: string, totalIterations = 3): L
   };
 }
 
+export function createLoopSshHandoffEvent(loopId: string, totalIterations = 0): LoopEvent {
+  return {
+    type: "loop.ssh_handoff",
+    loopId,
+    totalIterations,
+    timestamp: isoNow(),
+  };
+}
+
 export function createLoopDeletedEvent(loopId: string): LoopEvent {
   return {
     type: "loop.deleted",

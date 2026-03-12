@@ -12,6 +12,7 @@
  */
 
 import type { ReviewComment } from "./loop";
+import type { SshSession } from "./ssh-session";
 import {
   CreateLoopRequestSchema,
   UpdateLoopRequestSchema,
@@ -20,6 +21,7 @@ import {
   CreateChatRequestSchema,
   CreateSshSessionRequestSchema,
   UpdateSshSessionRequestSchema,
+  PlanAcceptRequestSchema,
 } from "./schemas";
 import type { z } from "zod";
 
@@ -102,6 +104,11 @@ export type UpdateSshSessionRequest = z.infer<typeof UpdateSshSessionRequestSche
  * single source of truth for both validation and TypeScript types.
  */
 export type AddressCommentsRequest = z.infer<typeof AddressCommentsRequestSchema>;
+
+/**
+ * Request body for POST /api/loops/:id/plan/accept endpoint.
+ */
+export type PlanAcceptRequest = z.infer<typeof PlanAcceptRequestSchema>;
 
 /**
  * Response from POST /api/loops/:id/address-comments endpoint.
@@ -210,6 +217,23 @@ export type PushResponse =
       success: false;
       /** Error message describing what went wrong */
       error: string;
+    };
+
+/**
+ * Response from POST /api/loops/:id/plan/accept endpoint.
+ */
+export type PlanAcceptResponse =
+  | {
+      success: true;
+      /** Which acceptance path was taken */
+      mode: "start_loop";
+    }
+  | {
+      success: true;
+      /** Which acceptance path was taken */
+      mode: "open_ssh";
+      /** Linked SSH session created or reused for the loop */
+      sshSession: SshSession;
     };
 
 /**

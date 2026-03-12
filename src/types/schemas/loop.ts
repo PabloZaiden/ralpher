@@ -113,6 +113,13 @@ export const PlanFeedbackRequestSchema = z.object({
 });
 
 /**
+ * Schema for plan acceptance - POST /api/loops/:id/plan/accept
+ */
+export const PlanAcceptRequestSchema = z.object({
+  mode: z.enum(["start_loop", "open_ssh"]).optional(),
+});
+
+/**
  * Schema for pending prompt - PUT /api/loops/:id/pending-prompt
  */
 export const PendingPromptRequestSchema = z.object({
@@ -163,4 +170,3 @@ export const SendChatMessageRequestSchema = z.object({
   }),
   model: ModelConfigSchema.optional(),
 });
-
