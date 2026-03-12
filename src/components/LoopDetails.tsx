@@ -36,6 +36,8 @@ export interface LoopDetailsProps {
   loopId: string;
   /** Callback to go back to dashboard */
   onBack?: () => void;
+  /** Navigate to the SSH session details view */
+  onSelectSshSession?: (sshSessionId: string) => void;
 }
 
 type TabId = "log" | "info" | "prompt" | "plan" | "status" | "diff" | "review" | "actions";
@@ -102,7 +104,7 @@ function DiffPatchViewer({ patch }: { patch: string }) {
   );
 }
 
-export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
+export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsProps) {
   const {
     loop,
     loading,
@@ -131,6 +133,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     discardPlan,
     addressReviewComments,
     update,
+    connectViaSsh,
   } = useLoop(loopId);
 
   // Markdown rendering preference
@@ -176,6 +179,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const [updateBranchModal, setUpdateBranchModal] = useState(false);
   const [discardPlanModal, setDiscardPlanModal] = useState(false);
   const [planActionSubmitting, setPlanActionSubmitting] = useState(false);
+  const [sshConnecting, setSshConnecting] = useState(false);
 
   // Models state for LoopActionBar
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -467,6 +471,24 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
     onBack?.();
   }
 
+  async function handleConnectViaSsh() {
+    setSshConnecting(true);
+    try {
+      const session = await connectViaSsh();
+      if (!session) {
+        toast.error("Failed to connect via ssh");
+        return;
+      }
+      if (onSelectSshSession) {
+        onSelectSshSession(session.config.id);
+      } else {
+        window.location.hash = `/ssh/${session.config.id}`;
+      }
+    } finally {
+      setSshConnecting(false);
+    }
+  }
+
   if (loading && !loop) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -505,6 +527,26 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
   const isPlanningActive = isPlanning && !isPlanReady;
   // Log panel should show spinner during both regular activity and active planning
   const isLogActive = isActive || isPlanningActive;
+  const connectSshAction = (
+    <button
+      onClick={handleConnectViaSsh}
+      disabled={sshConnecting}
+      className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+        <span className="text-sky-600 dark:text-sky-400 text-sm">⌁</span>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+          {sshConnecting ? "Connecting..." : "Connect via ssh"}
+        </div>
+        <div className="text-xs text-gray-500 dark:text-gray-400">
+          Open or reconnect to this loop&apos;s persistent SSH session
+        </div>
+      </div>
+      <span className="text-gray-400 dark:text-gray-500">→</span>
+    </button>
+  );
 
   // Filter tabs for chat mode: hide Prompt and Plan tabs
   const visibleTabs = isChatMode
@@ -1151,6 +1193,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                       <div className="max-w-md space-y-2">
                         {isPlanning ? (
                           <>
+                            {connectSshAction}
                             <button
                               onClick={handleAcceptPlan}
                               disabled={planActionSubmitting || !isPlanReady || !planContent?.content?.trim()}
@@ -1188,6 +1231,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                           </>
                         ) : isFinalState(state.status) ? (
                           <>
+                            {connectSshAction}
                             {state.reviewMode?.addressable && state.status !== "deleted" && (
                               <button
                                 onClick={() => setAddressCommentsModal(true)}
@@ -1249,6 +1293,7 @@ export function LoopDetails({ loopId, onBack }: LoopDetailsProps) {
                           </>
                         ) : (
                           <>
+                            {connectSshAction}
                             {canAccept(state.status) && state.git && (
                               <button
                                 onClick={() => setAcceptModal(true)}

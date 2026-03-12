@@ -4,7 +4,7 @@
  */
 
 import { createLogger } from "../lib/logger";
-import type { Loop, CreateChatRequest, SendChatMessageResponse } from "../types";
+import type { Loop, CreateChatRequest, SendChatMessageResponse, SshSession } from "../types";
 
 const log = createLogger("loopActions");
 
@@ -178,6 +178,28 @@ export async function deleteLoopApi(loopId: string): Promise<boolean> {
  */
 export async function purgeLoopApi(loopId: string): Promise<boolean> {
   return apiAction(`/api/loops/${loopId}/purge`, "POST", "Purge loop");
+}
+
+/**
+ * Fetch a loop's linked SSH session via the API.
+ */
+export async function getLoopSshSessionApi(loopId: string): Promise<SshSession> {
+  return apiCall<SshSession>(
+    `/api/loops/${loopId}/ssh-session`,
+    { method: "GET" },
+    "Fetch loop SSH session",
+  );
+}
+
+/**
+ * Get or create a loop's linked SSH session via the API.
+ */
+export async function getOrCreateLoopSshSessionApi(loopId: string): Promise<SshSession> {
+  return apiCall<SshSession>(
+    `/api/loops/${loopId}/ssh-session`,
+    { method: "POST" },
+    "Connect loop SSH session",
+  );
 }
 
 /**

@@ -12,6 +12,7 @@ import { renderWithUser, waitFor } from "../helpers/render";
 import {
   createLoopWithStatus,
   createFileDiff,
+  createSshSession,
 } from "../helpers/factories";
 import { LoopDetails } from "@/components/LoopDetails";
 
@@ -500,6 +501,74 @@ describe("actions tab content", () => {
 
     await waitFor(() => {
       expect(getByText("Delete Loop")).toBeTruthy();
+    });
+  });
+
+  test("planning loops show the connect via ssh action and navigate to the SSH session", async () => {
+    const loop = createLoopWithStatus("planning", {
+      config: { id: LOOP_ID, name: "Planning Loop" },
+      state: {
+        planMode: {
+          active: true,
+          feedbackRounds: 0,
+          planningFolderCleared: false,
+          isPlanReady: true,
+          planContent: "# Plan",
+        },
+      },
+    });
+    const session = createSshSession({ config: { id: "ssh-loop-1", loopId: LOOP_ID } });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: true, content: "# Plan" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: true, content: "todo" }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+    api.post("/api/loops/:id/ssh-session", () => session, 200);
+
+    let selectedSessionId: string | null = null;
+    const { getByText, user } = renderWithUser(
+      <LoopDetails loopId={LOOP_ID} onSelectSshSession={(sshSessionId) => { selectedSessionId = sshSessionId; }} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("Planning Loop")).toBeTruthy();
+    });
+
+    await user.click(getByText("Actions"));
+    await user.click(getByText("Connect via ssh"));
+
+    await waitFor(() => {
+      expect(selectedSessionId).toBe("ssh-loop-1");
+    });
+  });
+
+  test("deleted loops still show connect via ssh before purge", async () => {
+    const loop = createLoopWithStatus("deleted", {
+      config: { id: LOOP_ID, name: "Deleted Loop" },
+    });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Deleted Loop")).toBeTruthy();
+    });
+
+    await user.click(getByText("Actions"));
+
+    await waitFor(() => {
+      expect(getByText("Connect via ssh")).toBeTruthy();
+      expect(getByText("Purge Loop")).toBeTruthy();
     });
   });
 

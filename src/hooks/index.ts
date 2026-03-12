@@ -27,6 +27,8 @@ export {
   discardLoopApi,
   deleteLoopApi,
   purgeLoopApi,
+  getLoopSshSessionApi,
+  getOrCreateLoopSshSessionApi,
   setPendingPromptApi,
   clearPendingPromptApi,
   markMergedApi,

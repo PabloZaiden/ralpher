@@ -13,6 +13,7 @@ import type {
   MessageData,
   ToolCallData,
   TodoItem,
+  SshSession,
 } from "../types";
 import type { LogEntry } from "../components/LogViewer";
 import { useLoopEvents } from "./useWebSocket";
@@ -33,6 +34,7 @@ import {
   addressReviewCommentsApi,
   updateBranchApi,
   sendChatMessageApi,
+  getOrCreateLoopSshSessionApi,
   type AcceptLoopResult,
   type PushLoopResult,
   type AddressCommentsResult,
@@ -116,6 +118,8 @@ export interface UseLoopResult {
   clearPending: () => Promise<boolean>;
   /** Send a message to a chat (only works for chat-mode loops) */
   sendChatMessage: (message: string, model?: { providerID: string; modelID: string }) => Promise<boolean>;
+  /** Get or create the loop's linked SSH session */
+  connectViaSsh: () => Promise<SshSession | null>;
 }
 
 /**
@@ -686,6 +690,17 @@ export function useLoop(loopId: string): UseLoopResult {
     [loopId, refresh]
   );
 
+  const connectViaSsh = useCallback(async (): Promise<SshSession | null> => {
+    log.debug("Connecting loop SSH session", { loopId });
+    try {
+      return await getOrCreateLoopSshSessionApi(loopId);
+    } catch (err) {
+      log.error("Failed to connect loop SSH session", { loopId, error: String(err) });
+      setError(String(err));
+      return null;
+    }
+  }, [loopId]);
+
   // Whether this loop is in chat mode
   const isChatMode = loop?.config.mode === "chat";
 
@@ -766,5 +781,6 @@ export function useLoop(loopId: string): UseLoopResult {
     setPending,
     clearPending,
     sendChatMessage,
+    connectViaSsh,
   };
 }

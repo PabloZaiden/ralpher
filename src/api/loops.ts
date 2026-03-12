@@ -18,6 +18,7 @@
 import { getLoopWorkingDirectory, loopManager } from "../core/loop-manager";
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
+import { sshSessionManager } from "../core/ssh-session-manager";
 import { getWorkspace, touchWorkspace } from "../persistence/workspaces";
 import { createLogger } from "../core/logger";
 
@@ -116,6 +117,21 @@ async function applyLoopUpdates(
     }
     return errorResponse("update_failed", errorMessage, 500);
   }
+}
+
+function mapLoopSshSessionError(error: unknown): Response {
+  const message = String(error);
+  if (message.includes("Loop not found")) {
+    return errorResponse("not_found", "Loop not found", 404);
+  }
+  if (
+    message.includes("ssh transport")
+    || message.includes("tmux is not available")
+    || message.includes("Loop working directory is not available")
+  ) {
+    return errorResponse("invalid_session_configuration", message, 400);
+  }
+  return errorResponse("ssh_session_error", message, 500);
 }
 
 function startErrorResponse(
@@ -727,6 +743,43 @@ export const loopsControlRoutes = {
       log.info("POST /api/loops/:id/purge - Loop purged", { loopId: req.params.id });
 
       return successResponse();
+    },
+  },
+
+  "/api/loops/:id/ssh-session": {
+    async GET(req: Request & { params: { id: string } }): Promise<Response> {
+      try {
+        const loop = await loopManager.getLoop(req.params.id);
+        if (!loop) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+
+        const session = await sshSessionManager.getSessionByLoopId(req.params.id);
+        if (!session) {
+          return errorResponse("not_found", "SSH session not found for loop", 404);
+        }
+
+        return Response.json(session);
+      } catch (error) {
+        log.error("GET /api/loops/:id/ssh-session - Failed", {
+          loopId: req.params.id,
+          error: String(error),
+        });
+        return mapLoopSshSessionError(error);
+      }
+    },
+
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      try {
+        const session = await sshSessionManager.getOrCreateLoopSession(req.params.id);
+        return Response.json(session);
+      } catch (error) {
+        log.error("POST /api/loops/:id/ssh-session - Failed", {
+          loopId: req.params.id,
+          error: String(error),
+        });
+        return mapLoopSshSessionError(error);
+      }
     },
   },
 

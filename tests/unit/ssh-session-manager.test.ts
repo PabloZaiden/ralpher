@@ -1,0 +1,157 @@
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+import { LoopManager } from "../../src/core/loop-manager";
+import { backendManager } from "../../src/core/backend-manager";
+import { createMockBackend } from "../mocks/mock-backend";
+import { TestCommandExecutor } from "../mocks/mock-executor";
+import { createWorkspace } from "../../src/persistence/workspaces";
+import { updateLoopState } from "../../src/persistence/loops";
+import { closeDatabase, ensureDataDirectories } from "../../src/persistence/database";
+import { getDefaultServerSettings } from "../../src/types/settings";
+import { sshSessionManager } from "../../src/core/ssh-session-manager";
+
+class SshCapableExecutor extends TestCommandExecutor {
+  public killTargets: string[] = [];
+
+  override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
+    if (command === "tmux" && args[0] === "-V") {
+      return {
+        success: true,
+        stdout: "tmux 3.4\n",
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    if (command === "tmux" && args[0] === "kill-session") {
+      if (args[2]) {
+        this.killTargets.push(args[2]);
+      }
+      return {
+        success: true,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    return await super.exec(command, args, options);
+  }
+}
+
+describe("SshSessionManager loop-linked sessions", () => {
+  let dataDir: string;
+  let workDir: string;
+  let manager: LoopManager;
+  let executor: SshCapableExecutor;
+  const workspaceId = "workspace-1";
+  const modelFields = {
+    modelProviderID: "test-provider",
+    modelID: "test-model",
+    modelVariant: "",
+  };
+
+  beforeEach(async () => {
+    dataDir = await mkdtemp(join(tmpdir(), "ralpher-ssh-session-manager-data-"));
+    workDir = await mkdtemp(join(tmpdir(), "ralpher-ssh-session-manager-work-"));
+    process.env["RALPHER_DATA_DIR"] = dataDir;
+
+    await ensureDataDirectories();
+    await Bun.$`git init ${workDir}`.quiet();
+    await Bun.$`git -C ${workDir} config user.email "test@test.com"`.quiet();
+    await Bun.$`git -C ${workDir} config user.name "Test User"`.quiet();
+    await Bun.$`touch ${workDir}/README.md`.quiet();
+    await Bun.$`git -C ${workDir} add .`.quiet();
+    await Bun.$`git -C ${workDir} commit -m "Initial commit"`.quiet();
+
+    const sshSettings = getDefaultServerSettings(true);
+    if (sshSettings.agent.transport === "ssh") {
+      sshSettings.agent.hostname = "localhost";
+      sshSettings.agent.username = "tester";
+    }
+
+    await createWorkspace({
+      id: workspaceId,
+      name: "SSH Workspace",
+      directory: workDir,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      serverSettings: sshSettings,
+    });
+
+    backendManager.setBackendForTesting(createMockBackend());
+    executor = new SshCapableExecutor();
+    backendManager.setExecutorFactoryForTesting(() => executor);
+
+    manager = new LoopManager();
+  });
+
+  afterEach(async () => {
+    await manager.shutdown();
+    backendManager.resetForTesting();
+    closeDatabase();
+    delete process.env["RALPHER_DATA_DIR"];
+    await rm(dataDir, { recursive: true, force: true });
+    await rm(workDir, { recursive: true, force: true });
+  });
+
+  test("getOrCreateLoopSession reuses the same linked session and uses the worktree path", async () => {
+    const loop = await manager.createLoop({
+      ...modelFields,
+      directory: workDir,
+      prompt: "Link me to SSH",
+      workspaceId,
+      planMode: false,
+      useWorktree: true,
+    });
+    const worktreePath = join(workDir, ".ralph-worktrees", loop.config.id);
+
+    await updateLoopState(loop.config.id, {
+      ...loop.state,
+      git: {
+        originalBranch: "main",
+        workingBranch: "ralph/test-loop",
+        worktreePath,
+        commits: [],
+      },
+    });
+
+    const firstSession = await sshSessionManager.getOrCreateLoopSession(loop.config.id);
+    const secondSession = await sshSessionManager.getOrCreateLoopSession(loop.config.id);
+
+    expect(firstSession.config.loopId).toBe(loop.config.id);
+    expect(firstSession.config.directory).toBe(worktreePath);
+    expect(firstSession.config.name.endsWith(" SSH")).toBe(true);
+    expect(secondSession.config.id).toBe(firstSession.config.id);
+  });
+
+  test("purgeLoop deletes the linked SSH session and kills the tmux session", async () => {
+    const loop = await manager.createLoop({
+      ...modelFields,
+      directory: workDir,
+      prompt: "Purge linked ssh session",
+      workspaceId,
+      planMode: false,
+      useWorktree: true,
+    });
+    const worktreePath = join(workDir, ".ralph-worktrees", loop.config.id);
+
+    await updateLoopState(loop.config.id, {
+      ...loop.state,
+      status: "deleted",
+      git: {
+        originalBranch: "main",
+        workingBranch: "ralph/purge-loop",
+        worktreePath,
+        commits: [],
+      },
+    });
+
+    const session = await sshSessionManager.getOrCreateLoopSession(loop.config.id);
+    const result = await manager.purgeLoop(loop.config.id);
+
+    expect(result).toEqual({ success: true });
+    expect(await sshSessionManager.getSession(session.config.id)).toBeNull();
+    expect(executor.killTargets).toContain(session.config.remoteSessionName);
+  });
+});

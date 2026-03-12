@@ -21,6 +21,6 @@ export { sanitizeBranchName } from "./sanitize-branch-name";
 
 export { formatRelativeTime } from "./format";
 
-export { buildDefaultSshSessionName } from "./ssh-session-name";
+export { buildDefaultSshSessionName, buildLoopSshSessionName } from "./ssh-session-name";
 
 export { writeTextToClipboard } from "./clipboard";

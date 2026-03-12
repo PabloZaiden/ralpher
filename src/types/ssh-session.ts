@@ -25,6 +25,8 @@ export interface SshSessionConfig {
   name: string;
   /** Workspace that owns this session */
   workspaceId: string;
+  /** Optional loop associated with this session */
+  loopId?: string;
   /** Working directory used when creating the tmux session */
   directory: string;
   /** Remote tmux session name */

@@ -236,6 +236,24 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 4,
+    name: "add_loop_id_to_ssh_sessions",
+    up: (db) => {
+      if (!tableExists(db, "ssh_sessions")) {
+        return;
+      }
+      const columns = getTableColumns(db, "ssh_sessions");
+      if (!columns.includes("loop_id")) {
+        db.run("ALTER TABLE ssh_sessions ADD COLUMN loop_id TEXT");
+      }
+      db.run(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_ssh_sessions_loop_id_unique
+        ON ssh_sessions(loop_id)
+        WHERE loop_id IS NOT NULL
+      `);
+    },
+  },
 ];
 
 /**
