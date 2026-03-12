@@ -14,12 +14,23 @@ const log = createLogger("core:ssh-terminal-bridge");
 const TMUX_READY_POLL_INTERVAL_MS = 100;
 const DEFAULT_TMUX_READY_TIMEOUT_MS = 15_000;
 const DEFAULT_SSH_TERM = "xterm-256color";
+const OSC_52_SEQUENCE_START = "\u001b]52;";
+const OSC_SEQUENCE_BELL = "\u0007";
+const OSC_SEQUENCE_STRING_TERMINATOR = "\u001b\\";
+const MAX_PENDING_OSC_SEQUENCE_BYTES = 1024 * 1024;
 
 export interface SshTerminalBridgeOptions {
   onOutput: (chunk: string) => void;
+  onClipboardCopy?: (text: string) => void;
   onExit?: (code: number | null, signal: NodeJS.Signals | null) => void;
   onError?: (error: Error) => void;
   readyTimeoutMs?: number;
+}
+
+interface ClipboardSequenceResult {
+  visibleOutput: string;
+  clipboardCopies: string[];
+  remainder: string;
 }
 
 function quoteShell(value: string): string {
@@ -119,6 +130,89 @@ function buildResizeCommand(sessionName: string, cols: number, rows: number): st
   ].join("\n");
 }
 
+function getOsc52CarryoverLength(buffer: string): number {
+  const maxCarryoverLength = Math.min(buffer.length, OSC_52_SEQUENCE_START.length - 1);
+  for (let length = maxCarryoverLength; length > 0; length--) {
+    if (OSC_52_SEQUENCE_START.startsWith(buffer.slice(-length))) {
+      return length;
+    }
+  }
+  return 0;
+}
+
+function findOsc52Terminator(buffer: string, searchStart: number): { index: number; length: number } | null {
+  const bellIndex = buffer.indexOf(OSC_SEQUENCE_BELL, searchStart);
+  const stringTerminatorIndex = buffer.indexOf(OSC_SEQUENCE_STRING_TERMINATOR, searchStart);
+  if (bellIndex === -1 && stringTerminatorIndex === -1) {
+    return null;
+  }
+  if (bellIndex !== -1 && (stringTerminatorIndex === -1 || bellIndex < stringTerminatorIndex)) {
+    return {
+      index: bellIndex,
+      length: OSC_SEQUENCE_BELL.length,
+    };
+  }
+  return {
+    index: stringTerminatorIndex,
+    length: OSC_SEQUENCE_STRING_TERMINATOR.length,
+  };
+}
+
+function decodeClipboardPayload(payload: string): string | null {
+  const separatorIndex = payload.indexOf(";");
+  if (separatorIndex < 0) {
+    return null;
+  }
+  const encodedText = payload.slice(separatorIndex + 1);
+  if (encodedText === "?") {
+    return null;
+  }
+  return Buffer.from(encodedText, "base64").toString("utf8");
+}
+
+function extractClipboardSequences(buffer: string): ClipboardSequenceResult {
+  let cursor = 0;
+  let visibleOutput = "";
+  const clipboardCopies: string[] = [];
+
+  while (cursor < buffer.length) {
+    const sequenceStart = buffer.indexOf(OSC_52_SEQUENCE_START, cursor);
+    if (sequenceStart < 0) {
+      const carryoverLength = getOsc52CarryoverLength(buffer.slice(cursor));
+      const flushEnd = buffer.length - carryoverLength;
+      visibleOutput += buffer.slice(cursor, flushEnd);
+      return {
+        visibleOutput,
+        clipboardCopies,
+        remainder: buffer.slice(flushEnd),
+      };
+    }
+
+    visibleOutput += buffer.slice(cursor, sequenceStart);
+    const terminator = findOsc52Terminator(buffer, sequenceStart + OSC_52_SEQUENCE_START.length);
+    if (!terminator) {
+      return {
+        visibleOutput,
+        clipboardCopies,
+        remainder: buffer.slice(sequenceStart),
+      };
+    }
+
+    const payload = buffer.slice(sequenceStart + OSC_52_SEQUENCE_START.length, terminator.index);
+    const clipboardText = decodeClipboardPayload(payload);
+    if (clipboardText !== null) {
+      clipboardCopies.push(clipboardText);
+    }
+    cursor = terminator.index + terminator.length;
+  }
+
+  return {
+    visibleOutput,
+    clipboardCopies,
+    remainder: "",
+  };
+}
+
 export class SshTerminalBridge {
   private proc: ChildProcessWithoutNullStreams | null = null;
   private session: SshSession | null = null;
@@ -130,6 +224,8 @@ export class SshTerminalBridge {
   private skipCloseStatusUpdate = false;
   private startupError: string | undefined;
   private receivedStdout = false;
+  private stdoutBuffer = "";
+  private stderrBuffer = "";
 
   constructor(
     private readonly sessionId: string,
@@ -161,6 +257,8 @@ export class SshTerminalBridge {
     this.skipCloseStatusUpdate = false;
     this.startupError = undefined;
     this.receivedStdout = false;
+    this.stdoutBuffer = "";
+    this.stderrBuffer = "";
 
     this.session = await sshSessionManager.getSession(this.sessionId);
     if (!this.session) {
@@ -188,6 +286,7 @@ export class SshTerminalBridge {
     this.closePromise = new Promise((resolve) => {
       proc.on("close", (code: number | null, signal: NodeJS.Signals | null) => {
         void (async () => {
+          this.flushBufferedOutput();
           this.ready = false;
           this.proc = null;
           const skipStatusUpdate = this.skipCloseStatusUpdate;
@@ -222,10 +321,10 @@ export class SshTerminalBridge {
       if (chunk.length > 0) {
         this.receivedStdout = true;
       }
-      this.options.onOutput(chunk);
+      this.handleOutputChunk(chunk, "stdout");
     });
     proc.stderr.on("data", (chunk: string) => {
-      this.options.onOutput(chunk);
+      this.handleOutputChunk(chunk, "stderr");
     });
     proc.on("error", (error: Error) => {
       this.startupError = String(error);
@@ -290,6 +389,46 @@ export class SshTerminalBridge {
       throw new Error("SSH terminal is not connected");
     }
     await this.connectPromise;
+  }
+
+  private handleOutputChunk(chunk: string, stream: "stdout" | "stderr"): void {
+    const buffer = (stream === "stdout" ? this.stdoutBuffer : this.stderrBuffer) + chunk;
+    const parsed = extractClipboardSequences(buffer);
+    let visibleOutput = parsed.visibleOutput;
+    let remainder = parsed.remainder;
+    const remainderBytes = Buffer.byteLength(remainder, "utf8");
+    if (remainder.length > 0 && remainderBytes > MAX_PENDING_OSC_SEQUENCE_BYTES) {
+      log.warn("Flushing oversized OSC 52 buffer", {
+        sessionId: this.sessionId,
+        stream,
+        bufferedBytes: remainderBytes,
+        limitBytes: MAX_PENDING_OSC_SEQUENCE_BYTES,
+      });
+      visibleOutput += remainder;
+      remainder = "";
+    }
+    if (stream === "stdout") {
+      this.stdoutBuffer = remainder;
+    } else {
+      this.stderrBuffer = remainder;
+    }
+    if (visibleOutput.length > 0) {
+      this.options.onOutput(visibleOutput);
+    }
+    for (const clipboardText of parsed.clipboardCopies) {
+      this.options.onClipboardCopy?.(clipboardText);
+    }
+  }
+
+  private flushBufferedOutput(): void {
+    if (this.stdoutBuffer.length > 0) {
+      this.options.onOutput(this.stdoutBuffer);
+      this.stdoutBuffer = "";
+    }
+    if (this.stderrBuffer.length > 0) {
+      this.options.onOutput(this.stderrBuffer);
+      this.stderrBuffer = "";
+    }
   }
 
   private async waitForRemoteSessionReady(): Promise<void> {
