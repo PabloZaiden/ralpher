@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { serve, type Server } from "bun";
 import { apiRoutes } from "../../src/api";
-import { ensureDataDirectories, getDatabase } from "../../src/persistence/database";
+import { closeDatabase, ensureDataDirectories, getDatabase } from "../../src/persistence/database";
 import { backendManager } from "../../src/core/backend-manager";
 import { createMockBackend } from "../mocks/mock-backend";
 import { TestCommandExecutor } from "../mocks/mock-executor";
@@ -65,6 +65,7 @@ describe("Loop SSH session API integration", () => {
   afterAll(async () => {
     server.stop();
     backendManager.resetForTesting();
+    closeDatabase();
     await rm(dataDir, { recursive: true, force: true });
     await rm(workDir, { recursive: true, force: true });
     delete process.env["RALPHER_DATA_DIR"];
@@ -72,6 +73,7 @@ describe("Loop SSH session API integration", () => {
 
   beforeEach(() => {
     const db = getDatabase();
+    db.run("DELETE FROM forwarded_ports");
     db.run("DELETE FROM ssh_sessions");
     db.run("DELETE FROM loops WHERE workspace_id IS NOT NULL");
     db.run("DELETE FROM workspaces");
@@ -218,6 +220,7 @@ describe("Loop SSH session API integration", () => {
   test("purging a loop deletes its linked SSH session", async () => {
     const workspace = await createWorkspace("ssh");
     const loop = await createLoop(workspace.id);
+    await waitForLoopWorktree(loop.config.id);
 
     const sessionResponse = await fetch(`${baseUrl}/api/loops/${loop.config.id}/ssh-session`, {
       method: "POST",
