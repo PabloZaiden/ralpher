@@ -89,6 +89,27 @@ describe("migration infrastructure", () => {
       runMigrations(db);
       expect(tableExists(db, "schema_migrations")).toBe(true);
     });
+
+    test("adds use_worktree for an existing saved draft loop", () => {
+      db.run(`
+        CREATE TABLE loops (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'draft'
+        )
+      `);
+      db.run("INSERT INTO loops (id, name, status) VALUES ('draft-1', 'Draft loop', 'draft')");
+
+      runMigrations(db);
+
+      expect(getTableColumns(db, "loops")).toContain("use_worktree");
+      const row = db.query("SELECT status, use_worktree FROM loops WHERE id = ?").get("draft-1") as {
+        status: string;
+        use_worktree: number;
+      };
+      expect(row.status).toBe("draft");
+      expect(row.use_worktree).toBe(1);
+    });
   });
 
   describe("getTableColumns", () => {
