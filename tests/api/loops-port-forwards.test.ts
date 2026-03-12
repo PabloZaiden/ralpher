@@ -130,6 +130,13 @@ describe("Loop port forwards API integration", () => {
     return await response.json() as { config: { id: string } };
   }
 
+  async function deleteForward(loopId: string, forwardId: string): Promise<void> {
+    const response = await fetch(`${baseUrl}/api/loops/${loopId}/port-forwards/${forwardId}`, {
+      method: "DELETE",
+    });
+    expect([200, 404]).toContain(response.status);
+  }
+
   test("creates, lists, and deletes loop port forwards", async () => {
     const workspace = await createWorkspace();
     const loop = await createLoop(workspace.id);
@@ -168,39 +175,102 @@ describe("Loop port forwards API integration", () => {
   test("proxies forwarded browser traffic through the loop URL", async () => {
     const workspace = await createWorkspace();
     const loop = await createLoop(workspace.id);
+    let forwardId: string | undefined;
 
-    const createResponse = await fetch(`${baseUrl}/api/loops/${loop.config.id}/port-forwards`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        remoteHost: "127.0.0.1",
-        remotePort: 3000,
-      }),
-    });
-    expect(createResponse.status).toBe(201);
-    const created = await createResponse.json() as {
-      config: { id: string; localPort: number };
-    };
-
-    forwardedAppServer = serve({
-      port: created.config.localPort,
-      routes: {
-        "/": new Response("<html><head></head><body><script src=\"/app.js\"></script></body></html>", {
-          headers: { "Content-Type": "text/html" },
+    try {
+      const createResponse = await fetch(`${baseUrl}/api/loops/${loop.config.id}/port-forwards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          remoteHost: "127.0.0.1",
+          remotePort: 3000,
         }),
-        "/app.js": new Response("console.log('proxied');", {
-          headers: { "Content-Type": "application/javascript" },
-        }),
-      },
+      });
+      expect(createResponse.status).toBe(201);
+      const created = await createResponse.json() as {
+        config: { id: string; localPort: number };
+      };
+      forwardId = created.config.id;
+
+      forwardedAppServer = serve({
+        port: created.config.localPort,
+        routes: {
+          "/": new Response("<html><head></head><body><script src=\"/app.js\"></script></body></html>", {
+            headers: { "Content-Type": "text/html" },
+          }),
+          "/app.js": new Response("console.log('proxied');", {
+            headers: { "Content-Type": "application/javascript" },
+          }),
+        },
+      });
+
+      const proxyResponse = await fetch(`${baseUrl}/loop/${loop.config.id}/port/${created.config.id}/`);
+      expect(proxyResponse.ok).toBe(true);
+      const html = await proxyResponse.text();
+      expect(html).toContain(`/loop/${loop.config.id}/port/${created.config.id}/app.js`);
+
+      const jsResponse = await fetch(`${baseUrl}/loop/${loop.config.id}/port/${created.config.id}/app.js`);
+      expect(jsResponse.ok).toBe(true);
+      expect(await jsResponse.text()).toContain("proxied");
+    } finally {
+      forwardedAppServer?.stop();
+      forwardedAppServer = null;
+      if (forwardId) {
+        await deleteForward(loop.config.id, forwardId);
+      }
+    }
+  });
+
+  test("redirects base proxy routes with trailing slash while preserving query strings", async () => {
+    const response = await fetch(`${baseUrl}/loop/test-loop/port/test-forward?asset=1`, {
+      redirect: "manual",
     });
 
-    const proxyResponse = await fetch(`${baseUrl}/loop/${loop.config.id}/port/${created.config.id}/`);
-    expect(proxyResponse.ok).toBe(true);
-    const html = await proxyResponse.text();
-    expect(html).toContain(`/loop/${loop.config.id}/port/${created.config.id}/app.js`);
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(`${baseUrl}/loop/test-loop/port/test-forward/?asset=1`);
+  });
 
-    const jsResponse = await fetch(`${baseUrl}/loop/${loop.config.id}/port/${created.config.id}/app.js`);
-    expect(jsResponse.ok).toBe(true);
-    expect(await jsResponse.text()).toContain("proxied");
+  test("rewrites localhost redirect locations back into the loop proxy route", async () => {
+    const workspace = await createWorkspace();
+    const loop = await createLoop(workspace.id);
+    let forwardId: string | undefined;
+
+    try {
+      const createResponse = await fetch(`${baseUrl}/api/loops/${loop.config.id}/port-forwards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          remoteHost: "127.0.0.1",
+          remotePort: 3000,
+        }),
+      });
+      expect(createResponse.status).toBe(201);
+      const created = await createResponse.json() as {
+        config: { id: string; localPort: number };
+      };
+      forwardId = created.config.id;
+
+      forwardedAppServer = serve({
+        port: created.config.localPort,
+        routes: {
+          "/": Response.redirect(`http://localhost:${String(created.config.localPort)}/dashboard?asset=1#hash`, 302),
+        },
+      });
+
+      const proxyResponse = await fetch(`${baseUrl}/loop/${loop.config.id}/port/${created.config.id}/`, {
+        redirect: "manual",
+      });
+
+      expect(proxyResponse.status).toBe(302);
+      expect(proxyResponse.headers.get("location")).toBe(
+        `/loop/${loop.config.id}/port/${created.config.id}/dashboard?asset=1#hash`,
+      );
+    } finally {
+      forwardedAppServer?.stop();
+      forwardedAppServer = null;
+      if (forwardId) {
+        await deleteForward(loop.config.id, forwardId);
+      }
+    }
   });
 });

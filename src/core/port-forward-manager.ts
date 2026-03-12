@@ -23,6 +23,7 @@ const log = createLogger("core:port-forward-manager");
 const LOCAL_FORWARD_HOST = "127.0.0.1";
 const STARTUP_GRACE_MS = 300;
 const STOP_TIMEOUT_MS = 2_000;
+const LOCAL_PORT_RESERVATION_RETRY_LIMIT = 5;
 const RESERVED_STATUSES = new Set<PortForward["state"]["status"]>(["starting", "active", "stopping"]);
 
 type PortForwardSpawnFactory = (options: {
@@ -30,6 +31,7 @@ type PortForwardSpawnFactory = (options: {
   args: string[];
   env: NodeJS.ProcessEnv;
 }) => ChildProcess;
+type LocalPortAllocator = (reservedPorts: Set<number>) => Promise<number>;
 
 interface RuntimeHandle {
   child: ChildProcess;
@@ -199,6 +201,12 @@ async function ensureLocalPortAvailable(reservedPorts: Set<number>): Promise<num
   throw new Error("Failed to allocate a local port for forwarding");
 }
 
+function isActiveLocalPortConstraintError(error: unknown): boolean {
+  const message = String(error);
+  return message.includes("UNIQUE constraint failed: forwarded_ports.local_port")
+    || message.includes("idx_forwarded_ports_local_port_active");
+}
+
 async function waitForProcessExit(child: ChildProcess, timeoutMs: number): Promise<void> {
   if (child.exitCode !== null) {
     return;
@@ -231,6 +239,7 @@ export class PortForwardManager {
     env,
     stdio: ["ignore", "ignore", "pipe"],
   });
+  private localPortAllocator: LocalPortAllocator = ensureLocalPortAvailable;
   private initialized = false;
   private initializing: Promise<void> | null = null;
 
@@ -285,27 +294,13 @@ export class PortForwardManager {
     await touchWorkspace(workspace.id);
     const { sshSessionManager } = await import("./ssh-session-manager");
     const linkedSession = await sshSessionManager.getSessionByLoopId(options.loopId);
-    const reservedPorts = await this.getReservedLocalPorts();
-    const localPort = await ensureLocalPortAvailable(reservedPorts);
-    const now = new Date().toISOString();
-    const forward: PortForward = {
-      config: {
-        id: crypto.randomUUID(),
-        loopId: options.loopId,
-        workspaceId: workspace.id,
-        sshSessionId: linkedSession?.config.id,
-        remoteHost: options.remoteHost.trim(),
-        remotePort: options.remotePort,
-        localPort,
-        createdAt: now,
-        updatedAt: now,
-      },
-      state: {
-        status: "starting",
-      },
-    };
-
-    await savePortForward(forward);
+    const forward = await this.reserveStartingForward({
+      loopId: options.loopId,
+      workspaceId: workspace.id,
+      sshSessionId: linkedSession?.config.id,
+      remoteHost: options.remoteHost.trim(),
+      remotePort: options.remotePort,
+    });
     this.emitForwardCreated(forward);
 
     try {
@@ -388,6 +383,10 @@ export class PortForwardManager {
     this.runtimeHandles.clear();
     this.initialized = false;
     this.initializing = null;
+  }
+
+  setLocalPortAllocatorForTesting(allocator: LocalPortAllocator | null): void {
+    this.localPortAllocator = allocator ?? ensureLocalPortAvailable;
   }
 
   private spawnForwardProcess(workspace: Workspace, forward: PortForward): ChildProcess {
@@ -493,6 +492,54 @@ export class PortForwardManager {
       reserved.add(forward.config.localPort);
     }
     return reserved;
+  }
+
+  private async reserveStartingForward(options: {
+    loopId: string;
+    workspaceId: string;
+    sshSessionId?: string;
+    remoteHost: string;
+    remotePort: number;
+  }): Promise<PortForward> {
+    for (let attempt = 0; attempt < LOCAL_PORT_RESERVATION_RETRY_LIMIT; attempt++) {
+      const reservedPorts = await this.getReservedLocalPorts();
+      const localPort = await this.localPortAllocator(reservedPorts);
+      const now = new Date().toISOString();
+      const forward: PortForward = {
+        config: {
+          id: crypto.randomUUID(),
+          loopId: options.loopId,
+          workspaceId: options.workspaceId,
+          sshSessionId: options.sshSessionId,
+          remoteHost: options.remoteHost,
+          remotePort: options.remotePort,
+          localPort,
+          createdAt: now,
+          updatedAt: now,
+        },
+        state: {
+          status: "starting",
+        },
+      };
+
+      try {
+        await savePortForward(forward);
+        return forward;
+      } catch (error) {
+        if (!isActiveLocalPortConstraintError(error) || attempt === LOCAL_PORT_RESERVATION_RETRY_LIMIT - 1) {
+          throw error;
+        }
+        log.debug("Retrying port-forward reservation after local port conflict", {
+          loopId: options.loopId,
+          remoteHost: options.remoteHost,
+          remotePort: options.remotePort,
+          localPort,
+          attempt: attempt + 1,
+        });
+      }
+    }
+
+    throw new Error("Failed to reserve a unique local port for forwarding");
   }
 
   private async reconcilePersistedForwards(): Promise<void> {

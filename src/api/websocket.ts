@@ -227,8 +227,25 @@ export const websocketHandlers = {
    * @param message - The message content (string or Buffer)
    */
   message(ws: ServerWebSocket<WebSocketData>, message: string | Buffer) {
-    if (ws.data.portForwardMode && ws.data.proxySocket?.readyState === WebSocket.OPEN) {
-      ws.data.proxySocket.send(message);
+    if (ws.data.portForwardMode) {
+      const proxySocket = ws.data.proxySocket;
+
+      if (proxySocket?.readyState === WebSocket.OPEN) {
+        proxySocket.send(message);
+        return;
+      }
+
+      log.debug("Closing port-forward WebSocket because upstream proxy is not open", {
+        portForwardId: ws.data.portForwardId,
+        proxyReadyState: proxySocket ? proxySocket.readyState : "missing",
+      });
+      try {
+        ws.close(1011, "Upstream proxy is not open");
+      } catch (closeError) {
+        log.debug("Error while closing WebSocket after upstream proxy failure", {
+          error: String(closeError),
+        });
+      }
       return;
     }
 

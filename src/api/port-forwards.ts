@@ -18,6 +18,14 @@ function normalizeProxyPath(rawPath?: string): string {
   return rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
 }
 
+function appendTrailingSlash(urlString: string): string {
+  const url = new URL(urlString);
+  if (!url.pathname.endsWith("/")) {
+    url.pathname = `${url.pathname}/`;
+  }
+  return url.toString();
+}
+
 function extractWildcardPath(
   req: Request,
   loopId: string,
@@ -39,7 +47,8 @@ function rewriteLocationHeader(location: string, localPort: number, basePath: st
 
   try {
     const parsed = new URL(location);
-    if (parsed.hostname === "127.0.0.1" && parsed.port === String(localPort)) {
+    const localHosts = new Set(["127.0.0.1", "localhost", "0.0.0.0", "::1"]);
+    if (parsed.port === String(localPort) && localHosts.has(parsed.hostname)) {
       return `${basePath}${parsed.pathname}${parsed.search}${parsed.hash}`;
     }
   } catch {
@@ -177,7 +186,7 @@ export const portForwardProxyRoutes = {
     server: Server<WebSocketData>,
   ): Promise<Response | undefined> => {
     if (req.method === "GET" && !req.url.endsWith("/")) {
-      return Response.redirect(`${req.url}/`, 307);
+      return Response.redirect(appendTrailingSlash(req.url), 307);
     }
     if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
       return await upgradeProxyWebSocket(req, server, req.params.loopId, req.params.forwardId);
