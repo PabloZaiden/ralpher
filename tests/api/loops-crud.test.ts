@@ -383,6 +383,50 @@ describe("Loops CRUD API Integration", () => {
       const body = await response.json();
       expect(body.error).toBe("invalid_json");
     });
+
+    test("returns 409 when useWorktree is changed after git setup", async () => {
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Immutable worktree mode",
+          draft: true,
+          planMode: false,
+          model: testModel,
+          useWorktree: true,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      const { updateLoopState, loadLoop } = await import("../../src/persistence/loops");
+      const loop = await loadLoop(loopId);
+      expect(loop).not.toBeNull();
+
+      await updateLoopState(loopId, {
+        ...loop!.state,
+        status: "completed",
+        git: {
+          originalBranch: "master",
+          workingBranch: `ralph/${loopId}`,
+          worktreePath: `${testWorkDir}/.ralph-worktrees/${loopId}`,
+          commits: [],
+        },
+      });
+
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          useWorktree: false,
+        }),
+      });
+      expect(response.status).toBe(409);
+
+      const body = await response.json();
+      expect(body.error).toBe("use_worktree_immutable");
+    });
   });
 
   describe("DELETE /api/loops/:id", () => {

@@ -105,6 +105,9 @@ async function applyLoopUpdates(
       if (code === "BASE_BRANCH_IMMUTABLE") {
         return errorResponse("base_branch_immutable", errorMessage, status ?? 409);
       }
+      if (code === "USE_WORKTREE_IMMUTABLE") {
+        return errorResponse("use_worktree_immutable", errorMessage, status ?? 409);
+      }
     }
     return errorResponse("update_failed", errorMessage, 500);
   }
@@ -320,19 +323,19 @@ export const loopsCrudRoutes = {
         // Otherwise, start the loop immediately
         if (body.planMode) {
           try {
-              await loopManager.startPlanMode(loop.config.id);
-              // Return the loop with updated state after starting plan mode
-              const updatedLoop = await loopManager.getLoop(loop.config.id);
-              return Response.json(updatedLoop ?? loop, { status: 201 });
-            } catch (startError) {
-              // If start fails, delete the loop to avoid orphaned idle loops
-              try {
-                await loopManager.deleteLoop(loop.config.id);
-              } catch (deleteError) {
-                log.warn("Failed to clean up loop after start failure", { loopId: loop.config.id, error: String(deleteError) });
-              }
-              return startErrorResponse(startError, "start_plan_failed", "Loop created but failed to start plan mode");
+            await loopManager.startPlanMode(loop.config.id);
+            // Return the loop with updated state after starting plan mode
+            const updatedLoop = await loopManager.getLoop(loop.config.id);
+            return Response.json(updatedLoop ?? loop, { status: 201 });
+          } catch (startError) {
+            // If start fails, delete the loop to avoid orphaned idle loops
+            try {
+              await loopManager.deleteLoop(loop.config.id);
+            } catch (deleteError) {
+              log.warn("Failed to clean up loop after start failure", { loopId: loop.config.id, error: String(deleteError) });
             }
+            return startErrorResponse(startError, "start_plan_failed", "Loop created but failed to start plan mode");
+          }
         } else {
           // Always start the loop immediately after creation (normal mode)
           try {
@@ -340,15 +343,15 @@ export const loopsCrudRoutes = {
             // Return the loop with updated state after starting
             const updatedLoop = await loopManager.getLoop(loop.config.id);
             return Response.json(updatedLoop ?? loop, { status: 201 });
-            } catch (startError) {
-              // If start fails for any reason, delete the loop to avoid orphaned idle loops
-              try {
-                await loopManager.deleteLoop(loop.config.id);
-              } catch (deleteError) {
-                log.warn("Failed to clean up loop after start failure", { loopId: loop.config.id, error: String(deleteError) });
-              }
-              return startErrorResponse(startError, "start_failed", "Loop created but failed to start");
+          } catch (startError) {
+            // If start fails for any reason, delete the loop to avoid orphaned idle loops
+            try {
+              await loopManager.deleteLoop(loop.config.id);
+            } catch (deleteError) {
+              log.warn("Failed to clean up loop after start failure", { loopId: loop.config.id, error: String(deleteError) });
             }
+            return startErrorResponse(startError, "start_failed", "Loop created but failed to start");
+          }
         }
       } catch (error) {
         return errorResponse("create_failed", String(error), 500);

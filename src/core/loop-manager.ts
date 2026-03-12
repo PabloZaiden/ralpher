@@ -696,6 +696,21 @@ Follow the standard loop execution flow:
       throw error;
     }
 
+    if (
+      updates.useWorktree !== undefined &&
+      updates.useWorktree !== loop.config.useWorktree &&
+      (loop.state.git?.originalBranch || pendingGitState?.originalBranch)
+    ) {
+      log.warn(`Rejected useWorktree update for loop ${loopId} after git setup`);
+      const error = new Error("Use Worktree cannot be updated after git setup.") as Error & {
+        code: string;
+        status: number;
+      };
+      error.code = "USE_WORKTREE_IMMUTABLE";
+      error.status = 409;
+      throw error;
+    }
+
     if (updates.baseBranch !== undefined && loop.state.status === "draft") {
       log.info(`Updating baseBranch for draft loop ${loopId}`);
     }

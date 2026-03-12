@@ -848,13 +848,13 @@ export class LoopEngine {
       });
     }
 
-    if (!this.config.useWorktree) {
-      const currentBranch = await this.git.getCurrentBranch(directory);
-      if (currentBranch !== originalBranch) {
-        this.emitLog("info", `Checking out base branch in main checkout: ${originalBranch}`);
-        await this.git.checkoutBranch(directory, originalBranch);
-      }
+    const currentBranch = await this.git.getCurrentBranch(directory);
+    if (currentBranch !== originalBranch) {
+      this.emitLog("info", `Checking out base branch in main checkout: ${originalBranch}`);
+      await this.git.checkoutBranch(directory, originalBranch);
+    }
 
+    if (!this.config.useWorktree) {
       this.emitLog("info", `Pulling latest changes from remote for branch: ${originalBranch}`);
       const pullSucceeded = await this.git.pull(directory, originalBranch);
       if (pullSucceeded) {
@@ -1946,7 +1946,8 @@ export class LoopEngine {
     ctx: IterationContext,
     kind: "response" | "reasoning",
   ): void {
-    if (!content.trim()) return;
+    // commenting out the trim check for now since some models stream leading whitespace
+    //if (!content.trim()) return;
 
     if (kind === "response") {
       ctx.currentResponseLogContent += content;
