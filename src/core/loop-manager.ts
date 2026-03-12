@@ -106,6 +106,18 @@ export interface PushLoopResult {
 }
 
 /**
+ * Resolve the effective working directory for a loop.
+ * Branch-only loops run directly in the repository checkout, while
+ * worktree-based loops require a recorded worktree path.
+ */
+export function getLoopWorkingDirectory(loop: Pick<Loop, "config" | "state">): string | null {
+  if (loop.config.useWorktree) {
+    return loop.state.git?.worktreePath ?? null;
+  }
+  return loop.config.directory;
+}
+
+/**
  * LoopManager handles the lifecycle of Ralph Loops.
  */
 export class LoopManager {
@@ -2072,12 +2084,11 @@ Follow the standard loop execution flow:
    */
   private async jumpstartOnExistingBranch(loopId: string, loop: Loop, isPlanning = false): Promise<{ success: boolean; error?: string }> {
     try {
-      // Get the appropriate command executor for the current mode
-      const worktreeDir = loop.state.git?.worktreePath;
-      if (!worktreeDir) {
-        return { success: false, error: "Loop has no worktree path - cannot jumpstart" };
+      const workingDirectory = getLoopWorkingDirectory(loop);
+      if (!workingDirectory) {
+        return { success: false, error: "Loop is configured to use a worktree, but no worktree path is available - cannot jumpstart" };
       }
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workingDirectory);
       const git = GitService.withExecutor(executor);
       const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
@@ -2085,11 +2096,10 @@ Follow the standard loop execution flow:
       const loopType = isPlanning ? "planning loop" : "loop";
       log.info(`Jumpstarting ${loopType} ${loopId} on existing branch: ${workingBranch}`);
 
-      // With worktrees, the branch is already checked out in the worktree.
-      // No checkout or lock file cleanup needed - just create a new engine.
+      await this.ensureLoopBranchCheckedOut(loop, git, workingDirectory);
 
-      // Create and start a new loop engine with skipGitSetup
-      // (worktree already has the branch checked out, no need to create a new one)
+      // Create and start a new loop engine with skipGitSetup because the branch
+      // already exists and is ready in either the worktree or the main checkout.
       const engine = new LoopEngine({
         loop: { config: loop.config, state: loop.state },
         backend,
@@ -2597,13 +2607,13 @@ ${fileList}
       throw new Error("Loop plan mode is not running");
     }
 
-    // Recreate the engine for this planning loop
-    const worktreeDir = loop.state.git?.worktreePath;
-    if (!worktreeDir) {
-      throw new Error("Loop has no worktree path - cannot recreate engine for planning recovery");
+    const workingDirectory = getLoopWorkingDirectory(loop);
+    if (!workingDirectory) {
+      throw new Error("Loop is configured to use a worktree, but no worktree path is available - cannot recreate engine for planning recovery");
     }
-    const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workingDirectory);
     const git = GitService.withExecutor(executor);
+    await this.ensureLoopBranchCheckedOut(loop, git, workingDirectory);
     const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
     const engine = new LoopEngine({
@@ -2660,13 +2670,13 @@ ${fileList}
       throw new Error(`Cannot recover chat engine in status: ${loop.state.status}`);
     }
 
-    // Recreate the engine — requires an existing worktree
-    const worktreeDir = loop.state.git?.worktreePath;
-    if (!worktreeDir) {
-      throw new Error("Chat has no worktree path — cannot recreate engine for recovery");
+    const workingDirectory = getLoopWorkingDirectory(loop);
+    if (!workingDirectory) {
+      throw new Error("Chat is configured to use a worktree, but no worktree path is available — cannot recreate engine for recovery");
     }
-    const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, worktreeDir);
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workingDirectory);
     const git = GitService.withExecutor(executor);
+    await this.ensureLoopBranchCheckedOut(loop, git, workingDirectory);
     const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
     const engine = new LoopEngine({
@@ -2698,6 +2708,22 @@ ${fileList}
     this.startStatePersistence(loopId);
 
     return engine;
+  }
+
+  private async ensureLoopBranchCheckedOut(loop: Loop, git: GitService, workingDirectory: string): Promise<void> {
+    if (loop.config.useWorktree) {
+      return;
+    }
+
+    const workingBranch = loop.state.git?.workingBranch;
+    if (!workingBranch) {
+      return;
+    }
+
+    const currentBranch = await git.getCurrentBranch(workingDirectory);
+    if (currentBranch !== workingBranch) {
+      await git.checkoutBranch(workingDirectory, workingBranch);
+    }
   }
 
   /**

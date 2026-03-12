@@ -240,6 +240,35 @@ describe("LoopManager - Chat Mode", () => {
       expect(updated!.state.status).toMatch(/completed|max_iterations/);
     });
 
+    test("recovers a branch-only chat engine after it is removed from memory", async () => {
+      const loop = await ctx.manager.createChat({
+        ...testModelFields,
+        directory: ctx.workDir,
+        prompt: "Branch-only chat to recover",
+        workspaceId: testWorkspaceId,
+        useWorktree: false,
+      });
+
+      await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"]);
+
+      let updated = await ctx.manager.getLoop(loop.config.id);
+      expect(updated!.state.git?.workingBranch).toBeDefined();
+      expect(updated!.state.git?.originalBranch).toBeDefined();
+
+      await ctx.git.checkoutBranch(ctx.workDir, updated!.state.git!.originalBranch);
+
+      // @ts-expect-error - accessing private field for test purposes
+      ctx.manager.engines.delete(loop.config.id);
+
+      expect(ctx.manager.isRunning(loop.config.id)).toBe(false);
+
+      await ctx.manager.sendChatMessage(loop.config.id, "After branch-only recovery");
+      await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"], 15000);
+
+      updated = await ctx.manager.getLoop(loop.config.id);
+      expect(updated!.state.status).toMatch(/completed|max_iterations/);
+    });
+
     test("rejects recovery of a non-chat loop", async () => {
       const loop = await ctx.manager.createLoop({
         ...testModelFields,

@@ -902,6 +902,36 @@ describe("Plan Mode - Engine Recovery After Server Restart", () => {
     expect(["running", "completed", "max_iterations", "stopped"]).toContain(loopData!.state.status);
   });
 
+  test("acceptPlan recovers a branch-only planning loop after server restart", async () => {
+    const loop = await ctx.manager.createLoop({
+      ...testModelFields,
+      prompt: "Create a branch-only plan",
+      directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
+      maxIterations: 5,
+      planMode: true,
+      useWorktree: false,
+    });
+    const loopId = loop.config.id;
+
+    await ctx.manager.startPlanMode(loopId);
+    await waitForPlanReady(ctx.manager, loopId);
+    await waitForPersistedPlanReady(loopId);
+
+    let loopData = await ctx.manager.getLoop(loopId);
+    expect(loopData!.state.git?.workingBranch).toBeDefined();
+    expect(loopData!.state.git?.originalBranch).toBeDefined();
+
+    await ctx.git.checkoutBranch(ctx.workDir, loopData!.state.git!.originalBranch);
+
+    ctx.manager.resetForTesting();
+
+    await ctx.manager.acceptPlan(loopId);
+
+    loopData = await waitForLoopStatus(ctx.manager, loopId, ["running", "completed", "max_iterations", "stopped"]);
+    expect(["running", "completed", "max_iterations", "stopped"]).toContain(loopData!.state.status);
+  });
+
   test("sendPlanFeedback recovers engine after server restart", async () => {
     // Create and start plan mode loop
     const loop = await ctx.manager.createLoop({

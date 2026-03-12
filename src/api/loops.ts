@@ -15,7 +15,7 @@
  * @module api/loops
  */
 
-import { loopManager } from "../core/loop-manager";
+import { getLoopWorkingDirectory, loopManager } from "../core/loop-manager";
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
 import { getWorkspaceByDirectory, getWorkspace, touchWorkspace } from "../persistence/workspaces";
@@ -1056,10 +1056,9 @@ export const loopsDataRoutes = {
       }
 
       try {
-        // Every loop must operate in its own worktree -- no fallback to config.directory
-        const workDir = loop.state.git.worktreePath;
+        const workDir = getLoopWorkingDirectory(loop);
         if (!workDir) {
-          return errorResponse("no_worktree", "Loop has no worktree path. Every loop must operate in its own worktree.", 400);
+          return errorResponse("no_worktree", "Loop is configured to use a worktree, but no worktree path is available.", 400);
         }
         const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workDir);
         const git = GitService.withExecutor(executor);
@@ -1090,9 +1089,9 @@ export const loopsDataRoutes = {
         return errorResponse("not_found", "Loop not found", 404);
       }
 
-      const workDir = loop.state.git?.worktreePath;
+      const workDir = getLoopWorkingDirectory(loop);
       if (!workDir) {
-        return errorResponse("no_worktree", "Loop has no worktree path. Every loop must operate in its own worktree.", 400);
+        return errorResponse("no_worktree", "Loop is configured to use a worktree, but no worktree path is available.", 400);
       }
 
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workDir);
@@ -1128,9 +1127,9 @@ export const loopsDataRoutes = {
         return errorResponse("not_found", "Loop not found", 404);
       }
 
-      const workDir = loop.state.git?.worktreePath;
+      const workDir = getLoopWorkingDirectory(loop);
       if (!workDir) {
-        return errorResponse("no_worktree", "Loop has no worktree path. Every loop must operate in its own worktree.", 400);
+        return errorResponse("no_worktree", "Loop is configured to use a worktree, but no worktree path is available.", 400);
       }
 
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workDir);
