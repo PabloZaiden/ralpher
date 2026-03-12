@@ -133,7 +133,7 @@ export function Modal({
       <div
         ref={modalRef}
         tabIndex={-1}
-        className={`relative w-full ${sizeClasses[size]} rounded-lg bg-white shadow-xl dark:bg-gray-800 max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] flex flex-col`}
+        className={`relative w-full ${sizeClasses[size]} rounded-lg bg-white shadow-xl dark:bg-gray-800 max-h-[calc(100vh-1.5rem)] max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100vh-2.5rem)] sm:max-h-[calc(100dvh-2.5rem)] flex flex-col`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
