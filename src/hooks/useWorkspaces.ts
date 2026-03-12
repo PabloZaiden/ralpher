@@ -154,7 +154,7 @@ export function useWorkspaces(): UseWorkspacesResult {
     try {
       const response = await fetch(`/api/workspaces/by-directory?directory=${encodeURIComponent(directory)}`);
       if (!response.ok) {
-        if (response.status === 404) {
+        if (response.status === 404 || response.status === 409) {
           return null;
         }
         throw new Error(`Failed to get workspace: ${response.statusText}`);

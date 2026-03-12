@@ -11,7 +11,10 @@
 import type { Workspace, WorkspaceImportResult } from "../types/workspace";
 import type { ServerSettings } from "../types/settings";
 import type { WorkspaceConfig, WorkspaceExportData } from "../types/schemas";
-import { getDefaultServerSettings } from "../types/settings";
+import {
+  getServerFingerprint,
+  parseServerSettings,
+} from "../types/settings";
 import { getDatabase } from "./database";
 import { createLogger } from "../core/logger";
 
@@ -25,106 +28,11 @@ function workspaceToRow(workspace: Workspace): Record<string, unknown> {
     id: workspace.id,
     name: workspace.name,
     directory: workspace.directory,
+    server_fingerprint: getServerFingerprint(workspace.serverSettings),
     server_settings: JSON.stringify(workspace.serverSettings),
     created_at: workspace.createdAt,
     updated_at: workspace.updatedAt,
   };
-}
-
-/**
- * Parse server settings from database, with fallback to defaults.
- */
-function parseServerSettings(jsonString: string | null): ServerSettings {
-  const defaults = getDefaultServerSettings();
-  if (!jsonString) {
-    return defaults;
-  }
-  try {
-    const parsed = JSON.parse(jsonString) as unknown;
-    if (!parsed || typeof parsed !== "object") {
-      return defaults;
-    }
-
-    const parsedRecord = parsed as Record<string, unknown>;
-
-    // Legacy shape support for existing persisted rows:
-    // { mode, hostname, port, password, useHttps, allowInsecure }
-    if (typeof parsedRecord["mode"] === "string") {
-      const mode = parsedRecord["mode"] === "connect" ? "ssh" : "stdio";
-      if (mode === "ssh") {
-        return {
-          agent: {
-            provider: "opencode",
-            transport: "ssh",
-            hostname: typeof parsedRecord["hostname"] === "string" ? parsedRecord["hostname"] : "127.0.0.1",
-            port: typeof parsedRecord["port"] === "number" ? parsedRecord["port"] : 22,
-            password: typeof parsedRecord["password"] === "string" ? parsedRecord["password"] : undefined,
-          },
-        };
-      }
-      return {
-        agent: {
-          provider: "opencode",
-          transport: mode,
-        },
-      };
-    }
-
-    const parsedAgent = parsedRecord["agent"];
-    const parsedExecution = parsedRecord["execution"];
-    const agent = (parsedAgent && typeof parsedAgent === "object")
-      ? parsedAgent as Record<string, unknown>
-      : {};
-    const execution = (parsedExecution && typeof parsedExecution === "object")
-      ? parsedExecution as Record<string, unknown>
-      : {};
-
-    const provider = typeof agent["provider"] === "string"
-      ? agent["provider"] as ServerSettings["agent"]["provider"]
-      : defaults.agent.provider;
-    const rawTransport = typeof agent["transport"] === "string" ? agent["transport"] : "stdio";
-
-    if (rawTransport === "ssh") {
-      return {
-        agent: {
-          provider,
-          transport: "ssh",
-          hostname:
-            (typeof agent["hostname"] === "string" && agent["hostname"].trim().length > 0
-              ? agent["hostname"]
-              : typeof execution["host"] === "string" && execution["host"].trim().length > 0
-                ? execution["host"]
-                : "127.0.0.1"),
-          port:
-            typeof execution["port"] === "number"
-              ? execution["port"]
-              : typeof agent["port"] === "number"
-                ? agent["port"]
-                : 22,
-           username:
-             typeof agent["username"] === "string"
-               ? agent["username"]
-               : typeof execution["user"] === "string"
-                 ? execution["user"]
-                 : undefined,
-           password: typeof agent["password"] === "string" ? agent["password"] : undefined,
-           identityFile:
-             typeof agent["identityFile"] === "string" && agent["identityFile"].trim().length > 0
-               ? agent["identityFile"]
-               : undefined,
-         },
-       };
-     }
-
-    return {
-      agent: {
-        provider,
-        transport: "stdio",
-      },
-    };
-  } catch {
-    return defaults;
-  }
 }
 
 /**
@@ -177,20 +85,57 @@ export async function getWorkspace(id: string): Promise<Workspace | null> {
 }
 
 /**
- * Get a workspace by directory path.
+ * List workspaces by directory path.
+ */
+export async function listWorkspacesByDirectory(directory: string): Promise<Workspace[]> {
+  log.debug("Listing workspaces by directory", { directory });
+  const db = getDatabase();
+  const stmt = db.prepare(`
+    SELECT * FROM workspaces
+    WHERE directory = ?
+    ORDER BY name COLLATE NOCASE ASC, created_at ASC
+  `);
+  const rows = stmt.all(directory) as Array<Record<string, unknown>>;
+  return rows.map(rowToWorkspace);
+}
+
+/**
+ * Get a workspace by directory path when the match is unambiguous.
  */
 export async function getWorkspaceByDirectory(directory: string): Promise<Workspace | null> {
-  log.debug("Getting workspace by directory", { directory });
-  const db = getDatabase();
-  const stmt = db.prepare("SELECT * FROM workspaces WHERE directory = ?");
-  const row = stmt.get(directory) as Record<string, unknown> | null;
-  if (!row) {
+  const matches = await listWorkspacesByDirectory(directory);
+  if (matches.length === 0) {
     log.debug("Workspace not found for directory", { directory });
     return null;
   }
-  const workspace = rowToWorkspace(row);
-  log.debug("Workspace found for directory", { directory, id: workspace.id, name: workspace.name });
-  return workspace;
+  if (matches.length > 1) {
+    throw new Error(`Multiple workspaces found for directory: ${directory}`);
+  }
+  return matches[0] ?? null;
+}
+
+/**
+ * Get a workspace by directory and server settings.
+ */
+export async function getWorkspaceByDirectoryAndServerSettings(
+  directory: string,
+  serverSettings: ServerSettings,
+): Promise<Workspace | null> {
+  const serverFingerprint = getServerFingerprint(serverSettings);
+  log.debug("Getting workspace by directory and server fingerprint", {
+    directory,
+    serverFingerprint,
+  });
+  const db = getDatabase();
+  const stmt = db.prepare(`
+    SELECT * FROM workspaces
+    WHERE directory = ? AND server_fingerprint = ?
+  `);
+  const row = stmt.get(directory, serverFingerprint) as Record<string, unknown> | null;
+  if (!row) {
+    return null;
+  }
+  return rowToWorkspace(row);
 }
 
 /**
@@ -231,6 +176,8 @@ export async function updateWorkspace(
   if (updates.serverSettings !== undefined) {
     setClauses.push("server_settings = ?");
     values.push(JSON.stringify(updates.serverSettings));
+    setClauses.push("server_fingerprint = ?");
+    values.push(getServerFingerprint(updates.serverSettings));
   }
   
   if (setClauses.length === 0) {
@@ -360,7 +307,7 @@ export async function importWorkspaces(data: WorkspaceExportData): Promise<Works
     const directory = config.directory.trim();
 
     // Check if a workspace with this directory already exists
-    const existing = await getWorkspaceByDirectory(directory);
+    const existing = await getWorkspaceByDirectoryAndServerSettings(directory, config.serverSettings);
     if (existing) {
       log.debug("Skipping workspace import - directory already exists", {
         name,

@@ -15,7 +15,8 @@ import {
   listWorkspaces, 
   updateWorkspace, 
   deleteWorkspace,
-  getWorkspaceByDirectory,
+  getWorkspaceByDirectoryAndServerSettings,
+  listWorkspacesByDirectory,
   exportWorkspaces,
 } from "../persistence/workspaces";
 import { backendManager } from "../core/backend-manager";
@@ -26,7 +27,7 @@ import { getDefaultServerSettings } from "../types/settings";
 import type { Workspace, WorkspaceImportResult } from "../types/workspace";
 import type { WorkspaceExportData } from "../types/schemas";
 import { parseAndValidate } from "./validation";
-import { requireWorkspace, errorResponse } from "./helpers";
+import { requireWorkspace, errorResponse, resolveWorkspaceForDirectory } from "./helpers";
 import {
   CreateWorkspaceRequestSchema,
   UpdateWorkspaceRequestSchema,
@@ -57,7 +58,8 @@ async function importWorkspacesWithValidation(
 
   for (const config of data.workspaces) {
     // Check if a workspace with this directory already exists
-    const existing = await getWorkspaceByDirectory(config.directory);
+    const serverSettings = config.serverSettings ?? getDefaultServerSettings();
+    const existing = await getWorkspaceByDirectoryAndServerSettings(config.directory, serverSettings);
     if (existing) {
       log.debug("Skipping workspace import - directory already exists", {
         name: config.name,
@@ -65,18 +67,17 @@ async function importWorkspacesWithValidation(
         existingId: existing.id,
       });
       result.skipped++;
-      result.details.push({
-        name: config.name,
-        directory: config.directory,
-        status: "skipped",
-        reason: `A workspace already exists for directory: ${config.directory}`,
-      });
-      continue;
-    }
+        result.details.push({
+          name: config.name,
+          directory: config.directory,
+          status: "skipped",
+          reason: `A workspace already exists for directory ${config.directory} on this server target`,
+        });
+        continue;
+      }
 
-    // Validate directory on the remote server (same validation as POST /api/workspaces)
-    const serverSettings = config.serverSettings ?? getDefaultServerSettings();
-    try {
+      // Validate directory on the remote server (same validation as POST /api/workspaces)
+      try {
       const validation = await backendManager.validateRemoteDirectory(
         serverSettings,
         config.directory,
@@ -243,10 +244,14 @@ export const workspacesRoutes = {
         }
 
         // Check if a workspace already exists for this directory
-        const existingWorkspace = await getWorkspaceByDirectory(trimmedDirectory);
+        const existingWorkspace = await getWorkspaceByDirectoryAndServerSettings(trimmedDirectory, serverSettings);
         if (existingWorkspace) {
           return Response.json(
-            { error: "duplicate_workspace", message: "A workspace already exists for this directory", existingWorkspace },
+            {
+              error: "duplicate_workspace",
+              message: "A workspace already exists for this directory on the same server target",
+              existingWorkspace,
+            },
             { status: 409 }
           );
         }
@@ -305,6 +310,28 @@ export const workspacesRoutes = {
       const body = result.data;
 
       try {
+        const currentWorkspace = await requireWorkspace(id);
+        if (currentWorkspace instanceof Response) {
+          return currentWorkspace;
+        }
+
+        if (body.serverSettings) {
+          const existingWorkspace = await getWorkspaceByDirectoryAndServerSettings(
+            currentWorkspace.directory,
+            body.serverSettings,
+          );
+          if (existingWorkspace && existingWorkspace.id !== id) {
+            return Response.json(
+              {
+                error: "duplicate_workspace",
+                message: "Another workspace already uses this directory on the same server target",
+                existingWorkspace,
+              },
+              { status: 409 },
+            );
+          }
+        }
+
         const workspace = await updateWorkspace(id, { 
           name: body.name,
           serverSettings: body.serverSettings,
@@ -355,17 +382,33 @@ export const workspacesRoutes = {
     async GET(req: Request) {
       const url = new URL(req.url);
       const directory = url.searchParams.get("directory");
+      const workspaceId = url.searchParams.get("workspaceId");
       
       if (!directory) {
         return errorResponse("missing_parameter", "directory query parameter is required");
       }
 
       try {
-        const workspace = await getWorkspaceByDirectory(directory);
-        if (!workspace) {
+        if (workspaceId) {
+          const workspace = await resolveWorkspaceForDirectory(directory, workspaceId);
+          if (workspace instanceof Response) {
+            return workspace;
+          }
+          return Response.json(workspace);
+        }
+
+        const matches = await listWorkspacesByDirectory(directory);
+        if (matches.length === 0) {
           return errorResponse("workspace_not_found", "No workspace found for this directory", 404);
         }
-        return Response.json(workspace);
+        if (matches.length > 1) {
+          return errorResponse(
+            "ambiguous_workspace",
+            "Multiple workspaces use this directory. Provide workspaceId for an unambiguous lookup.",
+            409,
+          );
+        }
+        return Response.json(matches[0]);
       } catch (error) {
         log.error("Failed to get workspace by directory:", String(error));
         return errorResponse("get_failed", `Failed to get workspace: ${String(error)}`, 500);
@@ -400,6 +443,26 @@ export const workspacesRoutes = {
       const body = result.data;
 
       try {
+        const currentWorkspace = await requireWorkspace(id);
+        if (currentWorkspace instanceof Response) {
+          return currentWorkspace;
+        }
+
+        const existingWorkspace = await getWorkspaceByDirectoryAndServerSettings(
+          currentWorkspace.directory,
+          body,
+        );
+        if (existingWorkspace && existingWorkspace.id !== id) {
+          return Response.json(
+            {
+              error: "duplicate_workspace",
+              message: "Another workspace already uses this directory on the same server target",
+              existingWorkspace,
+            },
+            { status: 409 },
+          );
+        }
+
         const workspace = await updateWorkspace(id, { serverSettings: body });
         if (!workspace) {
           return errorResponse("workspace_not_found", "Workspace not found", 404);

@@ -8,6 +8,7 @@ import type { Loop, Workspace } from "../types";
 import type { StatusGroups, StatusSectionKey, WorkspaceGroup } from "../hooks/useLoopGrouping";
 import type { DashboardViewMode } from "../types/preferences";
 import { sectionConfig } from "../hooks/useLoopGrouping";
+import { getServerLabel } from "../types/settings";
 import { CollapsibleSection, ConfirmModal } from "./common";
 import { LoopCard } from "./LoopCard";
 import { LoopRow } from "./LoopRow";
@@ -207,7 +208,15 @@ export function LoopGrid({
               .filter(g => g.loops.length === 0)
               .map(({ workspace }) => (
                 <div key={workspace.id} className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-md">
-                  <span className="text-sm text-gray-700 dark:text-gray-300">{workspace.name}</span>
+                  <div className="min-w-0">
+                    <div className="text-sm text-gray-700 dark:text-gray-300 truncate">{workspace.name}</div>
+                    <div
+                      className="text-xs text-gray-500 dark:text-gray-400 truncate"
+                      title={getServerLabel(workspace.serverSettings)}
+                    >
+                      {getServerLabel(workspace.serverSettings)}
+                    </div>
+                  </div>
                   <button
                     type="button"
                     onClick={() => onOpenWorkspaceSettings(workspace.id)}
@@ -289,6 +298,12 @@ function WorkspaceHeader({
       <div className="flex items-center gap-2 min-w-0 sm:flex-1">
         <span className="text-sm text-gray-500 dark:text-gray-400 truncate" title={workspace.directory}>
           {workspace.directory}
+        </span>
+        <span
+          className="text-xs text-gray-400 dark:text-gray-500 truncate"
+          title={getServerLabel(workspace.serverSettings)}
+        >
+          {getServerLabel(workspace.serverSettings)}
         </span>
         <span className="text-sm text-gray-400 dark:text-gray-500 flex-shrink-0">
           ({loopCount} {loopCount === 1 ? "loop" : "loops"})

@@ -13,10 +13,9 @@
 
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
-import { getWorkspaceByDirectory } from "../persistence/workspaces";
 import type { BranchInfo } from "../types";
 import { createLogger } from "../core/logger";
-import { errorResponse } from "./helpers";
+import { errorResponse, resolveWorkspaceForDirectory } from "./helpers";
 
 const log = createLogger("api:git");
 
@@ -43,16 +42,15 @@ export interface DefaultBranchResponse {
  * Uses deterministic command execution (local/SSH), independent of agent transport.
  * 
  * @param directory - The directory containing the git repository
+ * @param workspaceId - Optional workspace ID used to disambiguate identical directories
  * @returns Configured GitService instance
  * @throws Error if no workspace is found for the directory
  */
-async function getGitService(directory: string): Promise<GitService> {
-  log.debug("Getting GitService for directory", { directory });
-  // Look up the workspace by directory to get its workspaceId
-  const workspace = await getWorkspaceByDirectory(directory);
-  if (!workspace) {
-    log.warn("No workspace found for directory", { directory });
-    throw new Error(`No workspace found for directory: ${directory}`);
+async function getGitService(directory: string, workspaceId?: string | null): Promise<GitService | Response> {
+  log.debug("Getting GitService for directory", { directory, workspaceId });
+  const workspace = await resolveWorkspaceForDirectory(directory, workspaceId);
+  if (workspace instanceof Response) {
+    return workspace;
   }
   const executor = await backendManager.getCommandExecutorAsync(workspace.id, directory);
   log.debug("GitService created", { workspaceId: workspace.id });
@@ -70,13 +68,17 @@ async function validateGitRequest(req: Request): Promise<
 > {
   const url = new URL(req.url);
   const directory = url.searchParams.get("directory");
+  const workspaceId = url.searchParams.get("workspaceId");
 
   if (!directory) {
     log.warn("Missing directory parameter");
     return errorResponse("missing_parameter", "directory query parameter is required");
   }
 
-  const git = await getGitService(directory);
+  const git = await getGitService(directory, workspaceId);
+  if (git instanceof Response) {
+    return git;
+  }
 
   const isGitRepo = await git.isGitRepo(directory);
   if (!isGitRepo) {

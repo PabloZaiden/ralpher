@@ -9,7 +9,7 @@
 
 import type { ErrorResponse } from "../types/api";
 import type { Workspace } from "../types/workspace";
-import { getWorkspace } from "../persistence/workspaces";
+import { getWorkspace, listWorkspacesByDirectory } from "../persistence/workspaces";
 
 /**
  * Create a standardized error response.
@@ -52,4 +52,42 @@ export async function requireWorkspace(
     return errorResponse("workspace_not_found", "Workspace not found", 404);
   }
   return workspace;
+}
+
+/**
+ * Resolve a workspace for a request that includes a directory and optional workspaceId.
+ * Uses workspaceId when provided, otherwise requires the directory lookup to be unambiguous.
+ */
+export async function resolveWorkspaceForDirectory(
+  directory: string,
+  workspaceId?: string | null,
+): Promise<Workspace | Response> {
+  if (workspaceId) {
+    const workspace = await getWorkspace(workspaceId);
+    if (!workspace) {
+      return errorResponse("workspace_not_found", "Workspace not found", 404);
+    }
+    if (workspace.directory !== directory) {
+      return errorResponse(
+        "workspace_directory_mismatch",
+        "workspaceId does not match the requested directory",
+        400,
+      );
+    }
+    return workspace;
+  }
+
+  const matches = await listWorkspacesByDirectory(directory);
+  if (matches.length === 0) {
+    return errorResponse("workspace_not_found", `No workspace found for directory: ${directory}`, 404);
+  }
+  if (matches.length > 1) {
+    return errorResponse(
+      "ambiguous_workspace",
+      "Multiple workspaces use this directory. Provide workspaceId to disambiguate.",
+      409,
+    );
+  }
+
+  return matches[0]!;
 }

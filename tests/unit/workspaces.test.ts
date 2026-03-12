@@ -225,9 +225,12 @@ describe("Workspace Persistence", () => {
       expect(found).toBeNull();
     });
 
-    test("directory is unique across workspaces", async () => {
+    test("throws when multiple workspaces share the same directory", async () => {
       const { ensureDataDirectories } = await import("../../src/persistence/database");
-      const { createWorkspace } = await import("../../src/persistence/workspaces");
+      const {
+        createWorkspace,
+        getWorkspaceByDirectory,
+      } = await import("../../src/persistence/workspaces");
 
       await ensureDataDirectories();
 
@@ -237,13 +240,53 @@ describe("Workspace Persistence", () => {
       });
       await createWorkspace(ws1);
 
-      // Attempting to create another workspace with same directory should fail
       const ws2 = createTestWorkspace({
         name: "Second Workspace",
         directory: "/tmp/unique-dir",
       });
-      
-      await expect(createWorkspace(ws2)).rejects.toThrow();
+      ws2.serverSettings = createConnectServerSettings({
+        hostname: "other-host.example",
+      });
+      await createWorkspace(ws2);
+
+      await expect(getWorkspaceByDirectory("/tmp/unique-dir")).rejects.toThrow(
+        "Multiple workspaces found for directory: /tmp/unique-dir"
+      );
+    });
+
+    test("allows duplicate directories on different server targets", async () => {
+      const { ensureDataDirectories } = await import("../../src/persistence/database");
+      const {
+        createWorkspace,
+        getWorkspaceByDirectoryAndServerSettings,
+        listWorkspacesByDirectory,
+      } = await import("../../src/persistence/workspaces");
+
+      await ensureDataDirectories();
+
+      const ws1 = createTestWorkspace({
+        name: "Local Workspace",
+        directory: "/tmp/shared-dir",
+      });
+      await createWorkspace(ws1);
+
+      const sshSettings = createConnectServerSettings({
+        hostname: "remote.example",
+        port: 2222,
+      });
+      const ws2 = createTestWorkspace({
+        name: "Remote Workspace",
+        directory: "/tmp/shared-dir",
+      });
+      ws2.serverSettings = sshSettings;
+      await createWorkspace(ws2);
+
+      const matches = await listWorkspacesByDirectory("/tmp/shared-dir");
+      expect(matches).toHaveLength(2);
+
+      const exact = await getWorkspaceByDirectoryAndServerSettings("/tmp/shared-dir", sshSettings);
+      expect(exact).not.toBeNull();
+      expect(exact!.id).toBe(ws2.id);
     });
   });
 
@@ -533,12 +576,13 @@ describe("Workspace Persistence", () => {
       const db = getDatabase();
       const now = new Date().toISOString();
       db.run(
-        `INSERT INTO workspaces (id, name, directory, server_settings, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO workspaces (id, name, directory, server_fingerprint, server_settings, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           randomUUID(),
           "Legacy Transport Workspace",
           "/tmp/legacy-transport",
+          "opencode:stdio",
           JSON.stringify({
             agent: {
               provider: "opencode",
@@ -671,7 +715,7 @@ describe("Workspace Persistence", () => {
       expect(workspaces).toHaveLength(2);
     });
 
-    test("import skips workspaces with duplicate directories", async () => {
+    test("import skips only exact duplicate workspace targets", async () => {
       const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
 
@@ -695,24 +739,35 @@ describe("Workspace Persistence", () => {
             directory: "/tmp/existing-dir",
             serverSettings: getDefaultServerSettings(),
           },
+          {
+            name: "Same Directory Different Server",
+            directory: "/tmp/existing-dir",
+            serverSettings: createConnectServerSettings({
+              hostname: "remote.example",
+              port: 2200,
+            }),
+          },
         ],
       };
 
       const result = await importWorkspaces(importData);
-      expect(result.created).toBe(1);
+      expect(result.created).toBe(2);
       expect(result.skipped).toBe(1);
       expect(result.failed).toBe(0);
-      expect(result.details).toHaveLength(2);
+      expect(result.details).toHaveLength(3);
 
-      const createdDetail = result.details.find((d) => d.status === "created");
+      const createdDetails = result.details.filter((d) => d.status === "created");
       const skippedDetail = result.details.find((d) => d.status === "skipped");
-      expect(createdDetail!.name).toBe("New Workspace");
+      expect(createdDetails.map((detail) => detail.name)).toEqual([
+        "New Workspace",
+        "Same Directory Different Server",
+      ]);
       expect(skippedDetail!.name).toBe("Duplicate Workspace");
       expect(skippedDetail!.reason).toContain("/tmp/existing-dir");
 
-      // Verify only 2 total workspaces exist (1 pre-existing + 1 new)
+      // Verify total workspaces exist (1 pre-existing + 2 new targets)
       const workspaces = await listWorkspaces();
-      expect(workspaces).toHaveLength(2);
+      expect(workspaces).toHaveLength(3);
     });
 
     test("import with empty workspaces array succeeds (no-op)", async () => {
@@ -838,7 +893,7 @@ describe("Workspace Persistence", () => {
       expect(ws!.directory).toBe("/tmp/padded-dir");
     });
 
-    test("import deduplicates directories that differ only by whitespace", async () => {
+    test("import deduplicates exact targets even when directories differ only by whitespace", async () => {
       const { ensureDataDirectories } = await import("../../src/persistence/database");
       const { createWorkspace, importWorkspaces, listWorkspaces } = await import("../../src/persistence/workspaces");
 

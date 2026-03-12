@@ -18,7 +18,7 @@
 import { getLoopWorkingDirectory, loopManager } from "../core/loop-manager";
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
-import { getWorkspaceByDirectory, getWorkspace, touchWorkspace } from "../persistence/workspaces";
+import { getWorkspace, touchWorkspace } from "../persistence/workspaces";
 import { createLogger } from "../core/logger";
 
 const log = createLogger("api:loops");
@@ -33,7 +33,7 @@ import type {
   SendChatMessageResponse,
 } from "../types/api";
 import { parseAndValidate } from "./validation";
-import { errorResponse, successResponse } from "./helpers";
+import { errorResponse, resolveWorkspaceForDirectory, successResponse } from "./helpers";
 import type { LoopConfig, Loop } from "../types/loop";
 import type { z } from "zod";
 import {
@@ -1168,15 +1168,15 @@ export const loopsDataRoutes = {
     async GET(req: Request): Promise<Response> {
       const url = new URL(req.url);
       const directory = url.searchParams.get("directory");
+      const workspaceId = url.searchParams.get("workspaceId");
 
       if (!directory) {
         return errorResponse("invalid_request", "directory query parameter is required", 400);
       }
 
-      // Look up workspace by directory to get workspaceId
-      const workspace = await getWorkspaceByDirectory(directory);
-      if (!workspace) {
-        return errorResponse("workspace_not_found", `No workspace found for directory: ${directory}`, 404);
+      const workspace = await resolveWorkspaceForDirectory(directory, workspaceId);
+      if (workspace instanceof Response) {
+        return workspace;
       }
 
       const planningDir = `${directory}/.planning`;

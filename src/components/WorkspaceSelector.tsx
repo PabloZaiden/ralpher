@@ -7,6 +7,7 @@
 
 import type { ChangeEvent } from "react";
 import type { Workspace } from "../types/workspace";
+import { getServerLabel } from "../types/settings";
 
 export interface WorkspaceSelectorProps {
   /** List of available workspaces */
@@ -70,15 +71,23 @@ export function WorkspaceSelector({
         
         {workspaces.map((workspace) => (
           <option key={workspace.id} value={workspace.id}>
-            {workspace.name}
+            {`${workspace.name} — ${getServerLabel(workspace.serverSettings)}`}
           </option>
         ))}
       </select>
       
       {selectedWorkspaceId && (
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 font-mono truncate">
-          {workspaces.find((w) => w.id === selectedWorkspaceId)?.directory}
-        </p>
+        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p className="font-mono truncate">
+            {workspaces.find((w) => w.id === selectedWorkspaceId)?.directory}
+          </p>
+          <p className="truncate">
+            {(() => {
+              const workspace = workspaces.find((w) => w.id === selectedWorkspaceId);
+              return workspace ? getServerLabel(workspace.serverSettings) : "";
+            })()}
+          </p>
+        </div>
       )}
       
       {hasNoWorkspaces && (

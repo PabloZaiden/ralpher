@@ -36,25 +36,46 @@ describe("WorkspaceSelector", () => {
   });
 
   describe("workspace options", () => {
-    test("renders workspace options with name only", () => {
+    test("renders workspace options with server labels", () => {
       const workspaces = [
         createWorkspace({ name: "Project A" }),
-        createWorkspace({ name: "Project B" }),
+        createWorkspace({
+          name: "Project B",
+          serverSettings: {
+            agent: {
+              provider: "opencode",
+              transport: "ssh",
+              hostname: "remote.example",
+              port: 2222,
+            },
+          },
+        }),
       ];
-      const { getByText } = renderWithUser(
+      const { getByRole } = renderWithUser(
         <WorkspaceSelector workspaces={workspaces} onSelect={mock()} />
       );
-      expect(getByText("Project A")).toBeInTheDocument();
-      expect(getByText("Project B")).toBeInTheDocument();
+      const select = getByRole("combobox") as HTMLSelectElement;
+      const optionTexts = Array.from(select.options).map((option) => option.text);
+      expect(optionTexts.some((text) => text.includes("Project A"))).toBe(true);
+      expect(optionTexts.some((text) => text.includes("Project B"))).toBe(true);
+      expect(optionTexts.some((text) => text.includes("remote.example"))).toBe(true);
     });
 
-    test("shows directory when workspace is selected", () => {
+    test("shows directory and server label when workspace is selected", () => {
       const workspace = createWorkspace({
         id: "ws-1",
         name: "My Workspace",
         directory: "/home/user/project",
+        serverSettings: {
+          agent: {
+            provider: "opencode",
+            transport: "ssh",
+            hostname: "selected.example",
+            port: 2200,
+          },
+        },
       });
-      const { getByText } = renderWithUser(
+      const { getByText, getAllByText } = renderWithUser(
         <WorkspaceSelector
           workspaces={[workspace]}
           selectedWorkspaceId="ws-1"
@@ -62,6 +83,7 @@ describe("WorkspaceSelector", () => {
         />
       );
       expect(getByText("/home/user/project")).toBeInTheDocument();
+      expect(getAllByText(/selected\.example/).length).toBeGreaterThan(0);
     });
 
     test("does not show directory when no workspace selected", () => {

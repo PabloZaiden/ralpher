@@ -208,7 +208,7 @@ describe("Workspace API Integration", () => {
       await rm(nonGitDir, { recursive: true, force: true });
     });
 
-    test("returns existing workspace if directory already exists", async () => {
+    test("returns existing workspace if the same directory already exists on the same server target", async () => {
       // Create first workspace
       const firstResponse = await fetch(`${baseUrl}/api/workspaces`, {
         method: "POST",
@@ -236,6 +236,43 @@ describe("Workspace API Integration", () => {
       const secondData = await secondResponse.json();
       expect(secondData.existingWorkspace).toBeDefined();
       expect(secondData.existingWorkspace.id).toBe(firstData.id);
+    });
+
+    test("allows the same directory on a different server target", async () => {
+      const firstResponse = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Local Workspace",
+          directory: testWorkDir,
+          serverSettings: makeServerSettings({ mode: "spawn" }),
+        }),
+      });
+      expect(firstResponse.ok).toBe(true);
+
+      const secondResponse = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Remote Workspace",
+          directory: testWorkDir,
+          serverSettings: makeServerSettings({
+            mode: "connect",
+            hostname: "example-remote.test",
+            port: 2222,
+          }),
+        }),
+      });
+      expect(secondResponse.status).toBe(201);
+
+      const listResponse = await fetch(`${baseUrl}/api/workspaces`);
+      expect(listResponse.ok).toBe(true);
+      const workspaces = await listResponse.json();
+      expect(workspaces).toHaveLength(2);
+      expect(workspaces.map((workspace: { name: string }) => workspace.name)).toEqual([
+        "Local Workspace",
+        "Remote Workspace",
+      ]);
     });
   });
 
@@ -373,6 +410,67 @@ describe("Workspace API Integration", () => {
     test("returns 400 if directory query param is missing", async () => {
       const response = await fetch(`${baseUrl}/api/workspaces/by-directory`);
       expect(response.status).toBe(400);
+    });
+
+    test("returns 409 when directory lookup is ambiguous", async () => {
+      await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Local Workspace",
+          directory: testWorkDir,
+        }),
+      });
+      await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Remote Workspace",
+          directory: testWorkDir,
+          serverSettings: makeServerSettings({
+            mode: "connect",
+            hostname: "another-host.test",
+            port: 2200,
+          }),
+        }),
+      });
+
+      const response = await fetch(
+        `${baseUrl}/api/workspaces/by-directory?directory=${encodeURIComponent(testWorkDir)}`
+      );
+      expect(response.status).toBe(409);
+    });
+
+    test("returns the matching workspace when workspaceId is provided", async () => {
+      await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Local Workspace",
+          directory: testWorkDir,
+        }),
+      });
+      const remoteResponse = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Remote Workspace",
+          directory: testWorkDir,
+          serverSettings: makeServerSettings({
+            mode: "connect",
+            hostname: "matching-host.test",
+            port: 2201,
+          }),
+        }),
+      });
+      const remoteWorkspace = await remoteResponse.json();
+
+      const response = await fetch(
+        `${baseUrl}/api/workspaces/by-directory?directory=${encodeURIComponent(testWorkDir)}&workspaceId=${encodeURIComponent(remoteWorkspace.id)}`
+      );
+      expect(response.ok).toBe(true);
+      const body = await response.json();
+      expect(body.id).toBe(remoteWorkspace.id);
     });
   });
 
