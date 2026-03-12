@@ -131,8 +131,10 @@ describe("ssh sessions section", () => {
     });
 
     const scrollRegion = getByRole("main");
-    expect(scrollRegion.textContent).toContain("Remote Shell");
-    expect(scrollRegion.textContent).toContain("Visible Loop");
+    await waitFor(() => {
+      expect(scrollRegion.textContent).toContain("Remote Shell");
+      expect(scrollRegion.textContent).toContain("Visible Loop");
+    });
   });
 
   test("can collapse ssh sessions without hiding loops", async () => {
@@ -153,6 +155,10 @@ describe("ssh sessions section", () => {
 
     await waitFor(() => {
       expect(getByText("Collapsible SSH")).toBeTruthy();
+    });
+
+    await waitFor(() => {
+      expect(getByText("Loop Still Visible")).toBeTruthy();
     });
 
     await user.click(getByRole("button", { name: /SSH Sessions \(1\)/ }));
