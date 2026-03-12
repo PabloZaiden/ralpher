@@ -44,6 +44,7 @@ function draftLoop(id = "draft-1", name = "My Draft") {
       workspaceId: "ws-1",
       prompt: "Build a feature",
       model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+      useWorktree: true,
       planMode: false,
     },
   });
@@ -160,6 +161,7 @@ describe("draft workflow scenario", () => {
     const draft = draftLoop();
     api.get("/api/loops", () => [draft]);
     api.get("/api/workspaces", () => [WORKSPACE]);
+    api.put("/api/loops/:id", () => draft);
     api.post("/api/loops/:id/draft/start", () => ({ success: true }));
 
     const { getByText, getByRole, user } = renderWithUser(<App />);

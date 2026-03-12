@@ -132,6 +132,23 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: "add_use_worktree_to_loops",
+    up: (db) => {
+      if (!tableExists(db, "loops")) {
+        return;
+      }
+      const columns = getTableColumns(db, "loops");
+      if (columns.includes("use_worktree")) {
+        return;
+      }
+      // Retain this upgrade path narrowly for already-saved draft loops on
+      // existing databases so they can still be edited or started after the
+      // new useWorktree setting became part of persisted loop config.
+      db.run("ALTER TABLE loops ADD COLUMN use_worktree INTEGER NOT NULL DEFAULT 1");
+    },
+  },
 ];
 
 /**

@@ -470,6 +470,7 @@ export async function createLoopViaAPI(
     directory: string;
     prompt: string;
     planMode: boolean;
+    useWorktree?: boolean;
     model?: { providerID: string; modelID: string; variant?: string };
     maxIterations?: number;
     clearPlanningFolder?: boolean;
@@ -488,7 +489,12 @@ export async function createLoopViaAPI(
   const response = await fetch(`${baseUrl}/api/loops`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...restOptions, workspaceId, model }),
+    body: JSON.stringify({
+      ...restOptions,
+      workspaceId,
+      model,
+      useWorktree: restOptions.useWorktree ?? true,
+    }),
   });
 
   const body = await response.json();

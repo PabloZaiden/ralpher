@@ -15,7 +15,6 @@ import {
   purgeLoopApi,
   addressReviewCommentsApi,
   updateBranchApi,
-  createChatApi,
   type AcceptLoopResult,
   type PushLoopResult,
   type AddressCommentsResult,
@@ -178,11 +177,13 @@ export function useLoops(): UseLoopsResult {
       
       // Handle uncommitted changes error (409)
       if (response.status === 409) {
-        const errorData = await response.json() as UncommittedChangesError;
-        return {
-          loop: null,
-          startError: errorData,
-        };
+        const errorData = await response.json() as { error?: string };
+        if (errorData.error === "uncommitted_changes") {
+          return {
+            loop: null,
+            startError: errorData as UncommittedChangesError,
+          };
+        }
       }
       
       if (!response.ok) {
@@ -204,8 +205,28 @@ export function useLoops(): UseLoopsResult {
   // Create a new interactive chat
   const createChat = useCallback(async (request: CreateChatRequest): Promise<CreateChatResult> => {
     try {
-      const loop = await createChatApi(request);
-      // Don't add to state here - let the WebSocket event handle it
+      const response = await fetch("/api/loops/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+
+      if (response.status === 409) {
+        const errorData = await response.json() as { error?: string };
+        if (errorData.error === "uncommitted_changes") {
+          return {
+            loop: null,
+            startError: errorData as UncommittedChangesError,
+          };
+        }
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to create chat");
+      }
+
+      const loop = (await response.json()) as Loop;
       return { loop };
     } catch (err) {
       setError(String(err));

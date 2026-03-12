@@ -193,6 +193,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -238,6 +239,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -282,6 +284,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -328,6 +331,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -378,6 +382,7 @@ describe("POST /api/loops/:id/pending", () => {
           draft: true,  // Create as draft - stays in idle status
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -414,6 +419,7 @@ describe("POST /api/loops/:id/pending", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -460,6 +466,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -498,6 +505,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -537,6 +545,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -577,6 +586,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -618,6 +628,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -660,6 +671,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -707,6 +719,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -749,6 +762,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -798,6 +812,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);
@@ -851,6 +866,7 @@ describe("POST /api/loops/:id/pending", () => {
           prompt: "Test prompt",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createRes.status).toBe(201);

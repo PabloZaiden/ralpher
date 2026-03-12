@@ -204,6 +204,7 @@ describe("createLoop", () => {
         prompt: "Do something",
         workspaceId: "ws-1",
         model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+        useWorktree: true,
         planMode: false,
       });
     });
@@ -212,12 +213,13 @@ describe("createLoop", () => {
     expect(createResult.loop!.config.id).toBe("new-loop");
     const postCalls = api.calls("/api/loops", "POST");
     expect(postCalls).toHaveLength(1);
-    expect(postCalls[0]!.body).toEqual({
-      prompt: "Do something",
-      workspaceId: "ws-1",
-      model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
-      planMode: false,
-    });
+      expect(postCalls[0]!.body).toEqual({
+        prompt: "Do something",
+        workspaceId: "ws-1",
+        model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+        useWorktree: true,
+        planMode: false,
+      });
   });
 
   test("returns startError on 409 uncommitted changes", async () => {
@@ -242,6 +244,7 @@ describe("createLoop", () => {
         prompt: "Do something",
         workspaceId: "ws-1",
         model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+        useWorktree: true,
         planMode: false,
       });
     });
@@ -269,6 +272,7 @@ describe("createLoop", () => {
         prompt: "Do something",
         workspaceId: "ws-1",
         model: { providerID: "bad", modelID: "bad" },
+        useWorktree: true,
         planMode: false,
       });
     });

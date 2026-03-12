@@ -122,6 +122,7 @@ export function DashboardModals(props: DashboardModalsProps) {
     maxConsecutiveErrors: editLoop.config.maxConsecutiveErrors,
     activityTimeoutSeconds: editLoop.config.activityTimeoutSeconds,
     baseBranch: editLoop.config.baseBranch,
+    useWorktree: editLoop.config.useWorktree,
     clearPlanningFolder: editLoop.config.clearPlanningFolder,
     planMode: editLoop.config.planMode ?? false,
     workspaceId: editLoop.config.workspaceId,
@@ -287,8 +288,7 @@ async function handleCreateLoopSubmit(
 
   // If editing a draft
   if (isEditing && editLoop) {
-    // If draft flag is set, this is an "Update Draft" action
-    if (request.draft) {
+    const persistDraftChanges = async (): Promise<boolean> => {
       try {
         const response = await fetch(`/api/loops/${editLoop.config.id}`, {
           method: "PUT",
@@ -310,6 +310,16 @@ async function handleCreateLoopSubmit(
         toast.error("Failed to update draft");
         return false;
       }
+    };
+
+    // If draft flag is set, this is an "Update Draft" action
+    if (request.draft) {
+      return await persistDraftChanges();
+    }
+
+    const persisted = await persistDraftChanges();
+    if (!persisted) {
+      return false;
     }
 
     // Otherwise, this is a "Start Loop" action - transition draft to execution
@@ -396,6 +406,7 @@ async function handleCreateChatSubmit(
     workspaceId: request.workspaceId!,
     prompt: request.prompt,
     model: request.model!,
+    useWorktree: request.useWorktree,
   };
 
   if (request.baseBranch) {

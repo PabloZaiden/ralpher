@@ -404,6 +404,7 @@ describe("Workspace API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(loopResponse.ok).toBe(true);
@@ -434,6 +435,7 @@ describe("Workspace API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 

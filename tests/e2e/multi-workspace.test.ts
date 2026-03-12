@@ -289,6 +289,7 @@ describe("Multi-Workspace E2E", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(loop1Response.ok).toBe(true);
@@ -304,6 +305,7 @@ describe("Multi-Workspace E2E", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(loop2Response.ok).toBe(true);

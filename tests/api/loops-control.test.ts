@@ -196,6 +196,7 @@ describe("Loops Control API Integration", () => {
           prompt: "Test prompt",
           planMode: true,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -237,6 +238,7 @@ describe("Loops Control API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -249,6 +251,46 @@ describe("Loops Control API Integration", () => {
       expect(response.status).toBe(400);
       const body = await response.json();
       expect(body.error).toBe("no_git_branch");
+    });
+
+    test("returns diff data for branch-only loops without a worktree", async () => {
+      const diffTestDir = await mkdtemp(join(tmpdir(), "ralpher-branch-only-diff-"));
+      await Bun.$`git init ${diffTestDir}`.quiet();
+      await Bun.$`git -C ${diffTestDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${diffTestDir} config user.name "Test User"`.quiet();
+      await writeFile(join(diffTestDir, "README.md"), "# Branch-only diff");
+      await Bun.$`git -C ${diffTestDir} add .`.quiet();
+      await Bun.$`git -C ${diffTestDir} commit -m "Initial commit"`.quiet();
+
+      const workspaceId = await getOrCreateWorkspace(diffTestDir);
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          prompt: "Test branch-only diff",
+          planMode: false,
+          model: testModel,
+          useWorktree: false,
+        }),
+      });
+      const createBody = await createResponse.json();
+      expect(createResponse.status).toBe(201);
+      const loopId = createBody.config.id;
+
+      await waitForLoopCompletion(loopId);
+      const loopResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
+      const loopBody = await loopResponse.json();
+      expect(loopBody.state.status).toBe("completed");
+      expect(loopBody.state.git).toBeDefined();
+
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/diff`);
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(Array.isArray(body)).toBe(true);
+
+      await rm(diffTestDir, { recursive: true, force: true });
     });
   });
 
@@ -279,6 +321,7 @@ describe("Loops Control API Integration", () => {
           prompt: "Test",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -304,6 +347,45 @@ describe("Loops Control API Integration", () => {
       expect(response.status).toBe(404);
     });
 
+    test("returns plan.md content for branch-only loops without a worktree", async () => {
+      const branchOnlyPlanDir = await mkdtemp(join(tmpdir(), "ralpher-branch-only-plan-"));
+      await Bun.$`git init ${branchOnlyPlanDir}`.quiet();
+      await Bun.$`git -C ${branchOnlyPlanDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${branchOnlyPlanDir} config user.name "Test User"`.quiet();
+      await writeFile(join(branchOnlyPlanDir, "README.md"), "# Branch-only plan");
+      await mkdir(join(branchOnlyPlanDir, ".planning"), { recursive: true });
+      await writeFile(join(branchOnlyPlanDir, ".planning/plan.md"), "# Branch-only Plan\n\nPlan content.");
+      await Bun.$`git -C ${branchOnlyPlanDir} add .`.quiet();
+      await Bun.$`git -C ${branchOnlyPlanDir} commit -m "Initial commit"`.quiet();
+
+      const workspaceId = await getOrCreateWorkspace(branchOnlyPlanDir);
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          prompt: "Read branch-only plan",
+          planMode: false,
+          model: testModel,
+          useWorktree: false,
+        }),
+      });
+      expect(createResponse.status).toBe(201);
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      await waitForLoopCompletion(loopId);
+
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/plan`);
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.exists).toBe(true);
+      expect(body.content).toContain("# Branch-only Plan");
+
+      await rm(branchOnlyPlanDir, { recursive: true, force: true });
+    });
+
     test("returns 400 for draft loop without worktree", async () => {
       // Create a new workdir (with git but without .planning)
       const emptyWorkDir = await mkdtemp(join(tmpdir(), "ralpher-empty-work-"));
@@ -327,6 +409,7 @@ describe("Loops Control API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -371,6 +454,7 @@ describe("Loops Control API Integration", () => {
           prompt: "Test",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -394,6 +478,45 @@ describe("Loops Control API Integration", () => {
     test("returns 404 for non-existent loop", async () => {
       const response = await fetch(`${baseUrl}/api/loops/non-existent/status-file`);
       expect(response.status).toBe(404);
+    });
+
+    test("returns status.md content for branch-only loops without a worktree", async () => {
+      const branchOnlyStatusDir = await mkdtemp(join(tmpdir(), "ralpher-branch-only-status-"));
+      await Bun.$`git init ${branchOnlyStatusDir}`.quiet();
+      await Bun.$`git -C ${branchOnlyStatusDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${branchOnlyStatusDir} config user.name "Test User"`.quiet();
+      await writeFile(join(branchOnlyStatusDir, "README.md"), "# Branch-only status");
+      await mkdir(join(branchOnlyStatusDir, ".planning"), { recursive: true });
+      await writeFile(join(branchOnlyStatusDir, ".planning/status.md"), "# Branch-only Status\n\nStatus content.");
+      await Bun.$`git -C ${branchOnlyStatusDir} add .`.quiet();
+      await Bun.$`git -C ${branchOnlyStatusDir} commit -m "Initial commit"`.quiet();
+
+      const workspaceId = await getOrCreateWorkspace(branchOnlyStatusDir);
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          prompt: "Read branch-only status",
+          planMode: false,
+          model: testModel,
+          useWorktree: false,
+        }),
+      });
+      expect(createResponse.status).toBe(201);
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      await waitForLoopCompletion(loopId);
+
+      const response = await fetch(`${baseUrl}/api/loops/${loopId}/status-file`);
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.exists).toBe(true);
+      expect(body.content).toContain("# Branch-only Status");
+
+      await rm(branchOnlyStatusDir, { recursive: true, force: true });
     });
   });
 
@@ -421,6 +544,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -466,6 +590,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -508,6 +633,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -551,6 +677,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -611,6 +738,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -658,6 +786,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -732,6 +861,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -790,6 +920,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -850,6 +981,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();

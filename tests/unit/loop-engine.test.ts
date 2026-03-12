@@ -172,6 +172,7 @@ describe("StopPatternDetector", () => {
       maxIterations: Infinity,
       maxConsecutiveErrors: 10,
       activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
+      useWorktree: DEFAULT_LOOP_CONFIG.useWorktree,
       clearPlanningFolder: false,
       planMode: false,
       mode: "loop",
@@ -234,6 +235,41 @@ describe("StopPatternDetector", () => {
 
     expect(engine.state.status).toBe("idle");
     expect(engine.config.id).toBe("test-loop-123");
+  });
+
+  test("uses the repository directory as workingDirectory when worktrees are disabled", () => {
+    const loop = createTestLoop({ useWorktree: false });
+    mockBackend = createMockBackend([]);
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    expect(engine.workingDirectory).toBe(testDir);
+  });
+
+  test("uses the worktree path as workingDirectory when worktrees are enabled", () => {
+    const loop = createTestLoop();
+    const worktreePath = join(testDir, ".ralph-worktrees/test-loop");
+    loop.state.git = {
+      originalBranch: "main",
+      workingBranch: "ralph/test-loop",
+      worktreePath,
+      commits: [],
+    };
+    mockBackend = createMockBackend([]);
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    expect(engine.workingDirectory).toBe(worktreePath);
   });
 
   test("starts and runs until completion", async () => {
@@ -663,6 +699,47 @@ describe("StopPatternDetector", () => {
       expect(engine.state.status).toBe("completed");
       expect(engine.state.git?.originalBranch).toBe(defaultBranch);
     }, 10000);
+
+    test("setupGitBranch checks out the base branch before pull when using worktrees", async () => {
+      const loop = createTestLoop({
+        baseBranch: "main",
+        useWorktree: true,
+      });
+      loop.state.startedAt = new Date().toISOString();
+
+      const calls: string[] = [];
+      const mockGitService = {
+        isGitRepo: async () => true,
+        getCurrentBranch: async () => "feature/current",
+        checkoutBranch: async (_directory: string, branch: string) => {
+          calls.push(`checkout:${branch}`);
+        },
+        pull: async (_directory: string, branch?: string) => {
+          calls.push(`pull:${branch}`);
+          return true;
+        },
+        branchExists: async () => false,
+        worktreeExists: async () => false,
+        createWorktree: async (_directory: string, _worktreePath: string, branchName: string, originalBranch: string) => {
+          calls.push(`createWorktree:${branchName}:${originalBranch}`);
+        },
+      } as unknown as GitService;
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService: mockGitService,
+        eventEmitter: emitter,
+      });
+
+      await (engine as unknown as { setupGitBranch: () => Promise<void> }).setupGitBranch();
+
+      expect(calls).toEqual([
+        "checkout:main",
+        "pull:main",
+        `createWorktree:${engine.state.git?.workingBranch}:main`,
+      ]);
+    });
 
   test("setPendingPrompt updates state", async () => {
     const loop = createTestLoop({ maxIterations: 1 });

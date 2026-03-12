@@ -232,7 +232,55 @@ describe("LoopManager", () => {
       expect(updated).not.toBeNull();
       expect(updated!.config.baseBranch).toBe("develop");
     });
-  
+
+    test("rejects useWorktree update when git state exists", async () => {
+      const loop = await manager.createLoop({
+        ...testModelFields,
+        directory: testWorkDir,
+        prompt: "Test",
+        workspaceId: testWorkspaceId,
+        planMode: false,
+        useWorktree: true,
+      });
+
+      await updateLoopState(loop.config.id, {
+        ...loop.state,
+        git: {
+          originalBranch: "main",
+          workingBranch: "ralph/test",
+          worktreePath: `${testWorkDir}/.ralph-worktrees/${loop.config.id}`,
+          commits: [],
+        },
+      });
+
+      await expect(
+        manager.updateLoop(loop.config.id, {
+          useWorktree: false,
+        })
+      ).rejects.toMatchObject({
+        code: "USE_WORKTREE_IMMUTABLE",
+        status: 409,
+      });
+    });
+
+    test("allows useWorktree update when git state is undefined", async () => {
+      const loop = await manager.createLoop({
+        ...testModelFields,
+        directory: testWorkDir,
+        prompt: "Test",
+        workspaceId: testWorkspaceId,
+        planMode: false,
+        useWorktree: true,
+      });
+
+      const updated = await manager.updateLoop(loop.config.id, {
+        useWorktree: false,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated!.config.useWorktree).toBe(false);
+    });
+   
     test("returns null for non-existent loop", async () => {
       const updated = await manager.updateLoop("non-existent", { prompt: "Test" });
       expect(updated).toBeNull();
