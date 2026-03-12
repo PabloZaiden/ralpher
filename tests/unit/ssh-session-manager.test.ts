@@ -11,6 +11,8 @@ import { updateLoopState } from "../../src/persistence/loops";
 import { closeDatabase, ensureDataDirectories } from "../../src/persistence/database";
 import { getDefaultServerSettings } from "../../src/types/settings";
 import { sshSessionManager } from "../../src/core/ssh-session-manager";
+import { portForwardManager } from "../../src/core/port-forward-manager";
+import { spawn } from "node:child_process";
 
 class SshCapableExecutor extends TestCommandExecutor {
   public killTargets: string[] = [];
@@ -82,6 +84,7 @@ describe("SshSessionManager loop-linked sessions", () => {
     backendManager.setBackendForTesting(createMockBackend());
     executor = new SshCapableExecutor();
     backendManager.setExecutorFactoryForTesting(() => executor);
+    portForwardManager.setSpawnFactoryForTesting(() => spawn("sleep", ["60"], { stdio: "ignore" }));
 
     manager = new LoopManager();
   });
@@ -89,6 +92,7 @@ describe("SshSessionManager loop-linked sessions", () => {
   afterEach(async () => {
     await manager.shutdown();
     backendManager.resetForTesting();
+    portForwardManager.setSpawnFactoryForTesting(null);
     closeDatabase();
     delete process.env["RALPHER_DATA_DIR"];
     await rm(dataDir, { recursive: true, force: true });
@@ -153,5 +157,72 @@ describe("SshSessionManager loop-linked sessions", () => {
     expect(result).toEqual({ success: true });
     expect(await sshSessionManager.getSession(session.config.id)).toBeNull();
     expect(executor.killTargets).toContain(session.config.remoteSessionName);
+  });
+
+  test("purgeLoop deletes loop-owned port forwards", async () => {
+    const loop = await manager.createLoop({
+      ...modelFields,
+      directory: workDir,
+      prompt: "Purge linked port forwards",
+      workspaceId,
+      planMode: false,
+      useWorktree: true,
+    });
+    const worktreePath = join(workDir, ".ralph-worktrees", loop.config.id);
+
+    await updateLoopState(loop.config.id, {
+      ...loop.state,
+      status: "deleted",
+      git: {
+        originalBranch: "main",
+        workingBranch: "ralph/purge-forwards",
+        worktreePath,
+        commits: [],
+      },
+    });
+
+    const forward = await portForwardManager.createLoopPortForward({
+      loopId: loop.config.id,
+      remoteHost: "127.0.0.1",
+      remotePort: 3000,
+    });
+
+    const result = await manager.purgeLoop(loop.config.id);
+
+    expect(result).toEqual({ success: true });
+    expect(await portForwardManager.getPortForward(forward.config.id)).toBeNull();
+  });
+
+  test("deleting an SSH session also deletes linked port forwards", async () => {
+    const loop = await manager.createLoop({
+      ...modelFields,
+      directory: workDir,
+      prompt: "Delete linked port forwards",
+      workspaceId,
+      planMode: false,
+      useWorktree: true,
+    });
+    const worktreePath = join(workDir, ".ralph-worktrees", loop.config.id);
+
+    await updateLoopState(loop.config.id, {
+      ...loop.state,
+      git: {
+        originalBranch: "main",
+        workingBranch: "ralph/delete-forwards",
+        worktreePath,
+        commits: [],
+      },
+    });
+
+    const session = await sshSessionManager.getOrCreateLoopSession(loop.config.id);
+    const forward = await portForwardManager.createLoopPortForward({
+      loopId: loop.config.id,
+      remoteHost: "127.0.0.1",
+      remotePort: 3000,
+    });
+
+    await sshSessionManager.deleteSession(session.config.id);
+
+    expect(await portForwardManager.getPortForward(forward.config.id)).toBeNull();
   });
 });

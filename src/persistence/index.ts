@@ -9,3 +9,4 @@ export * from "./migrations";
 export * from "./workspaces";
 export * from "./review-comments";
 export * from "./ssh-sessions";
+export * from "./forwarded-ports";

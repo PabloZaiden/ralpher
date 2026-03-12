@@ -61,4 +61,5 @@ export {
 export {
   CreateSshSessionRequestSchema,
   UpdateSshSessionRequestSchema,
+  CreatePortForwardRequestSchema,
 } from "./ssh-session";

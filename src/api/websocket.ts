@@ -44,10 +44,18 @@ export interface WebSocketData {
   loopId?: string;
   /** Optional SSH session ID to filter session events or attach a terminal */
   sshSessionId?: string;
+  /** Optional forwarded port ID for proxied websocket traffic */
+  portForwardId?: string;
   /** Whether this socket is a terminal transport socket */
   terminalMode?: boolean;
+  /** Whether this socket proxies a forwarded port websocket */
+  portForwardMode?: boolean;
   /** Active terminal bridge for terminal-mode sockets */
   terminalBridge?: SshTerminalBridge;
+  /** Outbound websocket for proxied forwarded-port traffic */
+  proxySocket?: WebSocket;
+  /** Target URL for proxied forwarded-port traffic */
+  proxyTargetUrl?: string;
   /** Unsubscribe functions for event emitter cleanup */
   unsubscribers?: Array<() => void>;
 }
@@ -66,7 +74,14 @@ export const websocketHandlers = {
    * @param ws - The WebSocket connection
    */
   open(ws: ServerWebSocket<WebSocketData>) {
-    const { loopId, sshSessionId, terminalMode } = ws.data;
+    const {
+      loopId,
+      sshSessionId,
+      terminalMode,
+      portForwardMode,
+      proxyTargetUrl,
+      portForwardId,
+    } = ws.data;
 
     // Enforce connection limit — close oldest connection if at capacity
     if (activeConnections.size >= MAX_CONNECTIONS) {
@@ -141,6 +156,36 @@ export const websocketHandlers = {
       return;
     }
 
+    if (portForwardMode && proxyTargetUrl) {
+      const proxySocket = new WebSocket(proxyTargetUrl);
+      proxySocket.binaryType = "arraybuffer";
+      ws.data.proxySocket = proxySocket;
+
+      proxySocket.addEventListener("message", (event) => {
+        try {
+          ws.send(event.data);
+        } catch (sendError) {
+          log.trace("Failed to send proxied websocket payload", {
+            error: String(sendError),
+            portForwardId,
+          });
+        }
+      });
+
+      proxySocket.addEventListener("close", (event) => {
+        ws.close(event.code || 1000, event.reason || undefined);
+      });
+
+      proxySocket.addEventListener("error", () => {
+        try {
+          ws.close(1011, "Upstream websocket error");
+        } catch {
+          // Ignore close errors during websocket proxy cleanup.
+        }
+      });
+      return;
+    }
+
     // Send initial connection confirmation
     ws.send(JSON.stringify({ type: "connected", loopId: loopId ?? null, sshSessionId: sshSessionId ?? null }));
 
@@ -182,6 +227,28 @@ export const websocketHandlers = {
    * @param message - The message content (string or Buffer)
    */
   message(ws: ServerWebSocket<WebSocketData>, message: string | Buffer) {
+    if (ws.data.portForwardMode) {
+      const proxySocket = ws.data.proxySocket;
+
+      if (proxySocket?.readyState === WebSocket.OPEN) {
+        proxySocket.send(message);
+        return;
+      }
+
+      log.debug("Closing port-forward WebSocket because upstream proxy is not open", {
+        portForwardId: ws.data.portForwardId,
+        proxyReadyState: proxySocket ? proxySocket.readyState : "missing",
+      });
+      try {
+        ws.close(1011, "Upstream proxy is not open");
+      } catch (closeError) {
+        log.debug("Error while closing WebSocket after upstream proxy failure", {
+          error: String(closeError),
+        });
+      }
+      return;
+    }
+
     // Parse message if needed for future commands
     try {
       const data = JSON.parse(typeof message === "string" ? message : message.toString());
@@ -234,6 +301,11 @@ export const websocketHandlers = {
       ws.data.terminalBridge = undefined;
     }
 
+    if (ws.data.proxySocket) {
+      ws.data.proxySocket.close();
+      ws.data.proxySocket = undefined;
+    }
+
     if (ws.data.unsubscribers) {
       for (const unsubscribe of ws.data.unsubscribers) {
         unsubscribe();
@@ -257,6 +329,10 @@ export const websocketHandlers = {
     if (ws.data.terminalBridge) {
       void ws.data.terminalBridge.dispose();
       ws.data.terminalBridge = undefined;
+    }
+    if (ws.data.proxySocket) {
+      ws.data.proxySocket.close();
+      ws.data.proxySocket = undefined;
     }
     if (ws.data.unsubscribers) {
       for (const unsubscribe of ws.data.unsubscribers) {

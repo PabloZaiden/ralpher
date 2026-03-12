@@ -263,6 +263,83 @@ describe("migration infrastructure", () => {
         );
       }).toThrow();
     });
+
+    test("creates forwarded_ports with active local-port uniqueness", () => {
+      db.run(`
+        CREATE TABLE schema_migrations (
+          version INTEGER PRIMARY KEY,
+          name TEXT NOT NULL,
+          applied_at TEXT NOT NULL
+        )
+      `);
+      for (const migration of migrations.filter((migration) => migration.version <= 4)) {
+        db.run(
+          "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+          [migration.version, migration.name, "2025-01-01T00:00:00.000Z"],
+        );
+      }
+      db.run("CREATE TABLE workspaces (id TEXT PRIMARY KEY)");
+      db.run("CREATE TABLE loops (id TEXT PRIMARY KEY, workspace_id TEXT)");
+      db.run("CREATE TABLE ssh_sessions (id TEXT PRIMARY KEY)");
+
+      runMigrations(db);
+
+      expect(tableExists(db, "forwarded_ports")).toBe(true);
+      expect(getTableColumns(db, "forwarded_ports")).toContain("local_port");
+      db.run("INSERT INTO workspaces (id) VALUES ('workspace-1')");
+      db.run("INSERT INTO loops (id, workspace_id) VALUES ('loop-1', 'workspace-1')");
+      db.run(
+        `INSERT INTO forwarded_ports (
+          id,
+          loop_id,
+          workspace_id,
+          remote_host,
+          remote_port,
+          local_port,
+          created_at,
+          updated_at,
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "forward-1",
+          "loop-1",
+          "workspace-1",
+          "127.0.0.1",
+          3000,
+          43001,
+          "2025-01-01T00:00:00.000Z",
+          "2025-01-01T00:00:00.000Z",
+          "active",
+        ],
+      );
+
+      expect(() => {
+        db.run(
+          `INSERT INTO forwarded_ports (
+            id,
+            loop_id,
+            workspace_id,
+            remote_host,
+            remote_port,
+            local_port,
+            created_at,
+            updated_at,
+            status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            "forward-2",
+            "loop-1",
+            "workspace-1",
+            "127.0.0.1",
+            3001,
+            43001,
+            "2025-01-01T00:00:00.000Z",
+            "2025-01-01T00:00:00.000Z",
+            "active",
+          ],
+        );
+      }).toThrow();
+    });
   });
 
   describe("getTableColumns", () => {
@@ -294,6 +371,7 @@ describe("migration infrastructure", () => {
       db.run("CREATE TABLE loops (id TEXT PRIMARY KEY)");
       db.run("CREATE TABLE ssh_sessions (id TEXT PRIMARY KEY)");
       db.run("CREATE TABLE workspaces (id TEXT PRIMARY KEY)");
+      db.run("CREATE TABLE forwarded_ports (id TEXT PRIMARY KEY)");
       db.run("CREATE TABLE preferences (key TEXT PRIMARY KEY)");
       db.run("CREATE TABLE review_comments (id TEXT PRIMARY KEY)");
       db.run("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)");
@@ -302,6 +380,7 @@ describe("migration infrastructure", () => {
       expect(getTableColumns(db, "loops")).toContain("id");
       expect(getTableColumns(db, "ssh_sessions")).toContain("id");
       expect(getTableColumns(db, "workspaces")).toContain("id");
+      expect(getTableColumns(db, "forwarded_ports")).toContain("id");
       expect(getTableColumns(db, "preferences")).toContain("key");
       expect(getTableColumns(db, "review_comments")).toContain("id");
       expect(getTableColumns(db, "schema_migrations")).toContain("version");

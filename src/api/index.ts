@@ -62,5 +62,6 @@ export * from "./settings";
 export * from "./git";
 export * from "./workspaces";
 export * from "./agents-md";
+export * from "./port-forwards";
 export * from "./ssh-sessions";
 export * from "./websocket";

@@ -18,6 +18,7 @@ import { backendManager } from "./backend-manager";
 import { createLogger } from "./logger";
 import { sshSessionEventEmitter } from "./event-emitter";
 import { buildDefaultSshSessionName, buildLoopSshSessionName } from "../utils";
+import { portForwardManager } from "./port-forward-manager";
 
 const log = createLogger("core:ssh-session-manager");
 
@@ -90,6 +91,7 @@ export class SshSessionManager {
 
   async deleteSession(id: string): Promise<boolean> {
     const session = await this.requireSession(id);
+    await portForwardManager.deleteForwardsBySshSessionId(id);
     const workspace = await requireSshWorkspace(session.config.workspaceId);
     const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
     const killResult = await executor.exec("tmux", ["kill-session", "-t", session.config.remoteSessionName], {

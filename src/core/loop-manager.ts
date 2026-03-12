@@ -35,6 +35,7 @@ import { sanitizeBranchName } from "../utils";
 import { generateLoopName } from "../utils/name-generator";
 import { assertValidTransition } from "./loop-state-machine";
 import { sshSessionManager } from "./ssh-session-manager";
+import { portForwardManager } from "./port-forward-manager";
 
 /**
  * Options for creating a new loop.
@@ -1646,6 +1647,12 @@ Follow the standard loop execution flow:
     // Only allow purge for final states
     if (loop.state.status !== "merged" && loop.state.status !== "pushed" && loop.state.status !== "deleted") {
       return { success: false, error: `Cannot purge loop in status: ${loop.state.status}. Only merged, pushed, or deleted loops can be purged.` };
+    }
+
+    try {
+      await portForwardManager.deleteForwardsByLoopId(loopId);
+    } catch (error) {
+      return { success: false, error: `Failed to delete linked port forwards: ${String(error)}` };
     }
 
     try {

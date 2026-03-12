@@ -19,6 +19,7 @@ import { getLoopWorkingDirectory, loopManager } from "../core/loop-manager";
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
 import { sshSessionManager } from "../core/ssh-session-manager";
+import { portForwardManager } from "../core/port-forward-manager";
 import { getWorkspace, touchWorkspace } from "../persistence/workspaces";
 import { createLogger } from "../core/logger";
 
@@ -54,6 +55,7 @@ import {
   AddressCommentsRequestSchema,
   CreateChatRequestSchema,
   SendChatMessageRequestSchema,
+  CreatePortForwardRequestSchema,
 } from "../types/schemas";
 
 /**
@@ -134,6 +136,20 @@ function mapLoopSshSessionError(error: unknown): Response {
     return errorResponse("invalid_session_configuration", message, 400);
   }
   return errorResponse("ssh_session_error", message, 500);
+}
+
+function mapLoopPortForwardError(error: unknown): Response {
+  const message = String(error);
+  if (message.includes("Loop not found")) {
+    return errorResponse("not_found", "Loop not found", 404);
+  }
+  if (message.includes("Port forward not found")) {
+    return errorResponse("not_found", "Port forward not found", 404);
+  }
+  if (message.includes("ssh transport")) {
+    return errorResponse("invalid_port_forward_configuration", message, 400);
+  }
+  return errorResponse("port_forward_error", message, 500);
 }
 
 function startErrorResponse(
@@ -781,6 +797,69 @@ export const loopsControlRoutes = {
           error: String(error),
         });
         return mapLoopSshSessionError(error);
+      }
+    },
+  },
+
+  "/api/loops/:id/port-forwards": {
+    async GET(req: Request & { params: { id: string } }): Promise<Response> {
+      try {
+        const loop = await loopManager.getLoop(req.params.id);
+        if (!loop) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+
+        const forwards = await portForwardManager.listLoopPortForwards(req.params.id);
+        return Response.json(forwards);
+      } catch (error) {
+        log.error("GET /api/loops/:id/port-forwards - Failed", {
+          loopId: req.params.id,
+          error: String(error),
+        });
+        return mapLoopPortForwardError(error);
+      }
+    },
+
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      const validation = await parseAndValidate(CreatePortForwardRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
+      }
+
+      try {
+        const forward = await portForwardManager.createLoopPortForward({
+          loopId: req.params.id,
+          remoteHost: validation.data.remoteHost,
+          remotePort: validation.data.remotePort,
+        });
+        return Response.json(forward, { status: 201 });
+      } catch (error) {
+        log.error("POST /api/loops/:id/port-forwards - Failed", {
+          loopId: req.params.id,
+          error: String(error),
+        });
+        return mapLoopPortForwardError(error);
+      }
+    },
+  },
+
+  "/api/loops/:id/port-forwards/:forwardId": {
+    async DELETE(req: Request & { params: { id: string; forwardId: string } }): Promise<Response> {
+      try {
+        const forward = await portForwardManager.getPortForward(req.params.forwardId);
+        if (!forward || forward.config.loopId !== req.params.id) {
+          return errorResponse("not_found", "Port forward not found", 404);
+        }
+
+        await portForwardManager.deletePortForward(req.params.forwardId);
+        return successResponse();
+      } catch (error) {
+        log.error("DELETE /api/loops/:id/port-forwards/:forwardId - Failed", {
+          loopId: req.params.id,
+          forwardId: req.params.forwardId,
+          error: String(error),
+        });
+        return mapLoopPortForwardError(error);
       }
     },
   },
