@@ -20,6 +20,7 @@ import {
   listLoops,
   updateLoopState,
   resetStaleLoops,
+  getActiveLoopByDirectory,
 } from "../persistence/loops";
 import { insertReviewComment, getReviewComments as getReviewCommentsFromDb } from "../persistence/review-comments";
 import { setLastModel } from "../persistence/preferences";
@@ -63,6 +64,8 @@ export interface CreateLoopOptions {
   gitCommitScope?: string;
   /** Base branch to create the loop from (default: current branch) */
   baseBranch?: string;
+  /** Whether to create a dedicated worktree for the loop (default: true) */
+  useWorktree?: boolean;
   /** Clear the .planning folder contents before starting (default: false) */
   clearPlanningFolder?: boolean;
   /** Start in plan creation mode instead of immediate execution (required) */
@@ -219,6 +222,7 @@ export class LoopManager {
         commitScope: options.gitCommitScope ?? DEFAULT_LOOP_CONFIG.git.commitScope,
       },
       baseBranch: options.baseBranch,
+      useWorktree: options.useWorktree ?? DEFAULT_LOOP_CONFIG.useWorktree,
       clearPlanningFolder: options.clearPlanningFolder ?? DEFAULT_LOOP_CONFIG.clearPlanningFolder,
       planMode: options.planMode,
       mode: options.mode ?? DEFAULT_LOOP_CONFIG.mode,
@@ -329,8 +333,8 @@ export class LoopManager {
 
   /**
    * Start a loop in plan mode (plan creation phase).
-   * Creates a worktree+branch first, then clears .planning in the worktree,
-   * and starts the AI session inside the worktree.
+   * Creates git state first, then clears .planning in the effective working
+   * directory and starts the AI session there.
    */
   async startPlanMode(loopId: string): Promise<void> {
     const loop = await loadLoop(loopId);
@@ -348,13 +352,11 @@ export class LoopManager {
       throw new Error("Loop plan mode is already running");
     }
 
-    // No directory conflict check needed — each loop operates in its own worktree
-
     // Get the appropriate command executor
     const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
     const git = GitService.withExecutor(executor);
 
-    // No uncommitted-changes check needed — worktrees are isolated from the main checkout
+    await this.validateMainCheckoutStart(loop, git);
 
     // Only set startedAt if not already present (e.g., during a jumpstart retry,
     // the original startedAt is preserved so branch naming remains stable/idempotent).
@@ -364,14 +366,11 @@ export class LoopManager {
     await updateLoopState(loopId, loop.state);
 
     // Get a dedicated backend for this loop (each loop gets its own connection).
-    // The worktree doesn't exist yet - it's created below by setupGitBranchForPlanAcceptance().
-    // The backend won't connect until engine.start() -> setupSession(), by which time
-    // the worktree will exist and engine.workingDirectory will return the worktree path.
+    // The effective working directory is prepared below before engine.start()
+    // connects the backend session.
     const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
-    // Create engine first, then set up git branch before starting the engine.
-    // This ensures the worktree exists before the AI session runs, so the AI
-    // operates in an isolated worktree rather than the main checkout directory.
+    // Create engine first, then set up git state before starting the engine.
     const engine = new LoopEngine({
       loop,
       backend,
@@ -382,20 +381,17 @@ export class LoopManager {
       },
     });
 
-    // Create worktree+branch before starting the engine.
-    // This is the key change: plan mode now gets its own worktree from the start,
-    // so multiple loops can be in plan mode simultaneously without conflicts.
+    // Create git state before starting the engine.
     try {
       await engine.setupGitBranchForPlanAcceptance();
     } catch (error) {
       throw new Error(`Failed to set up git branch for plan mode: ${String(error)}`, { cause: error });
     }
 
-    // Now that the worktree exists, use the worktree path for .planning operations
-    const worktreePath = engine.workingDirectory;
+    const workingDirectory = engine.workingDirectory;
 
-    // Clear planning files in the worktree before starting
-    await this.clearPlanningFiles(loopId, loop, executor, worktreePath);
+    // Clear planning files in the effective working directory before starting
+    await this.clearPlanningFiles(loopId, loop, executor, workingDirectory);
 
     this.engines.set(loopId, engine);
 
@@ -762,8 +758,6 @@ Follow the standard loop execution flow:
 
   /**
    * Start a loop.
-   * Each loop operates in its own git worktree, so no uncommitted-changes
-   * checks are needed on the main repository checkout.
    */
   async startLoop(loopId: string, _options?: StartLoopOptions): Promise<void> {
     const loop = await loadLoop(loopId);
@@ -776,19 +770,16 @@ Follow the standard loop execution flow:
       throw new Error("Loop is already running");
     }
 
-    // No directory conflict check needed — each loop operates in its own worktree
-
     // Get the appropriate command executor for the workspace transport
     // (`stdio` => local, `ssh` => remote). Use async version to ensure
     // the workspace connection is established when needed.
     const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
     const git = GitService.withExecutor(executor);
 
-    // No uncommitted-changes check needed — worktrees are isolated from the main checkout
+    await this.validateMainCheckoutStart(loop, git);
 
     // Get a dedicated backend for this loop (each loop gets its own connection).
-    // The worktree doesn't exist yet - it's created by engine.start() -> setupGitBranch().
-    // The backend connects after the worktree is set up, using engine.workingDirectory.
+    // The effective working directory is prepared by engine.start() -> setupGitBranch().
     const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
     // Create engine with persistence callback
@@ -1538,9 +1529,14 @@ Follow the standard loop execution flow:
     }
 
     try {
-      // With worktrees, discard just marks the loop as deleted.
-      // The worktree and branch are preserved until purgeLoop() handles cleanup.
-      // No need to reset or checkout - the main working directory is not affected.
+      if (!loop.config.useWorktree) {
+        const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+        const git = GitService.withExecutor(executor);
+        await git.resetHard(loop.config.directory, {
+          expectedBranch: loop.state.git.workingBranch,
+        });
+        await git.checkoutBranch(loop.config.directory, loop.state.git.originalBranch);
+      }
 
       // Update status to 'deleted' (final state)
       assertValidTransition(loop.state.status, "deleted", "discardLoop");
@@ -1605,7 +1601,16 @@ Follow the standard loop execution flow:
         }
       }
 
-      // Step 2: Delete the working branch (now safe since worktree is removed)
+      // Step 2: Move the main checkout off the working branch when no worktree is used.
+      if (!loop.config.useWorktree && loop.state.git?.workingBranch && loop.state.git.originalBranch) {
+        try {
+          await git.checkoutBranch(loop.config.directory, loop.state.git.originalBranch);
+        } catch (error) {
+          log.debug(`[LoopManager] purgeLoop: Could not switch back to original branch: ${String(error)}`);
+        }
+      }
+
+      // Step 3: Delete the working branch (now safe since worktree is removed)
       if (loop.state.git?.workingBranch) {
         try {
           await git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
@@ -1615,7 +1620,7 @@ Follow the standard loop execution flow:
         }
       }
 
-      // Step 3: Clean up review branches if review mode was active
+      // Step 4: Clean up review branches if review mode was active
       if (loop.state.reviewMode?.reviewBranches && loop.state.reviewMode.reviewBranches.length > 0) {
         for (const branchName of loop.state.reviewMode.reviewBranches) {
           // Skip the working branch if it was already deleted above
@@ -1629,7 +1634,7 @@ Follow the standard loop execution flow:
         }
       }
 
-      // Step 4: Prune stale worktree references
+      // Step 5: Prune stale worktree references
       try {
         await git.pruneWorktrees(loop.config.directory);
       } catch (error) {
@@ -2489,6 +2494,36 @@ ${fileList}
   getRunningLoopState(loopId: string): LoopState | null {
     const engine = this.engines.get(loopId);
     return engine?.state ?? null;
+  }
+
+  private async validateMainCheckoutStart(loop: Loop, git: GitService): Promise<void> {
+    if (loop.config.useWorktree) {
+      return;
+    }
+
+    const activeLoop = await getActiveLoopByDirectory(loop.config.directory);
+    if (activeLoop && activeLoop.config.id !== loop.config.id) {
+      const error = new Error(
+        `Cannot start without a worktree while loop "${activeLoop.config.name}" is already active in this workspace.`,
+      ) as Error & { code: string; status: number };
+      error.code = "directory_in_use";
+      error.status = 409;
+      throw error;
+    }
+
+    const hasChanges = await git.hasUncommittedChanges(loop.config.directory);
+    if (!hasChanges) {
+      return;
+    }
+
+    const changedFiles = await git.getChangedFiles(loop.config.directory);
+    const error = new Error(
+      "Cannot start without a worktree because the repository has uncommitted changes.",
+    ) as Error & { code: string; status: number; changedFiles: string[] };
+    error.code = "uncommitted_changes";
+    error.status = 409;
+    error.changedFiles = changedFiles;
+    throw error;
   }
 
   /**

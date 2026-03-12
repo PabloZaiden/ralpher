@@ -172,6 +172,7 @@ describe("StopPatternDetector", () => {
       maxIterations: Infinity,
       maxConsecutiveErrors: 10,
       activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
+      useWorktree: DEFAULT_LOOP_CONFIG.useWorktree,
       clearPlanningFolder: false,
       planMode: false,
       mode: "loop",
@@ -234,6 +235,41 @@ describe("StopPatternDetector", () => {
 
     expect(engine.state.status).toBe("idle");
     expect(engine.config.id).toBe("test-loop-123");
+  });
+
+  test("uses the repository directory as workingDirectory when worktrees are disabled", () => {
+    const loop = createTestLoop({ useWorktree: false });
+    mockBackend = createMockBackend([]);
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    expect(engine.workingDirectory).toBe(testDir);
+  });
+
+  test("uses the worktree path as workingDirectory when worktrees are enabled", () => {
+    const loop = createTestLoop();
+    const worktreePath = join(testDir, ".ralph-worktrees/test-loop");
+    loop.state.git = {
+      originalBranch: "main",
+      workingBranch: "ralph/test-loop",
+      worktreePath,
+      commits: [],
+    };
+    mockBackend = createMockBackend([]);
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    expect(engine.workingDirectory).toBe(worktreePath);
   });
 
   test("starts and runs until completion", async () => {

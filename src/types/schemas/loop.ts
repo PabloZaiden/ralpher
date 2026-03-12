@@ -62,6 +62,7 @@ export const CreateLoopRequestSchema = z.object({
   stopPattern: z.string().optional(),
   git: GitConfigSchema.optional(),
   baseBranch: z.string().optional(),
+  useWorktree: z.boolean({ error: "useWorktree is required and must be a boolean (true or false)" }),
   clearPlanningFolder: z.boolean().optional(),
   planMode: z.boolean({ error: "planMode is required and must be a boolean (true or false)" }),
   draft: z.boolean().optional(),
@@ -88,6 +89,7 @@ export const UpdateLoopRequestSchema = z.object({
   stopPattern: z.string().optional(),
   git: GitConfigSchema.optional(),
   baseBranch: z.string().optional(),
+  useWorktree: z.boolean().optional(),
   clearPlanningFolder: z.boolean().optional(),
   planMode: z.boolean().optional(),
 });
@@ -148,6 +150,7 @@ export const CreateChatRequestSchema = z.object({
   prompt: z.string().min(1, "prompt is required and must be a non-empty string"),
   model: ModelConfigSchema,
   baseBranch: z.string().optional(),
+  useWorktree: z.boolean({ error: "useWorktree is required and must be a boolean (true or false)" }),
   git: GitConfigSchema.optional(),
 });
 
@@ -160,5 +163,4 @@ export const SendChatMessageRequestSchema = z.object({
   }),
   model: ModelConfigSchema.optional(),
 });
-
 

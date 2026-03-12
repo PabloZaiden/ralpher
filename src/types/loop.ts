@@ -72,6 +72,9 @@ export interface LoopConfig {
   /** Base branch to create the loop from (if different from current when started) */
   baseBranch?: string;
 
+  /** Whether the loop should run in a dedicated git worktree */
+  useWorktree: boolean;
+
   /** Whether to clear .planning folder on start */
   clearPlanningFolder: boolean;
 
@@ -378,6 +381,7 @@ export const DEFAULT_LOOP_CONFIG = {
   maxIterations: Infinity,
   maxConsecutiveErrors: 10,
   activityTimeoutSeconds: 900, // 15 minutes
+  useWorktree: true,
   clearPlanningFolder: false,
   planMode: true,
   mode: "loop" as const,

@@ -135,6 +135,7 @@ describe("User Message Logging", () => {
       maxIterations: 1,
       maxConsecutiveErrors: 10,
       activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
+      useWorktree: DEFAULT_LOOP_CONFIG.useWorktree,
       clearPlanningFolder: false,
       planMode: false,
       mode: "loop",

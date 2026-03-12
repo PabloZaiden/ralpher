@@ -196,6 +196,7 @@ describe("Loops Control API Integration", () => {
           prompt: "Test prompt",
           planMode: true,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -237,6 +238,7 @@ describe("Loops Control API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -279,6 +281,7 @@ describe("Loops Control API Integration", () => {
           prompt: "Test",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -327,6 +330,7 @@ describe("Loops Control API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -371,6 +375,7 @@ describe("Loops Control API Integration", () => {
           prompt: "Test",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -421,6 +426,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -466,6 +472,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -508,6 +515,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -551,6 +559,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -611,6 +620,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -658,6 +668,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -732,6 +743,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -790,6 +802,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -850,6 +863,7 @@ describe("Loops Control API Integration", () => {
             prompt: "Test prompt",
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();

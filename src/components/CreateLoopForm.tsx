@@ -73,6 +73,7 @@ export interface CreateLoopFormProps {
     maxConsecutiveErrors?: number;
     activityTimeoutSeconds?: number;
     baseBranch?: string;
+    useWorktree?: boolean;
     clearPlanningFolder?: boolean;
     planMode?: boolean;
     workspaceId?: string;
@@ -146,6 +147,7 @@ export function CreateLoopForm({
   const [selectedBranch, setSelectedBranch] = useState<string>(initialLoopData?.baseBranch ?? "");
   // Track whether user has manually changed the branch selection
   const [userChangedBranch, setUserChangedBranch] = useState(!!initialLoopData?.baseBranch);
+  const [useWorktree, setUseWorktree] = useState(initialLoopData?.useWorktree ?? DEFAULT_LOOP_CONFIG.useWorktree);
   const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
   const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? true);
   const [selectedTemplate, setSelectedTemplate] = useState("");
@@ -312,6 +314,7 @@ export function CreateLoopForm({
       prompt: currentPrompt.trim(),
       planMode: planMode, // planMode is required
       model: { providerID: parsedModel.providerID, modelID: parsedModel.modelID, variant: parsedModel.variant },
+      useWorktree,
       // Backend settings are now global (not per-loop)
       // Git is always enabled - no toggle exposed to users
     };
@@ -382,6 +385,7 @@ export function CreateLoopForm({
     selectedBranch,
     currentBranch,
     clearPlanningFolder,
+    useWorktree,
   ]);
 
   const isSubmitting = loading || submitting;
@@ -688,6 +692,25 @@ export function CreateLoopForm({
         </label>
       </div>
       )}
+
+      <div>
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={useWorktree}
+            onChange={(e) => setUseWorktree(e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+          />
+          <div className="flex-1">
+            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Use Worktree
+            </span>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Run in a dedicated Ralph worktree. Turn this off to use the main checkout with a dedicated Ralph branch.
+            </p>
+          </div>
+        </label>
+      </div>
 
       {/* Advanced options toggle — hidden in chat mode */}
       {!isChatMode && (

@@ -173,6 +173,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "What files are in this repo?",
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -194,6 +195,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Tell me about the codebase",
           model: testModel,
+          useWorktree: true,
           git: { branchPrefix: "chat/" },
         }),
       });
@@ -211,6 +213,7 @@ describe("Chat API Integration", () => {
         body: JSON.stringify({
           prompt: "Hello",
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -227,6 +230,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "",
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -243,6 +247,7 @@ describe("Chat API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -271,6 +276,7 @@ describe("Chat API Integration", () => {
           workspaceId: "non-existent-workspace-id",
           prompt: "Hello",
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -290,6 +296,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Hello",
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -323,6 +330,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Hello",
           model: testModel,
+          useWorktree: true,
         }),
       });
       const chatBody = await createResponse.json();
@@ -353,6 +361,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Hello",
           model: testModel,
+          useWorktree: true,
         }),
       });
       const chatBody = await createResponse.json();
@@ -383,6 +392,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Hello",
           model: testModel,
+          useWorktree: true,
         }),
       });
       const chatBody = await createResponse.json();
@@ -425,6 +435,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Hello",
           model: testModel,
+          useWorktree: true,
         }),
       });
       const chatBody = await createResponse.json();
@@ -453,6 +464,7 @@ describe("Chat API Integration", () => {
           prompt: "Build something",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -486,6 +498,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Chat message",
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(chatResponse.status).toBe(201);
@@ -516,6 +529,7 @@ describe("Chat API Integration", () => {
           planMode: false,
           draft: true,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(loopResponse.status).toBe(201);
@@ -566,6 +580,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Hello",
           model: testModel,
+          useWorktree: true,
         }),
       });
       const chatBody = await createResponse.json();
@@ -589,6 +604,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Delete me",
           model: testModel,
+          useWorktree: true,
         }),
       });
       const chatBody = await createResponse.json();
@@ -617,6 +633,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Rename me",
           model: testModel,
+          useWorktree: true,
         }),
       });
       const chatBody = await createResponse.json();
@@ -655,6 +672,7 @@ describe("Chat API Integration", () => {
             workspaceId,
             prompt: "Discard me",
             model: testModel,
+            useWorktree: true,
           }),
         });
         expect(createResponse.status).toBe(201);
@@ -695,6 +713,7 @@ describe("Chat API Integration", () => {
             workspaceId,
             prompt: "Mark me merged",
             model: testModel,
+            useWorktree: true,
           }),
         });
         expect(createResponse.status).toBe(201);
@@ -730,6 +749,7 @@ describe("Chat API Integration", () => {
           workspaceId: testWorkspaceId,
           prompt: "Check defaults",
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -761,6 +781,7 @@ describe("Chat API Integration", () => {
             workspaceId,
             prompt: "Tell me about this repo",
             model: testModel,
+            useWorktree: true,
           }),
         });
         expect(createResponse.status).toBe(201);

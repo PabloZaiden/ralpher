@@ -170,6 +170,7 @@ describe("Model Validation in API Endpoints", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            useWorktree: true,
             model: {
               providerID: "anthropic",
               modelID: "claude-sonnet-4-20250514",
@@ -197,6 +198,7 @@ describe("Model Validation in API Endpoints", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            useWorktree: true,
             // No model specified - should be rejected
           }),
         });
@@ -223,6 +225,7 @@ describe("Model Validation in API Endpoints", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            useWorktree: true,
             draft: true,
             model: {
               providerID: "openai",
@@ -253,6 +256,7 @@ describe("Model Validation in API Endpoints", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            useWorktree: true,
             model: {
               providerID: "anthropic",
               modelID: "claude-sonnet-4-20250514",
@@ -298,6 +302,7 @@ describe("Model Validation in API Endpoints", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            useWorktree: true,
             model: {
               providerID: "anthropic",
               modelID: "claude-sonnet-4-20250514",

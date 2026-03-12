@@ -76,6 +76,7 @@ async function applyLoopUpdates(
     if (body.activityTimeoutSeconds !== undefined) updates.activityTimeoutSeconds = body.activityTimeoutSeconds;
     if (body.stopPattern !== undefined) updates.stopPattern = body.stopPattern;
     if (body.baseBranch !== undefined) updates.baseBranch = body.baseBranch;
+    if (body.useWorktree !== undefined) updates.useWorktree = body.useWorktree;
     if (body.clearPlanningFolder !== undefined) updates.clearPlanningFolder = body.clearPlanningFolder;
     if (body.planMode !== undefined) updates.planMode = body.planMode;
 
@@ -107,6 +108,35 @@ async function applyLoopUpdates(
     }
     return errorResponse("update_failed", errorMessage, 500);
   }
+}
+
+function startErrorResponse(
+  error: unknown,
+  fallbackCode: string,
+  fallbackMessage: string,
+): Response {
+  if (error instanceof Error) {
+    const code = (error as Error & { code?: string }).code;
+    const status = (error as Error & { status?: number }).status;
+    const changedFiles = (error as Error & { changedFiles?: string[] }).changedFiles;
+
+    if (code === "uncommitted_changes") {
+      return Response.json(
+        {
+          error: "uncommitted_changes",
+          message: error.message,
+          changedFiles: changedFiles ?? [],
+        },
+        { status: status ?? 409 },
+      );
+    }
+
+    if (code === "directory_in_use") {
+      return errorResponse("directory_in_use", error.message, status ?? 409);
+    }
+  }
+
+  return errorResponse(fallbackCode, `${fallbackMessage}: ${String(error)}`, 500);
 }
 
 /**
@@ -266,6 +296,7 @@ export const loopsCrudRoutes = {
           gitBranchPrefix: body.git?.branchPrefix,
           gitCommitScope: body.git?.commitScope,
           baseBranch: effectiveBaseBranch,
+          useWorktree: body.useWorktree,
           clearPlanningFolder: body.clearPlanningFolder,
           planMode: body.planMode,
           draft: body.draft,
@@ -300,7 +331,7 @@ export const loopsCrudRoutes = {
               } catch (deleteError) {
                 log.warn("Failed to clean up loop after start failure", { loopId: loop.config.id, error: String(deleteError) });
               }
-              return errorResponse("start_plan_failed", `Loop created but failed to start plan mode: ${String(startError)}`, 500);
+              return startErrorResponse(startError, "start_plan_failed", "Loop created but failed to start plan mode");
             }
         } else {
           // Always start the loop immediately after creation (normal mode)
@@ -309,15 +340,15 @@ export const loopsCrudRoutes = {
             // Return the loop with updated state after starting
             const updatedLoop = await loopManager.getLoop(loop.config.id);
             return Response.json(updatedLoop ?? loop, { status: 201 });
-          } catch (startError) {
-            // If start fails for any reason, delete the loop to avoid orphaned idle loops
-            try {
-              await loopManager.deleteLoop(loop.config.id);
-            } catch (deleteError) {
-              log.warn("Failed to clean up loop after start failure", { loopId: loop.config.id, error: String(deleteError) });
+            } catch (startError) {
+              // If start fails for any reason, delete the loop to avoid orphaned idle loops
+              try {
+                await loopManager.deleteLoop(loop.config.id);
+              } catch (deleteError) {
+                log.warn("Failed to clean up loop after start failure", { loopId: loop.config.id, error: String(deleteError) });
+              }
+              return startErrorResponse(startError, "start_failed", "Loop created but failed to start");
             }
-            return errorResponse("start_failed", `Loop created but failed to start: ${String(startError)}`, 500);
-          }
         }
       } catch (error) {
         return errorResponse("create_failed", String(error), 500);
@@ -529,11 +560,11 @@ export const loopsControlRoutes = {
         });
         return Response.json(updatedLoop);
       } catch (startError) {
-        const errorType = body.planMode ? "start_plan_failed" : "start_failed";
-        const errorMsg = body.planMode
-          ? `Failed to start plan mode: ${String(startError)}`
-          : `Failed to start loop: ${String(startError)}`;
-        return errorResponse(errorType, errorMsg, 500);
+        return startErrorResponse(
+          startError,
+          body.planMode ? "start_plan_failed" : "start_failed",
+          body.planMode ? "Failed to start plan mode" : "Failed to start loop",
+        );
       }
     },
   },
@@ -1383,6 +1414,7 @@ export const loopsChatRoutes = {
           gitBranchPrefix: body.git?.branchPrefix,
           gitCommitScope: body.git?.commitScope,
           baseBranch: effectiveBaseBranch,
+          useWorktree: body.useWorktree,
         });
 
         // Save the model as last used if provided
@@ -1396,7 +1428,7 @@ export const loopsChatRoutes = {
 
         return Response.json(chat, { status: 201 });
       } catch (error) {
-        return errorResponse("create_chat_failed", String(error), 500);
+        return startErrorResponse(error, "create_chat_failed", "Failed to create chat");
       }
     },
   },

@@ -158,6 +158,7 @@ describe("Draft Loop E2E Workflow", () => {
         draft: true,
         planMode: false,
           model: testModel,
+          useWorktree: true,
       }),
     });
 
@@ -248,6 +249,7 @@ describe("Draft Loop E2E Workflow", () => {
         prompt: "Create a plan for feature X",
         planMode: true,
           model: testModel,
+          useWorktree: true,
         draft: true,
       }),
     });
@@ -346,6 +348,7 @@ describe("Draft Loop E2E Workflow", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -387,6 +390,7 @@ describe("Draft Loop E2E Workflow", () => {
         prompt: "Task",
         planMode: false,
           model: testModel,
+          useWorktree: true,
       }),
     });
 
@@ -423,6 +427,7 @@ describe("Draft Loop E2E Workflow", () => {
         draft: true,
         planMode: false,
           model: testModel,
+          useWorktree: true,
       }),
     });
 
@@ -470,6 +475,7 @@ describe("Draft Loop E2E Workflow", () => {
         prompt: "Test task",
         planMode: true,
           model: testModel,
+          useWorktree: true,
         draft: true,
       }),
     });
@@ -515,6 +521,7 @@ describe("Draft Loop E2E Workflow", () => {
         prompt: "Test task",
         planMode: true,
           model: testModel,
+          useWorktree: true,
         draft: true,
       }),
     });
@@ -534,6 +541,7 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         planMode: false,
           model: testModel,
+          useWorktree: true,
       }),
     });
 
@@ -580,6 +588,7 @@ describe("Draft Loop E2E Workflow", () => {
         draft: true,
         planMode: false,
           model: testModel,
+          useWorktree: true,
       }),
     });
 
@@ -650,6 +659,7 @@ describe("Draft Loop E2E Workflow", () => {
         draft: true,
         planMode: false,
           model: testModel,
+          useWorktree: true,
       }),
     });
 
@@ -668,6 +678,7 @@ describe("Draft Loop E2E Workflow", () => {
         draft: true,
         planMode: false,
           model: testModel,
+          useWorktree: true,
       }),
     });
 
@@ -720,6 +731,7 @@ describe("Draft Loop E2E Workflow", () => {
         draft: true,
         planMode: false,
           model: testModel,
+          useWorktree: true,
       }),
     });
 

@@ -119,6 +119,14 @@ describe("CreateLoopForm", () => {
       expect(checkbox.checked).toBe(true);
     });
 
+    test("renders use worktree checkbox checked by default", () => {
+      const { getByRole } = renderWithUser(
+        <CreateLoopForm {...defaultProps()} />
+      );
+      const checkbox = getByRole("checkbox", { name: /Use Worktree/ }) as HTMLInputElement;
+      expect(checkbox.checked).toBe(true);
+    });
+
     test("renders advanced options toggle", () => {
       const { getByText } = renderWithUser(
         <CreateLoopForm {...defaultProps()} />
@@ -569,6 +577,7 @@ describe("CreateLoopForm", () => {
       expect(req.workspaceId).toBe("ws-1");
       expect(req.prompt).toBe("X");
       expect(req.planMode).toBe(true);
+      expect(req.useWorktree).toBe(true);
       expect(req.model).toBeDefined();
       expect(req.model.providerID).toBe("anthropic");
 
@@ -666,6 +675,38 @@ describe("CreateLoopForm", () => {
       const req = onSubmit.mock.calls[0]?.[0] as CreateLoopRequest;
       expect(req.draft).toBe(true);
     });
+
+    test("calls onSubmit with useWorktree=false when unchecked", async () => {
+      const onSubmit = mock(async (_req: CreateLoopRequest) => true);
+
+      const { getByLabelText, getByRole, user } = renderWithUser(
+        <CreateLoopForm
+          {...defaultProps({
+            onSubmit,
+            workspaces: testWorkspaces(),
+            models: connectedModels(),
+          })}
+        />
+      );
+
+      const workspaceSelect = getByLabelText("Workspace *") as HTMLSelectElement;
+      await user.selectOptions(workspaceSelect, "ws-1");
+      await setInputValue(user, getByLabelText(/Prompt/) as HTMLTextAreaElement, "No worktree");
+
+      await waitFor(() => {
+        expect((getByLabelText("Model") as HTMLSelectElement).value).not.toBe("");
+      });
+
+      await user.click(getByRole("checkbox", { name: /Use Worktree/ }));
+      await user.click(getByRole("button", { name: "Create Plan" }));
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+      });
+
+      const req = onSubmit.mock.calls[0]?.[0] as CreateLoopRequest;
+      expect(req.useWorktree).toBe(false);
+    });
   });
 
   describe("edit mode", () => {
@@ -678,6 +719,7 @@ describe("CreateLoopForm", () => {
               directory: "/workspaces/project-a",
               prompt: "Existing prompt text",
               model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
+              useWorktree: false,
               planMode: false,
               workspaceId: "ws-1",
             },
@@ -692,6 +734,8 @@ describe("CreateLoopForm", () => {
 
       const planMode = getByRole("checkbox", { name: /Plan Mode/ }) as HTMLInputElement;
       expect(planMode.checked).toBe(false);
+      const useWorktree = getByRole("checkbox", { name: /Use Worktree/ }) as HTMLInputElement;
+      expect(useWorktree.checked).toBe(false);
     });
 
     test("shows 'Start Loop' button in edit mode without plan mode", () => {

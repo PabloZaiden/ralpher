@@ -274,6 +274,7 @@ export function createLoopConfig(overrides?: Partial<LoopConfig>): LoopConfig {
     activityTimeoutSeconds: 180,
     stopPattern: "<promise>COMPLETE</promise>$",
     git: createGitConfig(),
+    useWorktree: true,
     clearPlanningFolder: false,
     planMode: true,
     mode: "loop",

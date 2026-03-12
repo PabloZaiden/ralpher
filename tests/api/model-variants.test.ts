@@ -275,6 +275,7 @@ describe("Model Variants API", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            useWorktree: true,
             draft: true, // Use draft mode to avoid starting the loop
             model: {
               providerID: "anthropic",
@@ -304,6 +305,7 @@ describe("Model Variants API", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            useWorktree: true,
             draft: true, // Use draft mode to avoid starting the loop
             model: {
               providerID: "anthropic",
@@ -333,6 +335,7 @@ describe("Model Variants API", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            useWorktree: true,
             draft: true, // Use draft mode to avoid starting the loop
             model: {
               providerID: "openai",
@@ -364,6 +367,7 @@ describe("Model Variants API", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            useWorktree: true,
             draft: true,
             model: {
               providerID: "anthropic",
@@ -401,6 +405,7 @@ describe("Model Variants API", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            useWorktree: true,
             draft: true,
             model: {
               providerID: "anthropic",
@@ -438,6 +443,7 @@ describe("Model Variants API", () => {
             workspaceId,
             prompt: "Test prompt",
             planMode: false,
+            useWorktree: true,
             draft: true,
             model: {
               providerID: "openai",

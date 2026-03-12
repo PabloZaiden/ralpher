@@ -187,6 +187,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Build something",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -211,6 +212,7 @@ describe("Loops CRUD API Integration", () => {
           git: { branchPrefix: "custom/" },
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -254,6 +256,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -288,6 +291,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -322,6 +326,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -361,6 +366,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -391,6 +397,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -423,6 +430,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -465,6 +473,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -484,6 +493,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -502,6 +512,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -523,6 +534,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -548,6 +560,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -581,6 +594,7 @@ describe("Loops CRUD API Integration", () => {
             draft: false,
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
 
@@ -607,6 +621,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -650,6 +665,7 @@ describe("Loops CRUD API Integration", () => {
             prompt: "Task",
             planMode: false,
           model: testModel,
+          useWorktree: true,
           }),
         });
         expect(createResponse.status).toBe(201);
@@ -686,6 +702,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -698,6 +715,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -739,6 +757,7 @@ describe("Loops CRUD API Integration", () => {
             draft: true,
             planMode: false,
             model: testModel,
+            useWorktree: true,
           }),
         });
         const createBody = await createResponse.json();
@@ -751,6 +770,7 @@ describe("Loops CRUD API Integration", () => {
           body: JSON.stringify({
             planMode: true,
             model: testModel,
+            useWorktree: true,
           }),
         });
 
@@ -786,6 +806,7 @@ describe("Loops CRUD API Integration", () => {
             draft: true,
             planMode: false,
           model: testModel,
+          useWorktree: true,
           }),
         });
         const draftBody = await draftResponse.json();
@@ -809,6 +830,7 @@ describe("Loops CRUD API Integration", () => {
           body: JSON.stringify({
             planMode: false,
           model: testModel,
+          useWorktree: true,
           }),
         });
 
@@ -831,6 +853,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -863,6 +886,7 @@ describe("Loops CRUD API Integration", () => {
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -899,6 +923,7 @@ multiple lines.
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -943,6 +968,7 @@ Updated line 3`;
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -1007,6 +1033,7 @@ Updated line 3`;
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -1033,6 +1060,7 @@ Updated line 3`;
           prompt: "Test no git",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -1073,6 +1101,7 @@ Updated line 3`;
           prompt: "Test mark merged",
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -1110,6 +1139,7 @@ Updated line 3`;
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -1158,6 +1188,7 @@ Updated line 3`;
             name: "Before Completion",
             planMode: false,
           model: testModel,
+          useWorktree: true,
           }),
         });
         expect(createResponse.status).toBe(201);
@@ -1192,6 +1223,7 @@ Updated line 3`;
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -1228,6 +1260,7 @@ Updated line 3`;
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();
@@ -1256,6 +1289,7 @@ Updated line 3`;
           draft: true,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
       const createBody = await createResponse.json();

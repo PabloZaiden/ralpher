@@ -269,16 +269,18 @@ export class LoopEngine {
 
   /**
    * Get the effective working directory for this loop.
-   * Returns the worktree path. Every loop must operate in its own worktree.
-   * Throws if the worktree path is not set -- this indicates a bug in the
-   * lifecycle (e.g., calling this before setupGitBranch() completes).
+   * Returns the worktree path when worktrees are enabled, otherwise the
+   * repository directory itself.
    */
   get workingDirectory(): string {
+    if (!this.config.useWorktree) {
+      return this.config.directory;
+    }
     const worktreePath = this.loop.state.git?.worktreePath;
     if (!worktreePath) {
       throw new Error(
         `Loop ${this.config.id} has no worktree path. ` +
-        `Every loop must operate in its own worktree. ` +
+        `This loop is configured to use a dedicated worktree. ` +
         `This is a bug -- workingDirectory was accessed before setupGitBranch() set the worktree path.`
       );
     }
@@ -554,9 +556,8 @@ export class LoopEngine {
   }
 
   /**
-   * Set up git branch and worktree for the loop (public method for plan mode).
-   * Called from startPlanMode() to create the worktree before the AI session starts.
-   * Idempotent: if the worktree already exists, it will be reused.
+   * Set up git branch and optional worktree for the loop (public method for plan mode).
+   * Called from startPlanMode() before the AI session starts.
    */
   async setupGitBranchForPlanAcceptance(): Promise<void> {
     await this.setupGitBranch(true);
@@ -826,13 +827,10 @@ export class LoopEngine {
   }
 
   /**
-   * Set up git branch for the loop using a git worktree.
-   * Creates a new worktree with a dedicated branch for the loop, isolated from the main checkout.
-   * @param allowPlanningFolderChanges - If true, allow uncommitted changes in .planning folder only (unused with worktrees, kept for API compatibility)
+   * Set up git branch for the loop using either a dedicated worktree or the main checkout.
    */
   private async setupGitBranch(_allowPlanningFolderChanges = false): Promise<void> {
     const directory = this.config.directory;
-    
     const branchName = this.resolveBranchName();
 
     // Check if we're in a git repo
@@ -842,8 +840,6 @@ export class LoopEngine {
       throw new Error(`Directory is not a git repository: ${directory}`);
     }
 
-    // No uncommitted-changes check needed — worktrees are isolated from the main checkout
-
     const originalBranch = await this.resolveOriginalBranch(directory);
 
     if (originalBranch.startsWith(this.config.git.branchPrefix) && !this.loop.state.git?.originalBranch) {
@@ -852,20 +848,41 @@ export class LoopEngine {
       });
     }
 
-    // Pull latest changes from the base branch to minimize merge conflicts
-    // Pull happens on the main checkout (config.directory), not the worktree
-    this.emitLog("info", `Pulling latest changes from remote for branch: ${originalBranch}`);
-    const pullSucceeded = await this.git.pull(directory, originalBranch);
-    if (pullSucceeded) {
-      this.emitLog("info", `Successfully pulled latest changes for ${originalBranch}`);
+    if (!this.config.useWorktree) {
+      const currentBranch = await this.git.getCurrentBranch(directory);
+      if (currentBranch !== originalBranch) {
+        this.emitLog("info", `Checking out base branch in main checkout: ${originalBranch}`);
+        await this.git.checkoutBranch(directory, originalBranch);
+      }
+
+      this.emitLog("info", `Pulling latest changes from remote for branch: ${originalBranch}`);
+      const pullSucceeded = await this.git.pull(directory, originalBranch);
+      if (pullSucceeded) {
+        this.emitLog("info", `Successfully pulled latest changes for ${originalBranch}`);
+      } else {
+        this.emitLog("debug", `Skipped pull for ${originalBranch} (no remote or upstream configured)`);
+      }
     } else {
-      this.emitLog("debug", `Skipped pull for ${originalBranch} (no remote or upstream configured)`);
+      // Pull latest changes from the base branch to minimize merge conflicts.
+      // Pull happens on the main checkout (config.directory), not the worktree.
+      this.emitLog("info", `Pulling latest changes from remote for branch: ${originalBranch}`);
+      const pullSucceeded = await this.git.pull(directory, originalBranch);
+      if (pullSucceeded) {
+        this.emitLog("info", `Successfully pulled latest changes for ${originalBranch}`);
+      } else {
+        this.emitLog("debug", `Skipped pull for ${originalBranch} (no remote or upstream configured)`);
+      }
     }
 
-    // Set up the worktree (create new, recreate, or reuse existing)
-    const worktreePath = await this.setupWorktree(directory, branchName, originalBranch);
+    const worktreePath = this.config.useWorktree
+      ? await this.setupWorktree(directory, branchName, originalBranch)
+      : undefined;
 
-    // Update state with git info including the worktree path
+    if (!this.config.useWorktree) {
+      await this.setupBranchInMainCheckout(directory, branchName, originalBranch);
+    }
+
+    // Update state with git info including the optional worktree path.
     this.updateState({
       git: {
         originalBranch,
@@ -879,9 +896,33 @@ export class LoopEngine {
     this.emitLog("info", `Git branch setup complete`, { 
       originalBranch, 
       workingBranch: branchName,
-      worktreePath,
+      worktreePath: worktreePath ?? directory,
+      useWorktree: this.config.useWorktree,
     });
     log.debug("[LoopEngine] Exiting setupGitBranch");
+  }
+
+  private async setupBranchInMainCheckout(
+    directory: string,
+    branchName: string,
+    originalBranch: string,
+  ): Promise<void> {
+    const branchExists = await this.git.branchExists(directory, branchName);
+
+    if (branchExists) {
+      this.emitLog("info", `Checking out existing working branch in main checkout: ${branchName}`);
+      await this.git.checkoutBranch(directory, branchName);
+      return;
+    }
+
+    const currentBranch = await this.git.getCurrentBranch(directory);
+    if (currentBranch !== originalBranch) {
+      this.emitLog("info", `Checking out base branch before creating working branch: ${originalBranch}`);
+      await this.git.checkoutBranch(directory, originalBranch);
+    }
+
+    this.emitLog("info", `Creating working branch in main checkout: ${branchName}`);
+    await this.git.createBranch(directory, branchName);
   }
 
   /**

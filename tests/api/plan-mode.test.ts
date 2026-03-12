@@ -242,6 +242,7 @@ describe("Plan Mode API Integration", () => {
           maxIterations: 1,
           planMode: true,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -276,6 +277,7 @@ describe("Plan Mode API Integration", () => {
           clearPlanningFolder: true,
           planMode: true,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -326,6 +328,7 @@ describe("Plan Mode API Integration", () => {
           maxIterations: 1,
           planMode: true,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -369,6 +372,7 @@ describe("Plan Mode API Integration", () => {
           maxIterations: 1,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -414,6 +418,7 @@ describe("Plan Mode API Integration", () => {
           maxIterations: 1,
           planMode: true,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -465,6 +470,7 @@ describe("Plan Mode API Integration", () => {
           clearPlanningFolder: true,
           planMode: true,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -514,6 +520,7 @@ describe("Plan Mode API Integration", () => {
           maxIterations: 1,
           planMode: false,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
@@ -551,6 +558,7 @@ describe("Plan Mode API Integration", () => {
           maxIterations: 1,
           planMode: true,
           model: testModel,
+          useWorktree: true,
         }),
       });
 
