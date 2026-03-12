@@ -101,7 +101,7 @@ describe("Loop port forwards API integration", () => {
           agent: {
             provider: "opencode",
             transport: "ssh",
-            hostname: "localhost",
+            hostname: "workspace.example.com",
             username: "tester",
           },
         },
@@ -272,7 +272,7 @@ describe("Loop port forwards API integration", () => {
     }
   });
 
-  test("derives the forwarded host from the workspace instead of the request body", async () => {
+  test("uses localhost for the forwarded destination and ignores remoteHost in the request body", async () => {
     const workspace = await createWorkspace();
     const loop = await createLoop(workspace.id);
 

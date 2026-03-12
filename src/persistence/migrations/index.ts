@@ -308,6 +308,8 @@ export const migrations: Migration[] = [
         UPDATE forwarded_ports
         SET
           status = 'stopped',
+          pid = NULL,
+          connected_at = NULL,
           updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
           error_message = COALESCE(
             error_message,

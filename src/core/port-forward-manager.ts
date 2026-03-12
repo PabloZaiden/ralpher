@@ -22,6 +22,7 @@ import { buildSshCommandArgs } from "./remote-command-executor";
 
 const log = createLogger("core:port-forward-manager");
 const LOCAL_FORWARD_HOST = "127.0.0.1";
+const REMOTE_FORWARD_HOST = "localhost";
 const STARTUP_GRACE_MS = 300;
 const STOP_TIMEOUT_MS = 2_000;
 const LOCAL_PORT_RESERVATION_RETRY_LIMIT = 5;
@@ -323,7 +324,6 @@ export class PortForwardManager {
       throw new Error(`Workspace not found: ${loop.config.workspaceId}`);
     }
 
-    const remoteHost = getWorkspaceSshHost(workspace);
     await assertWorkspaceRemotePortAvailable(workspace.id, options.remotePort);
     await touchWorkspace(workspace.id);
     const { sshSessionManager } = await import("./ssh-session-manager");
@@ -332,7 +332,7 @@ export class PortForwardManager {
       loopId: options.loopId,
       workspaceId: workspace.id,
       sshSessionId: linkedSession?.config.id,
-      remoteHost,
+      remoteHost: REMOTE_FORWARD_HOST,
       remotePort: options.remotePort,
     });
     this.emitForwardCreated(forward);

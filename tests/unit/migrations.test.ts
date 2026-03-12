@@ -387,8 +387,10 @@ describe("migration infrastructure", () => {
           local_port,
           created_at,
           updated_at,
-          status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          status,
+          pid,
+          connected_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           "forward-older",
           "loop-1",
@@ -399,6 +401,8 @@ describe("migration infrastructure", () => {
           "2025-01-01T00:00:00.000Z",
           "2025-01-01T00:00:00.000Z",
           "active",
+          12345,
+          "2025-01-01T00:00:01.000Z",
         ],
       );
       db.run(
@@ -429,17 +433,27 @@ describe("migration infrastructure", () => {
       runMigrations(db);
 
       const rows = db.query(
-        "SELECT id, status, error_message FROM forwarded_ports ORDER BY id ASC",
-      ).all() as Array<{ id: string; status: string; error_message: string | null }>;
+        "SELECT id, status, pid, connected_at, error_message FROM forwarded_ports ORDER BY id ASC",
+      ).all() as Array<{
+        id: string;
+        status: string;
+        pid: number | null;
+        connected_at: string | null;
+        error_message: string | null;
+      }>;
       expect(rows).toEqual([
         {
           id: "forward-newer",
           status: "active",
+          pid: null,
+          connected_at: null,
           error_message: null,
         },
         {
           id: "forward-older",
           status: "stopped",
+          pid: null,
+          connected_at: null,
           error_message: "Stopped during duplicate port-forward cleanup",
         },
       ]);

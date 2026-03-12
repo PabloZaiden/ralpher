@@ -41,7 +41,7 @@ describe("PortForwardManager", () => {
 
     const sshSettings = getDefaultServerSettings(true);
     if (sshSettings.agent.transport === "ssh") {
-      sshSettings.agent.hostname = "localhost";
+      sshSettings.agent.hostname = "workspace.example.com";
       sshSettings.agent.username = "tester";
     }
 

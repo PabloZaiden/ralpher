@@ -34,7 +34,6 @@ function setupDefaultApi(loopOverrides?: Parameters<typeof createLoopWithStatus>
   api.get("/api/loops/:id/diff", () => []);
   api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
   api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
-  api.get("/api/loops/:id/port-forwards", () => []);
   // Comments
   api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
   // Models
@@ -560,7 +559,7 @@ describe("actions tab content", () => {
           id: "forward-1",
           loopId: LOOP_ID,
           workspaceId: "workspace-1",
-          remoteHost: "workspace.example.com",
+          remoteHost: "localhost",
           remotePort: 3000,
           localPort: 43000,
           createdAt: new Date().toISOString(),
