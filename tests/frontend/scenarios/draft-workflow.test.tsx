@@ -198,6 +198,49 @@ describe("draft workflow scenario", () => {
     });
   });
 
+  test("edit draft modal can delete an existing draft", async () => {
+    setupBaseApi();
+    const draft = draftLoop();
+    api.get("/api/loops", () => [draft]);
+    api.get("/api/workspaces", () => [WORKSPACE]);
+    api.delete("/api/loops/:id", () => ({ success: true }));
+
+    const { getByText, getByRole, queryByRole, user } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByText("My Draft")).toBeTruthy();
+    });
+
+    await user.click(getByText("My Draft"));
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Edit Draft Loop" })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: "Delete Draft" }));
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Delete Draft?" })).toBeTruthy();
+    });
+
+    const confirmDeleteButtons = document.querySelectorAll("button");
+    const confirmDeleteButton = Array.from(confirmDeleteButtons).filter(
+      (button) => button.textContent?.includes("Delete Draft"),
+    ).at(-1);
+    expect(confirmDeleteButton).toBeTruthy();
+
+    await user.click(confirmDeleteButton!);
+
+    await waitFor(() => {
+      const calls = api.calls("/api/loops/:id", "DELETE");
+      expect(calls.length).toBeGreaterThan(0);
+    });
+
+    await waitFor(() => {
+      expect(queryByRole("heading", { name: "Edit Draft Loop" })).toBeNull();
+    });
+  });
+
   // Note: "Delete draft from dashboard card" test was removed because
   // Delete buttons were removed from dashboard cards/rows in PR #125.
   // Drafts can now only be deleted from LoopDetails Actions tab.

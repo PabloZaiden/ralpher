@@ -2,12 +2,13 @@
  * Dashboard modal renderings — aggregates all modal components used in the Dashboard.
  */
 
+import { useState } from "react";
 import type { Loop, UncommittedChangesError, ModelInfo, BranchInfo, Workspace, CreateLoopRequest, CreateChatRequest } from "../types";
 import type { WorkspaceExportData, WorkspaceImportResult, CreateWorkspaceRequest } from "../types/workspace";
 import type { CreateLoopFormActionState } from "./CreateLoopForm";
 import type { CreateLoopResult, CreateChatResult } from "../hooks/useLoops";
 import type { UseWorkspaceServerSettingsResult } from "../hooks/useWorkspaceServerSettings";
-import { Modal, Button } from "./common";
+import { Modal, Button, ConfirmModal } from "./common";
 import { CreateLoopForm } from "./CreateLoopForm";
 import {
   UncommittedChangesModal,
@@ -36,6 +37,7 @@ export interface DashboardModalsProps {
   onCloseCreateModal: () => void;
   onCreateLoop: (request: CreateLoopRequest) => Promise<CreateLoopResult>;
   onCreateChat: (request: CreateChatRequest) => Promise<CreateChatResult>;
+  onDeleteLoop: (loopId: string) => Promise<boolean>;
   onRefresh: () => Promise<void>;
 
   // Model/branch/workspace data for create form
@@ -93,12 +95,34 @@ export interface DashboardModalsProps {
 
 export function DashboardModals(props: DashboardModalsProps) {
   const toast = useToast();
+  const [deleteDraftModalOpen, setDeleteDraftModalOpen] = useState(false);
+  const [deletingDraft, setDeletingDraft] = useState(false);
 
   // Compute create/edit modal state
   const editLoop = props.editDraftId ? props.loops.find((l) => l.config.id === props.editDraftId) : null;
   const isEditing = !!editLoop;
   const isEditingDraft = editLoop?.state.status === "draft";
   const isChatMode = props.createMode === "chat";
+
+  async function handleDeleteDraft(): Promise<void> {
+    if (!editLoop) {
+      return;
+    }
+
+    setDeletingDraft(true);
+    try {
+      const success = await props.onDeleteLoop(editLoop.config.id);
+      if (!success) {
+        toast.error("Failed to delete draft");
+        return;
+      }
+
+      setDeleteDraftModalOpen(false);
+      props.onCloseCreateModal();
+    } finally {
+      setDeletingDraft(false);
+    }
+  }
 
   // Modal titles/descriptions based on mode
   const modalTitle = isEditing
@@ -141,16 +165,29 @@ export function DashboardModals(props: DashboardModalsProps) {
           <>
             {/* Left side - Save as Draft / Update Draft button — hidden in chat mode */}
             {!isChatMode && (!props.formActionState.isEditing || props.formActionState.isEditingDraft) && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={props.formActionState.onSaveAsDraft}
-                disabled={props.formActionState.isSubmitting || !props.formActionState.canSaveDraft}
-                loading={props.formActionState.isSubmitting}
-                className="sm:mr-auto"
-              >
-                {props.formActionState.isEditingDraft ? "Update Draft" : "Save as Draft"}
-              </Button>
+              <>
+                {props.formActionState.isEditingDraft && (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={() => setDeleteDraftModalOpen(true)}
+                    disabled={props.formActionState.isSubmitting}
+                    className="sm:mr-auto"
+                  >
+                    Delete Draft
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={props.formActionState.onSaveAsDraft}
+                  disabled={props.formActionState.isSubmitting || !props.formActionState.canSaveDraft}
+                  loading={props.formActionState.isSubmitting}
+                  className={props.formActionState.isEditingDraft ? "" : "sm:mr-auto"}
+                >
+                  {props.formActionState.isEditingDraft ? "Update Draft" : "Save as Draft"}
+                </Button>
+              </>
             )}
 
             {/* Right side - Cancel and Create/Start buttons */}
@@ -272,6 +309,18 @@ export function DashboardModals(props: DashboardModalsProps) {
         creating={props.workspaceCreating}
         error={props.workspaceError}
         remoteOnly={props.remoteOnly}
+      />
+
+      <ConfirmModal
+        isOpen={deleteDraftModalOpen}
+        onClose={() => setDeleteDraftModalOpen(false)}
+        onConfirm={handleDeleteDraft}
+        title="Delete Draft?"
+        message={`Are you sure you want to delete "${editLoop?.config.name ?? "this draft"}"? The draft will be marked as deleted and can be purged later if needed.`}
+        confirmLabel={deletingDraft ? "Deleting..." : "Delete Draft"}
+        cancelLabel="Cancel"
+        loading={deletingDraft}
+        variant="danger"
       />
     </>
   );

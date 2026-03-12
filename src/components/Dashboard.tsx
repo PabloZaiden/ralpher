@@ -32,7 +32,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
     refresh,
     createLoop,
     createChat,
-
+    deleteLoop,
     updateLoop,
   } = useLoops();
   const {
@@ -139,6 +139,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         onCloseCreateModal={modals.handleCloseCreateModal}
         onCreateLoop={createLoop}
         onCreateChat={createChat}
+        onDeleteLoop={deleteLoop}
         onRefresh={refresh}
         // Model/branch/workspace data
         models={dashboardData.models}
