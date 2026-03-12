@@ -34,6 +34,7 @@ function setupDefaultApi(loopOverrides?: Parameters<typeof createLoopWithStatus>
   api.get("/api/loops/:id/diff", () => []);
   api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
   api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+  api.get("/api/loops/:id/port-forwards", () => []);
   // Comments
   api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
   // Models
@@ -61,6 +62,7 @@ function setupDefaultApi(loopOverrides?: Parameters<typeof createLoopWithStatus>
 beforeEach(() => {
   api.reset();
   api.install();
+  api.get("/api/loops/:id/port-forwards", () => []);
   ws.reset();
   ws.install();
 });
@@ -546,6 +548,58 @@ describe("actions tab content", () => {
 
     await waitFor(() => {
       expect(selectedSessionId).toBe("ssh-loop-1");
+    });
+  });
+
+  test("port-forward form only shows the remote port and submits only that value", async () => {
+    setupDefaultApi();
+    api.post("/api/loops/:id/port-forwards", (req) => {
+      expect(req.body).toEqual({ remotePort: 3000 });
+      return {
+        config: {
+          id: "forward-1",
+          loopId: LOOP_ID,
+          workspaceId: "workspace-1",
+          remoteHost: "workspace.example.com",
+          remotePort: 3000,
+          localPort: 43000,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        state: {
+          status: "active",
+        },
+      };
+    }, 201);
+
+    const {
+      getByLabelText,
+      getByRole,
+      getByText,
+      queryByText,
+      user,
+    } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Test Loop")).toBeTruthy();
+    });
+
+    await user.click(getByText("Actions"));
+
+    await waitFor(() => {
+      expect(getByText("Forward a Port")).toBeTruthy();
+    });
+
+    expect(queryByText("Remote host")).toBeNull();
+
+    const remotePortInput = getByLabelText("Remote port") as HTMLInputElement;
+    expect(remotePortInput.getAttribute("placeholder")).toBe("");
+
+    await user.type(remotePortInput, "3000");
+    await user.click(getByRole("button", { name: "Create Port Forward" }));
+
+    await waitFor(() => {
+      expect(remotePortInput.value).toBe("");
     });
   });
 

@@ -122,7 +122,6 @@ export interface AddressCommentsResult {
 
 export interface CreatePortForwardRequest {
   remotePort: number;
-  remoteHost?: string;
 }
 
 /**

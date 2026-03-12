@@ -139,12 +139,15 @@ function mapLoopSshSessionError(error: unknown): Response {
 }
 
 function mapLoopPortForwardError(error: unknown): Response {
-  const message = String(error);
+  const message = error instanceof Error ? error.message : String(error);
   if (message.includes("Loop not found")) {
     return errorResponse("not_found", "Loop not found", 404);
   }
   if (message.includes("Port forward not found")) {
     return errorResponse("not_found", "Port forward not found", 404);
+  }
+  if (message.includes("already being forwarded for this workspace")) {
+    return errorResponse("duplicate_port_forward", message, 409);
   }
   if (message.includes("ssh transport")) {
     return errorResponse("invalid_port_forward_configuration", message, 400);
@@ -829,7 +832,6 @@ export const loopsControlRoutes = {
       try {
         const forward = await portForwardManager.createLoopPortForward({
           loopId: req.params.id,
-          remoteHost: validation.data.remoteHost,
           remotePort: validation.data.remotePort,
         });
         return Response.json(forward, { status: 201 });

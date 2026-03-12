@@ -145,15 +145,15 @@ describe("Loop port forwards API integration", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        remoteHost: "127.0.0.1",
         remotePort: 3000,
       }),
     });
     expect(createResponse.status).toBe(201);
     const created = await createResponse.json() as {
-      config: { id: string; remotePort: number };
+      config: { id: string; remoteHost: string; remotePort: number };
       state: { status: string };
     };
+    expect(created.config.remoteHost).toBe("localhost");
     expect(created.config.remotePort).toBe(3000);
     expect(created.state.status).toBe("active");
 
@@ -182,7 +182,6 @@ describe("Loop port forwards API integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          remoteHost: "127.0.0.1",
           remotePort: 3000,
         }),
       });
@@ -240,7 +239,6 @@ describe("Loop port forwards API integration", () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          remoteHost: "127.0.0.1",
           remotePort: 3000,
         }),
       });
@@ -268,6 +266,65 @@ describe("Loop port forwards API integration", () => {
     } finally {
       forwardedAppServer?.stop();
       forwardedAppServer = null;
+      if (forwardId) {
+        await deleteForward(loop.config.id, forwardId);
+      }
+    }
+  });
+
+  test("derives the forwarded host from the workspace instead of the request body", async () => {
+    const workspace = await createWorkspace();
+    const loop = await createLoop(workspace.id);
+
+    const createResponse = await fetch(`${baseUrl}/api/loops/${loop.config.id}/port-forwards`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        remoteHost: "ignored.example.com",
+        remotePort: 3000,
+      }),
+    });
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as {
+      config: { remoteHost: string; remotePort: number };
+    };
+
+    expect(created.config.remoteHost).toBe("localhost");
+    expect(created.config.remotePort).toBe(3000);
+  });
+
+  test("rejects duplicate forwarded ports for the same workspace port", async () => {
+    const workspace = await createWorkspace();
+    const loop = await createLoop(workspace.id);
+    let forwardId: string | undefined;
+
+    try {
+      const firstResponse = await fetch(`${baseUrl}/api/loops/${loop.config.id}/port-forwards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          remotePort: 3000,
+        }),
+      });
+      expect(firstResponse.status).toBe(201);
+      const firstForward = await firstResponse.json() as {
+        config: { id: string };
+      };
+      forwardId = firstForward.config.id;
+
+      const duplicateResponse = await fetch(`${baseUrl}/api/loops/${loop.config.id}/port-forwards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          remotePort: 3000,
+        }),
+      });
+      expect(duplicateResponse.status).toBe(409);
+      expect(await duplicateResponse.json()).toEqual({
+        error: "duplicate_port_forward",
+        message: "Port 3000 is already being forwarded for this workspace",
+      });
+    } finally {
       if (forwardId) {
         await deleteForward(loop.config.id, forwardId);
       }
