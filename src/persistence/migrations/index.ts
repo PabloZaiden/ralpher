@@ -37,6 +37,7 @@
 
 import type { Database } from "bun:sqlite";
 import { createLogger } from "../../core/logger";
+import { getServerFingerprint, parseServerSettings } from "../../types/settings";
 
 const log = createLogger("persistence:migrations");
 
@@ -50,6 +51,8 @@ export interface Migration {
   name: string;
   /** Function to apply the migration */
   up: (db: Database) => void;
+  /** Whether the migration should be wrapped in the default transaction */
+  transactional?: boolean;
 }
 
 /**
@@ -149,6 +152,90 @@ export const migrations: Migration[] = [
       db.run("ALTER TABLE loops ADD COLUMN use_worktree INTEGER NOT NULL DEFAULT 1");
     },
   },
+  {
+    version: 3,
+    name: "make_workspaces_server_aware",
+    transactional: false,
+    up: (db) => {
+      if (!tableExists(db, "workspaces")) {
+        return;
+      }
+
+      const columns = getTableColumns(db, "workspaces");
+      if (columns.includes("server_fingerprint")) {
+        db.run(`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_workspaces_directory_server_fingerprint
+          ON workspaces(directory, server_fingerprint)
+        `);
+        return;
+      }
+
+      const rows = db.query(`
+        SELECT id, name, directory, server_settings, created_at, updated_at
+        FROM workspaces
+      `).all() as Array<{
+        id: string;
+        name: string;
+        directory: string;
+        server_settings: string | null;
+        created_at: string;
+        updated_at: string;
+      }>;
+
+      db.run("PRAGMA foreign_keys = OFF");
+      try {
+        const migrate = db.transaction(() => {
+          db.run(`
+            CREATE TABLE workspaces_new (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              directory TEXT NOT NULL,
+              server_fingerprint TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              server_settings TEXT NOT NULL DEFAULT '{}'
+            )
+          `);
+
+          const insertStmt = db.prepare(`
+            INSERT INTO workspaces_new (
+              id,
+              name,
+              directory,
+              server_fingerprint,
+              server_settings,
+              created_at,
+              updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `);
+
+          for (const row of rows) {
+            const serverSettings = parseServerSettings(row.server_settings);
+            insertStmt.run(
+              row.id,
+              row.name,
+              row.directory,
+              getServerFingerprint(serverSettings),
+              row.server_settings ?? "{}",
+              row.created_at,
+              row.updated_at,
+            );
+          }
+
+          db.run("DROP TABLE workspaces");
+          db.run("ALTER TABLE workspaces_new RENAME TO workspaces");
+          db.run(`
+            CREATE UNIQUE INDEX idx_workspaces_directory_server_fingerprint
+            ON workspaces(directory, server_fingerprint)
+          `);
+        });
+
+        migrate();
+      } finally {
+        db.run("PRAGMA foreign_keys = ON");
+      }
+    },
+  },
 ];
 
 /**
@@ -213,12 +300,17 @@ export function runMigrations(db: Database): number {
     
     try {
       // Run each migration in a transaction
-      const runMigration = db.transaction(() => {
+      if (migration.transactional === false) {
         migration.up(db);
         recordMigration(db, migration);
-      });
-      
-      runMigration();
+      } else {
+        const runMigration = db.transaction(() => {
+          migration.up(db);
+          recordMigration(db, migration);
+        });
+
+        runMigration();
+      }
       appliedCount++;
       log.info(`Migration ${migration.version} applied successfully`);
     } catch (error) {

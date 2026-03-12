@@ -171,14 +171,16 @@ export function useDashboardData(): UseDashboardDataResult {
   }, []);
 
   // Check planning directory
-  const checkPlanningDir = useCallback(async (directory: string) => {
-    if (!directory) {
+  const checkPlanningDir = useCallback(async (directory: string, workspaceId: string | null) => {
+    if (!directory || !workspaceId) {
       setPlanningWarning(null);
       return;
     }
 
     try {
-      const response = await fetch(`/api/check-planning-dir?directory=${encodeURIComponent(directory)}`);
+      const response = await fetch(
+        `/api/check-planning-dir?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`
+      );
       if (response.ok) {
         const data = await response.json();
         setPlanningWarning(data.warning ?? null);
@@ -191,8 +193,8 @@ export function useDashboardData(): UseDashboardDataResult {
   }, []);
 
   // Fetch branches
-  const fetchBranches = useCallback(async (directory: string) => {
-    if (!directory) {
+  const fetchBranches = useCallback(async (directory: string, workspaceId: string | null) => {
+    if (!directory || !workspaceId) {
       setBranches([]);
       setCurrentBranch("");
       return;
@@ -200,7 +202,9 @@ export function useDashboardData(): UseDashboardDataResult {
 
     setBranchesLoading(true);
     try {
-      const response = await fetch(`/api/git/branches?directory=${encodeURIComponent(directory)}`);
+      const response = await fetch(
+        `/api/git/branches?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`
+      );
       if (response.ok) {
         const data = await response.json();
         setBranches(data.branches ?? []);
@@ -218,14 +222,16 @@ export function useDashboardData(): UseDashboardDataResult {
   }, []);
 
   // Fetch default branch
-  const fetchDefaultBranch = useCallback(async (directory: string) => {
-    if (!directory) {
+  const fetchDefaultBranch = useCallback(async (directory: string, workspaceId: string | null) => {
+    if (!directory || !workspaceId) {
       setDefaultBranch("");
       return;
     }
 
     try {
-      const response = await fetch(`/api/git/default-branch?directory=${encodeURIComponent(directory)}`);
+      const response = await fetch(
+        `/api/git/default-branch?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`
+      );
       if (response.ok) {
         const data = await response.json();
         setDefaultBranch(data.defaultBranch ?? "");
@@ -250,9 +256,9 @@ export function useDashboardData(): UseDashboardDataResult {
       log.debug("Using directory from parameter:", directory);
 
       fetchModels(directory, workspaceId);
-      fetchBranches(directory);
-      fetchDefaultBranch(directory);
-      checkPlanningDir(directory);
+       fetchBranches(directory, workspaceId);
+       fetchDefaultBranch(directory, workspaceId);
+       checkPlanningDir(directory, workspaceId);
     } else {
       log.debug("Workspace unchanged, skipping fetch");
     }

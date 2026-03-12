@@ -18,7 +18,7 @@
 import { getLoopWorkingDirectory, loopManager } from "../core/loop-manager";
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
-import { getWorkspaceByDirectory, getWorkspace, touchWorkspace } from "../persistence/workspaces";
+import { getWorkspace, touchWorkspace } from "../persistence/workspaces";
 import { createLogger } from "../core/logger";
 
 const log = createLogger("api:loops");
@@ -33,7 +33,12 @@ import type {
   SendChatMessageResponse,
 } from "../types/api";
 import { parseAndValidate } from "./validation";
-import { errorResponse, successResponse } from "./helpers";
+import {
+  errorResponse,
+  normalizeDirectoryPath,
+  resolveWorkspaceForDirectory,
+  successResponse,
+} from "./helpers";
 import type { LoopConfig, Loop } from "../types/loop";
 import type { z } from "zod";
 import {
@@ -1158,32 +1163,42 @@ export const loopsDataRoutes = {
      * GET /api/check-planning-dir - Check if .planning directory exists.
      * 
      * Checks if a directory has a .planning folder and lists its contents.
-     * Useful for validating a project before creating a loop.
+     * Useful for validating a project before creating a loop. When multiple
+     * workspaces share the same directory path across different server targets,
+     * callers should pass `workspaceId` to disambiguate the lookup.
      * 
      * Query Parameters:
      * - directory (required): Absolute path to check
+     * - workspaceId (optional): Workspace ID used to disambiguate shared directories
+     *
+     * Errors:
+     * - 400: Missing directory parameter or workspaceId/directory mismatch
+     * - 404: Workspace not found
+     * - 409: Multiple workspaces use this directory and workspaceId was not provided
+     * - 500: Failed to inspect the planning directory
      * 
      * @returns Object with exists, hasFiles, files array, and optional warning
      */
     async GET(req: Request): Promise<Response> {
       const url = new URL(req.url);
       const directory = url.searchParams.get("directory");
+      const workspaceId = url.searchParams.get("workspaceId");
 
       if (!directory) {
         return errorResponse("invalid_request", "directory query parameter is required", 400);
       }
 
-      // Look up workspace by directory to get workspaceId
-      const workspace = await getWorkspaceByDirectory(directory);
-      if (!workspace) {
-        return errorResponse("workspace_not_found", `No workspace found for directory: ${directory}`, 404);
+      const normalizedDirectory = normalizeDirectoryPath(directory);
+      const workspace = await resolveWorkspaceForDirectory(normalizedDirectory, workspaceId);
+      if (workspace instanceof Response) {
+        return workspace;
       }
 
-      const planningDir = `${directory}/.planning`;
+      const planningDir = `${normalizedDirectory}/.planning`;
       
       try {
         // Get mode-appropriate command executor
-        const executor = await backendManager.getCommandExecutorAsync(workspace.id, directory);
+        const executor = await backendManager.getCommandExecutorAsync(workspace.id, normalizedDirectory);
 
         // Check if directory exists
         const exists = await executor.directoryExists(planningDir);

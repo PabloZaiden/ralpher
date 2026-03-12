@@ -110,6 +110,87 @@ describe("migration infrastructure", () => {
       expect(row.status).toBe("draft");
       expect(row.use_worktree).toBe(1);
     });
+
+    test("rebuilds workspaces for server-aware uniqueness", () => {
+      db.run(`
+        CREATE TABLE workspaces (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          directory TEXT UNIQUE NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          server_settings TEXT NOT NULL DEFAULT '{}'
+        )
+      `);
+      db.run(`
+        CREATE TABLE loops (
+          id TEXT PRIMARY KEY,
+          workspace_id TEXT,
+          FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+        )
+      `);
+
+      db.run(
+        `INSERT INTO workspaces (id, name, directory, server_settings, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          "ws-1",
+          "Workspace One",
+          "/tmp/shared-dir",
+          JSON.stringify({
+            agent: {
+              provider: "opencode",
+              transport: "stdio",
+            },
+          }),
+          "2025-01-01T00:00:00.000Z",
+          "2025-01-01T00:00:00.000Z",
+        ],
+      );
+      db.run(`INSERT INTO loops (id, workspace_id) VALUES ('loop-1', 'ws-1')`);
+
+      runMigrations(db);
+
+      expect(getTableColumns(db, "workspaces")).toContain("server_fingerprint");
+      db.run(
+        `INSERT INTO workspaces (
+          id,
+          name,
+          directory,
+          server_fingerprint,
+          server_settings,
+          created_at,
+          updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "ws-2",
+          "Workspace Two",
+          "/tmp/shared-dir",
+          "opencode:ssh:host.example:22:",
+          JSON.stringify({
+            agent: {
+              provider: "opencode",
+              transport: "ssh",
+              hostname: "host.example",
+              port: 22,
+            },
+          }),
+          "2025-01-02T00:00:00.000Z",
+          "2025-01-02T00:00:00.000Z",
+        ],
+      );
+
+      const rows = db.query(
+        "SELECT id, directory, server_fingerprint FROM workspaces ORDER BY id ASC"
+      ).all() as Array<{ id: string; directory: string; server_fingerprint: string }>;
+      expect(rows).toHaveLength(2);
+      expect(rows[0]?.server_fingerprint).toBe("opencode:stdio");
+
+      const loopRow = db.query("SELECT workspace_id FROM loops WHERE id = 'loop-1'").get() as {
+        workspace_id: string;
+      };
+      expect(loopRow.workspace_id).toBe("ws-1");
+    });
   });
 
   describe("getTableColumns", () => {

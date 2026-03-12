@@ -13,10 +13,9 @@
 
 import { backendManager } from "../core/backend-manager";
 import { GitService } from "../core/git-service";
-import { getWorkspaceByDirectory } from "../persistence/workspaces";
 import type { BranchInfo } from "../types";
 import { createLogger } from "../core/logger";
-import { errorResponse } from "./helpers";
+import { errorResponse, normalizeDirectoryPath, resolveWorkspaceForDirectory } from "./helpers";
 
 const log = createLogger("api:git");
 
@@ -41,20 +40,21 @@ export interface DefaultBranchResponse {
 /**
  * Get a GitService configured for the current execution provider.
  * Uses deterministic command execution (local/SSH), independent of agent transport.
+ * This helper never throws for missing or ambiguous workspaces; lookup failures
+ * are returned as `Response` objects from `resolveWorkspaceForDirectory()`.
  * 
  * @param directory - The directory containing the git repository
- * @returns Configured GitService instance
- * @throws Error if no workspace is found for the directory
+ * @param workspaceId - Optional workspace ID used to disambiguate identical directories
+ * @returns Configured GitService instance on success, or an error Response
  */
-async function getGitService(directory: string): Promise<GitService> {
-  log.debug("Getting GitService for directory", { directory });
-  // Look up the workspace by directory to get its workspaceId
-  const workspace = await getWorkspaceByDirectory(directory);
-  if (!workspace) {
-    log.warn("No workspace found for directory", { directory });
-    throw new Error(`No workspace found for directory: ${directory}`);
+async function getGitService(directory: string, workspaceId?: string | null): Promise<GitService | Response> {
+  const normalizedDirectory = normalizeDirectoryPath(directory);
+  log.debug("Getting GitService for directory", { directory: normalizedDirectory, workspaceId });
+  const workspace = await resolveWorkspaceForDirectory(normalizedDirectory, workspaceId);
+  if (workspace instanceof Response) {
+    return workspace;
   }
-  const executor = await backendManager.getCommandExecutorAsync(workspace.id, directory);
+  const executor = await backendManager.getCommandExecutorAsync(workspace.id, normalizedDirectory);
   log.debug("GitService created", { workspaceId: workspace.id });
   return GitService.withExecutor(executor);
 }
@@ -70,21 +70,26 @@ async function validateGitRequest(req: Request): Promise<
 > {
   const url = new URL(req.url);
   const directory = url.searchParams.get("directory");
+  const workspaceId = url.searchParams.get("workspaceId");
 
   if (!directory) {
     log.warn("Missing directory parameter");
     return errorResponse("missing_parameter", "directory query parameter is required");
   }
 
-  const git = await getGitService(directory);
+  const normalizedDirectory = normalizeDirectoryPath(directory);
+  const git = await getGitService(normalizedDirectory, workspaceId);
+  if (git instanceof Response) {
+    return git;
+  }
 
-  const isGitRepo = await git.isGitRepo(directory);
+  const isGitRepo = await git.isGitRepo(normalizedDirectory);
   if (!isGitRepo) {
-    log.debug("Directory is not a git repository", { directory });
+    log.debug("Directory is not a git repository", { directory: normalizedDirectory });
     return errorResponse("not_git_repo", "Directory is not a git repository");
   }
 
-  return { git, directory };
+  return { git, directory: normalizedDirectory };
 }
 
 /**
@@ -102,9 +107,12 @@ export const gitRoutes = {
    * 
    * Query Parameters:
    * - directory (required): Path to the git repository
+   * - workspaceId (optional): Workspace ID used to disambiguate shared directories
    * 
    * Errors:
-   * - 400: Missing directory parameter or not a git repo
+   * - 400: Missing directory parameter, directory mismatch, or not a git repo
+   * - 404: Workspace not found
+   * - 409: Multiple workspaces use this directory and workspaceId was not provided
    * - 500: Git command error
    * 
    * @returns BranchesResponse with currentBranch and branches array
@@ -143,9 +151,12 @@ export const gitRoutes = {
    * 
    * Query Parameters:
    * - directory (required): Path to the git repository
+   * - workspaceId (optional): Workspace ID used to disambiguate shared directories
    * 
    * Errors:
-   * - 400: Missing directory parameter or not a git repo
+   * - 400: Missing directory parameter, directory mismatch, or not a git repo
+   * - 404: Workspace not found
+   * - 409: Multiple workspaces use this directory and workspaceId was not provided
    * - 500: Git command error
    * 
    * @returns DefaultBranchResponse with defaultBranch

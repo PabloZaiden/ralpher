@@ -111,6 +111,45 @@ describe("Git API Integration", () => {
       // Should return an error (500 for git error or 400 for workspace not found)
       expect(res.status).toBeGreaterThanOrEqual(400);
     });
+
+    test("returns 409 for ambiguous directories without workspaceId", async () => {
+      await createWorkspace({
+        id: "git-test-workspace-ssh",
+        name: "Git Test SSH",
+        directory: testWorkDir,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        serverSettings: {
+          agent: {
+            provider: "opencode",
+            transport: "ssh",
+            hostname: "git-host.test",
+            port: 22,
+          },
+        },
+      });
+
+      const res = await fetch(`${baseUrl}/api/git/branches?directory=${encodeURIComponent(testWorkDir)}`);
+      expect(res.status).toBe(409);
+    });
+
+    test("uses workspaceId to disambiguate directories", async () => {
+      const res = await fetch(
+        `${baseUrl}/api/git/branches?directory=${encodeURIComponent(testWorkDir)}&workspaceId=${encodeURIComponent("git-test-workspace")}`
+      );
+      expect(res.status).toBe(200);
+    });
+
+    test("trims incidental whitespace from directory queries", async () => {
+      const res = await fetch(
+        `${baseUrl}/api/git/branches?directory=${encodeURIComponent(`  ${testWorkDir}  `)}&workspaceId=${encodeURIComponent("git-test-workspace")}`
+      );
+      expect(res.status).toBe(200);
+
+      const body = await res.json();
+      expect(body.currentBranch).toBeTruthy();
+      expect(Array.isArray(body.branches)).toBe(true);
+    });
   });
 
   // ==========================================================================
@@ -119,7 +158,9 @@ describe("Git API Integration", () => {
 
   describe("GET /api/git/default-branch", () => {
     test("returns a default branch for a valid git directory", async () => {
-      const res = await fetch(`${baseUrl}/api/git/default-branch?directory=${encodeURIComponent(testWorkDir)}`);
+      const res = await fetch(
+        `${baseUrl}/api/git/default-branch?directory=${encodeURIComponent(testWorkDir)}&workspaceId=${encodeURIComponent("git-test-workspace")}`
+      );
       expect(res.status).toBe(200);
 
       const body = await res.json();

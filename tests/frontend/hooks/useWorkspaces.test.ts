@@ -334,6 +334,27 @@ describe("getWorkspaceByDirectory", () => {
     expect(result.current.error).toBeNull();
   });
 
+  test("returns null on 409 ambiguity without setting error state", async () => {
+    setupWorkspacesList();
+    api.get("/api/workspaces/by-directory", () => {
+      throw new MockApiError(409, { message: "Ambiguous workspace" });
+    });
+
+    const { result } = renderHook(() => useWorkspaces());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    let found: ReturnType<typeof createWorkspace> | null = null;
+    await act(async () => {
+      found = await result.current.getWorkspaceByDirectory("/shared");
+    });
+
+    expect(found).toBeNull();
+    expect(result.current.error).toBeNull();
+  });
+
   test("returns null on other errors without setting error state", async () => {
     setupWorkspacesList();
     api.get("/api/workspaces/by-directory", () => {
