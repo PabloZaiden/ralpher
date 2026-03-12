@@ -9,7 +9,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor } from "../helpers/render";
-import { createLoopWithStatus, createWorkspace } from "../helpers/factories";
+import { createLoopWithStatus, createSshSession, createWorkspace } from "../helpers/factories";
 import { Dashboard } from "@/components/Dashboard";
 
 const api = createMockApi();
@@ -19,6 +19,7 @@ const ws = createMockWebSocket();
 function setupDefaultApi() {
   api.get("/api/loops", () => []);
   api.get("/api/workspaces", () => []);
+  api.get("/api/ssh-sessions", () => []);
   api.get("/api/config", () => ({ remoteOnly: false }));
   api.get("/api/health", () => ({ status: "ok", version: "1.0.0" }));
   api.get("/api/preferences/last-model", () => null);
@@ -105,6 +106,68 @@ describe("empty state", () => {
       expect(getByText("No loops yet")).toBeTruthy();
     });
     expect(getByText(/Click "New Loop"/)).toBeTruthy();
+  });
+});
+
+describe("ssh sessions section", () => {
+  test("renders ssh sessions inside the shared dashboard scroll area", async () => {
+    const workspace = createWorkspace({ id: "ws-1", name: "Project" });
+    const loop = createLoopWithStatus("running", {
+      config: { id: "loop-1", name: "Visible Loop", workspaceId: "ws-1" },
+    });
+    const session = createSshSession({
+      config: { id: "ssh-1", name: "Remote Shell" },
+      state: { status: "connected" },
+    });
+
+    api.get("/api/loops", () => [loop]);
+    api.get("/api/workspaces", () => [workspace]);
+    api.get("/api/ssh-sessions", () => [session]);
+
+    const { getByRole } = renderWithUser(<Dashboard />);
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: /SSH Sessions \(1\)/ })).toBeTruthy();
+    });
+
+    const scrollRegion = getByRole("main");
+    await waitFor(() => {
+      expect(scrollRegion.textContent).toContain("Remote Shell");
+      expect(scrollRegion.textContent).toContain("Visible Loop");
+    });
+  });
+
+  test("can collapse ssh sessions without hiding loops", async () => {
+    const workspace = createWorkspace({ id: "ws-1", name: "Project" });
+    const loop = createLoopWithStatus("running", {
+      config: { id: "loop-1", name: "Loop Still Visible", workspaceId: "ws-1" },
+    });
+    const session = createSshSession({
+      config: { id: "ssh-1", name: "Collapsible SSH" },
+      state: { status: "connected" },
+    });
+
+    api.get("/api/loops", () => [loop]);
+    api.get("/api/workspaces", () => [workspace]);
+    api.get("/api/ssh-sessions", () => [session]);
+
+    const { getByRole, getByText, queryByText, user } = renderWithUser(<Dashboard />);
+
+    await waitFor(() => {
+      expect(getByText("Collapsible SSH")).toBeTruthy();
+    });
+
+    await waitFor(() => {
+      expect(getByText("Loop Still Visible")).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: /SSH Sessions \(1\)/ }));
+
+    await waitFor(() => {
+      expect(queryByText("Collapsible SSH")).toBeNull();
+    });
+
+    expect(getByText("Loop Still Visible")).toBeTruthy();
   });
 });
 
