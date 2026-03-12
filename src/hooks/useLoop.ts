@@ -230,6 +230,7 @@ export function useLoop(loopId: string): UseLoopResult {
       case "loop.started":
       case "loop.stopped":
       case "loop.completed":
+      case "loop.ssh_handoff":
       case "loop.accepted":
       case "loop.pushed":
       case "loop.discarded":

@@ -9,7 +9,23 @@ import { join } from "path";
 import { setupTestContext, teardownTestContext, waitForPlanReady, waitForPersistedPlanReady, waitForLoopStatus, testModelFields } from "../setup";
 import type { TestContext } from "../setup";
 import { MockAcpBackend, defaultTestModel } from "../mocks/mock-backend";
+import { TestCommandExecutor } from "../mocks/mock-executor";
 import { backendManager } from "../../src/core/backend-manager";
+import { updateWorkspace } from "../../src/persistence/workspaces";
+
+class SshReadyExecutor extends TestCommandExecutor {
+  override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
+    if (command === "tmux" && args[0] === "-V") {
+      return {
+        success: true,
+        stdout: "tmux 3.4\n",
+        stderr: "",
+        exitCode: 0,
+      };
+    }
+    return await super.exec(command, args, options);
+  }
+}
 
 // Helper to check if a file exists
 async function exists(path: string): Promise<boolean> {
@@ -994,5 +1010,60 @@ describe("Plan Mode - Engine Recovery After Server Restart", () => {
 
     // Try to accept — loop is in 'idle' status, not 'planning'
     await expect(ctx.manager.acceptPlan(loopId)).rejects.toThrow("Loop plan mode is not running");
+  });
+});
+
+describe("Plan Mode - Open SSH acceptance", () => {
+  let ctx: TestContext;
+
+  beforeEach(async () => {
+    ctx = await setupTestContext({
+      initGit: true,
+      mockResponses: ["<promise>PLAN_READY</promise>"],
+    });
+    backendManager.setExecutorFactoryForTesting(() => new SshReadyExecutor());
+    await updateWorkspace(testWorkspaceId, {
+      serverSettings: {
+        agent: {
+          provider: "opencode",
+          transport: "ssh",
+          hostname: "localhost",
+          username: "tester",
+        },
+      },
+    });
+  });
+
+  afterEach(async () => {
+    await teardownTestContext(ctx);
+  });
+
+  test("acceptPlan in open_ssh mode clears pending execution state and emits an SSH handoff event", async () => {
+    const loop = await ctx.manager.createLoop({
+      ...testModelFields,
+      prompt: "Create a plan",
+      directory: ctx.workDir,
+      workspaceId: testWorkspaceId,
+      maxIterations: 1,
+      planMode: true,
+    });
+    const loopId = loop.config.id;
+
+    await ctx.manager.startPlanMode(loopId);
+    await waitForPlanReady(ctx.manager, loopId);
+
+    const result = await ctx.manager.acceptPlan(loopId, { mode: "open_ssh" });
+    expect(result.mode).toBe("open_ssh");
+    expect(result.sshSession.config.loopId).toBe(loopId);
+
+    const loopData = await waitForLoopStatus(ctx.manager, loopId, ["completed"]);
+    expect(loopData.state.status).toBe("completed");
+    expect(loopData.state.pendingPrompt).toBeUndefined();
+
+    const sshHandoffEvents = ctx.events.filter((event) => event.type === "loop.ssh_handoff" && event.loopId === loopId);
+    expect(sshHandoffEvents).toHaveLength(1);
+
+    const completionEvents = ctx.events.filter((event) => event.type === "loop.completed" && event.loopId === loopId);
+    expect(completionEvents).toHaveLength(0);
   });
 });

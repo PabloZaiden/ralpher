@@ -460,7 +460,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
     try {
       const result = await acceptPlan(mode);
       if (!result.success) {
-        toast.error(mode === "open_ssh" ? "Failed to accept plan and open ssh" : "Failed to accept plan");
+        toast.error(mode === "open_ssh" ? "Failed to accept plan and open SSH" : "Failed to accept plan");
         return;
       }
       if (result.mode === "open_ssh") {

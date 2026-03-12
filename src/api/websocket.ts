@@ -11,7 +11,7 @@
  * - Automatic cleanup on disconnect
  * 
  * Event Types Streamed:
- * - loop.created, loop.started, loop.completed, loop.stopped, loop.error
+ * - loop.created, loop.started, loop.completed, loop.ssh_handoff, loop.stopped, loop.error
  * - loop.iteration.start, loop.iteration.end
  * - loop.message, loop.tool_call, loop.progress, loop.log
  * - loop.git.commit, loop.deleted, loop.accepted, loop.pushed, loop.discarded

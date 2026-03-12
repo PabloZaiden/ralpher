@@ -564,6 +564,7 @@ export class LoopManager {
       status: targetStatus,
       startedAt: engine.state.startedAt ?? now,
       completedAt: mode === "open_ssh" ? now : engine.state.completedAt,
+      pendingPrompt: mode === "open_ssh" ? undefined : engine.state.pendingPrompt,
       planMode: {
         ...engine.state.planMode,
         active: false,
@@ -589,8 +590,6 @@ Follow the standard loop execution flow:
 
 <promise>COMPLETE</promise>`;
 
-    engine.setPendingPrompt(executionPrompt);
-
     // Emit plan accepted event
     this.emitter.emit({
       type: "loop.plan.accepted",
@@ -600,7 +599,7 @@ Follow the standard loop execution flow:
 
     if (mode === "open_ssh") {
       this.emitter.emit({
-        type: "loop.completed",
+        type: "loop.ssh_handoff",
         loopId,
         totalIterations: engine.state.currentIteration,
         timestamp: now,
@@ -620,6 +619,8 @@ Follow the standard loop execution flow:
       iteration: 0,
       timestamp: now,
     });
+
+    engine.setPendingPrompt(executionPrompt);
 
     // Start the execution loop (fire-and-forget, same pattern as engine.start()).
     // This is a long-running process that runs AI iterations for minutes to hours.
