@@ -759,7 +759,7 @@ export function SshSessionDetails({
                   variant="secondary"
                   size="xs"
                   className={touchButtonClassName}
-                  onClick={() => sendTerminalTextShortcut("curl https://raw.githubusercontent.com/sinelaw/fresh/refs/heads/master/scripts/install.sh | sh\n")}
+                  onClick={() => sendTerminalTextShortcut("curl https://raw.githubusercontent.com/sinelaw/fresh/refs/heads/master/scripts/install.sh | sh")}
                 >
                   Install fresh
                 </Button>
