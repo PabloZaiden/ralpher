@@ -10,12 +10,12 @@ describe("branch-name helpers", () => {
     expect(buildLoopBranchName("", "My Feature", "Test prompt")).toBe("my-feature-46817f3");
   });
 
-  test("buildLoopBranchName preserves an explicit configured prefix", () => {
-    expect(buildLoopBranchName("team/", "My Feature", "Test prompt")).toBe("team/my-feature-46817f3");
+  test("buildLoopBranchName ignores an explicit configured prefix", () => {
+    expect(buildLoopBranchName("team/", "My Feature", "Test prompt")).toBe("my-feature-46817f3");
   });
 
-  test("buildLoopBranchName normalizes prefixes without a trailing slash", () => {
-    expect(buildLoopBranchName("team", "My Feature", "Test prompt")).toBe("team/my-feature-46817f3");
+  test("buildLoopBranchName still starts with the sanitized title when the prefix has no trailing slash", () => {
+    expect(buildLoopBranchName("team", "My Feature", "Test prompt")).toBe("my-feature-46817f3");
   });
 
   test("normalizeBranchPrefix strips invalid characters and empty segments", () => {

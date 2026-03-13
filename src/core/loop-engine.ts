@@ -870,9 +870,10 @@ export class LoopEngine {
     const originalBranch = await this.resolveOriginalBranch(directory);
     const branchName = await this.resolveBranchName(directory);
 
-    if (originalBranch.startsWith(this.config.git.branchPrefix) && !this.loop.state.git?.originalBranch) {
-      this.emitLog("warn", `Base branch is a working branch (${originalBranch}); preserving base branch but continuing`, {
+    if (originalBranch === branchName && !this.loop.state.git?.originalBranch) {
+      this.emitLog("warn", `Base branch matches generated working branch (${originalBranch}); preserving base branch but continuing`, {
         originalBranch,
+        branchName,
       });
     }
 
