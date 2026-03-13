@@ -123,6 +123,19 @@ describe("LoopManager", () => {
       // Backend is now global, not per-loop config
       expect(loop.config.maxIterations).toBe(10);
     });
+
+    test("normalizes configured branch prefixes", async () => {
+      const loop = await manager.createLoop({
+        ...testModelFields,
+        directory: testWorkDir,
+        prompt: "Custom task",
+        workspaceId: testWorkspaceId,
+        gitBranchPrefix: " Team Alpha ",
+        planMode: false,
+      });
+
+      expect(loop.config.git.branchPrefix).toBe("team-alpha/");
+    });
   });
 
   describe("getLoop", () => {

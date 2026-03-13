@@ -859,7 +859,6 @@ export class LoopEngine {
    */
   private async setupGitBranch(_allowPlanningFolderChanges = false): Promise<void> {
     const directory = this.config.directory;
-    const branchName = this.resolveBranchName();
 
     // Check if we're in a git repo
     this.emitLog("debug", "Checking if directory is a git repository", { directory });
@@ -869,6 +868,7 @@ export class LoopEngine {
     }
 
     const originalBranch = await this.resolveOriginalBranch(directory);
+    const branchName = await this.resolveBranchName(directory);
 
     if (originalBranch.startsWith(this.config.git.branchPrefix) && !this.loop.state.git?.originalBranch) {
       this.emitLog("warn", `Base branch is a working branch (${originalBranch}); preserving base branch but continuing`, {
@@ -956,20 +956,38 @@ export class LoopEngine {
   /**
    * Determine the branch name for this loop.
    * Reuses an existing workingBranch if present (idempotent), otherwise generates
-   * a new name from the loop name + a short hash of the prompt.
+   * a new name from the loop name + a short hash of the prompt, appending a
+   * numeric suffix if the deterministic base already exists in the repository.
    */
-  private resolveBranchName(): string {
+  private async resolveBranchName(directory: string): Promise<string> {
     if (this.loop.state.git?.workingBranch) {
       // Branch was already created (e.g., retry, jumpstart, or plan mode setup).
-      // Reuse the authoritative name rather than regenerating from timestamp.
+      // Reuse the authoritative name rather than regenerating it.
       return this.loop.state.git.workingBranch;
     }
 
-    return buildLoopBranchName(
+    const baseBranchName = buildLoopBranchName(
       this.config.git.branchPrefix,
       this.config.name,
       this.config.prompt,
     );
+
+    let branchName = baseBranchName;
+    let collisionIndex = 2;
+
+    while (await this.git.branchExists(directory, branchName)) {
+      branchName = `${baseBranchName}-${collisionIndex}`;
+      collisionIndex += 1;
+    }
+
+    if (branchName !== baseBranchName) {
+      this.emitLog("info", `Generated unique working branch after collision: ${branchName}`, {
+        baseBranchName,
+        branchName,
+      });
+    }
+
+    return branchName;
   }
 
   /**

@@ -196,7 +196,7 @@ describe("Chat API Integration", () => {
           prompt: "Tell me about the codebase",
           model: testModel,
           useWorktree: true,
-          git: { branchPrefix: "chat/" },
+          git: { branchPrefix: "chat" },
         }),
       });
 

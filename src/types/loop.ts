@@ -92,7 +92,7 @@ export interface LoopConfig {
  * and commits are named for the loop's work.
  */
 export interface GitConfig {
-  /** Branch name prefix. Default: empty string (e.g., "team/add-auth" when configured) */
+  /** Branch name prefix. Default: empty string; non-empty values are normalized to git-safe path segments (e.g., "team/" -> "team/add-auth"). */
   branchPrefix: string;
   /**
    * Conventional commit scope. Default: "ralph".

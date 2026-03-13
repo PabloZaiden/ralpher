@@ -741,6 +741,56 @@ describe("StopPatternDetector", () => {
       ]);
     });
 
+    test("setupGitBranch appends a numeric suffix when the generated branch already exists", async () => {
+      const loop = createTestLoop({
+        name: "My Feature",
+        prompt: "Test prompt",
+        baseBranch: "main",
+        useWorktree: true,
+      });
+      loop.state.startedAt = new Date().toISOString();
+      mockBackend = createMockBackend([]);
+
+      const calls: string[] = [];
+      const baseBranchName = "my-feature-46817f3";
+      const mockGitService = {
+        isGitRepo: async () => true,
+        getCurrentBranch: async () => "main",
+        checkoutBranch: async (_directory: string, branch: string) => {
+          calls.push(`checkout:${branch}`);
+        },
+        pull: async (_directory: string, branch?: string) => {
+          calls.push(`pull:${branch}`);
+          return true;
+        },
+        branchExists: async (_directory: string, branch: string) => branch === baseBranchName,
+        worktreeExists: async () => false,
+        createWorktree: async (
+          _directory: string,
+          _worktreePath: string,
+          branchName: string,
+          originalBranch: string,
+        ) => {
+          calls.push(`createWorktree:${branchName}:${originalBranch}`);
+        },
+      } as unknown as GitService;
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService: mockGitService,
+        eventEmitter: emitter,
+      });
+
+      await (engine as unknown as { setupGitBranch: () => Promise<void> }).setupGitBranch();
+
+      expect(engine.state.git?.workingBranch).toBe(`${baseBranchName}-2`);
+      expect(calls).toEqual([
+        "pull:main",
+        `createWorktree:${baseBranchName}-2:main`,
+      ]);
+    });
+
   test("setPendingPrompt updates state", async () => {
     const loop = createTestLoop({ maxIterations: 1 });
 

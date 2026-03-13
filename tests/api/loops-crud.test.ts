@@ -209,7 +209,7 @@ describe("Loops CRUD API Integration", () => {
           prompt: "Custom task",
           maxIterations: 10,
           stopPattern: "<done>FINISHED</done>$",
-          git: { branchPrefix: "custom/" },
+          git: { branchPrefix: "custom" },
           planMode: false,
           model: testModel,
           useWorktree: true,
@@ -338,12 +338,16 @@ describe("Loops CRUD API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Updated prompt",
+          git: {
+            branchPrefix: "team platform",
+          },
         }),
       });
       expect(response.status).toBe(200);
 
       const body = await response.json();
       expect(body.config.prompt).toBe("Updated prompt");
+      expect(body.config.git.branchPrefix).toBe("team-platform/");
     });
 
     test("returns 404 for non-existent loop", async () => {

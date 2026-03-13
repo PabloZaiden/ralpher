@@ -35,7 +35,7 @@ import { generateLoopName } from "../utils/name-generator";
 import { assertValidTransition } from "./loop-state-machine";
 import { sshSessionManager } from "./ssh-session-manager";
 import { portForwardManager } from "./port-forward-manager";
-import { buildReviewBranchName } from "./branch-name";
+import { buildReviewBranchName, normalizeBranchPrefix } from "./branch-name";
 
 /**
  * Options for creating a new loop.
@@ -246,7 +246,7 @@ export class LoopManager {
       activityTimeoutSeconds: options.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
       stopPattern: options.stopPattern ?? DEFAULT_LOOP_CONFIG.stopPattern,
       git: {
-        branchPrefix: options.gitBranchPrefix ?? DEFAULT_LOOP_CONFIG.git.branchPrefix,
+        branchPrefix: normalizeBranchPrefix(options.gitBranchPrefix ?? DEFAULT_LOOP_CONFIG.git.branchPrefix),
         commitScope: options.gitCommitScope ?? DEFAULT_LOOP_CONFIG.git.commitScope,
       },
       baseBranch: options.baseBranch,
@@ -759,6 +759,13 @@ Follow the standard loop execution flow:
     const updatedConfig: LoopConfig = {
       ...loop.config,
       ...updates,
+      git: updates.git
+        ? {
+            ...loop.config.git,
+            ...updates.git,
+            branchPrefix: normalizeBranchPrefix(updates.git.branchPrefix ?? loop.config.git.branchPrefix),
+          }
+        : loop.config.git,
       updatedAt: createTimestamp(),
     };
 

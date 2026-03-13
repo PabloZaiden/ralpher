@@ -131,7 +131,7 @@ Loop names are **automatically generated** from the prompt using AI. The `name` 
 | `activityTimeoutSeconds` | number | No | Seconds without events before treating as error (default: 900, min: 60) |
 | `stopPattern` | string | No | Completion regex (default: `<promise>COMPLETE</promise>$`) |
 | `git` | object | No | Git configuration |
-| `git.branchPrefix` | string | No | Optional prefix prepended before the generated `title-hash` branch name (default: empty string) |
+| `git.branchPrefix` | string | No | Optional prefix prepended before the generated `title-hash` branch name (default: empty string). Non-empty values are normalized to git-safe path segments and stored with a trailing `/`. |
 | `git.commitScope` | string | No | Conventional commit scope (default: "ralph"). Used in commit messages as `type(scope): description`. The deprecated `git.commitPrefix` is still accepted and automatically converted (e.g., `"[Ralph]"` becomes `"ralph"`). |
 | `baseBranch` | string | No | Base branch to create the loop from (default: auto-detected default branch) |
 | `clearPlanningFolder` | boolean | No | Clear .planning folder before starting (default: false) |
@@ -329,7 +329,7 @@ When the push succeeds normally:
 ```json
 {
   "success": true,
-  "remoteBranch": "add-dark-mode-toggle-a1b2c3d",
+  "remoteBranch": "origin/add-dark-mode-toggle-a1b2c3d",
   "syncStatus": "clean"
 }
 ```
@@ -339,7 +339,7 @@ When the branch is already up to date with the remote:
 ```json
 {
   "success": true,
-  "remoteBranch": "add-dark-mode-toggle-a1b2c3d",
+  "remoteBranch": "origin/add-dark-mode-toggle-a1b2c3d",
   "syncStatus": "already_up_to_date"
 }
 ```
