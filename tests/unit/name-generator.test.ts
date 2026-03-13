@@ -3,7 +3,11 @@
  */
 
 import { describe, test, expect, mock } from "bun:test";
-import { generateLoopName, sanitizeLoopName } from "../../src/utils/name-generator";
+import {
+  DEFAULT_LOOP_TITLE_TIMEOUT_MS,
+  generateLoopName,
+  sanitizeLoopName,
+} from "../../src/utils/name-generator";
 import type { BackendInterface } from "../../src/utils/name-generator";
 import type { AgentResponse } from "../../src/backends/types";
 
@@ -67,6 +71,10 @@ describe("sanitizeLoopName", () => {
 });
 
 describe("generateLoopName", () => {
+  test("exports the longer default loop title timeout", () => {
+    expect(DEFAULT_LOOP_TITLE_TIMEOUT_MS).toBe(30000);
+  });
+
   test("generates name from prompt successfully", async () => {
     const mockBackend: BackendInterface = {
       sendPrompt: mock(async (_sessionId: string, _prompt) => {
