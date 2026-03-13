@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { appFetch } from "../lib/public-path";
 
 export interface UseMarkdownPreferenceResult {
   /** Whether markdown rendering is enabled */
@@ -41,7 +42,7 @@ export function useMarkdownPreference(): UseMarkdownPreferenceResult {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("/api/preferences/markdown-rendering");
+      const response = await appFetch("/api/preferences/markdown-rendering");
       if (!response.ok) {
         throw new Error(`Failed to fetch preference: ${response.statusText}`);
       }
@@ -59,7 +60,7 @@ export function useMarkdownPreference(): UseMarkdownPreferenceResult {
     try {
       setSaving(true);
       setError(null);
-      const response = await fetch("/api/preferences/markdown-rendering", {
+      const response = await appFetch("/api/preferences/markdown-rendering", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: newEnabled }),

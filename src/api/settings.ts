@@ -16,6 +16,7 @@ import { backendManager } from "../core/backend-manager";
 import { getAppConfig } from "../core/config";
 import { deleteAndReinitializeDatabase } from "../persistence/database";
 import { createLogger } from "../core/logger";
+import { getPublicBasePathFromForwardedPrefix } from "../utils/public-base-path";
 import { errorResponse } from "./helpers";
 
 const log = createLogger("api:settings");
@@ -42,11 +43,23 @@ export const settingsRoutes = {
      * 
      * @returns AppConfig object
      */
-    async GET(): Promise<Response> {
+    async GET(req: Request): Promise<Response> {
       log.debug("GET /api/config");
       const config = getAppConfig();
-      log.debug("Returning app config", { remoteOnly: config.remoteOnly });
-      return Response.json(config);
+      const publicBasePath = getPublicBasePathFromForwardedPrefix(
+        req.headers.get("x-forwarded-prefix"),
+      );
+      const responseConfig = publicBasePath
+        ? {
+            ...config,
+            publicBasePath,
+          }
+        : config;
+      log.debug("Returning app config", {
+        remoteOnly: config.remoteOnly,
+        publicBasePath: publicBasePath || undefined,
+      });
+      return Response.json(responseConfig);
     },
   },
 

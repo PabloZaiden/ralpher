@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Loop, LoopEvent, CreateLoopRequest, CreateChatRequest, UpdateLoopRequest, UncommittedChangesError } from "../types";
 import { useGlobalEvents } from "./useWebSocket";
 import { log } from "../lib/logger";
+import { appFetch } from "../lib/public-path";
 import {
   acceptLoopApi,
   pushLoopApi,
@@ -125,7 +126,7 @@ export function useLoops(): UseLoopsResult {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("/api/loops", { signal: controller.signal });
+      const response = await appFetch("/api/loops", { signal: controller.signal });
       if (controller.signal.aborted) return;
       if (!response.ok) {
         throw new Error(`Failed to fetch loops: ${response.statusText}`);
@@ -143,7 +144,7 @@ export function useLoops(): UseLoopsResult {
   // Refresh a single loop
   const refreshLoop = useCallback(async (id: string) => {
     try {
-      const response = await fetch(`/api/loops/${id}`);
+      const response = await appFetch(`/api/loops/${id}`);
       if (!response.ok) {
         if (response.status === 404) {
           // Loop was deleted
@@ -170,7 +171,7 @@ export function useLoops(): UseLoopsResult {
   // Create a new loop (loops are always started immediately by the API)
   const createLoop = useCallback(async (request: CreateLoopRequest): Promise<CreateLoopResult> => {
     try {
-      const response = await fetch("/api/loops", {
+      const response = await appFetch("/api/loops", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
@@ -206,7 +207,7 @@ export function useLoops(): UseLoopsResult {
   // Create a new interactive chat
   const createChat = useCallback(async (request: CreateChatRequest): Promise<CreateChatResult> => {
     try {
-      const response = await fetch("/api/loops/chat", {
+      const response = await appFetch("/api/loops/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
@@ -238,7 +239,7 @@ export function useLoops(): UseLoopsResult {
   // Update an existing loop
   const updateLoop = useCallback(async (id: string, request: UpdateLoopRequest): Promise<Loop | null> => {
     try {
-      const response = await fetch(`/api/loops/${id}`, {
+      const response = await appFetch(`/api/loops/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),

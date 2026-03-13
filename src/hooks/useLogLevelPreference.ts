@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { setLogLevel as setFrontendLogLevel, type LogLevelName, LOG_LEVEL_OPTIONS, DEFAULT_LOG_LEVEL } from "../lib/logger";
+import { appFetch } from "../lib/public-path";
 
 export interface UseLogLevelPreferenceResult {
   /** Current log level */
@@ -43,7 +44,7 @@ export function useLogLevelPreference(): UseLogLevelPreferenceResult {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("/api/preferences/log-level");
+      const response = await appFetch("/api/preferences/log-level");
       if (!response.ok) {
         throw new Error(`Failed to fetch log level preference: ${response.statusText}`);
       }
@@ -64,7 +65,7 @@ export function useLogLevelPreference(): UseLogLevelPreferenceResult {
     try {
       setSaving(true);
       setError(null);
-      const response = await fetch("/api/preferences/log-level", {
+      const response = await appFetch("/api/preferences/log-level", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ level: newLevel }),

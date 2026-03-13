@@ -30,6 +30,7 @@ import {
   getEntityLabel,
 } from "../utils";
 import { writeTextToClipboard } from "../utils";
+import { appAbsoluteUrl, appPath, appFetch } from "../lib/public-path";
 import { log } from "../lib/logger";
 
 export interface LoopDetailsProps {
@@ -199,7 +200,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
   const fetchReviewComments = useCallback(async () => {
     setLoadingComments(true);
     try {
-      const response = await fetch(`/api/loops/${loopId}/comments`);
+      const response = await appFetch(`/api/loops/${loopId}/comments`);
       if (response.ok) {
         const data = await response.json();
         if (data.success && data.comments) {
@@ -220,7 +221,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
     async function fetchModels() {
       setModelsLoading(true);
       try {
-        const response = await fetch(`/api/models?directory=${encodeURIComponent(loop!.config.directory)}&workspaceId=${encodeURIComponent(loop!.config.workspaceId)}`);
+        const response = await appFetch(`/api/models?directory=${encodeURIComponent(loop!.config.directory)}&workspaceId=${encodeURIComponent(loop!.config.workspaceId)}`);
         if (response.ok) {
           const data = await response.json() as ModelInfo[];
           setModels(data);
@@ -543,8 +544,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
   }
 
   async function handleCopyForwardUrl(forwardId: string) {
-    const relativeUrl = `/loop/${loopId}/port/${forwardId}/`;
-    const absoluteUrl = `${window.location.origin}${relativeUrl}`;
+    const absoluteUrl = appAbsoluteUrl(`/loop/${loopId}/port/${forwardId}/`);
     try {
       await writeTextToClipboard(absoluteUrl);
       toast.success("Forward URL copied");
@@ -554,7 +554,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
   }
 
   function handleOpenForward(forwardId: string) {
-    window.open(`/loop/${loopId}/port/${forwardId}/`, "_blank", "noopener,noreferrer");
+    window.open(appPath(`/loop/${loopId}/port/${forwardId}/`), "_blank", "noopener,noreferrer");
   }
 
   if (loading && !loop) {
@@ -946,7 +946,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                                       </span>
                                     </div>
                                     <div className="text-xs text-gray-500 dark:text-gray-400 font-mono break-all">
-                                      {window.location.origin}/loop/{loopId}/port/{forward.config.id}/
+                                      {appAbsoluteUrl(`/loop/${loopId}/port/${forward.config.id}/`)}
                                     </div>
                                     <div className="text-xs text-gray-500 dark:text-gray-400">
                                       Local listener: {forward.config.localPort}

@@ -9,6 +9,7 @@ import { ServerSettingsForm } from "./ServerSettingsForm";
 import { getDefaultServerSettings } from "../types/settings";
 import type { ServerSettings } from "../types/settings";
 import type { CreateWorkspaceRequest } from "../types/workspace";
+import { appFetch } from "../lib/public-path";
 
 export interface CreateWorkspaceModalProps {
   /** Whether the modal is open */
@@ -91,7 +92,7 @@ export function CreateWorkspaceModal({
 
     setTesting(true);
     try {
-      const res = await fetch("/api/server-settings/test", {
+      const res = await appFetch("/api/server-settings/test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ settings, directory: trimmedDirectory }),

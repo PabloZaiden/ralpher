@@ -59,7 +59,9 @@ afterEach(() => {
   cleanup();
 });
 
-// Reset location hash before each test
+// Reset location before each test so pathname-based public base path inference
+// never leaks between unrelated test files.
 beforeEach(() => {
+  window.location.href = "http://localhost:3000/";
   window.location.hash = "#/";
 });

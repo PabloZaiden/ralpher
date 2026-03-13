@@ -4,6 +4,7 @@
  */
 
 import { createLogger } from "../lib/logger";
+import { appFetch } from "../lib/public-path";
 import type {
   Loop,
   CreateChatRequest,
@@ -33,7 +34,7 @@ async function apiCall<T = unknown>(
   extractError?: (data: Record<string, unknown>) => string | undefined,
 ): Promise<T> {
   log.debug(`API: ${actionName}`, { url });
-  const response = await fetch(url, options);
+  const response = await appFetch(url, options);
 
   if (!response.ok) {
     const errorData = await response.json();

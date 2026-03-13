@@ -3,6 +3,8 @@
  * Reads configuration from environment variables.
  */
 
+import type { AppConfig } from "../types/api";
+
 /**
  * Check if the application is running in remote-only mode.
  * When enabled, spawning local servers is disabled and only
@@ -13,15 +15,6 @@
 export function isRemoteOnlyMode(): boolean {
   const value = process.env["RALPHER_REMOTE_ONLY"]?.toLowerCase();
   return value === "true" || value === "1" || value === "yes";
-}
-
-/**
- * Application configuration object.
- * Used by the /api/config endpoint to inform the frontend.
- */
-export interface AppConfig {
-  /** Whether remote-only mode is enabled */
-  remoteOnly: boolean;
 }
 
 /**

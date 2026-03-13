@@ -19,6 +19,7 @@ import {
   type TmuxShortcut,
 } from "../utils/terminal-keys";
 import { writeTextToClipboard } from "../utils";
+import { appWebSocketUrl } from "../lib/public-path";
 
 function getStatusVariant(status: string) {
   switch (status) {
@@ -342,8 +343,7 @@ export function SshSessionDetails({
     }
     setSocketStatus("connecting");
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}${terminalUrl}`);
+    const ws = new WebSocket(appWebSocketUrl(terminalUrl));
     terminalSocketRef.current = ws;
 
     ws.onopen = () => {};

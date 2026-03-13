@@ -8,6 +8,7 @@ import { useCallback, useState } from "react";
 import type { OptimizationAnalysis, OptimizationPreview } from "../core/agents-md-optimizer";
 import { analyzeAgentsMd } from "../core/agents-md-optimizer";
 import { log } from "../lib/logger";
+import { appFetch } from "../lib/public-path";
 
 /** Result of reading the current AGENTS.md state */
 export interface AgentsMdStatus {
@@ -79,7 +80,7 @@ export function useAgentsMdOptimizer(): UseAgentsMdOptimizerResult {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`/api/workspaces/${workspaceId}/agents-md`);
+      const response = await appFetch(`/api/workspaces/${workspaceId}/agents-md`);
       if (!response.ok) {
         const errorData = await response.json() as { message?: string };
         throw new Error(errorData.message || "Failed to fetch AGENTS.md status");
@@ -103,7 +104,7 @@ export function useAgentsMdOptimizer(): UseAgentsMdOptimizerResult {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`/api/workspaces/${workspaceId}/agents-md/preview`, {
+      const response = await appFetch(`/api/workspaces/${workspaceId}/agents-md/preview`, {
         method: "POST",
       });
       if (!response.ok) {
@@ -135,7 +136,7 @@ export function useAgentsMdOptimizer(): UseAgentsMdOptimizerResult {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`/api/workspaces/${workspaceId}/agents-md/optimize`, {
+      const response = await appFetch(`/api/workspaces/${workspaceId}/agents-md/optimize`, {
         method: "POST",
       });
       if (!response.ok) {

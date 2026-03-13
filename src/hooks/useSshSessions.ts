@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CreateSshSessionRequest, SshSession, SshSessionEvent, UpdateSshSessionRequest } from "../types";
 import { useGlobalEvents } from "./useWebSocket";
+import { appFetch } from "../lib/public-path";
 
 export interface UseSshSessionsResult {
   sessions: SshSession[];
@@ -26,7 +27,7 @@ export function useSshSessions(): UseSshSessionsResult {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("/api/ssh-sessions");
+      const response = await appFetch("/api/ssh-sessions");
       if (!response.ok) {
         const data = await response.json() as { message?: string };
         throw new Error(data.message || "Failed to fetch SSH sessions");
@@ -42,7 +43,7 @@ export function useSshSessions(): UseSshSessionsResult {
 
   const refreshSession = useCallback(async (id: string) => {
     try {
-      const response = await fetch(`/api/ssh-sessions/${id}`);
+      const response = await appFetch(`/api/ssh-sessions/${id}`);
       if (!response.ok) {
         if (response.status === 404) {
           setSessions((prev) => prev.filter((session) => session.config.id !== id));
@@ -90,7 +91,7 @@ export function useSshSessions(): UseSshSessionsResult {
   const createSession = useCallback(async (request: CreateSshSessionRequest): Promise<SshSession | null> => {
     try {
       setError(null);
-      const response = await fetch("/api/ssh-sessions", {
+      const response = await appFetch("/api/ssh-sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
@@ -109,7 +110,7 @@ export function useSshSessions(): UseSshSessionsResult {
   const updateSession = useCallback(async (id: string, request: UpdateSshSessionRequest): Promise<SshSession | null> => {
     try {
       setError(null);
-      const response = await fetch(`/api/ssh-sessions/${id}`, {
+      const response = await appFetch(`/api/ssh-sessions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
@@ -130,7 +131,7 @@ export function useSshSessions(): UseSshSessionsResult {
   const deleteSession = useCallback(async (id: string): Promise<boolean> => {
     try {
       setError(null);
-      const response = await fetch(`/api/ssh-sessions/${id}`, {
+      const response = await appFetch(`/api/ssh-sessions/${id}`, {
         method: "DELETE",
       });
       if (!response.ok) {

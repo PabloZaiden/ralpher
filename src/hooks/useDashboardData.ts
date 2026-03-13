@@ -4,7 +4,8 @@
  */
 
 import { useState, useCallback, useEffect } from "react";
-import type { ModelInfo, HealthResponse, BranchInfo } from "../types";
+import type { AppConfig, ModelInfo, HealthResponse, BranchInfo } from "../types";
+import { appFetch, setConfiguredPublicBasePath } from "../lib/public-path";
 import { useToast } from "./useToast";
 import { createLogger } from "../lib/logger";
 
@@ -72,9 +73,10 @@ export function useDashboardData(): UseDashboardDataResult {
 
   // Fetch app config on mount
   useEffect(() => {
-    fetch("/api/config")
+    appFetch("/api/config")
       .then((res) => res.json())
-      .then((config: { remoteOnly: boolean }) => {
+      .then((config: AppConfig) => {
+        setConfiguredPublicBasePath(config.publicBasePath || undefined);
         setRemoteOnly(config.remoteOnly);
       })
       .catch(() => {
@@ -84,7 +86,7 @@ export function useDashboardData(): UseDashboardDataResult {
 
   // Fetch version on mount
   useEffect(() => {
-    fetch("/api/health")
+    appFetch("/api/health")
       .then((res) => res.json())
       .then((data: HealthResponse) => {
         setVersion(data.version);
@@ -98,7 +100,7 @@ export function useDashboardData(): UseDashboardDataResult {
   useEffect(() => {
     async function fetchLastModel() {
       try {
-        const response = await fetch("/api/preferences/last-model");
+        const response = await appFetch("/api/preferences/last-model");
         if (response.ok) {
           const data = await response.json();
           setLastModel(data);
@@ -114,7 +116,7 @@ export function useDashboardData(): UseDashboardDataResult {
   const resetAllSettings = useCallback(async () => {
     setAppSettingsResetting(true);
     try {
-      const response = await fetch("/api/settings/reset-all", { method: "POST" });
+      const response = await appFetch("/api/settings/reset-all", { method: "POST" });
       if (!response.ok) {
         toast.error("Failed to reset settings");
       }
@@ -132,7 +134,7 @@ export function useDashboardData(): UseDashboardDataResult {
   const killServer = useCallback(async () => {
     setAppSettingsKilling(true);
     try {
-      const response = await fetch("/api/server/kill", { method: "POST" });
+      const response = await appFetch("/api/server/kill", { method: "POST" });
       if (!response.ok) {
         log.error("Failed to kill server: HTTP", response.status);
         toast.error("Failed to kill server");
@@ -156,7 +158,7 @@ export function useDashboardData(): UseDashboardDataResult {
 
     setModelsLoading(true);
     try {
-      const response = await fetch(`/api/models?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`);
+      const response = await appFetch(`/api/models?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`);
       if (response.ok) {
         const data = await response.json() as ModelInfo[];
         setModels(data);
@@ -178,7 +180,7 @@ export function useDashboardData(): UseDashboardDataResult {
     }
 
     try {
-      const response = await fetch(
+      const response = await appFetch(
         `/api/check-planning-dir?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`
       );
       if (response.ok) {
@@ -202,7 +204,7 @@ export function useDashboardData(): UseDashboardDataResult {
 
     setBranchesLoading(true);
     try {
-      const response = await fetch(
+      const response = await appFetch(
         `/api/git/branches?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`
       );
       if (response.ok) {
@@ -229,7 +231,7 @@ export function useDashboardData(): UseDashboardDataResult {
     }
 
     try {
-      const response = await fetch(
+      const response = await appFetch(
         `/api/git/default-branch?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`
       );
       if (response.ok) {
