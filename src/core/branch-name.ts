@@ -36,7 +36,7 @@ export function normalizeBranchPrefix(prefix: string): string {
   return `${segments.join("/")}/`;
 }
 
-export function buildLoopBranchName(_prefix: string, title: string, prompt: string): string {
+export function buildLoopBranchName(title: string, prompt: string): string {
   const safeTitle = sanitizeBranchName(title);
   const shortPromptHash = buildShortPromptHash(prompt);
   return `${safeTitle}-${shortPromptHash}`;

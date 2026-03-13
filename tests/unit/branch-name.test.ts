@@ -6,16 +6,12 @@ import {
 } from "../../src/core/branch-name";
 
 describe("branch-name helpers", () => {
-  test("buildLoopBranchName creates title-plus-hash branch names without a default prefix", () => {
-    expect(buildLoopBranchName("", "My Feature", "Test prompt")).toBe("my-feature-46817f3");
+  test("buildLoopBranchName creates title-plus-hash branch names", () => {
+    expect(buildLoopBranchName("My Feature", "Test prompt")).toBe("my-feature-46817f3");
   });
 
-  test("buildLoopBranchName ignores an explicit configured prefix", () => {
-    expect(buildLoopBranchName("team/", "My Feature", "Test prompt")).toBe("my-feature-46817f3");
-  });
-
-  test("buildLoopBranchName still starts with the sanitized title when the prefix has no trailing slash", () => {
-    expect(buildLoopBranchName("team", "My Feature", "Test prompt")).toBe("my-feature-46817f3");
+  test("buildLoopBranchName sanitizes the title before appending the prompt hash", () => {
+    expect(buildLoopBranchName("Team / Infra", "Test prompt")).toBe("team-infra-46817f3");
   });
 
   test("normalizeBranchPrefix strips invalid characters and empty segments", () => {

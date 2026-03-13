@@ -991,11 +991,7 @@ export class LoopEngine {
       return this.loop.state.git.workingBranch;
     }
 
-    const baseBranchName = buildLoopBranchName(
-      this.config.git.branchPrefix,
-      this.config.name,
-      this.config.prompt,
-    );
+    const baseBranchName = buildLoopBranchName(this.config.name, this.config.prompt);
 
     let branchName = baseBranchName;
     let collisionIndex = 2;
