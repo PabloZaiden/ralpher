@@ -79,6 +79,7 @@ export interface CreateLoopFormProps {
     useWorktree?: boolean;
     clearPlanningFolder?: boolean;
     planMode?: boolean;
+    planModeAutoReply?: boolean;
     workspaceId?: string;
   } | null;
   /** Whether editing a draft loop (to show Update Draft button) */
@@ -157,6 +158,7 @@ export function CreateLoopForm({
   const [useWorktree, setUseWorktree] = useState(initialLoopData?.useWorktree ?? DEFAULT_LOOP_CONFIG.useWorktree);
   const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
   const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? true);
+  const [planModeAutoReply, setPlanModeAutoReply] = useState(initialLoopData?.planModeAutoReply ?? DEFAULT_LOOP_CONFIG.planModeAutoReply);
   const [selectedTemplate, setSelectedTemplate] = useState("");
   const [generatingTitle, setGeneratingTitle] = useState(false);
 
@@ -353,6 +355,7 @@ export function CreateLoopForm({
         workspaceId: selectedWorkspaceId,
         prompt: currentPrompt.trim(),
         planMode,
+        planModeAutoReply,
         model,
         useWorktree,
       };
@@ -416,6 +419,7 @@ export function CreateLoopForm({
     selectedModelEnabled,
     isChatMode,
     planMode,
+    planModeAutoReply,
     maxIterations,
     maxConsecutiveErrors,
     activityTimeoutSeconds,
@@ -794,6 +798,27 @@ export function CreateLoopForm({
             </p>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
               Create and review a plan before starting the loop. The AI will generate a plan based on your prompt, and you can provide feedback before execution begins.
+            </p>
+          </div>
+        </label>
+      </div>
+      )}
+
+      {!isChatMode && planMode && (
+      <div className="ml-7">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={planModeAutoReply}
+            onChange={(e) => setPlanModeAutoReply(e.target.checked)}
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+          />
+          <div className="flex-1">
+            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Auto-reply plan questions
+            </span>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Enabled by default. Turn this off to answer plan-mode questions yourself below the execution log.
             </p>
           </div>
         </label>

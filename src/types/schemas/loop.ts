@@ -72,6 +72,7 @@ export const CreateLoopRequestSchema = z.object({
   useWorktree: z.boolean({ error: "useWorktree is required and must be a boolean (true or false)" }),
   clearPlanningFolder: z.boolean().optional(),
   planMode: z.boolean({ error: "planMode is required and must be a boolean (true or false)" }),
+  planModeAutoReply: z.boolean().optional(),
   draft: z.boolean().optional(),
   mode: z.enum(["loop", "chat"]).optional(),
 });
@@ -99,6 +100,7 @@ export const UpdateLoopRequestSchema = z.object({
   useWorktree: z.boolean().optional(),
   clearPlanningFolder: z.boolean().optional(),
   planMode: z.boolean().optional(),
+  planModeAutoReply: z.boolean().optional(),
 });
 
 /**
@@ -132,6 +134,20 @@ export const PlanFeedbackRequestSchema = z.object({
  */
 export const PlanAcceptRequestSchema = z.object({
   mode: z.enum(["start_loop", "open_ssh"]).optional(),
+});
+
+export const AnswerPlanQuestionRequestSchema = z.object({
+  answers: z.array(
+    z.array(
+      z.string().trim().min(1, {
+        message: "answer strings cannot be empty or whitespace-only",
+      }),
+    ).min(1, {
+      message: "answer groups must contain at least one answer",
+    }),
+  ).min(1, {
+    message: "answers must contain at least one answer group",
+  }),
 });
 
 /**

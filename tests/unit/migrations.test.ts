@@ -584,6 +584,24 @@ describe("migration infrastructure", () => {
       expect(getTableColumns(db, "review_comments")).toContain("id");
       expect(getTableColumns(db, "schema_migrations")).toContain("version");
     });
+
+    test("migration 7 adds plan question persistence columns", () => {
+      db.run("CREATE TABLE loops (id TEXT PRIMARY KEY, name TEXT NOT NULL)");
+      db.run("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)");
+
+      for (const migration of migrations.filter((migration) => migration.version < 7)) {
+        db.run(
+          "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+          [migration.version, migration.name, "2025-01-01T00:00:00.000Z"],
+        );
+      }
+
+      runMigrations(db);
+
+      const columns = getTableColumns(db, "loops");
+      expect(columns).toContain("plan_mode_auto_reply");
+      expect(columns).toContain("pending_plan_question");
+    });
   });
 
   describe("tableExists", () => {

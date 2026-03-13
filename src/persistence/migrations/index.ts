@@ -338,6 +338,22 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 7,
+    name: "add_plan_question_persistence",
+    up: (db) => {
+      if (!tableExists(db, "loops")) {
+        return;
+      }
+      const columns = getTableColumns(db, "loops");
+      if (!columns.includes("plan_mode_auto_reply")) {
+        db.run("ALTER TABLE loops ADD COLUMN plan_mode_auto_reply INTEGER NOT NULL DEFAULT 1");
+      }
+      if (!columns.includes("pending_plan_question")) {
+        db.run("ALTER TABLE loops ADD COLUMN pending_plan_question TEXT");
+      }
+    },
+  },
 ];
 
 /**

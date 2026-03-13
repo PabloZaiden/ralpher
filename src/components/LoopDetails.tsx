@@ -131,6 +131,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
     getPlan,
     getStatusFile,
     sendPlanFeedback,
+    answerPlanQuestion,
     acceptPlan,
     discardPlan,
     addressReviewComments,
@@ -188,6 +189,9 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
   const [updateBranchModal, setUpdateBranchModal] = useState(false);
   const [discardPlanModal, setDiscardPlanModal] = useState(false);
   const [planActionSubmitting, setPlanActionSubmitting] = useState(false);
+  const [planQuestionSelections, setPlanQuestionSelections] = useState<string[][]>([]);
+  const [planQuestionCustomAnswers, setPlanQuestionCustomAnswers] = useState<string[]>([]);
+  const [planQuestionSubmitting, setPlanQuestionSubmitting] = useState(false);
   const [sshConnecting, setSshConnecting] = useState(false);
 
   // Models state for LoopActionBar
@@ -380,12 +384,30 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
 
   // Default to "plan" tab when in planning mode on initial load
   const isCurrentlyPlanning = loop?.state.status === "planning" && !isChatMode;
+  const pendingPlanQuestion = loop?.state.planMode?.pendingQuestion;
   useEffect(() => {
     if (isCurrentlyPlanning && !initialTabSet.current) {
-      setActiveTab("plan");
+      setActiveTab(pendingPlanQuestion ? "log" : "plan");
       initialTabSet.current = true;
     }
-  }, [isCurrentlyPlanning]);
+  }, [isCurrentlyPlanning, pendingPlanQuestion]);
+
+  useEffect(() => {
+    if (pendingPlanQuestion && activeTab === "plan") {
+      setActiveTab("log");
+    }
+  }, [activeTab, pendingPlanQuestion?.requestId]);
+
+  useEffect(() => {
+    if (!pendingPlanQuestion) {
+      setPlanQuestionSelections([]);
+      setPlanQuestionCustomAnswers([]);
+      return;
+    }
+
+    setPlanQuestionSelections(pendingPlanQuestion.questions.map(() => []));
+    setPlanQuestionCustomAnswers(pendingPlanQuestion.questions.map(() => ""));
+  }, [pendingPlanQuestion?.requestId]);
 
   // Handle delete
   async function handleDelete() {
@@ -495,6 +517,42 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
     }
     // Navigate after state cleanup so we don't setState on an unmounted component
     onBack?.();
+  }
+
+  async function handleAnswerPlanQuestion() {
+    if (!pendingPlanQuestion) {
+      return;
+    }
+
+    const answers = pendingPlanQuestion.questions.map((question, index) => {
+      const customAnswer = planQuestionCustomAnswers[index]?.trim();
+      if (customAnswer) {
+        return [customAnswer];
+      }
+
+      if (question.multiple) {
+        return planQuestionSelections[index] ?? [];
+      }
+
+      const selected = planQuestionSelections[index]?.[0];
+      return selected ? [selected] : [];
+    });
+
+    const hasMissingAnswer = answers.some((answerGroup) => answerGroup.length === 0);
+    if (hasMissingAnswer) {
+      toast.error("Answer every pending question before submitting.");
+      return;
+    }
+
+    setPlanQuestionSubmitting(true);
+    try {
+      const success = await answerPlanQuestion(answers);
+      if (!success) {
+        toast.error("Failed to answer plan question");
+      }
+    } finally {
+      setPlanQuestionSubmitting(false);
+    }
   }
 
   async function handleConnectViaSsh() {
@@ -751,18 +809,141 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                             <span>Logs</span>
                           </button>
                           {!logsCollapsed && (
-                            <LogViewer
-                              id="logs-viewer"
-                              messages={messages}
-                              toolCalls={toolCalls}
-                              logs={logs}
-                              showSystemInfo={showSystemInfo}
-                              showReasoning={showReasoning}
-                              showTools={showTools}
-                              autoScroll={autoScroll}
-                              markdownEnabled={markdownEnabled}
-                              isActive={isLogActive}
-                            />
+                            <>
+                              <LogViewer
+                                id="logs-viewer"
+                                messages={messages}
+                                toolCalls={toolCalls}
+                                logs={logs}
+                                showSystemInfo={showSystemInfo}
+                                showReasoning={showReasoning}
+                                showTools={showTools}
+                                autoScroll={autoScroll}
+                                markdownEnabled={markdownEnabled}
+                                isActive={isLogActive}
+                              />
+                              {pendingPlanQuestion && (
+                                <div className="mt-4 flex-shrink-0 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
+                                  <div className="mb-3">
+                                    <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                                      Pending plan question
+                                    </h3>
+                                    <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+                                      This prompt stays here until you answer it. Use the recent log output above for context.
+                                    </p>
+                                  </div>
+
+                                  <div className="space-y-4">
+                                    {pendingPlanQuestion.questions.map((question, questionIndex) => {
+                                      const selection = planQuestionSelections[questionIndex] ?? [];
+                                      const customAnswer = planQuestionCustomAnswers[questionIndex] ?? "";
+                                      const useCheckboxes = question.multiple === true;
+
+                                      return (
+                                        <div
+                                          key={`${pendingPlanQuestion.requestId}-${questionIndex}`}
+                                          className="rounded-md border border-amber-200/80 bg-white/70 p-3 dark:border-amber-900/50 dark:bg-gray-900/40"
+                                        >
+                                          <div className="space-y-1">
+                                            <p className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                                              {question.header}
+                                            </p>
+                                            <p className="text-sm text-gray-900 dark:text-gray-100">
+                                              {question.question}
+                                            </p>
+                                          </div>
+
+                                          {question.options.length > 0 && (
+                                            <div className="mt-3 space-y-2">
+                                              {question.options.map((option) => {
+                                                const checked = selection.includes(option.label);
+                                                return (
+                                                  <label
+                                                    key={option.label}
+                                                    className="flex items-start gap-3 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:border-amber-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                                                  >
+                                                    <input
+                                                      type={useCheckboxes ? "checkbox" : "radio"}
+                                                      name={`plan-question-${questionIndex}`}
+                                                      checked={checked}
+                                                      onChange={(event) => {
+                                                        const isChecked = event.target.checked;
+                                                        setPlanQuestionSelections((prev) => {
+                                                          const next = [...prev];
+                                                          const existing = next[questionIndex] ?? [];
+                                                          if (useCheckboxes) {
+                                                            next[questionIndex] = isChecked
+                                                              ? [...existing, option.label]
+                                                              : existing.filter((value) => value !== option.label);
+                                                          } else {
+                                                            next[questionIndex] = isChecked ? [option.label] : [];
+                                                          }
+                                                          return next;
+                                                        });
+                                                      }}
+                                                      className="mt-0.5 h-4 w-4 border-gray-300 text-amber-600 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700"
+                                                    />
+                                                    <span className="min-w-0">
+                                                      <span className="block font-medium text-gray-900 dark:text-gray-100">
+                                                        {option.label}
+                                                      </span>
+                                                      {option.description && (
+                                                        <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
+                                                          {option.description}
+                                                        </span>
+                                                      )}
+                                                    </span>
+                                                  </label>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+
+                                          <div className="mt-3">
+                                            <label
+                                              htmlFor={`plan-question-custom-${questionIndex}`}
+                                              className="block text-xs font-medium text-gray-700 dark:text-gray-300"
+                                            >
+                                              Your answer
+                                            </label>
+                                            <textarea
+                                              id={`plan-question-custom-${questionIndex}`}
+                                              value={customAnswer}
+                                              onChange={(event) => {
+                                                const value = event.target.value;
+                                                setPlanQuestionCustomAnswers((prev) => {
+                                                  const next = [...prev];
+                                                  next[questionIndex] = value;
+                                                  return next;
+                                                });
+                                              }}
+                                              rows={3}
+                                              placeholder={
+                                                question.options.length > 0
+                                                  ? "Optional freeform answer. If provided, it overrides the option selection above."
+                                                  : "Type your answer here..."
+                                              }
+                                              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+
+                                  <div className="mt-4 flex items-center justify-end">
+                                    <Button
+                                      type="button"
+                                      onClick={handleAnswerPlanQuestion}
+                                      loading={planQuestionSubmitting}
+                                      disabled={planQuestionSubmitting}
+                                    >
+                                      Submit answer
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                         
