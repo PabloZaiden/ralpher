@@ -17,9 +17,6 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install opencode
-        run: curl -fsSL https://opencode.ai/install | bash
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
