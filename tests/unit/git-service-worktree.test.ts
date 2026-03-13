@@ -5,7 +5,7 @@
  */
 
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, readFile, realpath } from "fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { GitService } from "../../src/core/git-service";
@@ -243,6 +243,29 @@ describe("GitService Worktree Operations", () => {
       await git.removeWorktree(testDir, worktreePath);
 
       expect(await git.worktreeExists(testDir, worktreePath)).toBe(false);
+    });
+
+    test("matches stale worktree metadata through a symlinked parent path", async () => {
+      const physicalParent = join(testDir, "physical-worktrees");
+      const symlinkParent = join(testDir, "symlink-worktrees");
+      await mkdir(physicalParent, { recursive: true });
+      await symlink(physicalParent, symlinkParent);
+
+      const aliasedWorktreePath = join(symlinkParent, "stale-symlinked");
+      const canonicalWorktreePath = join(physicalParent, "stale-symlinked");
+      await mkdir(canonicalWorktreePath, { recursive: true });
+      await rm(canonicalWorktreePath, { recursive: true, force: true });
+
+      const originalListWorktrees = git.listWorktrees.bind(git);
+      git.listWorktrees = async () => [
+        { path: canonicalWorktreePath, head: "deadbeef", branch: "ralph/stale-symlinked" },
+      ];
+
+      try {
+        expect(await git.worktreeExists(testDir, aliasedWorktreePath)).toBe(true);
+      } finally {
+        git.listWorktrees = originalListWorktrees;
+      }
     });
   });
 

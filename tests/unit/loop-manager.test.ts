@@ -12,7 +12,6 @@ import type { LoopEvent } from "../../src/types/events";
 import { updateLoopState } from "../../src/persistence/loops";
 import { getDefaultServerSettings } from "../../src/types/settings";
 import { backendManager } from "../../src/core/backend-manager";
-import { GitService } from "../../src/core/git-service";
 import { createMockBackend } from "../mocks/mock-backend";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 
@@ -410,7 +409,12 @@ describe("LoopManager", () => {
       expect(purgeResult.error).toContain("Cannot purge loop in status");
     });
 
-    test("fails purge when worktree cleanup cannot be completed", async () => {
+    test("fails purge when worktree cleanup leaves an orphaned directory behind", async () => {
+      await Bun.$`git init ${testWorkDir}`.quiet();
+      await Bun.$`git -C ${testWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${testWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`git -C ${testWorkDir} commit --allow-empty -m "Initial commit"`.quiet();
+
       const loop = await manager.createLoop({
         ...testModelFields,
         directory: testWorkDir,
@@ -421,6 +425,7 @@ describe("LoopManager", () => {
         useWorktree: true,
       });
       const worktreePath = `${testWorkDir}/.ralph-worktrees/${loop.config.id}`;
+      await Bun.$`mkdir -p ${worktreePath}`.quiet();
 
       await updateLoopState(loop.config.id, {
         ...loop.state,
@@ -433,27 +438,14 @@ describe("LoopManager", () => {
         },
       });
 
-      const originalWithExecutor = GitService.withExecutor;
-      GitService.withExecutor = (() => ({
-        ensureWorktreeRemoved: async () => {
-          throw new Error("simulated cleanup failure");
-        },
-        deleteBranch: async () => {},
-        checkoutBranch: async () => {},
-      })) as unknown as typeof GitService.withExecutor;
+      const purgeResult = await manager.purgeLoop(loop.config.id);
+      expect(purgeResult.success).toBe(false);
+      expect(purgeResult.error).toContain("Failed to clean up git state during purge");
+      expect(purgeResult.error).toContain("Worktree directory still exists after cleanup");
 
-      try {
-        const purgeResult = await manager.purgeLoop(loop.config.id);
-        expect(purgeResult.success).toBe(false);
-        expect(purgeResult.error).toContain("Failed to clean up git state during purge");
-        expect(purgeResult.error).toContain("simulated cleanup failure");
-
-        const fetched = await manager.getLoop(loop.config.id);
-        expect(fetched).not.toBeNull();
-        expect(fetched!.state.status).toBe("deleted");
-      } finally {
-        GitService.withExecutor = originalWithExecutor;
-      }
+      const fetched = await manager.getLoop(loop.config.id);
+      expect(fetched).not.toBeNull();
+      expect(fetched!.state.status).toBe("deleted");
     });
 
     test("returns false for non-existent loop", async () => {

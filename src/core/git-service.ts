@@ -5,7 +5,7 @@
  */
 
 import type { CommandExecutor } from "./command-executor";
-import { resolve } from "node:path";
+import { dirname, relative, resolve } from "node:path";
 import { log } from "./logger";
 
 /**
@@ -1526,6 +1526,11 @@ export class GitService {
       this.normalizeWorktreePath(worktreePath),
     ]);
 
+    const canonicalPath = await this.resolvePathThroughExistingParent(worktreePath);
+    if (canonicalPath) {
+      comparablePaths.add(canonicalPath);
+    }
+
     if (await this.executor.directoryExists(worktreePath)) {
       const cdupResult = await this.runGitCommand(
         worktreePath,
@@ -1549,6 +1554,46 @@ export class GitService {
     }
 
     return comparablePaths;
+  }
+
+  private async resolvePathThroughExistingParent(worktreePath: string): Promise<string | null> {
+    const normalizedPath = this.normalizeWorktreePath(worktreePath);
+    let existingParent = normalizedPath;
+
+    while (!(await this.executor.directoryExists(existingParent))) {
+      const parentPath = dirname(existingParent);
+      if (parentPath === existingParent) {
+        return null;
+      }
+      existingParent = parentPath;
+    }
+
+    const canonicalParent = await this.resolveExistingDirectory(existingParent);
+    if (!canonicalParent) {
+      return null;
+    }
+
+    const relativeSuffix = relative(existingParent, normalizedPath);
+    return this.normalizeWorktreePath(
+      relativeSuffix ? resolve(canonicalParent, relativeSuffix) : canonicalParent,
+    );
+  }
+
+  private async resolveExistingDirectory(directory: string): Promise<string | null> {
+    const result = await this.executor.exec("pwd", ["-P"], { cwd: directory });
+    if (!result.success) {
+      log.debug(
+        `[GitService] Failed to canonicalize directory ${directory}: ${result.stderr || result.stdout || "unknown error"}`,
+      );
+      return null;
+    }
+
+    const resolvedDirectory = result.stdout.trim();
+    if (!resolvedDirectory) {
+      return null;
+    }
+
+    return this.normalizeWorktreePath(resolvedDirectory);
   }
 
   /**
