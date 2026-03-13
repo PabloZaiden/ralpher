@@ -255,7 +255,6 @@ export class LoopManager {
         prompt: options.prompt,
         backend,
         sessionId: tempSession.id,
-        timeoutMs: 10000,
       });
       log.info(`Generated loop title: ${title}`);
       return title;
