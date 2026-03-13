@@ -19,47 +19,55 @@ const target = targetArg?.split('=')[1] as
   | undefined;
 
 const outfile = target?.startsWith('bun-windows') ? `${outDir}/ralpher.exe` : `${outDir}/ralpher`;
-log.info('Building server binary...');
-if (target) {
-  log.info(`Target: ${target}`);
-}
+let buildSucceeded = false;
 
-const result = await Bun.build({
-  entrypoints: [ `${workDir}/src/index.ts`],
-  compile: target 
-    ? { outfile, target } 
-    : { outfile },
-  plugins: [twPlugin],
-  minify: true,
-  sourcemap: true,
-  define: {
-    'process.env.NODE_ENV': JSON.stringify('production'),
-  },
-});
-
-if (!result.success) {
-  log.error('Build failed:');
-  for (const _log of result.logs) {
-    log.error(_log);
+try {
+  log.info('Building server binary...');
+  if (target) {
+    log.info(`Target: ${target}`);
   }
-  process.exit(1);
+
+  const result = await Bun.build({
+    entrypoints: [ `${workDir}/src/index.ts`],
+    compile: target 
+      ? { outfile, target } 
+      : { outfile },
+    plugins: [twPlugin],
+    minify: true,
+    sourcemap: true,
+    define: {
+      'process.env.NODE_ENV': JSON.stringify('production'),
+    },
+  });
+
+  if (!result.success) {
+    log.error('Build failed:');
+    for (const _log of result.logs) {
+      log.error(_log);
+    }
+    process.exitCode = 1;
+  } else {
+    log.info('Ensuring dist directory exists...');
+    await Bun.$`mkdir -p ${finalOutDir}`.quiet();
+
+    log.info('Copying built file to dist directory...');
+    const destName = target ? `ralpher-${target.replace('bun-', '')}` : 'ralpher';
+    const destPath = `${finalOutDir}/${destName}`;
+    await Bun.write(destPath, Bun.file(outfile));
+
+    // Mark the output binary as executable (skip for Windows targets)
+    if (!target?.startsWith('bun-windows')) {
+      await Bun.$`chmod +x ${destPath}`.quiet();
+    }
+
+    buildSucceeded = true;
+    log.info('Build completed:', outfile);
+  }
+} finally {
+  log.info('Cleaning up temporary files...');
+  await Bun.$`rm -rf ${outDir}`.quiet();
 }
 
-
-log.info('Ensuring dist directory exists...');
-await Bun.$`mkdir -p ${finalOutDir}`.quiet();
-
-log.info('Copying built file to dist directory...');
-const destName = target ? `ralpher-${target.replace('bun-', '')}` : 'ralpher';
-const destPath = `${finalOutDir}/${destName}`;
-await Bun.write(destPath, Bun.file(outfile));
-
-// Mark the output binary as executable (skip for Windows targets)
-if (!target?.startsWith('bun-windows')) {
-  await Bun.$`chmod +x ${destPath}`.quiet();
+if (!buildSucceeded) {
+  process.exit(process.exitCode ?? 1);
 }
-
-log.info('Cleaning up temporary files...');
-await Bun.$`rm -rf ${outDir}`.quiet();
-
-log.info('Build completed:', outfile);
