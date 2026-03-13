@@ -168,7 +168,7 @@ describe("StopPatternDetector", () => {
       model: { providerID: "test-provider", modelID: "test-model" },
       // Backend is now global, not per-loop config
       stopPattern: "<promise>COMPLETE</promise>$",
-      git: { branchPrefix: "ralph/", commitScope: "ralph" },
+      git: { branchPrefix: "", commitScope: "ralph" },
       maxIterations: Infinity,
       maxConsecutiveErrors: 10,
       activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
@@ -256,7 +256,7 @@ describe("StopPatternDetector", () => {
     const worktreePath = join(testDir, ".ralph-worktrees/test-loop");
     loop.state.git = {
       originalBranch: "main",
-      workingBranch: "ralph/test-loop",
+      workingBranch: "test-loop-a1b2c3d",
       worktreePath,
       commits: [],
     };
@@ -660,7 +660,7 @@ describe("StopPatternDetector", () => {
       const loop = createTestLoop({ maxIterations: 1 });
       mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
 
-      await Bun.$`git checkout -b ralph/working`.cwd(testDir).quiet();
+      await Bun.$`git checkout -b working-a1b2c3d`.cwd(testDir).quiet();
 
       const engine = new LoopEngine({
         loop,
@@ -672,7 +672,7 @@ describe("StopPatternDetector", () => {
       await engine.start();
 
       expect(engine.state.status).toBe("completed");
-      expect(engine.state.git?.originalBranch).toBe("ralph/working");
+      expect(engine.state.git?.originalBranch).toBe("working-a1b2c3d");
     }, 10000);
 
     test("setupGitBranch preserves existing originalBranch", async () => {
@@ -682,7 +682,7 @@ describe("StopPatternDetector", () => {
       const loop = createTestLoop({ maxIterations: 1 });
       loop.state.git = {
         originalBranch: defaultBranch,
-        workingBranch: "ralph/existing",
+        workingBranch: "existing-a1b2c3d",
         commits: [],
       };
       mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
@@ -738,6 +738,56 @@ describe("StopPatternDetector", () => {
         "checkout:main",
         "pull:main",
         `createWorktree:${engine.state.git?.workingBranch}:main`,
+      ]);
+    });
+
+    test("setupGitBranch appends a numeric suffix when the generated branch already exists", async () => {
+      const loop = createTestLoop({
+        name: "My Feature",
+        prompt: "Test prompt",
+        baseBranch: "main",
+        useWorktree: true,
+      });
+      loop.state.startedAt = new Date().toISOString();
+      mockBackend = createMockBackend([]);
+
+      const calls: string[] = [];
+      const baseBranchName = "my-feature-46817f3";
+      const mockGitService = {
+        isGitRepo: async () => true,
+        getCurrentBranch: async () => "main",
+        checkoutBranch: async (_directory: string, branch: string) => {
+          calls.push(`checkout:${branch}`);
+        },
+        pull: async (_directory: string, branch?: string) => {
+          calls.push(`pull:${branch}`);
+          return true;
+        },
+        branchExists: async (_directory: string, branch: string) => branch === baseBranchName,
+        worktreeExists: async () => false,
+        createWorktree: async (
+          _directory: string,
+          _worktreePath: string,
+          branchName: string,
+          originalBranch: string,
+        ) => {
+          calls.push(`createWorktree:${branchName}:${originalBranch}`);
+        },
+      } as unknown as GitService;
+
+      const engine = new LoopEngine({
+        loop,
+        backend: mockBackend,
+        gitService: mockGitService,
+        eventEmitter: emitter,
+      });
+
+      await (engine as unknown as { setupGitBranch: () => Promise<void> }).setupGitBranch();
+
+      expect(engine.state.git?.workingBranch).toBe(`${baseBranchName}-2`);
+      expect(calls).toEqual([
+        "pull:main",
+        `createWorktree:${baseBranchName}-2:main`,
       ]);
     });
 
@@ -1666,7 +1716,7 @@ describe("StopPatternDetector", () => {
       // manually (normally done by startPlanMode() before engine.start()).
       loop.state.git = {
         originalBranch: "main",
-        workingBranch: "ralph/test",
+        workingBranch: "test-a1b2c3d",
         worktreePath: testDir,
         commits: [],
       };
@@ -1753,7 +1803,7 @@ describe("StopPatternDetector", () => {
       // manually (normally done by startPlanMode() before engine.start()).
       loop.state.git = {
         originalBranch: "main",
-        workingBranch: "ralph/test",
+        workingBranch: "test-a1b2c3d",
         worktreePath: testDir,
         commits: [],
       };
@@ -1855,7 +1905,7 @@ describe("StopPatternDetector", () => {
       };
       loop.state.git = {
         originalBranch: "master",
-        workingBranch: "ralph/test-loop",
+        workingBranch: "test-loop-a1b2c3d",
         worktreePath: testDir,
         commits: [],
       };

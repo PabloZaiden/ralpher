@@ -52,7 +52,8 @@ describe("Review Mode", () => {
         expect(acceptedLoop!.state.reviewMode!.reviewCycles).toBe(0);
         // reviewBranches should contain the working branch after merge
         expect(acceptedLoop!.state.reviewMode!.reviewBranches.length).toBe(1);
-        expect(acceptedLoop!.state.reviewMode!.reviewBranches[0]).toContain("ralph/");
+        expect(acceptedLoop!.state.reviewMode!.reviewBranches[0]).not.toContain("ralph/");
+        expect(acceptedLoop!.state.reviewMode!.reviewBranches[0]).toMatch(/-[0-9a-f]{7}$/);
       } finally {
         await teardownTestContext(ctx);
       }

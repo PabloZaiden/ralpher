@@ -137,7 +137,7 @@ describe("LoopEngine Pending Model", () => {
       workspaceId: "test-workspace-id",
       stopPattern: "<promise>COMPLETE</promise>$",
       git: {
-        branchPrefix: "ralph/",
+        branchPrefix: "",
         commitScope: "ralph",
       },
       model: {

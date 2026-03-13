@@ -101,7 +101,7 @@ describe("LoopManager", () => {
       expect(loop.config.directory).toBe(testWorkDir);
       expect(loop.config.prompt).toBe("Do something");
       // Backend is now global, not per-loop config
-      expect(loop.config.git.branchPrefix).toBe("ralph/");
+      expect(loop.config.git.branchPrefix).toBe("");
       expect(loop.state.status).toBe("idle");
 
       // Check event was emitted
@@ -122,6 +122,19 @@ describe("LoopManager", () => {
 
       // Backend is now global, not per-loop config
       expect(loop.config.maxIterations).toBe(10);
+    });
+
+    test("normalizes configured branch prefixes", async () => {
+      const loop = await manager.createLoop({
+        ...testModelFields,
+        directory: testWorkDir,
+        prompt: "Custom task",
+        workspaceId: testWorkspaceId,
+        gitBranchPrefix: " Team Alpha ",
+        planMode: false,
+      });
+
+      expect(loop.config.git.branchPrefix).toBe("team-alpha/");
     });
   });
 
@@ -201,7 +214,7 @@ describe("LoopManager", () => {
         ...loop.state,
         git: {
           originalBranch: "main",
-          workingBranch: "ralph/test",
+          workingBranch: "test-a1b2c3d",
           commits: [],
         },
       });
@@ -247,7 +260,7 @@ describe("LoopManager", () => {
         ...loop.state,
         git: {
           originalBranch: "main",
-          workingBranch: "ralph/test",
+          workingBranch: "test-a1b2c3d",
           worktreePath: `${testWorkDir}/.ralph-worktrees/${loop.config.id}`,
           commits: [],
         },

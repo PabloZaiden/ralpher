@@ -31,9 +31,9 @@ import { backendManager, buildConnectionConfig } from "./backend-manager";
 import type { GitService } from "./git-service";
 import { SimpleEventEmitter, loopEventEmitter } from "./event-emitter";
 import { log } from "./logger";
-import { sanitizeBranchName } from "../utils";
 import { markCommentsAsAddressed } from "../persistence/review-comments";
 import { assertValidTransition } from "./loop-state-machine";
+import { buildLoopBranchName } from "./branch-name";
 
 /**
  * Maximum number of log entries to persist in loop state.
@@ -53,27 +53,6 @@ const MAX_PERSISTED_MESSAGES = 2000;
  * Maximum number of tool calls to persist in loop state.
  */
 const MAX_PERSISTED_TOOL_CALLS = 5000;
-
-/**
- * Generate a git-safe branch name from a loop name and timestamp.
- * - Converts to lowercase
- * - Replaces spaces and special characters with hyphens
- * - Removes consecutive hyphens
- * - Limits length to avoid overly long branch names
- */
-function generateBranchName(prefix: string, name: string, timestamp: string): string {
-  // Parse the timestamp to get a readable date-time format
-  const date = new Date(timestamp);
-  const dateStr = date.toISOString()
-    .replace(/[:.]/g, "-")  // Replace : and . with -
-    .replace("T", "-")       // Replace T with -
-    .slice(0, 19);           // Take YYYY-MM-DD-HH-MM-SS
-
-  // Sanitize the name for git branch
-  const safeName = sanitizeBranchName(name);
-
-  return `${prefix}${safeName}-${dateStr}`;
-}
 
 /**
  * Backend interface for LoopEngine.
@@ -880,7 +859,6 @@ export class LoopEngine {
    */
   private async setupGitBranch(_allowPlanningFolderChanges = false): Promise<void> {
     const directory = this.config.directory;
-    const branchName = this.resolveBranchName();
 
     // Check if we're in a git repo
     this.emitLog("debug", "Checking if directory is a git repository", { directory });
@@ -890,6 +868,7 @@ export class LoopEngine {
     }
 
     const originalBranch = await this.resolveOriginalBranch(directory);
+    const branchName = await this.resolveBranchName(directory);
 
     if (originalBranch.startsWith(this.config.git.branchPrefix) && !this.loop.state.git?.originalBranch) {
       this.emitLog("warn", `Base branch is a working branch (${originalBranch}); preserving base branch but continuing`, {
@@ -977,28 +956,38 @@ export class LoopEngine {
   /**
    * Determine the branch name for this loop.
    * Reuses an existing workingBranch if present (idempotent), otherwise generates
-   * a new name from the loop name + startedAt timestamp.
+   * a new name from the loop name + a short hash of the prompt, appending a
+   * numeric suffix if the deterministic base already exists in the repository.
    */
-  private resolveBranchName(): string {
+  private async resolveBranchName(directory: string): Promise<string> {
     if (this.loop.state.git?.workingBranch) {
       // Branch was already created (e.g., retry, jumpstart, or plan mode setup).
-      // Reuse the authoritative name rather than regenerating from timestamp.
+      // Reuse the authoritative name rather than regenerating it.
       return this.loop.state.git.workingBranch;
     }
 
-    // First-time setup: generate branch name from startedAt.
-    // startedAt must already be set by the caller (engine.start() or startPlanMode()).
-    // If missing, this is a programming error — fail loudly rather than silently
-    // generating a one-off timestamp that can't be reproduced.
-    const startTimestamp = this.loop.state.startedAt;
-    if (!startTimestamp) {
-      throw new Error("Cannot set up git branch: loop.state.startedAt is not set. Ensure startedAt is set before calling setupGitBranch.");
-    }
-    return generateBranchName(
+    const baseBranchName = buildLoopBranchName(
       this.config.git.branchPrefix,
       this.config.name,
-      startTimestamp
+      this.config.prompt,
     );
+
+    let branchName = baseBranchName;
+    let collisionIndex = 2;
+
+    while (await this.git.branchExists(directory, branchName)) {
+      branchName = `${baseBranchName}-${collisionIndex}`;
+      collisionIndex += 1;
+    }
+
+    if (branchName !== baseBranchName) {
+      this.emitLog("info", `Generated unique working branch after collision: ${branchName}`, {
+        baseBranchName,
+        branchName,
+      });
+    }
+
+    return branchName;
   }
 
   /**

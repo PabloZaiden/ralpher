@@ -114,7 +114,7 @@ describe("SshSessionManager loop-linked sessions", () => {
       ...loop.state,
       git: {
         originalBranch: "main",
-        workingBranch: "ralph/test-loop",
+        workingBranch: "test-loop-a1b2c3d",
         worktreePath,
         commits: [],
       },
@@ -145,7 +145,7 @@ describe("SshSessionManager loop-linked sessions", () => {
       status: "deleted",
       git: {
         originalBranch: "main",
-        workingBranch: "ralph/purge-loop",
+        workingBranch: "purge-loop-a1b2c3d",
         worktreePath,
         commits: [],
       },
@@ -175,7 +175,7 @@ describe("SshSessionManager loop-linked sessions", () => {
       status: "deleted",
       git: {
         originalBranch: "main",
-        workingBranch: "ralph/purge-forwards",
+        workingBranch: "purge-forwards-a1b2c3d",
         worktreePath,
         commits: [],
       },
@@ -207,7 +207,7 @@ describe("SshSessionManager loop-linked sessions", () => {
       ...loop.state,
       git: {
         originalBranch: "main",
-        workingBranch: "ralph/delete-forwards",
+        workingBranch: "delete-forwards-a1b2c3d",
         worktreePath,
         commits: [],
       },

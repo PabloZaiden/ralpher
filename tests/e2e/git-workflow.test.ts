@@ -66,7 +66,8 @@ describe("Git Workflow", () => {
       const finalLoop = await ctx.manager.getLoop(loop.config.id);
       expect(finalLoop!.state.git).toBeDefined();
       expect(finalLoop!.state.git!.originalBranch).toBe(originalBranch);
-      expect(finalLoop!.state.git!.workingBranch).toMatch(/^ralph\//);
+      expect(finalLoop!.state.git!.workingBranch).not.toStartWith("ralph/");
+      expect(finalLoop!.state.git!.workingBranch).toMatch(/-[0-9a-f]{7}$/);
       expect(finalLoop!.state.git!.worktreePath).toBeDefined();
     });
 
@@ -88,7 +89,7 @@ describe("Git Workflow", () => {
       expect(finalLoop!.state.git!.workingBranch).toMatch(/^feature\//);
     });
 
-    test("branch name includes loop name and timestamp", async () => {
+    test("branch name includes loop name and prompt hash", async () => {
       const loop = await ctx.manager.createLoop({
         ...testModelFields,
         directory: ctx.workDir,
@@ -105,10 +106,10 @@ describe("Git Workflow", () => {
       const workingBranch = finalLoop!.state.git!.workingBranch;
       // Branch should contain the sanitized loop name
       expect(workingBranch).toContain("branch-id-loop");
-      // Branch should start with ralph/ prefix
-      expect(workingBranch).toStartWith("ralph/");
-      // Branch should contain a date component (YYYY-MM-DD format)
-      expect(workingBranch).toMatch(/\d{4}-\d{2}-\d{2}/);
+      // Branch should not include the legacy ralph/ prefix
+      expect(workingBranch).not.toStartWith("ralph/");
+      // Branch should end with a 7-character prompt hash
+      expect(workingBranch).toMatch(/-[0-9a-f]{7}$/);
     });
   });
 
@@ -192,7 +193,8 @@ describe("Git Workflow", () => {
       // Verify loop completed successfully
       const finalLoop = await ctx.manager.getLoop(loop.config.id);
       expect(finalLoop!.state.status).toBe("completed");
-      expect(finalLoop!.state.git!.workingBranch).toMatch(/^ralph\//);
+      expect(finalLoop!.state.git!.workingBranch).not.toStartWith("ralph/");
+      expect(finalLoop!.state.git!.workingBranch).toMatch(/-[0-9a-f]{7}$/);
 
       // Clean up uncommitted changes
       await Bun.$`git reset HEAD -- .`.cwd(ctx.workDir).quiet().nothrow();

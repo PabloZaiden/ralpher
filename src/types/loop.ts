@@ -92,7 +92,7 @@ export interface LoopConfig {
  * and commits are named for the loop's work.
  */
 export interface GitConfig {
-  /** Branch name prefix. Default: "ralph/" (e.g., "ralph/add-auth") */
+  /** Branch name prefix. Default: empty string; non-empty values are normalized to git-safe path segments (e.g., "team/" -> "team/add-auth"). */
   branchPrefix: string;
   /**
    * Conventional commit scope. Default: "ralph".
@@ -386,7 +386,7 @@ export const DEFAULT_LOOP_CONFIG = {
   planMode: true,
   mode: "loop" as const,
   git: {
-    branchPrefix: "ralph/",
+    branchPrefix: "",
     commitScope: "ralph",
   },
 } as const;

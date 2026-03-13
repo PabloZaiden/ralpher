@@ -31,11 +31,11 @@ import { GitService } from "./git-service";
 import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
 import { log } from "./logger";
-import { sanitizeBranchName } from "../utils";
 import { generateLoopName } from "../utils/name-generator";
 import { assertValidTransition } from "./loop-state-machine";
 import { sshSessionManager } from "./ssh-session-manager";
 import { portForwardManager } from "./port-forward-manager";
+import { buildReviewBranchName, normalizeBranchPrefix } from "./branch-name";
 
 /**
  * Options for creating a new loop.
@@ -61,7 +61,7 @@ export interface CreateLoopOptions {
   activityTimeoutSeconds?: number;
   /** Custom stop pattern (default: "<promise>COMPLETE</promise>$") */
   stopPattern?: string;
-  /** Git branch prefix (default: "ralph/") */
+  /** Git branch prefix (default: empty string) */
   gitBranchPrefix?: string;
   /** Git commit scope for conventional commits (default: "ralph") */
   gitCommitScope?: string;
@@ -246,7 +246,7 @@ export class LoopManager {
       activityTimeoutSeconds: options.activityTimeoutSeconds ?? DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
       stopPattern: options.stopPattern ?? DEFAULT_LOOP_CONFIG.stopPattern,
       git: {
-        branchPrefix: options.gitBranchPrefix ?? DEFAULT_LOOP_CONFIG.git.branchPrefix,
+        branchPrefix: normalizeBranchPrefix(options.gitBranchPrefix ?? DEFAULT_LOOP_CONFIG.git.branchPrefix),
         commitScope: options.gitCommitScope ?? DEFAULT_LOOP_CONFIG.git.commitScope,
       },
       baseBranch: options.baseBranch,
@@ -759,6 +759,13 @@ Follow the standard loop execution flow:
     const updatedConfig: LoopConfig = {
       ...loop.config,
       ...updates,
+      git: updates.git
+        ? {
+            ...loop.config.git,
+            ...updates.git,
+            branchPrefix: normalizeBranchPrefix(updates.git.branchPrefix ?? loop.config.git.branchPrefix),
+          }
+        : loop.config.git,
       updatedAt: createTimestamp(),
     };
 
@@ -1442,7 +1449,7 @@ Follow the standard loop execution flow:
    * @param loopId - The loop ID
    * @param loop - The loop config and state
    * @param git - The GitService instance
-   * @param sourceBranch - The full ref being merged (e.g., "origin/main" or "origin/ralph/loop-id")
+   * @param sourceBranch - The full ref being merged (e.g., "origin/main" or "origin/add-feature-a1b2c3d")
    * @param conflictedFiles - List of files with conflicts
    * @returns PushLoopResult indicating conflicts are being resolved
    */
@@ -2305,9 +2312,11 @@ Follow the standard loop execution flow:
     loop: Loop,
     git: GitService
   ): Promise<string> {
-    // Generate new review branch name
-    const safeName = sanitizeBranchName(loop.config.name);
-    const reviewBranchName = `${loop.config.git.branchPrefix}${safeName}-review-${loop.state.reviewMode!.reviewCycles}`;
+    const baseBranchName = loop.state.reviewMode!.reviewBranches[0] ?? loop.state.git!.workingBranch;
+    const reviewBranchName = buildReviewBranchName(
+      baseBranchName,
+      loop.state.reviewMode!.reviewCycles,
+    );
 
     // Create a new worktree for the review branch (branched from original)
     const worktreePath = `${loop.config.directory}/.ralph-worktrees/${loop.config.id}`;
@@ -2458,7 +2467,7 @@ Instructions:
    * Construct a specialized prompt for resolving merge conflicts.
    * Used when pushing a loop and there are conflicting changes that need resolution.
    * 
-   * @param sourceBranch - The branch or ref being merged (e.g., "origin/main" or "origin/ralph/loop-id")
+   * @param sourceBranch - The branch or ref being merged (e.g., "origin/main" or "origin/add-feature-a1b2c3d")
    * @param conflictedFiles - List of files with conflicts
    */
   private constructConflictResolutionPrompt(

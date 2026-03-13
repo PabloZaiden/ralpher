@@ -107,7 +107,7 @@ export function createServerSettings(
 
 export function createGitConfig(overrides?: Partial<GitConfig>): GitConfig {
   return {
-    branchPrefix: "ralph/",
+    branchPrefix: "",
     commitScope: "ralph",
     ...overrides,
   };
@@ -127,7 +127,7 @@ export function createGitCommit(overrides?: Partial<GitCommit>): GitCommit {
 export function createGitState(overrides?: Partial<GitState>): GitState {
   return {
     originalBranch: "main",
-    workingBranch: "ralph/test-loop",
+    workingBranch: "test-loop-a1b2c3d",
     commits: [],
     ...overrides,
   };
@@ -588,7 +588,7 @@ export function createLoopAcceptedEvent(loopId: string, mergeCommit = "abc123"):
   };
 }
 
-export function createLoopPushedEvent(loopId: string, remoteBranch = "origin/ralph/test-loop"): LoopEvent {
+export function createLoopPushedEvent(loopId: string, remoteBranch = "origin/test-loop-a1b2c3d"): LoopEvent {
   return {
     type: "loop.pushed",
     loopId,
