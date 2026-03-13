@@ -32,7 +32,6 @@ describe("Branch Safety - Worktree Isolation", () => {
     beforeAll(async () => {
       ctx = await setupTestServer({
         mockResponses: [
-          "test-loop-name", // Name generation response
           "Working on iteration 1...",
           "Working on iteration 2...",
           "Done! <promise>COMPLETE</promise>",
@@ -87,7 +86,6 @@ describe("Branch Safety - Worktree Isolation", () => {
     beforeEach(async () => {
       ctx = await setupTestServer({
         mockResponses: [
-          "test-loop-name",
           "Working...",
           "Done! <promise>COMPLETE</promise>",
         ],
@@ -148,7 +146,6 @@ describe("Branch Safety - Worktree Isolation", () => {
 
       // Reset mock for this test
       ctx.mockBackend.reset([
-        "test-loop-name",
         "Working...",
         "Done! <promise>COMPLETE</promise>",
       ]);
@@ -189,7 +186,6 @@ describe("Branch Safety - Worktree Isolation", () => {
     beforeEach(async () => {
       ctx = await setupTestServer({
         mockResponses: [
-          "test-loop-name",
           "Working...",
           "Done! <promise>COMPLETE</promise>",
         ],
@@ -243,7 +239,6 @@ describe("Branch Safety - Worktree Isolation", () => {
     beforeEach(async () => {
       ctx = await setupTestServer({
         mockResponses: [
-          "test-loop-name",
           "Working...",
           "Done! <promise>COMPLETE</promise>",
         ],

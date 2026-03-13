@@ -31,7 +31,7 @@ import { GitService } from "./git-service";
 import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
 import { log } from "./logger";
-import { generateLoopName } from "../utils/name-generator";
+import { generateLoopName, sanitizeLoopName } from "../utils/name-generator";
 import { assertValidTransition } from "./loop-state-machine";
 import { sshSessionManager } from "./ssh-session-manager";
 import { portForwardManager } from "./port-forward-manager";
@@ -41,6 +41,8 @@ import { buildReviewBranchName, normalizeBranchPrefix } from "./branch-name";
  * Options for creating a new loop.
  */
 export interface CreateLoopOptions {
+  /** Human-readable loop title */
+  name: string;
   /** Absolute path to working directory */
   directory: string;
   /** The task prompt/PRD */
@@ -150,71 +152,16 @@ export class LoopManager {
 
 
   /**
-   * Generate a name for a new loop.
-   * For drafts: uses prompt-based fallback (no AI call).
-   * For non-drafts: calls AI-based title generation with fallback on failure.
-   */
-  private async generateName(
-    options: Pick<CreateLoopOptions, "draft" | "prompt" | "directory" | "workspaceId">,
-    timestamp: string
-  ): Promise<string> {
-    // For drafts, skip AI title generation and use prompt-based fallback
-    // This avoids backend interference issues and makes draft creation faster
-    if (options.draft) {
-      const fallbackName = options.prompt.slice(0, 50).trim();
-      const name = fallbackName || `Draft ${timestamp.slice(0, 10)}`;
-      log.debug("createLoop - Using prompt-based name for draft", { generatedName: name });
-      return name;
-    }
-
-    // For non-drafts, use AI-based title generation
-    try {
-      const backend = backendManager.getBackend(options.workspaceId);
-      const tempSession = await backend.createSession({
-        title: "Loop Name Generation",
-        directory: options.directory,
-      });
-
-      try {
-        const name = await generateLoopName({
-          prompt: options.prompt,
-          backend,
-          sessionId: tempSession.id,
-          timeoutMs: 10000,
-        });
-        log.info(`Generated loop name: ${name}`);
-        return name;
-      } finally {
-        try {
-          await backend.abortSession(tempSession.id);
-        } catch (cleanupError) {
-          log.warn(`Failed to clean up temporary session: ${String(cleanupError)}`);
-        }
-      }
-    } catch (error) {
-      // If name generation fails, use prompt-based fallback
-      log.warn(`Failed to generate loop name: ${String(error)}, using fallback`);
-      const fallbackName = options.prompt.slice(0, 50).trim();
-      if (fallbackName) {
-        return fallbackName;
-      }
-      // Ultimate fallback if prompt is empty
-      const ts = new Date().toISOString()
-        .replace(/[T:.]/g, "-")
-        .replace(/Z$/, "")
-        .slice(0, 19);
-      return `loop-${ts}`;
-    }
-  }
-
-
-  /**
    * Create a new loop.
-   * The loop name is automatically generated from the prompt using the configured agent backend.
    */
   async createLoop(options: CreateLoopOptions): Promise<Loop> {
     const id = crypto.randomUUID();
     const now = createTimestamp();
+    const name = options.name.trim();
+
+    if (!name) {
+      throw new Error("Loop name is required");
+    }
 
     // Debug logging for loop creation
     log.debug("createLoop - Input", {
@@ -225,12 +172,9 @@ export class LoopManager {
       workspaceId: options.workspaceId,
     });
 
-    // Generate loop name
-    const generatedName = await this.generateName(options, now);
-
     const config: LoopConfig = {
       id,
-      name: generatedName,
+      name,
       directory: options.directory,
       prompt: options.prompt,
       createdAt: now,
@@ -291,6 +235,31 @@ export class LoopManager {
     return loop;
   }
 
+  async generateLoopTitle(options: Pick<CreateLoopOptions, "prompt" | "directory" | "workspaceId">): Promise<string> {
+    const backend = backendManager.getBackend(options.workspaceId);
+    const tempSession = await backend.createSession({
+      title: "Loop Title Generation",
+      directory: options.directory,
+    });
+
+    try {
+      const title = await generateLoopName({
+        prompt: options.prompt,
+        backend,
+        sessionId: tempSession.id,
+        timeoutMs: 10000,
+      });
+      log.info(`Generated loop title: ${title}`);
+      return title;
+    } finally {
+      try {
+        await backend.abortSession(tempSession.id);
+      } catch (cleanupError) {
+        log.warn(`Failed to clean up temporary session: ${String(cleanupError)}`);
+      }
+    }
+  }
+
   /**
    * Create a new interactive chat.
    *
@@ -305,10 +274,11 @@ export class LoopManager {
    * @param options - Same options as createLoop, with chat-specific overrides applied
    * @returns The created chat (as a Loop with mode: "chat")
    */
-  async createChat(options: Omit<CreateLoopOptions, "planMode" | "mode">): Promise<Loop> {
+  async createChat(options: Omit<CreateLoopOptions, "planMode" | "mode" | "name">): Promise<Loop> {
     // Create the loop with chat-specific config overrides
     const loop = await this.createLoop({
       ...options,
+      name: sanitizeLoopName(options.prompt) || "New Chat",
       mode: "chat",
       planMode: false,
       maxIterations: 1,           // Single turn per iteration

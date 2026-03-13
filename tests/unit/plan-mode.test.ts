@@ -66,6 +66,7 @@ describe("Plan Mode - Clear Planning Folder", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a simple plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -112,6 +113,7 @@ describe("Plan Mode - Clear Planning Folder", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -145,6 +147,7 @@ describe("Plan Mode - Clear Planning Folder", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -188,6 +191,7 @@ describe("Plan Mode - Clear Planning Folder", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -264,6 +268,7 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a simple plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -301,6 +306,7 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a simple plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -340,6 +346,7 @@ describe("Plan Mode - Always Clear plan.md on Start", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a simple plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -390,6 +397,7 @@ describe("Plan Mode - State Transitions", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -407,6 +415,7 @@ describe("Plan Mode - State Transitions", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -437,6 +446,7 @@ describe("Plan Mode - State Transitions", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 5, // Need enough iterations for multiple feedbacks
@@ -473,6 +483,7 @@ describe("Plan Mode - State Transitions", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -499,6 +510,7 @@ describe("Plan Mode - State Transitions", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -552,6 +564,7 @@ describe("Plan Mode - isPlanReady Flag", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a simple plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -568,6 +581,7 @@ describe("Plan Mode - isPlanReady Flag", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a simple plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -587,6 +601,7 @@ describe("Plan Mode - isPlanReady Flag", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a simple plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 5, // Increase max iterations to allow feedback iteration
@@ -616,6 +631,7 @@ describe("Plan Mode - isPlanReady Flag", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a simple plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -665,6 +681,7 @@ describe("Plan Mode - Rejection Paths", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a simple plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 5,  // Allow multiple iterations
@@ -700,7 +717,6 @@ describe("Plan Mode - Worktree Isolation", () => {
     ctx = await setupTestContext({
       initGit: true,
       mockResponses: [
-        "worktree-test-loop",               // Name generation for single loop tests
         "<promise>PLAN_READY</promise>",     // Plan iteration response
       ],
     });
@@ -720,6 +736,7 @@ describe("Plan Mode - Worktree Isolation", () => {
     const loop = await ctx.manager.createLoop({
       ...testModelFields,
       prompt: "Create a plan",
+      name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -755,12 +772,9 @@ describe("Plan Mode - Worktree Isolation", () => {
   });
 
   test("multiple plan mode loops have separate worktrees", async () => {
-    // Override mock backend with responses for two loops:
-    // name1, name2 (for createLoop), PLAN_READY, PLAN_READY (for startPlanMode)
+    // Override mock backend with responses for two plan iterations.
     const multiLoopMock = new MockAcpBackend({
       responses: [
-        "multi-loop-a",                     // Name generation for loop 1
-        "multi-loop-b",                     // Name generation for loop 2
         "<promise>PLAN_READY</promise>",    // Plan iteration for loop 1
         "<promise>PLAN_READY</promise>",    // Plan iteration for loop 2
       ],
@@ -777,6 +791,7 @@ describe("Plan Mode - Worktree Isolation", () => {
     const loop1 = await ctx.manager.createLoop({
       ...testModelFields,
       prompt: "Plan A",
+      name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -785,6 +800,7 @@ describe("Plan Mode - Worktree Isolation", () => {
     const loop2 = await ctx.manager.createLoop({
       ...testModelFields,
       prompt: "Plan B",
+      name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -829,6 +845,7 @@ describe("Plan Mode - Worktree Isolation", () => {
     const loop = await ctx.manager.createLoop({
       ...testModelFields,
       prompt: "Create a plan",
+      name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -864,15 +881,13 @@ describe("Plan Mode - Engine Recovery After Server Restart", () => {
     ctx = await setupTestContext({
       initGit: true,
       // Responses consumed in order by the shared mock backend:
-      // [0] name generation — createLoop() calls generateName() which uses sendPrompt()
-      // [1] plan iteration — startPlanMode() fires engine.start() which uses subscribeToEvents() → PLAN_READY
-      // [2] post-recovery feedback or accept iteration (subscribeToEvents)
-      // [3] execution after accept (subscribeToEvents)
+      // [0] plan iteration — startPlanMode() fires engine.start() which uses subscribeToEvents() → PLAN_READY
+      // [1] post-recovery feedback or accept iteration (subscribeToEvents)
+      // [2] execution after accept (subscribeToEvents)
       mockResponses: [
-        "recovery-loop",                       // [0] name generation via sendPrompt()
-        "<promise>PLAN_READY</promise>",       // [1] initial plan iteration via subscribeToEvents()
-        "<promise>PLAN_READY</promise>",       // [2] post-recovery feedback or accept iteration
-        "<promise>COMPLETE</promise>",         // [3] execution after accept
+        "<promise>PLAN_READY</promise>",       // [0] initial plan iteration via subscribeToEvents()
+        "<promise>PLAN_READY</promise>",       // [1] post-recovery feedback or accept iteration
+        "<promise>COMPLETE</promise>",         // [2] execution after accept
       ],
     });
   });
@@ -886,6 +901,7 @@ describe("Plan Mode - Engine Recovery After Server Restart", () => {
     const loop = await ctx.manager.createLoop({
       ...testModelFields,
       prompt: "Create a plan",
+      name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 5,
@@ -922,6 +938,7 @@ describe("Plan Mode - Engine Recovery After Server Restart", () => {
     const loop = await ctx.manager.createLoop({
       ...testModelFields,
       prompt: "Create a branch-only plan",
+      name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 5,
@@ -953,6 +970,7 @@ describe("Plan Mode - Engine Recovery After Server Restart", () => {
     const loop = await ctx.manager.createLoop({
       ...testModelFields,
       prompt: "Create a plan",
+      name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 5,
@@ -998,6 +1016,7 @@ describe("Plan Mode - Engine Recovery After Server Restart", () => {
     const loop = await ctx.manager.createLoop({
       ...testModelFields,
       prompt: "Regular loop",
+      name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,
@@ -1042,6 +1061,7 @@ describe("Plan Mode - Open SSH acceptance", () => {
     const loop = await ctx.manager.createLoop({
       ...testModelFields,
       prompt: "Create a plan",
+      name: "Test Loop",
       directory: ctx.workDir,
       workspaceId: testWorkspaceId,
       maxIterations: 1,

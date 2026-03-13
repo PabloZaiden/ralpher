@@ -45,11 +45,18 @@ export const GitConfigSchema = z.object({
   };
 });
 
+export const LoopNameSchema = z
+  .string()
+  .trim()
+  .min(1, "name is required")
+  .max(100, "name cannot exceed 100 characters");
+
 /**
  * Schema for CreateLoopRequest - POST /api/loops
  *
  */
 export const CreateLoopRequestSchema = z.object({
+  name: LoopNameSchema,
   workspaceId: z.string().min(1, "workspaceId is required"),
   prompt: z.string().min(1, "prompt is required and must be a non-empty string"),
   model: ModelConfigSchema,
@@ -76,7 +83,7 @@ export const CreateLoopRequestSchema = z.object({
  * additional fields that the PATCH endpoint supports.
  */
 export const UpdateLoopRequestSchema = z.object({
-  name: z.string().optional(),
+  name: LoopNameSchema.optional(),
   directory: z.string().optional(),
   prompt: z.string().optional(),
   model: ModelConfigSchema.optional(),
@@ -92,6 +99,14 @@ export const UpdateLoopRequestSchema = z.object({
   useWorktree: z.boolean().optional(),
   clearPlanningFolder: z.boolean().optional(),
   planMode: z.boolean().optional(),
+});
+
+/**
+ * Schema for explicit AI title generation - POST /api/loops/title
+ */
+export const GenerateLoopTitleRequestSchema = z.object({
+  workspaceId: z.string().min(1, "workspaceId is required"),
+  prompt: z.string().trim().min(1, "prompt is required and must be a non-empty string"),
 });
 
 /**

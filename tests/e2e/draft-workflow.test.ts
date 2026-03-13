@@ -155,6 +155,7 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         workspaceId: testWorkspaceId,
         prompt: "Initial task",
+        name: "Test Draft Loop",
         draft: true,
         planMode: false,
           model: testModel,
@@ -247,6 +248,7 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         workspaceId: testWorkspaceId,
         prompt: "Create a plan for feature X",
+        name: "Test Draft Loop",
         planMode: true,
           model: testModel,
           useWorktree: true,
@@ -345,6 +347,7 @@ describe("Draft Loop E2E Workflow", () => {
         body: JSON.stringify({
           workspaceId: uniqueWorkspaceId,
           prompt: "Quick task",
+          name: "Test Draft Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -388,6 +391,7 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         workspaceId: testWorkspaceId,
         prompt: "Task",
+        name: "Test Draft Loop",
         planMode: false,
           model: testModel,
           useWorktree: true,
@@ -424,6 +428,7 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         workspaceId: testWorkspaceId,
         prompt: "Test task for workspace selection",
+        name: "Test Draft Loop",
         draft: true,
         planMode: false,
           model: testModel,
@@ -473,6 +478,7 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         workspaceId: testWorkspaceId,
         prompt: "Test task",
+        name: "Test Draft Loop",
         planMode: true,
           model: testModel,
           useWorktree: true,
@@ -519,6 +525,7 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         workspaceId: testWorkspaceId,
         prompt: "Test task",
+        name: "Test Draft Loop",
         planMode: true,
           model: testModel,
           useWorktree: true,
@@ -584,6 +591,7 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         workspaceId: testWorkspaceId,
         prompt: "Test task",
+        name: "Test Draft Loop",
         clearPlanningFolder: true,
         draft: true,
         planMode: false,
@@ -656,6 +664,7 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         workspaceId: testWorkspaceId,
         prompt: "First draft prompt - this should be unique",
+        name: "Test Draft Loop",
         draft: true,
         planMode: false,
           model: testModel,
@@ -675,6 +684,7 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         workspaceId: testWorkspaceId,
         prompt: "Second draft prompt - completely different",
+        name: "Test Draft Loop",
         draft: true,
         planMode: false,
           model: testModel,
@@ -719,7 +729,7 @@ describe("Draft Loop E2E Workflow", () => {
     expect(verify1Body.config.prompt).toBe("First draft prompt - UPDATED");
   });
 
-  test("draft name is derived from prompt (first 50 chars)", async () => {
+  test("draft preserves the explicitly provided name", async () => {
     const longPrompt = "This is a very long prompt that should be truncated to create the draft name automatically";
     
     const createResponse = await fetch(`${baseUrl}/api/loops`, {
@@ -728,21 +738,18 @@ describe("Draft Loop E2E Workflow", () => {
       body: JSON.stringify({
         workspaceId: testWorkspaceId,
         prompt: longPrompt,
+        name: "Explicit Draft Title",
         draft: true,
         planMode: false,
-          model: testModel,
-          useWorktree: true,
+        model: testModel,
+        useWorktree: true,
       }),
     });
 
     expect(createResponse.status).toBe(201);
     const createBody = await createResponse.json();
     
-    // Draft name should be derived from the prompt (first 50 chars)
-    // Not a timestamp-based fallback
-    expect(createBody.config.name).toBeDefined();
-    expect(createBody.config.name.length).toBeLessThanOrEqual(50);
-    expect(createBody.config.name).not.toMatch(/^loop-\d{4}-\d{2}-\d{2}/);
-    expect(createBody.config.name).toContain("This is a very long prompt");
+    expect(createBody.config.name).toBe("Explicit Draft Title");
+    expect(createBody.config.prompt).toBe(longPrompt);
   });
 });

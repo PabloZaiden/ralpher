@@ -173,7 +173,10 @@ describe("error handling scenario", () => {
       expect(btn).toBeTruthy();
     });
 
-    // Fill prompt
+    // Fill required fields
+    const titleInput = getByLabelText(/Title/) as HTMLInputElement;
+    await user.type(titleInput, "Conflict Loop");
+
     const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
     await user.type(promptTextarea, "X");
 

@@ -1,6 +1,6 @@
 /**
- * Loop name generation utility.
- * Generates meaningful loop names from prompts using the configured agent backend.
+ * Loop title generation utility.
+ * Generates AI-assisted loop titles from prompts using the configured agent backend.
  */
 
 import type { PromptInput, AgentResponse } from "../backends/types";
@@ -46,43 +46,15 @@ export function sanitizeLoopName(name: string): string {
 }
 
 /**
- * Generate a fallback name from the prompt using simple heuristics.
- * Extracts key words from the first 100 chars of the prompt.
- */
-function generateFallbackName(prompt: string): string {
-  // Take first 100 chars, split by spaces, take first 8 words
-  const words = prompt
-    .slice(0, 100)
-    .split(/\s+/)
-    .filter(w => w.length > 2)  // Skip very short words
-    .slice(0, 8);
-  
-  if (words.length > 0) {
-    return sanitizeLoopName(words.join(" "));
-  }
-  
-  // Ultimate fallback: timestamp-based name
-  const now = new Date();
-  const timestamp = now.toISOString()
-    .replace(/T/, " ")
-    .replace(/\.\d+Z$/, "")  // \. matches literal period; removes fractional seconds like .123Z
-    .slice(0, 19);  // YYYY-MM-DD HH:MM:SS
-  return `Loop ${timestamp}`;
-}
-
-/**
- * Generate a loop name from a prompt using the configured agent backend.
- * 
+ * Generate a loop title from a prompt using the configured agent backend.
+ *
  * This function sends a prompt to the backend asking it to generate a short,
  * descriptive title for a coding task. The title is sanitized and validated
  * before being returned.
- * 
- * If generation fails or times out, falls back to heuristic-based naming
- * or timestamp-based naming.
- * 
+ *
  * @param options - Options for name generation
  * @returns A sanitized loop title (max 100 chars, preserves spaces and casing)
- * @throws Error if prompt is empty or backend/session is invalid
+ * @throws Error if prompt is empty, the backend call fails, or the response is unusable
  */
 export async function generateLoopName(options: GenerateLoopNameOptions): Promise<string> {
   const { prompt, backend, sessionId, timeoutMs = 10000 } = options;
@@ -128,22 +100,17 @@ Output ONLY the title, nothing else. No quotes, no formatting, no explanation.`
     }
 
     const generatedName = response.content.trim();
-
-    // Validate the generated name
-    if (generatedName && generatedName.length > 0 && generatedName.length <= 100) {
-      // Sanitize the name
-      const sanitized = sanitizeLoopName(generatedName);
-      
-      // Make sure sanitization didn't produce an empty string
-      if (sanitized && sanitized.length > 0) {
-        return sanitized;
-      }
+    if (!generatedName) {
+      throw new Error("Title generation returned an empty response");
     }
 
-    // If validation failed, fall back to heuristics
-    return generateFallbackName(prompt);
+    const sanitized = sanitizeLoopName(generatedName);
+    if (!sanitized) {
+      throw new Error("Title generation returned an unusable title");
+    }
+
+    return sanitized;
   } catch (error) {
-    // On any error (timeout, backend failure, etc.), fall back
-    return generateFallbackName(prompt);
+    throw new Error(`Failed to generate loop title: ${String(error)}`, { cause: error });
   }
 }

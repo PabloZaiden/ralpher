@@ -15,7 +15,9 @@ export {
 // Loop schemas
 export {
   GitConfigSchema,
+  LoopNameSchema,
   CreateLoopRequestSchema,
+  GenerateLoopTitleRequestSchema,
   UpdateLoopRequestSchema,
   AddressCommentsRequestSchema,
   PlanFeedbackRequestSchema,

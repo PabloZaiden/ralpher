@@ -298,6 +298,7 @@ describe("Chat Workflow E2E", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Loop task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -320,7 +321,6 @@ describe("Chat Workflow E2E", () => {
         useMockBackend: true,
         initGit: true,
         mockResponses: [
-          "test-loop-name",
           "Done! <promise>COMPLETE</promise>",
         ],
       });
@@ -329,6 +329,7 @@ describe("Chat Workflow E2E", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Regular loop",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });

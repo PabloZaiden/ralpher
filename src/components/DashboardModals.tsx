@@ -10,6 +10,7 @@ import type { CreateLoopResult, CreateChatResult } from "../hooks/useLoops";
 import type { UseWorkspaceServerSettingsResult } from "../hooks/useWorkspaceServerSettings";
 import { Modal, Button } from "./common";
 import { CreateLoopForm } from "./CreateLoopForm";
+import type { CreateLoopFormSubmitRequest } from "./CreateLoopForm";
 import {
   UncommittedChangesModal,
   RenameLoopModal,
@@ -290,7 +291,13 @@ export function DashboardModals(props: DashboardModalsProps) {
             mode={props.createMode}
             onSubmit={async (request) => {
               if (isChatMode) {
+                if (isCreateLoopRequest(request)) {
+                  throw new Error("Expected chat submission request");
+                }
                 return await handleCreateChatSubmit(props, request, toast);
+              }
+              if (!isCreateLoopRequest(request)) {
+                throw new Error("Expected loop submission request");
               }
               return await handleCreateLoopSubmit(props, editLoop, request, toast);
             }}
@@ -380,6 +387,11 @@ export function DashboardModals(props: DashboardModalsProps) {
 
     </>
   );
+}
+
+/** Handles the create/edit loop form submission logic */
+function isCreateLoopRequest(request: CreateLoopFormSubmitRequest): request is CreateLoopRequest {
+  return "name" in request;
 }
 
 /** Handles the create/edit loop form submission logic */
@@ -503,22 +515,10 @@ async function handleCreateLoopSubmit(
 /** Handles the create chat form submission logic */
 async function handleCreateChatSubmit(
   props: DashboardModalsProps,
-  request: CreateLoopRequest,
+  request: CreateChatRequest,
   toast: { error: (msg: string) => void },
 ): Promise<boolean> {
-  // Build a CreateChatRequest from the loop form data
-  const chatRequest: CreateChatRequest = {
-    workspaceId: request.workspaceId!,
-    prompt: request.prompt,
-    model: request.model!,
-    useWorktree: request.useWorktree,
-  };
-
-  if (request.baseBranch) {
-    chatRequest.baseBranch = request.baseBranch;
-  }
-
-  const result = await props.onCreateChat(chatRequest);
+  const result = await props.onCreateChat(request);
 
   if (result.startError) {
     props.setUncommittedModal({

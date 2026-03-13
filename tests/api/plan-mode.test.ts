@@ -243,6 +243,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
+          name: "Test Loop",
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,
@@ -277,6 +278,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
+          name: "Test Loop",
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           clearPlanningFolder: true,
@@ -329,6 +331,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
+          name: "Test Loop",
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,
@@ -373,6 +376,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Do something",
+          name: "Test Loop",
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: false,
@@ -419,6 +423,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
+          name: "Test Loop",
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,
@@ -467,6 +472,7 @@ describe("Plan Mode API Integration", () => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt: "Create a plan",
+            name: "Test Loop",
             workspaceId: sshWorkspaceId,
             maxIterations: 1,
             planMode: true,
@@ -518,6 +524,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
+          name: "Test Loop",
           workspaceId: currentWorkspaceId,
           planningFolderPath: ".planning-test2",
           maxIterations: 1,
@@ -570,6 +577,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Do something",
+          name: "Test Loop",
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: false,
@@ -608,6 +616,7 @@ describe("Plan Mode API Integration", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: "Create a plan",
+          name: "Test Loop",
           workspaceId: currentWorkspaceId,
           maxIterations: 1,
           planMode: true,

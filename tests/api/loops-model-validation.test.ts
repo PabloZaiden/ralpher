@@ -169,6 +169,7 @@ describe("Model Validation in API Endpoints", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             useWorktree: true,
             model: {
@@ -197,6 +198,7 @@ describe("Model Validation in API Endpoints", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             useWorktree: true,
             // No model specified - should be rejected
@@ -224,6 +226,7 @@ describe("Model Validation in API Endpoints", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             useWorktree: true,
             draft: true,
@@ -255,6 +258,7 @@ describe("Model Validation in API Endpoints", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             useWorktree: true,
             model: {
@@ -301,6 +305,7 @@ describe("Model Validation in API Endpoints", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             useWorktree: true,
             model: {
@@ -354,6 +359,7 @@ describe("Model Validation in API Endpoints", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             model: {
               // Missing providerID - should be rejected

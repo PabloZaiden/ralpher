@@ -274,6 +274,7 @@ describe("Model Variants API", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             useWorktree: true,
             draft: true, // Use draft mode to avoid starting the loop
@@ -304,6 +305,7 @@ describe("Model Variants API", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             useWorktree: true,
             draft: true, // Use draft mode to avoid starting the loop
@@ -334,6 +336,7 @@ describe("Model Variants API", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             useWorktree: true,
             draft: true, // Use draft mode to avoid starting the loop
@@ -366,6 +369,7 @@ describe("Model Variants API", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             useWorktree: true,
             draft: true,
@@ -404,6 +408,7 @@ describe("Model Variants API", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             useWorktree: true,
             draft: true,
@@ -442,6 +447,7 @@ describe("Model Variants API", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             useWorktree: true,
             draft: true,

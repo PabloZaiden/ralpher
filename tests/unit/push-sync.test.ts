@@ -40,6 +40,7 @@ async function createAndCompleteLoop(ctx: TestContext) {
     ...testModelFields,
     directory: ctx.workDir,
     prompt: "Make changes",
+    name: "Test Loop",
     planMode: false,
     workspaceId: testWorkspaceId,
   });
@@ -189,19 +190,17 @@ describe("Push with Base Branch Sync", () => {
 
   describe("conflict resolution", () => {
     test("starts conflict resolution engine when merge conflicts exist", async () => {
-      // Mock responses consumed in order:
-      // Index 0: sendPrompt (name generation) → COMPLETE name
-      // Index 1: subscribeToEvents (initial loop iteration) → COMPLETE
-      // Index 2: subscribeToEvents (conflict resolution iteration) → COMPLETE
-      const ctx = await setupTestContext({
-        initGit: true,
-        initialFiles: { "test.txt": "Initial content" },
-        mockResponses: [
-          "<promise>COMPLETE</promise>",
-          "<promise>COMPLETE</promise>",
-          "<promise>COMPLETE</promise>",
-        ],
-      });
+        // Mock responses consumed in order:
+        // Index 0: subscribeToEvents (initial loop iteration) → COMPLETE
+        // Index 1: subscribeToEvents (conflict resolution iteration) → COMPLETE
+        const ctx = await setupTestContext({
+          initGit: true,
+          initialFiles: { "test.txt": "Initial content" },
+          mockResponses: [
+            "<promise>COMPLETE</promise>",
+            "<promise>COMPLETE</promise>",
+          ],
+        });
 
       try {
         const { remoteDir } = await setupRemote(ctx);
@@ -211,6 +210,7 @@ describe("Push with Base Branch Sync", () => {
           ...testModelFields,
           directory: ctx.workDir,
           prompt: "Modify test.txt",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -269,15 +269,13 @@ describe("Push with Base Branch Sync", () => {
 
     test("does not auto-push when conflict resolution fails", async () => {
       // Mock responses consumed in order:
-      // Index 0: sendPrompt (name generation) → COMPLETE name
-      // Index 1: subscribeToEvents (initial loop iteration) → COMPLETE
-      // Index 2: subscribeToEvents (conflict resolution iteration) → ERROR
+      // Index 0: subscribeToEvents (initial loop iteration) → COMPLETE
+      // Index 1: subscribeToEvents (conflict resolution iteration) → ERROR
       // With maxConsecutiveErrors: 1, a single error triggers failsafe → "failed" status
       const ctx = await setupTestContext({
         initGit: true,
         initialFiles: { "test.txt": "Initial content" },
         mockResponses: [
-          "<promise>COMPLETE</promise>",
           "<promise>COMPLETE</promise>",
           "ERROR:Failed to resolve conflicts",
         ],
@@ -290,6 +288,7 @@ describe("Push with Base Branch Sync", () => {
           ...testModelFields,
           directory: ctx.workDir,
           prompt: "Modify test.txt",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
           maxConsecutiveErrors: 1,
@@ -358,6 +357,7 @@ describe("Push with Base Branch Sync", () => {
           ...testModelFields,
           directory: ctx.workDir,
           prompt: "Test",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -385,15 +385,13 @@ describe("Push with Base Branch Sync", () => {
 
     test("syncState is cleared when jumpstarting a loop", async () => {
       // Mock responses consumed in order:
-      // Index 0: sendPrompt (name generation) → COMPLETE name
-      // Index 1: subscribeToEvents (initial loop iteration) → COMPLETE
-      // Index 2: subscribeToEvents (conflict resolution iteration) → ERROR (fails with maxConsecutiveErrors: 1)
-      // Index 3: subscribeToEvents (jumpstarted loop iteration) → COMPLETE
+      // Index 0: subscribeToEvents (initial loop iteration) → COMPLETE
+      // Index 1: subscribeToEvents (conflict resolution iteration) → ERROR (fails with maxConsecutiveErrors: 1)
+      // Index 2: subscribeToEvents (jumpstarted loop iteration) → COMPLETE
       const ctx = await setupTestContext({
         initGit: true,
         initialFiles: { "test.txt": "Initial content" },
         mockResponses: [
-          "<promise>COMPLETE</promise>",
           "<promise>COMPLETE</promise>",
           "ERROR:Failed to resolve conflicts",
           "<promise>COMPLETE</promise>",
@@ -407,6 +405,7 @@ describe("Push with Base Branch Sync", () => {
           ...testModelFields,
           directory: ctx.workDir,
           prompt: "Modify test.txt",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
           maxConsecutiveErrors: 1,
@@ -511,9 +510,8 @@ describe("Push with Working Branch Sync", () => {
   describe("working branch conflicts", () => {
     test("starts conflict resolution when working branch has conflicting remote changes", async () => {
       // Mock responses consumed in order:
-      // Index 0: sendPrompt (name generation) → COMPLETE name
-      // Index 1: subscribeToEvents (initial loop iteration) → COMPLETE
-      // Index 2: subscribeToEvents (conflict resolution for working branch) → COMPLETE
+      // Index 0: subscribeToEvents (initial loop iteration) → COMPLETE
+      // Index 1: subscribeToEvents (conflict resolution for working branch) → COMPLETE
       //
       // NOTE: We only verify that conflict resolution starts with the correct syncPhase.
       // We do NOT wait for the full flow to reach "pushed" because the mock AI doesn't
@@ -528,7 +526,6 @@ describe("Push with Working Branch Sync", () => {
         mockResponses: [
           "<promise>COMPLETE</promise>",
           "<promise>COMPLETE</promise>",
-          "<promise>COMPLETE</promise>",
         ],
       });
 
@@ -540,6 +537,7 @@ describe("Push with Working Branch Sync", () => {
           ...testModelFields,
           directory: ctx.workDir,
           prompt: "Modify test.txt",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });

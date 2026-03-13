@@ -28,11 +28,10 @@ function createPlanModeMockResponses(options: {
   const {
     planIterations = 1,
     executionResponses = ["<promise>COMPLETE</promise>"],
-    loopName = "test-loop-name",
+    loopName: _loopName = "unused",
   } = options;
 
   const responses: string[] = [];
-  responses.push(loopName);
 
   for (let i = 0; i < planIterations; i++) {
     responses.push("Planning... <promise>PLAN_READY</promise>");
@@ -218,7 +217,6 @@ describe("Default Base Branch - Auto-Detection", () => {
     beforeAll(async () => {
       ctx = await setupTestServer({
         mockResponses: [
-          "test-loop-name", // Name generation
           "Working...",
           "Done! <promise>COMPLETE</promise>",
         ],
@@ -273,7 +271,6 @@ describe("Default Base Branch - Auto-Detection", () => {
     beforeAll(async () => {
       ctx = await setupTestServer({
         mockResponses: [
-          "test-loop-name", // Name generation
           "Working...",
           "Done! <promise>COMPLETE</promise>",
         ],

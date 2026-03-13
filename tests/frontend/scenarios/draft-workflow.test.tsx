@@ -275,7 +275,10 @@ describe("draft workflow scenario", () => {
       expect(draftBtn).toBeTruthy();
     });
 
-    // Fill in prompt
+    // Fill in required fields
+    const titleInput = getByLabelText(/Title/) as HTMLInputElement;
+    await user.type(titleInput, "New Draft");
+
     const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
     await user.type(promptTextarea, "X");
 

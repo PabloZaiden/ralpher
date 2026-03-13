@@ -25,6 +25,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -73,6 +74,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -119,6 +121,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -161,6 +164,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -200,6 +204,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -231,6 +236,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -266,6 +272,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -303,6 +310,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -358,6 +366,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -413,6 +422,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -461,6 +471,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -505,6 +516,7 @@ describe("Review Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
           prompt: "Make changes",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });

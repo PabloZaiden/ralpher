@@ -462,6 +462,7 @@ describe("Chat API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Build something",
+          name: "Test Loop",
           planMode: false,
           model: testModel,
           useWorktree: true,
@@ -526,6 +527,7 @@ describe("Chat API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Loop task",
+          name: "Test Loop",
           planMode: false,
           draft: true,
           model: testModel,

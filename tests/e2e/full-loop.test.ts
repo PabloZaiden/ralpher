@@ -24,7 +24,6 @@ describe("Full Loop Workflow", () => {
       useMockBackend: true,
       initGit: true,
       mockResponses: [
-        "test-loop-name",  // Name generation response
         "Working on iteration 1...",
         "Working on iteration 2...",
         "Done! <promise>COMPLETE</promise>",
@@ -42,6 +41,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Implement a feature",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -63,6 +63,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Custom task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
         // Backend options removed - now global
@@ -78,6 +79,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Test persistence",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -94,6 +96,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Do the work",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -143,6 +146,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Work forever",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
         maxIterations: 2,
@@ -178,6 +182,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Do work",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -213,6 +218,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Cause error",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
         // Set maxConsecutiveErrors to 1 so it fails after first error
@@ -236,6 +242,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Task 1",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -244,6 +251,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Task 2",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -252,6 +260,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Task 3",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -265,6 +274,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Original prompt",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -286,6 +296,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Delete me",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -307,6 +318,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Purge me",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -341,6 +353,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Track me",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -365,6 +378,7 @@ describe("Full Loop Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Track iterations",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });

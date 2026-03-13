@@ -461,6 +461,8 @@ export const testModelForAPI = {
   variant: "",
 };
 
+let testLoopNameCounter = 0;
+
 /**
  * Create a loop via the API.
  */
@@ -468,6 +470,7 @@ export async function createLoopViaAPI(
   baseUrl: string,
   options: {
     directory: string;
+    name?: string;
     prompt: string;
     planMode: boolean;
     useWorktree?: boolean;
@@ -491,6 +494,7 @@ export async function createLoopViaAPI(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       ...restOptions,
+      name: restOptions.name ?? `Test Loop ${++testLoopNameCounter}`,
       workspaceId,
       model,
       useWorktree: restOptions.useWorktree ?? true,

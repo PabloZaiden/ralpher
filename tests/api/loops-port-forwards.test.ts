@@ -118,6 +118,7 @@ describe("Loop port forwards API integration", () => {
       body: JSON.stringify({
         workspaceId,
         prompt: "Create a forwarded port",
+        name: "Test Loop",
         planMode: true,
         useWorktree: true,
         model: {

@@ -15,6 +15,7 @@ import type { ReviewComment } from "./loop";
 import type { SshSession } from "./ssh-session";
 import {
   CreateLoopRequestSchema,
+  GenerateLoopTitleRequestSchema,
   UpdateLoopRequestSchema,
   AddressCommentsRequestSchema,
   SendChatMessageRequestSchema,
@@ -77,7 +78,7 @@ export interface ModelInfo {
  * 
  * If `planMode: true`, the loop starts in plan review mode before execution.
  * 
- * The loop name is automatically generated from the prompt using AI.
+ * The loop name is required and must be provided by the client.
  * 
  * The `workspaceId` is required - loops must be created within a workspace.
  * The directory is automatically derived from the workspace.
@@ -86,6 +87,21 @@ export interface ModelInfo {
  * single source of truth for both validation and TypeScript types.
  */
 export type CreateLoopRequest = z.infer<typeof CreateLoopRequestSchema>;
+
+/**
+ * Request body for POST /api/loops/title endpoint.
+ *
+ * Requests explicit AI-assisted title generation for the current prompt
+ * using the selected workspace context.
+ */
+export type GenerateLoopTitleRequest = z.infer<typeof GenerateLoopTitleRequestSchema>;
+
+/**
+ * Response from POST /api/loops/title endpoint.
+ */
+export interface GenerateLoopTitleResponse {
+  title: string;
+}
 
 /**
  * Request body for POST /api/ssh-sessions.

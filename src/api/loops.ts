@@ -46,6 +46,7 @@ import type { LoopConfig, Loop } from "../types/loop";
 import type { z } from "zod";
 import {
   CreateLoopRequestSchema,
+  GenerateLoopTitleRequestSchema,
   UpdateLoopRequestSchema,
   StartDraftRequestSchema,
   PendingPromptRequestSchema,
@@ -230,7 +231,7 @@ export const loopsCrudRoutes = {
      * Creates a new Ralph Loop with the specified configuration. The loop is
      * automatically started unless `draft: true` is specified.
      * 
-     * The loop name is automatically generated from the prompt using AI.
+      * The loop name is required and supplied by the client.
      * 
      * Request Body Fields:
      * - directory (required): Absolute path to working directory
@@ -264,6 +265,7 @@ export const loopsCrudRoutes = {
       const body = validation.data;
       
       log.debug("POST /api/loops - Request validated", { 
+        name: body.name,
         workspaceId: body.workspaceId, 
         planMode: body.planMode, 
         draft: body.draft,
@@ -328,6 +330,7 @@ export const loopsCrudRoutes = {
 
       try {
         const loop = await loopManager.createLoop({
+          name: body.name,
           directory,
           prompt: body.prompt,
           workspaceId,
@@ -397,6 +400,33 @@ export const loopsCrudRoutes = {
         }
       } catch (error) {
         return errorResponse("create_failed", String(error), 500);
+      }
+    },
+  },
+
+  "/api/loops/title": {
+    async POST(req: Request): Promise<Response> {
+      const validation = await parseAndValidate(GenerateLoopTitleRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
+      }
+
+      const workspace = await getWorkspace(validation.data.workspaceId);
+      if (!workspace) {
+        return errorResponse("workspace_not_found", `Workspace not found: ${validation.data.workspaceId}`, 404);
+      }
+
+      await touchWorkspace(workspace.id);
+
+      try {
+        const title = await loopManager.generateLoopTitle({
+          workspaceId: workspace.id,
+          directory: workspace.directory,
+          prompt: validation.data.prompt,
+        });
+        return Response.json({ title });
+      } catch (error) {
+        return errorResponse("title_generation_failed", String(error), 500);
       }
     },
   },
