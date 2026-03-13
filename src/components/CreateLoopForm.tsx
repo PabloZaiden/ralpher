@@ -693,13 +693,23 @@ export function CreateLoopForm({
 
       {!isChatMode && (
         <div>
-          <div className="flex items-center justify-between gap-3">
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-            >
-              Title <span className="text-red-500">*</span>
-            </label>
+          <label
+            htmlFor="name"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
+            Title <span className="text-red-500">*</span>
+          </label>
+          <div className="mt-1 flex items-start gap-2">
+            <input
+              id="name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Short loop title"
+              required
+              maxLength={100}
+              className="block flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            />
             <Button
               type="button"
               variant="secondary"
@@ -708,20 +718,13 @@ export function CreateLoopForm({
               disabled={!canGenerateTitle}
               loading={generatingTitle}
               icon={<TitleSparkIcon className="h-4 w-4" />}
+              aria-label="Generate title with AI"
+              title="Generate title with AI"
+              className="shrink-0 px-2"
             >
-              AI
+              {null}
             </Button>
           </div>
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Short loop title"
-            required
-            maxLength={100}
-            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
-          />
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Give the loop a clear title, or use AI to suggest one from the current prompt.
           </p>

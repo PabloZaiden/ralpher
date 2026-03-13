@@ -165,7 +165,7 @@ describe("create loop scenario", () => {
     });
   });
 
-  test("AI title button fills the title from the prompt", async () => {
+  test("title spark button fills the title from the prompt", async () => {
     setupApi();
     api.post("/api/loops/title", () => ({ title: "Generated Loop Title" }));
 
@@ -176,14 +176,16 @@ describe("create loop scenario", () => {
     const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
     await user.type(promptTextarea, "X");
 
-    await user.click(getByRole("button", { name: "AI" }));
+    const generateTitleButton = getByRole("button", { name: "Generate title with AI" });
+    expect(generateTitleButton.textContent).toBe("");
+    await user.click(generateTitleButton);
 
     await waitFor(() => {
       expect((getByLabelText(/Title/) as HTMLInputElement).value).toBe("Generated Loop Title");
     });
   });
 
-  test("AI title button shows an error toast when generation fails", async () => {
+  test("title spark button shows an error toast when generation fails", async () => {
     setupApi();
     api.post(
       "/api/loops/title",
@@ -198,7 +200,7 @@ describe("create loop scenario", () => {
     const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
     await user.type(promptTextarea, "X");
 
-    await user.click(getByRole("button", { name: "AI" }));
+    await user.click(getByRole("button", { name: "Generate title with AI" }));
 
     await waitFor(() => {
       expect(getByText("Title generation failed")).toBeTruthy();
