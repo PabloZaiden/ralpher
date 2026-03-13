@@ -593,7 +593,14 @@ describe("actions tab content", () => {
       expect(queryByText("Remote host")).toBeNull();
 
       const remotePortInput = getByLabelText("Remote port") as HTMLInputElement;
+      expect(remotePortInput.type).toBe("number");
+      expect(remotePortInput.min).toBe("1");
+      expect(remotePortInput.max).toBe("65535");
+      expect(remotePortInput.className).toContain("w-28");
+      expect(remotePortInput.className).not.toContain("w-full");
       expect(remotePortInput.getAttribute("placeholder")).toBe("");
+
+      expect(getByRole("button", { name: "Create Port Forward" })).toBeTruthy();
 
       await user.type(remotePortInput, "3000");
       await user.click(getByRole("button", { name: "Create Port Forward" }));

@@ -918,25 +918,29 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                           <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                             Expose a remote service through a Ralpher URL in a new browser window.
                           </div>
-                          <div className="mt-3">
+                          <div className="mt-3 flex flex-wrap items-end gap-3">
                             <label className="text-sm">
                               <span className="mb-1 block text-gray-500 dark:text-gray-400">Remote port</span>
                               <input
+                                type="number"
+                                min={1}
+                                max={65535}
+                                step={1}
                                 value={newForwardPort}
                                 onChange={(e) => setNewForwardPort(e.target.value)}
-                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                                className="w-28 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                                 inputMode="numeric"
                                 placeholder=""
                               />
                             </label>
+                            <Button
+                              size="sm"
+                              onClick={handleCreateForward}
+                              disabled={creatingForward}
+                            >
+                              {creatingForward ? "Creating..." : "Create Port Forward"}
+                            </Button>
                           </div>
-                          <Button
-                            className="mt-3"
-                            onClick={handleCreateForward}
-                            disabled={creatingForward}
-                          >
-                            {creatingForward ? "Creating..." : "Create Port Forward"}
-                          </Button>
                         </div>
 
                         <div className="flex items-center justify-between gap-3 mb-3">
