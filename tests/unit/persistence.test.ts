@@ -65,6 +65,7 @@ function createTestLoop(overrides: {
       useWorktree: DEFAULT_LOOP_CONFIG.useWorktree,
       clearPlanningFolder: false,
       planMode: false,
+      planModeAutoReply: true,
       mode: "loop",
     },
     state: {
@@ -136,6 +137,47 @@ describe("Persistence", () => {
 
       expect(loaded).not.toBeNull();
       expect(loaded!.state.status).toBe("idle");
+    });
+
+    test("persists plan-mode auto-reply and pending questions", async () => {
+      const { saveLoop, loadLoop } = await import("../../src/persistence/loops");
+
+      await setupPersistence();
+
+      const testLoop = createTestLoop({
+        id: "pending-question-loop",
+        status: "planning",
+      });
+      testLoop.config.planMode = true;
+      testLoop.config.planModeAutoReply = false;
+      testLoop.state.planMode = {
+        active: true,
+        feedbackRounds: 0,
+        planningFolderCleared: false,
+        isPlanReady: false,
+        pendingQuestion: {
+          requestId: "question-1",
+          sessionId: "session-1",
+          askedAt: new Date().toISOString(),
+          questions: [
+            {
+              header: "Pick one",
+              question: "How should the plan proceed?",
+              options: [
+                { label: "Option A", description: "Try A" },
+              ],
+              custom: true,
+            },
+          ],
+        },
+      };
+
+      await saveLoop(testLoop);
+      const loaded = await loadLoop("pending-question-loop");
+
+      expect(loaded?.config.planModeAutoReply).toBe(false);
+      expect(loaded?.state.planMode?.pendingQuestion?.requestId).toBe("question-1");
+      expect(loaded?.state.planMode?.pendingQuestion?.questions[0]?.custom).toBe(true);
     });
 
     test("loadLoop returns null for non-existent loop", async () => {

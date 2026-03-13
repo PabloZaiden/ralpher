@@ -29,6 +29,7 @@ import {
   setPendingApi,
   clearPendingApi,
   sendPlanFeedbackApi,
+  answerPlanQuestionApi,
   acceptPlanApi,
   discardPlanApi,
   addressReviewCommentsApi,
@@ -108,6 +109,8 @@ export interface UseLoopResult {
   getStatusFile: () => Promise<FileContentResponse>;
   /** Send feedback to refine the plan (only works when loop is in planning status) */
   sendPlanFeedback: (feedback: string) => Promise<boolean>;
+  /** Answer a pending plan-mode question */
+  answerPlanQuestion: (answers: string[][]) => Promise<boolean>;
   /** Accept the plan via the requested mode (only works when loop is in planning status) */
   acceptPlan: (mode?: "start_loop" | "open_ssh") => Promise<AcceptPlanResult>;
   /** Discard the plan and delete the loop (only works when loop is in planning status) */
@@ -594,6 +597,23 @@ export function useLoop(loopId: string): UseLoopResult {
     [loopId, refresh]
   );
 
+  const answerPlanQuestion = useCallback(
+    async (answers: string[][]): Promise<boolean> => {
+      log.debug("Answering plan question", { loopId, answerGroups: answers.length });
+      try {
+        await answerPlanQuestionApi(loopId, answers);
+        await refresh();
+        log.debug("Plan question answered", { loopId });
+        return true;
+      } catch (err) {
+        log.error("Failed to answer plan question", { loopId, error: String(err) });
+        setError(String(err));
+        return false;
+      }
+    },
+    [loopId, refresh],
+  );
+
   // Accept the plan and start the loop execution
   const acceptPlan = useCallback(
     async (mode: "start_loop" | "open_ssh" = "start_loop"): Promise<AcceptPlanResult> => {
@@ -783,6 +803,7 @@ export function useLoop(loopId: string): UseLoopResult {
     getPlan,
     getStatusFile,
     sendPlanFeedback,
+    answerPlanQuestion,
     acceptPlan,
     discardPlan,
     addressReviewComments,

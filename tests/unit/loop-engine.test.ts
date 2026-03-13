@@ -1076,6 +1076,73 @@ describe("StopPatternDetector", () => {
     expect(questionLogs.length).toBeGreaterThan(0);
   }, 10000);
 
+  test("plan-mode questions wait for a manual answer when auto-reply is disabled", async () => {
+    const loop = createTestLoop({
+      planMode: true,
+      planModeAutoReply: false,
+    });
+    loop.state.status = "planning";
+    loop.state.planMode = {
+      active: true,
+      feedbackRounds: 0,
+      planningFolderCleared: false,
+      isPlanReady: false,
+    };
+
+    let repliedRequestId = "";
+    let repliedAnswers: string[][] = [];
+    mockBackend = {
+      ...createMockBackend([]),
+      async replyToQuestion(requestId: string, answers: string[][]): Promise<void> {
+        repliedRequestId = requestId;
+        repliedAnswers = answers;
+      },
+    };
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    const handleQuestionAsked = (engine as unknown as {
+      handleQuestionAsked: (event: AgentEvent & { type: "question.asked" }) => Promise<void>;
+    }).handleQuestionAsked.bind(engine);
+
+    const questionPromise = handleQuestionAsked({
+      type: "question.asked",
+      requestId: "question-manual-1",
+      sessionId: "session-1",
+      questions: [
+        {
+          header: "Choose an approach",
+          question: "Which path should I take?",
+          options: [
+            { label: "Option A", description: "Use option A" },
+            { label: "Option B", description: "Use option B" },
+          ],
+          custom: true,
+        },
+      ],
+    });
+
+    expect(engine.state.planMode?.pendingQuestion?.requestId).toBe("question-manual-1");
+    expect(repliedAnswers).toEqual([]);
+
+    await engine.answerPendingPlanQuestion([["Use option B, but adapt it for tests"]]);
+    await questionPromise;
+
+    expect(repliedRequestId).toBe("question-manual-1");
+    expect(repliedAnswers).toEqual([["Use option B, but adapt it for tests"]]);
+    expect(engine.state.planMode?.pendingQuestion).toBeUndefined();
+
+    const pendingEvent = emittedEvents.find(
+      (event) => event.type === "loop.pending.updated" && event.pendingPlanQuestion?.requestId === "question-manual-1",
+    );
+    expect(pendingEvent).toBeTruthy();
+  });
+
   test("session.status events are logged for debugging", async () => {
     const loop = createTestLoop({ maxIterations: 2 });
 

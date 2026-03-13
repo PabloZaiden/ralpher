@@ -176,6 +176,7 @@ export function DashboardModals(props: DashboardModalsProps) {
     useWorktree: editLoop.config.useWorktree,
     clearPlanningFolder: editLoop.config.clearPlanningFolder,
     planMode: editLoop.config.planMode ?? false,
+    planModeAutoReply: editLoop.config.planModeAutoReply ?? true,
     workspaceId: editLoop.config.workspaceId,
   } : null;
 

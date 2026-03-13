@@ -75,6 +75,8 @@ export interface CreateLoopOptions {
   clearPlanningFolder?: boolean;
   /** Start in plan creation mode instead of immediate execution (required) */
   planMode: boolean;
+  /** Whether plan-mode questions should be auto-answered instead of shown inline */
+  planModeAutoReply?: boolean;
   /** Save as draft without starting (no git branch or session created) */
   draft?: boolean;
   /** Mode of operation: "loop" for autonomous loops, "chat" for interactive chat (default: "loop") */
@@ -197,6 +199,7 @@ export class LoopManager {
       useWorktree: options.useWorktree ?? DEFAULT_LOOP_CONFIG.useWorktree,
       clearPlanningFolder: options.clearPlanningFolder ?? DEFAULT_LOOP_CONFIG.clearPlanningFolder,
       planMode: options.planMode,
+      planModeAutoReply: options.planModeAutoReply ?? DEFAULT_LOOP_CONFIG.planModeAutoReply,
       mode: options.mode ?? DEFAULT_LOOP_CONFIG.mode,
     };
 
@@ -501,6 +504,16 @@ export class LoopManager {
     // Inject feedback: abort current processing or start new iteration.
     // This returns quickly — the iteration runs asynchronously.
     await engine.injectPlanFeedback(feedback);
+  }
+
+  async answerPendingPlanQuestion(loopId: string, answers: string[][]): Promise<void> {
+    const engine = this.engines.get(loopId) ?? await this.recoverPlanningEngine(loopId);
+
+    if (engine.state.status !== "planning") {
+      throw new Error(`Loop is not in planning status: ${engine.state.status}`);
+    }
+
+    await engine.answerPendingPlanQuestion(answers);
   }
 
   /**
