@@ -131,7 +131,7 @@ describe("User Message Logging", () => {
       workspaceId: "test-workspace-id",
       model: { providerID: "test-provider", modelID: "test-model" },
       stopPattern: "<promise>COMPLETE</promise>$",
-      git: { branchPrefix: "ralph/", commitScope: "ralph" },
+      git: { branchPrefix: "", commitScope: "ralph" },
       maxIterations: 1,
       maxConsecutiveErrors: 10,
       activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
@@ -324,7 +324,7 @@ describe("User Message Logging", () => {
       });
       loop.state.git = {
         originalBranch: "main",
-        workingBranch: "ralph/test",
+        workingBranch: "test-a1b2c3d",
         worktreePath: testDir,
         commits: [],
       };
@@ -409,7 +409,7 @@ describe("User Message Logging", () => {
       // manually (normally done by startPlanMode() before engine.start()).
       loop.state.git = {
         originalBranch: "main",
-        workingBranch: "ralph/test",
+        workingBranch: "test-a1b2c3d",
         worktreePath: testDir,
         commits: [],
       };
@@ -448,7 +448,7 @@ describe("User Message Logging", () => {
       // manually (normally done by startPlanMode() before engine.start()).
       loop.state.git = {
         originalBranch: "main",
-        workingBranch: "ralph/test",
+        workingBranch: "test-a1b2c3d",
         worktreePath: testDir,
         commits: [],
       };

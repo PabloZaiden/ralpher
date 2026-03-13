@@ -101,7 +101,7 @@ describe("LoopManager", () => {
       expect(loop.config.directory).toBe(testWorkDir);
       expect(loop.config.prompt).toBe("Do something");
       // Backend is now global, not per-loop config
-      expect(loop.config.git.branchPrefix).toBe("ralph/");
+      expect(loop.config.git.branchPrefix).toBe("");
       expect(loop.state.status).toBe("idle");
 
       // Check event was emitted
@@ -201,7 +201,7 @@ describe("LoopManager", () => {
         ...loop.state,
         git: {
           originalBranch: "main",
-          workingBranch: "ralph/test",
+          workingBranch: "test-a1b2c3d",
           commits: [],
         },
       });
@@ -247,7 +247,7 @@ describe("LoopManager", () => {
         ...loop.state,
         git: {
           originalBranch: "main",
-          workingBranch: "ralph/test",
+          workingBranch: "test-a1b2c3d",
           worktreePath: `${testWorkDir}/.ralph-worktrees/${loop.config.id}`,
           commits: [],
         },

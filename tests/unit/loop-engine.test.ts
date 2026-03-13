@@ -168,7 +168,7 @@ describe("StopPatternDetector", () => {
       model: { providerID: "test-provider", modelID: "test-model" },
       // Backend is now global, not per-loop config
       stopPattern: "<promise>COMPLETE</promise>$",
-      git: { branchPrefix: "ralph/", commitScope: "ralph" },
+      git: { branchPrefix: "", commitScope: "ralph" },
       maxIterations: Infinity,
       maxConsecutiveErrors: 10,
       activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
@@ -256,7 +256,7 @@ describe("StopPatternDetector", () => {
     const worktreePath = join(testDir, ".ralph-worktrees/test-loop");
     loop.state.git = {
       originalBranch: "main",
-      workingBranch: "ralph/test-loop",
+      workingBranch: "test-loop-a1b2c3d",
       worktreePath,
       commits: [],
     };
@@ -660,7 +660,7 @@ describe("StopPatternDetector", () => {
       const loop = createTestLoop({ maxIterations: 1 });
       mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
 
-      await Bun.$`git checkout -b ralph/working`.cwd(testDir).quiet();
+      await Bun.$`git checkout -b working-a1b2c3d`.cwd(testDir).quiet();
 
       const engine = new LoopEngine({
         loop,
@@ -672,7 +672,7 @@ describe("StopPatternDetector", () => {
       await engine.start();
 
       expect(engine.state.status).toBe("completed");
-      expect(engine.state.git?.originalBranch).toBe("ralph/working");
+      expect(engine.state.git?.originalBranch).toBe("working-a1b2c3d");
     }, 10000);
 
     test("setupGitBranch preserves existing originalBranch", async () => {
@@ -682,7 +682,7 @@ describe("StopPatternDetector", () => {
       const loop = createTestLoop({ maxIterations: 1 });
       loop.state.git = {
         originalBranch: defaultBranch,
-        workingBranch: "ralph/existing",
+        workingBranch: "existing-a1b2c3d",
         commits: [],
       };
       mockBackend = createMockBackend(["<promise>COMPLETE</promise>"]);
@@ -1666,7 +1666,7 @@ describe("StopPatternDetector", () => {
       // manually (normally done by startPlanMode() before engine.start()).
       loop.state.git = {
         originalBranch: "main",
-        workingBranch: "ralph/test",
+        workingBranch: "test-a1b2c3d",
         worktreePath: testDir,
         commits: [],
       };
@@ -1753,7 +1753,7 @@ describe("StopPatternDetector", () => {
       // manually (normally done by startPlanMode() before engine.start()).
       loop.state.git = {
         originalBranch: "main",
-        workingBranch: "ralph/test",
+        workingBranch: "test-a1b2c3d",
         worktreePath: testDir,
         commits: [],
       };
@@ -1855,7 +1855,7 @@ describe("StopPatternDetector", () => {
       };
       loop.state.git = {
         originalBranch: "master",
-        workingBranch: "ralph/test-loop",
+        workingBranch: "test-loop-a1b2c3d",
         worktreePath: testDir,
         commits: [],
       };

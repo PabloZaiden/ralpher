@@ -172,7 +172,7 @@ describe("LoopManager - Chat Mode", () => {
         status: "completed",
         git: {
           originalBranch: "master",
-          workingBranch: "ralph/test",
+          workingBranch: "test-a1b2c3d",
           worktreePath: ctx.workDir,
           commits: [],
         },

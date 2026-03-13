@@ -192,7 +192,8 @@ describe("Regular Loop User Scenarios", () => {
       // With worktrees, main checkout stays on original branch
       // Verify the working branch exists (it's checked out in the worktree, not main checkout)
       const workingBranch = completedLoop.state.git!.workingBranch;
-      expect(workingBranch).toMatch(/^ralph\//);
+      expect(workingBranch).not.toStartWith("ralph/");
+      expect(workingBranch).toMatch(/-[0-9a-f]{7}$/);
       expect(await branchExists(ctx.workDir, workingBranch)).toBe(true);
 
       // Verify diff endpoint works

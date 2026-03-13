@@ -436,7 +436,7 @@ describe("pushLoop", () => {
 
     api.post("/api/loops/:id/push", () => ({
       success: true,
-      remoteBranch: "ralph/feature",
+      remoteBranch: "feature-a1b2c3d",
     }));
     api.get("/api/loops/:id", () => pushedLoop);
 
@@ -452,7 +452,7 @@ describe("pushLoop", () => {
     });
 
     expect(pushResult.success).toBe(true);
-    expect(pushResult.remoteBranch).toBe("ralph/feature");
+    expect(pushResult.remoteBranch).toBe("feature-a1b2c3d");
   });
 });
 
@@ -539,7 +539,7 @@ describe("addressReviewComments", () => {
     api.post("/api/loops/:id/address-comments", () => ({
       success: true,
       reviewCycle: 1,
-      branch: "ralph/loop-1-review-1",
+      branch: "loop-1-a1b2c3d-review-1",
     }));
     api.get("/api/loops/:id", () => runningLoop);
 

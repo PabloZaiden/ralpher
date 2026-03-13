@@ -881,7 +881,8 @@ describe("POST /api/loops/:id/pending", () => {
       const loopDataBeforeStop = await loopBeforeStop.json();
       const originalWorkingBranch = loopDataBeforeStop.state.git?.workingBranch;
       expect(originalWorkingBranch).toBeDefined();
-      expect(originalWorkingBranch).toContain("ralph/");
+      expect(originalWorkingBranch).not.toContain("ralph/");
+      expect(originalWorkingBranch).toMatch(/-[0-9a-f]{7}$/);
 
       // Stop the loop
       await loopManager.stopLoop(loopId);

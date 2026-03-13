@@ -152,19 +152,19 @@ describe("LoopCard", () => {
     test("shows working branch for non-draft loops with git state", () => {
       const loop = createLoopWithStatus("running", {
         state: {
-          git: createGitState({ workingBranch: "ralph/feature-x" }),
+          git: createGitState({ workingBranch: "feature-x-a1b2c3d" }),
         },
       });
       const { getByText } = renderWithUser(<LoopCard loop={loop} />);
       expect(getByText("Branch:")).toBeInTheDocument();
-      expect(getByText("ralph/feature-x")).toBeInTheDocument();
+      expect(getByText("feature-x-a1b2c3d")).toBeInTheDocument();
     });
 
     test("shows commit count when commits exist", () => {
       const loop = createLoopWithStatus("completed", {
         state: {
           git: createGitState({
-            workingBranch: "ralph/test",
+            workingBranch: "test-a1b2c3d",
             commits: [createGitCommit(), createGitCommit(), createGitCommit()],
           }),
         },
@@ -186,7 +186,7 @@ describe("LoopCard", () => {
     test("hides git info for draft loops", () => {
       const loop = createLoopWithStatus("draft" as any, {
         state: {
-          git: createGitState({ workingBranch: "ralph/draft-branch" }),
+          git: createGitState({ workingBranch: "draft-branch-a1b2c3d" }),
         },
       });
       const { queryByText } = renderWithUser(<LoopCard loop={loop} />);

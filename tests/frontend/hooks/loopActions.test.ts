@@ -78,12 +78,12 @@ describe("pushLoopApi", () => {
   test("calls POST /api/loops/:id/push and returns result", async () => {
     api.post(`/api/loops/${LOOP_ID}/push`, () => ({
       success: true,
-      remoteBranch: "ralph/feature-branch",
+      remoteBranch: "feature-branch-a1b2c3d",
     }));
 
     const result = await pushLoopApi(LOOP_ID);
 
-    expect(result).toEqual({ success: true, remoteBranch: "ralph/feature-branch" });
+    expect(result).toEqual({ success: true, remoteBranch: "feature-branch-a1b2c3d" });
     expect(api.calls(`/api/loops/${LOOP_ID}/push`, "POST")).toHaveLength(1);
   });
 
@@ -515,7 +515,7 @@ describe("addressReviewCommentsApi", () => {
     api.post(`/api/loops/${LOOP_ID}/address-comments`, () => ({
       success: true,
       reviewCycle: 2,
-      branch: "ralph/loop-123-review-2",
+      branch: "loop-123-a1b2c3d-review-2",
     }));
 
     const result = await addressReviewCommentsApi(LOOP_ID, "Please fix the typo on line 42");
@@ -523,7 +523,7 @@ describe("addressReviewCommentsApi", () => {
     expect(result).toEqual({
       success: true,
       reviewCycle: 2,
-      branch: "ralph/loop-123-review-2",
+      branch: "loop-123-a1b2c3d-review-2",
     });
     const calls = api.calls(`/api/loops/${LOOP_ID}/address-comments`, "POST");
     expect(calls).toHaveLength(1);

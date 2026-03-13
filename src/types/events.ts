@@ -398,7 +398,7 @@ export interface LoopPushedEvent {
   type: "loop.pushed";
   /** ID of the loop that was pushed */
   loopId: string;
-  /** Name of the remote branch (e.g., "origin/ralph/add-feature") */
+  /** Name of the remote branch (e.g., "origin/add-feature-a1b2c3d") */
   remoteBranch: string;
   /** ISO 8601 timestamp */
   timestamp: string;

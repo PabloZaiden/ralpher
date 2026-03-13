@@ -409,7 +409,7 @@ describe("Loops CRUD API Integration", () => {
         status: "completed",
         git: {
           originalBranch: "master",
-          workingBranch: `ralph/${loopId}`,
+          workingBranch: `${loopId}-a1b2c3d`,
           worktreePath: `${testWorkDir}/.ralph-worktrees/${loopId}`,
           commits: [],
         },

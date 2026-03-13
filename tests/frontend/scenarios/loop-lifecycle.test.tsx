@@ -229,7 +229,7 @@ describe("loop lifecycle scenario", () => {
     setupApi(loop);
     api.post("/api/loops/:id/push", () => ({
       success: true,
-      remoteBranch: "ralph/push-loop",
+      remoteBranch: "push-loop-a1b2c3d",
     }));
 
     window.location.hash = `/loop/${LOOP_ID}`;

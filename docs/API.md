@@ -95,7 +95,7 @@ List all loops.
       "updatedAt": "2026-01-20T10:00:00.000Z",
       "stopPattern": "<promise>COMPLETE</promise>$",
       "git": {
-        "branchPrefix": "ralph/",
+        "branchPrefix": "",
         "commitScope": "ralph"
       }
     },
@@ -131,7 +131,7 @@ Loop names are **automatically generated** from the prompt using AI. The `name` 
 | `activityTimeoutSeconds` | number | No | Seconds without events before treating as error (default: 900, min: 60) |
 | `stopPattern` | string | No | Completion regex (default: `<promise>COMPLETE</promise>$`) |
 | `git` | object | No | Git configuration |
-| `git.branchPrefix` | string | No | Branch prefix (default: "ralph/") |
+| `git.branchPrefix` | string | No | Optional prefix prepended before the generated `title-hash` branch name (default: empty string) |
 | `git.commitScope` | string | No | Conventional commit scope (default: "ralph"). Used in commit messages as `type(scope): description`. The deprecated `git.commitPrefix` is still accepted and automatically converted (e.g., `"[Ralph]"` becomes `"ralph"`). |
 | `baseBranch` | string | No | Base branch to create the loop from (default: auto-detected default branch) |
 | `clearPlanningFolder` | boolean | No | Clear .planning folder before starting (default: false) |
@@ -329,7 +329,7 @@ When the push succeeds normally:
 ```json
 {
   "success": true,
-  "remoteBranch": "ralph/my-feature",
+  "remoteBranch": "add-dark-mode-toggle-a1b2c3d",
   "syncStatus": "clean"
 }
 ```
@@ -339,7 +339,7 @@ When the branch is already up to date with the remote:
 ```json
 {
   "success": true,
-  "remoteBranch": "ralph/my-feature",
+  "remoteBranch": "add-dark-mode-toggle-a1b2c3d",
   "syncStatus": "already_up_to_date"
 }
 ```
@@ -737,7 +737,7 @@ Start addressing reviewer comments. Creates a new review cycle and restarts the 
 {
   "success": true,
   "reviewCycle": 1,
-  "branch": "ralph/my-feature",
+  "branch": "add-dark-mode-toggle-a1b2c3d-review-1",
   "commentIds": ["uuid-1", "uuid-2"]
 }
 ```
@@ -763,7 +763,7 @@ Get the review history for a loop, including past review cycles.
     "addressable": true,
     "completionAction": "push",
     "reviewCycles": 2,
-    "reviewBranches": ["ralph/my-feature-review-1", "ralph/my-feature-review-2"]
+    "reviewBranches": ["add-dark-mode-toggle-a1b2c3d-review-1", "add-dark-mode-toggle-a1b2c3d-review-2"]
   }
 }
 ```
@@ -1660,7 +1660,7 @@ Get all local branches for a directory.
   "branches": [
     { "name": "main", "current": true },
     { "name": "feature/auth", "current": false },
-    { "name": "ralph/add-tests", "current": false }
+    { "name": "add-tests-1a2b3c4", "current": false }
   ]
 }
 ```
@@ -2011,13 +2011,13 @@ After pushing a loop, you can address reviewer comments:
 ```bash
 # Push the loop first
 curl -X POST http://localhost:3000/api/loops/abc-123/push
-# Response: {"success":true,"remoteBranch":"ralph/my-feature","syncStatus":"clean"}
+# Response: {"success":true,"remoteBranch":"add-dark-mode-toggle-a1b2c3d","syncStatus":"clean"}
 
 # Later, address reviewer comments
 curl -X POST http://localhost:3000/api/loops/abc-123/address-comments \
   -H "Content-Type: application/json" \
   -d '{"comments": "Please fix the type errors and add error handling"}'
-# Response: {"success":true,"reviewCycle":1,"branch":"ralph/my-feature"}
+# Response: {"success":true,"reviewCycle":1,"branch":"add-dark-mode-toggle-a1b2c3d-review-1"}
 
 # Get review history
 curl http://localhost:3000/api/loops/abc-123/review-history

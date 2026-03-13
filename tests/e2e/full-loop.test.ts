@@ -50,7 +50,7 @@ describe("Full Loop Workflow", () => {
       expect(loop.config.directory).toBe(ctx.workDir);
       expect(loop.config.prompt).toBe("Implement a feature");
       // Backend is now global, not per-loop
-      expect(loop.config.git.branchPrefix).toBe("ralph/");
+      expect(loop.config.git.branchPrefix).toBe("");
       expect(loop.state.status).toBe("idle");
       expect(loop.state.currentIteration).toBe(0);
 
