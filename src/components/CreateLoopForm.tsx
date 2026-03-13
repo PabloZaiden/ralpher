@@ -406,7 +406,8 @@ export function CreateLoopForm({
     }
     // Note: onSubmit and onCancel are intentionally NOT in deps
     // They are callbacks from parent and shouldn't trigger recreation
-    // Note: prompt is NOT in deps because we read from promptRef.current
+    // Note: prompt and name are NOT in deps because we read from promptRef.current
+    // and nameRef.current instead of capturing potentially stale state values.
     // This avoids stale closures when callbacks are passed to parent via renderActions
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [

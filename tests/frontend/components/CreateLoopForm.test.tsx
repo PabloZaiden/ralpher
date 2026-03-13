@@ -682,6 +682,10 @@ describe("CreateLoopForm", () => {
 
       await setInputValue(user, getByLabelText(/Title/) as HTMLInputElement, "Loop title");
 
+      await waitFor(() => {
+        expect(actionState?.canSubmit).toBe(true);
+      });
+
       await act(async () => {
         actionState?.onSubmit();
       });
@@ -805,6 +809,10 @@ describe("CreateLoopForm", () => {
       });
 
       await setInputValue(user, getByLabelText(/Title/) as HTMLInputElement, "Draft title");
+
+      await waitFor(() => {
+        expect(actionState?.canSaveDraft).toBe(true);
+      });
 
       await act(async () => {
         actionState?.onSaveAsDraft();
