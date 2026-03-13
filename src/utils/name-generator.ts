@@ -87,7 +87,10 @@ Output ONLY the title, nothing else. No quotes, no formatting, no explanation.`
     // so we can clear it when the race completes (prevents timer leak).
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error("Name generation timed out")), timeoutMs);
+      timeoutId = setTimeout(
+        () => reject(new Error(`Name generation timed out after ${timeoutMs}ms`)),
+        timeoutMs
+      );
     });
 
     // Race between generation and timeout
