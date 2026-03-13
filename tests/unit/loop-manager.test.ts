@@ -2,7 +2,7 @@
  * Unit tests for LoopManager.
  */
 
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { test, expect, describe, beforeEach, afterEach, mock } from "bun:test";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -153,7 +153,19 @@ describe("LoopManager", () => {
   });
 
   describe("generateLoopTitle", () => {
-    test("generates a title through the backend without using createLoop fallbacks", async () => {
+    test("connects the workspace backend before creating a temporary title session", async () => {
+      const strictBackend = createMockBackend();
+      const originalConnect = strictBackend.connect.bind(strictBackend);
+      strictBackend.connect = mock(async (config, signal) => originalConnect(config, signal));
+      const originalCreateSession = strictBackend.createSession.bind(strictBackend);
+      strictBackend.createSession = mock(async (options) => {
+        if (!strictBackend.isConnected()) {
+          throw new Error("Not connected. Call connect() first.");
+        }
+        return originalCreateSession(options);
+      });
+      backendManager.setBackendForTesting(strictBackend);
+
       const title = await manager.generateLoopTitle({
         directory: testWorkDir,
         prompt: "Create a loop title for this prompt",
@@ -161,6 +173,8 @@ describe("LoopManager", () => {
       });
 
       expect(title).toBe("<promise>COMPLETE</promise>");
+      expect(strictBackend.connect).toHaveBeenCalledTimes(1);
+      expect(strictBackend.createSession).toHaveBeenCalledTimes(1);
     });
   });
 
