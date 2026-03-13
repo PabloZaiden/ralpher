@@ -53,9 +53,7 @@ describe("LoopManager", () => {
       serverSettings: getDefaultServerSettings(),
     });
 
-    // Set up test backend to avoid real backend connections during name generation.
-    // Without this, createLoop() attempts real AcpBackend sessions which can
-    // hang or timeout in some environments, causing flaky test failures.
+    // Set up a test backend for explicit title-generation flows.
     backendManager.setBackendForTesting(createMockBackend());
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
 
@@ -93,6 +91,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Do something",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -114,6 +113,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Custom task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         // Backend options removed - now global
         maxIterations: 10,
@@ -129,12 +129,38 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Custom task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         gitBranchPrefix: " Team Alpha ",
         planMode: false,
       });
 
       expect(loop.config.git.branchPrefix).toBe("team-alpha/");
+    });
+
+    test("requires an explicit loop name", async () => {
+      await expect(
+        manager.createLoop({
+          ...testModelFields,
+          directory: testWorkDir,
+          prompt: "Custom task",
+          name: "   ",
+          workspaceId: testWorkspaceId,
+          planMode: false,
+        })
+      ).rejects.toThrow("Loop name is required");
+    });
+  });
+
+  describe("generateLoopTitle", () => {
+    test("generates a title through the backend without using createLoop fallbacks", async () => {
+      const title = await manager.generateLoopTitle({
+        directory: testWorkDir,
+        prompt: "Create a loop title for this prompt",
+        workspaceId: testWorkspaceId,
+      });
+
+      expect(title).toBe("<promise>COMPLETE</promise>");
     });
   });
 
@@ -144,6 +170,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -165,6 +192,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test 1",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -173,6 +201,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test 2",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -189,6 +218,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Original prompt",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -206,6 +236,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -234,6 +265,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -251,6 +283,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
         useWorktree: true,
@@ -281,6 +314,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
         useWorktree: true,
@@ -306,6 +340,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -328,6 +363,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -349,6 +385,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -371,6 +408,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -388,6 +426,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -426,6 +465,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -440,6 +480,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Task with clearing",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         clearPlanningFolder: true,
         planMode: false,
@@ -453,6 +494,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Task without clearing",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         clearPlanningFolder: false,
         planMode: false,
@@ -466,6 +508,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Task with default",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -479,6 +522,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Test persistence",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         clearPlanningFolder: true,
         planMode: false,
@@ -499,6 +543,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Running task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -514,6 +559,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Draft task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         draft: true,
         planMode: false,
@@ -529,6 +575,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Draft task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         draft: true,
         planMode: false,
@@ -541,6 +588,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Normal task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -559,6 +607,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
           prompt: `Terminal ${status} task`,
+          name: "Test Loop",
           workspaceId: testWorkspaceId,
           planMode: false,
         });
@@ -578,6 +627,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "New task after terminals",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -594,6 +644,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Planning task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: true,
       });
@@ -632,6 +683,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Running task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -660,6 +712,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Planning task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: true,
       });
@@ -680,6 +733,7 @@ describe("LoopManager", () => {
         ...testModelFields,
         directory: testWorkDir,
         prompt: "Running task",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });

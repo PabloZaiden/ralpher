@@ -149,6 +149,8 @@ describe("create loop scenario", () => {
     // Fill in the prompt (type single char to avoid OOM)
     const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
     await user.type(promptTextarea, "X");
+    const titleInput = getByLabelText(/Title/) as HTMLInputElement;
+    await user.type(titleInput, "X");
 
     // Submit the form
     const submitBtn = Array.from(document.querySelectorAll("button")).find(
@@ -160,6 +162,46 @@ describe("create loop scenario", () => {
     // Modal should close after successful submission
     await waitFor(() => {
       expect(queryByText("Create New Loop")).toBeNull();
+    });
+  });
+
+  test("AI title button fills the title from the prompt", async () => {
+    setupApi();
+    api.post("/api/loops/title", () => ({ title: "Generated Loop Title" }));
+
+    const { getByText, getByRole, getByLabelText, user } = renderWithUser(<App />);
+
+    await openCreateAndSelectWorkspace(user, getByText, getByRole);
+
+    const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
+    await user.type(promptTextarea, "X");
+
+    await user.click(getByRole("button", { name: "AI" }));
+
+    await waitFor(() => {
+      expect((getByLabelText(/Title/) as HTMLInputElement).value).toBe("Generated Loop Title");
+    });
+  });
+
+  test("AI title button shows an error toast when generation fails", async () => {
+    setupApi();
+    api.post(
+      "/api/loops/title",
+      () => ({ message: "Title generation failed" }),
+      500,
+    );
+
+    const { getByText, getByRole, getByLabelText, user } = renderWithUser(<App />);
+
+    await openCreateAndSelectWorkspace(user, getByText, getByRole);
+
+    const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
+    await user.type(promptTextarea, "X");
+
+    await user.click(getByRole("button", { name: "AI" }));
+
+    await waitFor(() => {
+      expect(getByText("Title generation failed")).toBeTruthy();
     });
   });
 
@@ -184,6 +226,8 @@ describe("create loop scenario", () => {
     // Fill in the prompt
     const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
     await user.type(promptTextarea, "X");
+    const titleInput = getByLabelText(/Title/) as HTMLInputElement;
+    await user.type(titleInput, "X");
 
     // Submit the form
     const submitBtn = Array.from(document.querySelectorAll("button")).find(

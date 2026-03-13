@@ -25,7 +25,6 @@ describe("Plan Mode E2E Workflow", () => {
       initGit: true,
       // Need multiple PLAN_READY responses for feedback tests, followed by COMPLETE for acceptance
       mockResponses: [
-        "test-loop-name",                     // Name generation
         "<promise>PLAN_READY</promise>",     // Initial plan creation
         "<promise>PLAN_READY</promise>",     // After first feedback
         "<promise>PLAN_READY</promise>",     // After second feedback
@@ -47,6 +46,7 @@ describe("Plan Mode E2E Workflow", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a simple implementation plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       maxIterations: 2,
       planMode: true,
@@ -113,6 +113,7 @@ describe("Plan Mode E2E Workflow", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,
@@ -147,6 +148,7 @@ describe("Plan Mode E2E Workflow", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a detailed plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,
@@ -199,6 +201,7 @@ describe("Plan Mode E2E Workflow", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       maxIterations: 1,
       clearPlanningFolder: true,
@@ -250,6 +253,7 @@ describe("Plan Mode E2E Workflow", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,
@@ -295,6 +299,7 @@ describe("Plan Mode E2E Workflow", () => {
     const loop = await ctx.manager.createLoop({
         ...testModelFields,
         prompt: "Create a simple plan",
+        name: "Test Loop",
       directory: ctx.workDir,
       maxIterations: 1,
       planMode: true,

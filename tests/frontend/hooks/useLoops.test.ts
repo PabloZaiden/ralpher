@@ -201,6 +201,7 @@ describe("createLoop", () => {
     let createResult: { loop: Loop | null } = { loop: null };
     await act(async () => {
       createResult = await result.current.createLoop({
+        name: "Do something",
         prompt: "Do something",
         workspaceId: "ws-1",
         model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
@@ -214,6 +215,7 @@ describe("createLoop", () => {
     const postCalls = api.calls("/api/loops", "POST");
     expect(postCalls).toHaveLength(1);
       expect(postCalls[0]!.body).toEqual({
+        name: "Do something",
         prompt: "Do something",
         workspaceId: "ws-1",
         model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
@@ -241,6 +243,7 @@ describe("createLoop", () => {
     let createResult: { loop: Loop | null; startError?: unknown } = { loop: null };
     await act(async () => {
       createResult = await result.current.createLoop({
+        name: "Do something",
         prompt: "Do something",
         workspaceId: "ws-1",
         model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
@@ -269,6 +272,7 @@ describe("createLoop", () => {
     let createResult: { loop: Loop | null } = { loop: null };
     await act(async () => {
       createResult = await result.current.createLoop({
+        name: "Do something",
         prompt: "Do something",
         workspaceId: "ws-1",
         model: { providerID: "bad", modelID: "bad" },

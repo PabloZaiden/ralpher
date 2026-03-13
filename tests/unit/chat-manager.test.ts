@@ -162,6 +162,7 @@ describe("LoopManager - Chat Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Regular loop",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });
@@ -274,6 +275,7 @@ describe("LoopManager - Chat Mode", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Regular loop",
+        name: "Test Loop",
         workspaceId: testWorkspaceId,
         planMode: false,
       });

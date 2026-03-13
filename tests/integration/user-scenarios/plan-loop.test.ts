@@ -29,10 +29,9 @@ import type { Loop } from "../../../src/types/loop";
 
 /**
  * Helper to create a plan mode mock backend.
- * Plan mode has three phases:
- * 1. Name generation: Returns a loop name
- * 2. Planning phase: Returns PLAN_READY to indicate plan is ready for review
- * 3. Execution phase: Normal iteration responses
+ * Plan mode has two phases:
+ * 1. Planning phase: Returns PLAN_READY to indicate plan is ready for review
+ * 2. Execution phase: Normal iteration responses
  */
 function createPlanModeMockResponses(options: {
   planIterations?: number;
@@ -42,13 +41,10 @@ function createPlanModeMockResponses(options: {
   const { 
     planIterations = 1, 
     executionResponses = ["<promise>COMPLETE</promise>"],
-    loopName = "test-loop-name",
+    loopName: _loopName = "unused",
   } = options;
 
   const responses: string[] = [];
-
-  // Name generation response (consumed when loop is created)
-  responses.push(loopName);
 
   // Planning phase responses (PLAN_READY after each iteration)
   for (let i = 0; i < planIterations; i++) {

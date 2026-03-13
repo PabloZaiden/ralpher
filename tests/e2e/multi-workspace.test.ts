@@ -286,6 +286,7 @@ describe("Multi-Workspace E2E", () => {
         body: JSON.stringify({
           workspaceId: ws1.id,
           prompt: "Test loop for workspace 1",
+          name: "Test Draft Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -302,6 +303,7 @@ describe("Multi-Workspace E2E", () => {
         body: JSON.stringify({
           workspaceId: ws2.id,
           prompt: "Test loop for workspace 2",
+          name: "Test Draft Loop",
           draft: true,
           planMode: false,
           model: testModel,

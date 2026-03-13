@@ -520,6 +520,7 @@ describe("Workspace API Integration", () => {
         body: JSON.stringify({
           workspaceId: workspace.id,
           prompt: "Test prompt for loop creation",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -551,6 +552,7 @@ describe("Workspace API Integration", () => {
         body: JSON.stringify({
           workspaceId: "non-existent-workspace-id",
           prompt: "Test prompt",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,

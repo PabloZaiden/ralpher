@@ -24,6 +24,7 @@ describe("Loops CRUD API Integration", () => {
   let server: Server<unknown>;
   let baseUrl: string;
   let testWorkspaceId: string;
+  let mockBackend: ReturnType<typeof createMockBackend>;
 
   // Helper function to poll for loop completion
   async function waitForLoopCompletion(loopId: string, timeoutMs = 10000): Promise<void> {
@@ -85,11 +86,9 @@ describe("Loops CRUD API Integration", () => {
     await Bun.$`git -C ${testWorkDir} add .`.quiet();
     await Bun.$`git -C ${testWorkDir} commit -m "Initial commit"`.quiet();
 
-    // Set up backend manager with test executor factory
-    // Use a mock backend that generates unique loop names to avoid branch name collisions.
-    // The default createMockBackend() returns "<promise>COMPLETE</promise>" for sendPrompt
-    // (name generation), causing all loops to get the same branch name and collide.
-    const mockBackend = createMockBackend();
+    // Set up backend manager with test executor factory.
+    // The mocked backend is also used by the explicit title-generation endpoint tests.
+    mockBackend = createMockBackend();
     let nameCounter = 0;
     const originalSendPrompt = mockBackend.sendPrompt.bind(mockBackend);
     mockBackend.sendPrompt = async (sessionId, prompt) => {
@@ -178,13 +177,14 @@ describe("Loops CRUD API Integration", () => {
   });
 
   describe("POST /api/loops", () => {
-    test("creates a new loop with required fields and auto-generates name", async () => {
+    test("creates a new loop with required fields and preserves the provided name", async () => {
       const response = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Build something",
+          name: "Test Loop",
           planMode: false,
           model: testModel,
           useWorktree: true,
@@ -193,6 +193,7 @@ describe("Loops CRUD API Integration", () => {
 
       expect(response.status).toBe(201);
       const body = await response.json();
+      expect(body.config.name).toBe("Test Loop");
       expect(body.config.directory).toBe(testWorkDir);
       expect(body.config.prompt).toBe("Build something");
       expect(body.config.id).toBeDefined();
@@ -207,6 +208,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Custom task",
+          name: "Test Loop",
           maxIterations: 10,
           stopPattern: "<done>FINISHED</done>$",
           git: { branchPrefix: "custom" },
@@ -239,7 +241,11 @@ describe("Loops CRUD API Integration", () => {
       const response = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: "Missing workspaceId", planMode: false }),
+        body: JSON.stringify({
+          name: "Test Loop",
+          prompt: "Missing workspaceId",
+          planMode: false,
+        }),
       });
 
       expect(response.status).toBe(400);
@@ -254,6 +260,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "",
+          name: "Test Loop",
           planMode: false,
           model: testModel,
           useWorktree: true,
@@ -264,6 +271,67 @@ describe("Loops CRUD API Integration", () => {
       const body = await response.json();
       expect(body.error).toBe("validation_error");
       expect(body.message).toContain("prompt");
+    });
+
+    test("returns 400 for empty name", async () => {
+      const response = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          name: "   ",
+          prompt: "Build something",
+          planMode: false,
+          model: testModel,
+          useWorktree: true,
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toBe("validation_error");
+      expect(body.message).toContain("name");
+    });
+  });
+
+  describe("POST /api/loops/title", () => {
+    test("generates a title explicitly from prompt and workspace", async () => {
+      const response = await fetch(`${baseUrl}/api/loops/title`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Build something",
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.title).toBe("crud-test-loop-1");
+    });
+
+    test("surfaces backend failures without fallback titles", async () => {
+      const failingBackend = createMockBackend();
+      failingBackend.sendPrompt = async () => {
+        throw new Error("backend unavailable");
+      };
+      backendManager.setBackendForTesting(failingBackend);
+
+      const response = await fetch(`${baseUrl}/api/loops/title`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Build something",
+        }),
+      });
+
+      expect(response.status).toBe(500);
+      const body = await response.json();
+      expect(body.error).toBe("title_generation_failed");
+      expect(body.message).toContain("Failed to generate loop title");
+
+      backendManager.setBackendForTesting(mockBackend);
     });
   });
 
@@ -288,6 +356,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test prompt",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -323,6 +392,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Original prompt",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -367,6 +437,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -395,6 +466,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Immutable worktree mode",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -442,6 +514,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test prompt",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -475,6 +548,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Purge me",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -517,6 +591,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Task with clearing",
+          name: "Test Loop",
           clearPlanningFolder: true,
           draft: true,
           planMode: false,
@@ -537,6 +612,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Task without clearing",
+          name: "Test Loop",
           clearPlanningFolder: false,
           draft: true,
           planMode: false,
@@ -557,6 +633,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Task with default",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -578,6 +655,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test",
+          name: "Test Loop",
           clearPlanningFolder: true,
           draft: true,
           planMode: false,
@@ -605,6 +683,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Draft task",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -639,6 +718,7 @@ describe("Loops CRUD API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Normal task",
+            name: "Test Loop",
             draft: false,
             planMode: false,
             model: testModel,
@@ -666,6 +746,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Original prompt",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -711,6 +792,7 @@ describe("Loops CRUD API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Task",
+            name: "Test Loop",
             planMode: false,
           model: testModel,
           useWorktree: true,
@@ -747,6 +829,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Task",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -802,6 +885,7 @@ describe("Loops CRUD API Integration", () => {
           body: JSON.stringify({
             workspaceId: uniqueWorkspaceId,
             prompt: "Plan mode draft task",
+            name: "Test Loop",
             draft: true,
             planMode: false,
             model: testModel,
@@ -851,6 +935,7 @@ describe("Loops CRUD API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Task",
+            name: "Test Loop",
             draft: true,
             planMode: false,
           model: testModel,
@@ -898,6 +983,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Task",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -931,6 +1017,7 @@ describe("Loops CRUD API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: testPrompt,
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -968,6 +1055,7 @@ multiple lines.
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: multiLinePrompt,
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -1013,6 +1101,7 @@ Updated line 3`;
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Initial prompt v1",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -1078,6 +1167,7 @@ Updated line 3`;
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test mark merged",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -1106,6 +1196,7 @@ Updated line 3`;
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test no git",
+          name: "Test Loop",
           planMode: false,
           model: testModel,
           useWorktree: true,
@@ -1147,6 +1238,7 @@ Updated line 3`;
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test mark merged",
+          name: "Test Loop",
           planMode: false,
           model: testModel,
           useWorktree: true,
@@ -1184,6 +1276,7 @@ Updated line 3`;
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test rename task",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -1268,6 +1361,7 @@ Updated line 3`;
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test trim",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -1305,6 +1399,7 @@ Updated line 3`;
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test empty name",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -1323,7 +1418,7 @@ Updated line 3`;
       expect(renameResponse.status).toBe(400);
       const renameBody = await renameResponse.json();
       expect(renameBody.error).toBe("validation_error");
-      expect(renameBody.message).toContain("empty");
+      expect(renameBody.message).toContain("name is required");
     });
 
     test("returns 400 for whitespace-only name", async () => {
@@ -1334,6 +1429,7 @@ Updated line 3`;
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test whitespace name",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -1352,7 +1448,7 @@ Updated line 3`;
       expect(renameResponse.status).toBe(400);
       const renameBody = await renameResponse.json();
       expect(renameBody.error).toBe("validation_error");
-      expect(renameBody.message).toContain("empty");
+      expect(renameBody.message).toContain("name is required");
     });
   });
 });

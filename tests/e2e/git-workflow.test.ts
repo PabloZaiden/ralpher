@@ -25,10 +25,8 @@ describe("Git Workflow", () => {
     ctx = await setupTestContext({
       useMockBackend: true,
       mockResponses: Array(30).fill(null).map((_, i) => {
-        // Cycle through: name, iteration, complete
-        const mod = i % 3;
-        if (mod === 0) return "branch-id-loop";  // Name generation response
-        if (mod === 1) return "Working on iteration 1...";
+        const mod = i % 2;
+        if (mod === 0) return "Working on iteration 1...";
         return "Done! <promise>COMPLETE</promise>";
       }),
       initGit: true, // Initialize git in work directory
@@ -45,6 +43,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Branch ID Loop",
         planMode: false,
         workspaceId: testWorkspaceId,
       });
@@ -76,6 +75,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Test Loop",
         planMode: false,
         gitBranchPrefix: "feature/",
         workspaceId: testWorkspaceId,
@@ -94,6 +94,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Branch ID Loop",
         planMode: false,
         workspaceId: testWorkspaceId,
       });
@@ -123,7 +124,6 @@ describe("Git Workflow", () => {
         useMockBackend: true,
         initGit: true,
         mockResponses: [
-          "test-loop-name",  // Name generation response
           "Iteration 1...",
           "Iteration 2...",
           "<promise>COMPLETE</promise>",
@@ -134,6 +134,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Branch ID Loop",
         planMode: false,
         workspaceId: testWorkspaceId,
       });
@@ -162,6 +163,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Test Loop",
         planMode: false,
         gitCommitScope: "custom",
         workspaceId: testWorkspaceId,
@@ -182,6 +184,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Test Loop",
         planMode: false,
         workspaceId: testWorkspaceId,
       });
@@ -210,6 +213,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Test Loop",
         planMode: false,
         workspaceId: testWorkspaceId,
       });
@@ -253,6 +257,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Test Loop",
         planMode: false,
         workspaceId: testWorkspaceId,
       });
@@ -270,6 +275,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Test Loop",
         planMode: false,
         workspaceId: testWorkspaceId,
       });
@@ -301,6 +307,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Test Loop",
         planMode: false,
         workspaceId: testWorkspaceId,
       });
@@ -332,6 +339,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Test Loop",
         planMode: false,
         workspaceId: testWorkspaceId,
       });
@@ -371,6 +379,7 @@ describe("Git Workflow", () => {
         ...testModelFields,
         directory: ctx.workDir,
         prompt: "Make changes",
+        name: "Test Loop",
         planMode: false,
         workspaceId: testWorkspaceId,
       });

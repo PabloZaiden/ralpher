@@ -42,6 +42,7 @@ async function createCompleteAndPushLoop(ctx: TestContext) {
     ...testModelFields,
     directory: ctx.workDir,
     prompt: "Make changes",
+    name: "Test Loop",
     planMode: false,
     workspaceId: testWorkspaceId,
   });
@@ -168,14 +169,12 @@ describe("Update Branch", () => {
   describe("conflict resolution", () => {
     test("starts conflict resolution engine when merge conflicts exist", async () => {
       // Mock responses consumed in order:
-      // Index 0: sendPrompt (name generation) → COMPLETE name
-      // Index 1: subscribeToEvents (initial loop iteration) → COMPLETE
-      // Index 2: subscribeToEvents (conflict resolution iteration) → COMPLETE
+      // Index 0: subscribeToEvents (initial loop iteration) → COMPLETE
+      // Index 1: subscribeToEvents (conflict resolution iteration) → COMPLETE
       const ctx = await setupTestContext({
         initGit: true,
         initialFiles: { "test.txt": "Initial content" },
         mockResponses: [
-          "<promise>COMPLETE</promise>",
           "<promise>COMPLETE</promise>",
           "<promise>COMPLETE</promise>",
         ],
@@ -189,6 +188,7 @@ describe("Update Branch", () => {
           ...testModelFields,
           directory: ctx.workDir,
           prompt: "Modify test.txt",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -260,6 +260,7 @@ describe("Update Branch", () => {
           ...testModelFields,
           directory: ctx.workDir,
           prompt: "Test",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });
@@ -300,6 +301,7 @@ describe("Update Branch", () => {
           ...testModelFields,
           directory: ctx.workDir,
           prompt: "Test",
+          name: "Test Loop",
           planMode: false,
           workspaceId: testWorkspaceId,
         });

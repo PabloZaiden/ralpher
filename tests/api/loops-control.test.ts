@@ -212,6 +212,7 @@ describe("Loops Control API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test prompt",
+          name: "Test Loop",
           planMode: true,
           model: testModel,
           useWorktree: true,
@@ -253,6 +254,7 @@ describe("Loops Control API Integration", () => {
         body: JSON.stringify({
           workspaceId: testWorkspaceId,
           prompt: "Test prompt",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -287,6 +289,7 @@ describe("Loops Control API Integration", () => {
         body: JSON.stringify({
           workspaceId,
           prompt: "Test branch-only diff",
+          name: "Test Loop",
           planMode: false,
           model: testModel,
           useWorktree: false,
@@ -337,6 +340,7 @@ describe("Loops Control API Integration", () => {
         body: JSON.stringify({
           workspaceId,
           prompt: "Test",
+          name: "Test Loop",
           planMode: false,
           model: testModel,
           useWorktree: true,
@@ -383,6 +387,7 @@ describe("Loops Control API Integration", () => {
         body: JSON.stringify({
           workspaceId,
           prompt: "Read branch-only plan",
+          name: "Test Loop",
           planMode: false,
           model: testModel,
           useWorktree: false,
@@ -424,6 +429,7 @@ describe("Loops Control API Integration", () => {
         body: JSON.stringify({
           workspaceId,
           prompt: "Test",
+          name: "Test Loop",
           draft: true,
           planMode: false,
           model: testModel,
@@ -470,6 +476,7 @@ describe("Loops Control API Integration", () => {
         body: JSON.stringify({
           workspaceId,
           prompt: "Test",
+          name: "Test Loop",
           planMode: false,
           model: testModel,
           useWorktree: true,
@@ -516,6 +523,7 @@ describe("Loops Control API Integration", () => {
         body: JSON.stringify({
           workspaceId,
           prompt: "Read branch-only status",
+          name: "Test Loop",
           planMode: false,
           model: testModel,
           useWorktree: false,
@@ -560,6 +568,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             model: testModel,
             useWorktree: true,
@@ -606,6 +615,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             model: testModel,
             useWorktree: true,
@@ -649,6 +659,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             model: testModel,
             useWorktree: true,
@@ -693,6 +704,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             model: testModel,
             useWorktree: true,
@@ -754,6 +766,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             model: testModel,
             useWorktree: true,
@@ -802,6 +815,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             model: testModel,
             useWorktree: true,
@@ -877,6 +891,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             model: testModel,
             useWorktree: true,
@@ -936,6 +951,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             model: testModel,
             useWorktree: true,
@@ -997,6 +1013,7 @@ describe("Loops Control API Integration", () => {
           body: JSON.stringify({
             workspaceId,
             prompt: "Test prompt",
+            name: "Test Loop",
             planMode: false,
             model: testModel,
             useWorktree: true,

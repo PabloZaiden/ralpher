@@ -7,7 +7,7 @@
  */
 
 import { test, expect, describe, mock } from "bun:test";
-import { CreateLoopForm } from "@/components/CreateLoopForm";
+import { CreateLoopForm, type CreateLoopFormSubmitRequest } from "@/components/CreateLoopForm";
 import { renderWithUser, waitFor } from "../helpers/render";
 import {
   createModelInfo,
@@ -40,7 +40,7 @@ async function setInputValue(
 // Default props factory
 function defaultProps(overrides?: Partial<Parameters<typeof CreateLoopForm>[0]>) {
   return {
-    onSubmit: mock(async (_req: CreateLoopRequest) => true),
+    onSubmit: mock(async (_req: CreateLoopFormSubmitRequest) => true),
     onCancel: mock(() => {}),
     ...overrides,
   };
@@ -109,6 +109,13 @@ describe("CreateLoopForm", () => {
         <CreateLoopForm {...defaultProps()} />
       );
       expect(getByLabelText(/Prompt/)).toBeInTheDocument();
+    });
+
+    test("renders title input", () => {
+      const { getByLabelText } = renderWithUser(
+        <CreateLoopForm {...defaultProps()} />
+      );
+      expect(getByLabelText(/Title/)).toBeInTheDocument();
     });
 
     test("renders plan mode checkbox checked by default", () => {
@@ -324,6 +331,14 @@ describe("CreateLoopForm", () => {
   });
 
   describe("prompt", () => {
+    test("title is required", () => {
+      const { getByLabelText } = renderWithUser(
+        <CreateLoopForm {...defaultProps()} />
+      );
+      const input = getByLabelText(/Title/) as HTMLInputElement;
+      expect(input.required).toBe(true);
+    });
+
     test("prompt is required", () => {
       const { getByLabelText } = renderWithUser(
         <CreateLoopForm {...defaultProps()} />
@@ -520,6 +535,7 @@ describe("CreateLoopForm", () => {
 
       // Set prompt value
       await setInputValue(user, getByLabelText(/Prompt/) as HTMLTextAreaElement, "Test");
+      await setInputValue(user, getByLabelText(/Title/) as HTMLInputElement, "Title");
 
       // Wait for model auto-selection, then clear it using DOM manipulation
       // (user.selectOptions(select, "") causes OOM on this complex form)
@@ -537,7 +553,7 @@ describe("CreateLoopForm", () => {
     });
 
     test("calls onSubmit with correct request and onCancel on success", async () => {
-      const onSubmit = mock(async (_req: CreateLoopRequest) => true);
+      const onSubmit = mock(async (_req: CreateLoopFormSubmitRequest) => true);
       const onCancel = mock(() => {});
 
       const { getByLabelText, getByRole, user } = renderWithUser(
@@ -560,6 +576,7 @@ describe("CreateLoopForm", () => {
 
       // Set prompt value (using setInputValue to avoid OOM from user.type on complex forms)
       await setInputValue(user, getByLabelText(/Prompt/) as HTMLTextAreaElement, "Do it");
+      await setInputValue(user, getByLabelText(/Title/) as HTMLInputElement, "Loop title");
 
       // Wait for model auto-selection
       await waitFor(() => {
@@ -575,6 +592,7 @@ describe("CreateLoopForm", () => {
 
       const req = onSubmit.mock.calls[0]?.[0] as CreateLoopRequest;
       expect(req.workspaceId).toBe("ws-1");
+      expect(req.name).toBe("X");
       expect(req.prompt).toBe("X");
       expect(req.planMode).toBe(true);
       expect(req.useWorktree).toBe(true);
@@ -588,7 +606,7 @@ describe("CreateLoopForm", () => {
     });
 
     test("does not call onCancel when submission fails", async () => {
-      const onSubmit = mock(async (_req: CreateLoopRequest) => false);
+      const onSubmit = mock(async (_req: CreateLoopFormSubmitRequest) => false);
       const onCancel = mock(() => {});
 
       const { getByLabelText, getByRole, user } = renderWithUser(
@@ -608,6 +626,7 @@ describe("CreateLoopForm", () => {
 
       // Set prompt value (using setInputValue to avoid OOM from user.type on complex forms)
       await setInputValue(user, getByLabelText(/Prompt/) as HTMLTextAreaElement, "Test");
+      await setInputValue(user, getByLabelText(/Title/) as HTMLInputElement, "Loop title");
 
       // Wait for model auto-selection
       await waitFor(() => {
@@ -642,7 +661,7 @@ describe("CreateLoopForm", () => {
     });
 
     test("calls onSubmit with draft=true", async () => {
-      const onSubmit = mock(async (_req: CreateLoopRequest) => true);
+      const onSubmit = mock(async (_req: CreateLoopFormSubmitRequest) => true);
 
       const { getByLabelText, getByRole, user } = renderWithUser(
         <CreateLoopForm
@@ -659,6 +678,7 @@ describe("CreateLoopForm", () => {
       await user.selectOptions(workspaceSelect, "ws-1");
       // Set prompt value (using setInputValue to avoid OOM from user.type on complex forms)
       await setInputValue(user, getByLabelText(/Prompt/) as HTMLTextAreaElement, "Draft");
+      await setInputValue(user, getByLabelText(/Title/) as HTMLInputElement, "Draft title");
 
       // Wait for model auto-selection
       await waitFor(() => {
@@ -677,7 +697,7 @@ describe("CreateLoopForm", () => {
     });
 
     test("calls onSubmit with useWorktree=false when unchecked", async () => {
-      const onSubmit = mock(async (_req: CreateLoopRequest) => true);
+      const onSubmit = mock(async (_req: CreateLoopFormSubmitRequest) => true);
 
       const { getByLabelText, getByRole, user } = renderWithUser(
         <CreateLoopForm
@@ -692,6 +712,7 @@ describe("CreateLoopForm", () => {
       const workspaceSelect = getByLabelText("Workspace *") as HTMLSelectElement;
       await user.selectOptions(workspaceSelect, "ws-1");
       await setInputValue(user, getByLabelText(/Prompt/) as HTMLTextAreaElement, "No worktree");
+      await setInputValue(user, getByLabelText(/Title/) as HTMLInputElement, "Loop title");
 
       await waitFor(() => {
         expect((getByLabelText("Model") as HTMLSelectElement).value).not.toBe("");
@@ -716,6 +737,7 @@ describe("CreateLoopForm", () => {
           {...defaultProps({
             editLoopId: "loop-1",
             initialLoopData: {
+              name: "Existing title",
               directory: "/workspaces/project-a",
               prompt: "Existing prompt text",
               model: { providerID: "anthropic", modelID: "claude-sonnet-4-20250514" },
@@ -731,6 +753,7 @@ describe("CreateLoopForm", () => {
 
       const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
       expect(promptTextarea.value).toBe("Existing prompt text");
+      expect((getByLabelText(/Title/) as HTMLInputElement).value).toBe("Existing title");
 
       const planMode = getByRole("checkbox", { name: /Plan Mode/ }) as HTMLInputElement;
       expect(planMode.checked).toBe(false);
@@ -744,6 +767,7 @@ describe("CreateLoopForm", () => {
           {...defaultProps({
             editLoopId: "loop-1",
             initialLoopData: {
+              name: "Test Loop",
               directory: "/workspaces/project-a",
               prompt: "Test",
               planMode: false,
@@ -763,6 +787,7 @@ describe("CreateLoopForm", () => {
           {...defaultProps({
             editLoopId: "loop-1",
             initialLoopData: {
+              name: "Test Loop",
               directory: "/workspaces/project-a",
               prompt: "Test",
               planMode: true,
@@ -783,6 +808,7 @@ describe("CreateLoopForm", () => {
             editLoopId: "loop-1",
             isEditingDraft: true,
             initialLoopData: {
+              name: "Test Loop",
               directory: "/workspaces/project-a",
               prompt: "Test",
               workspaceId: "ws-1",
@@ -801,6 +827,7 @@ describe("CreateLoopForm", () => {
           {...defaultProps({
             editLoopId: "loop-1",
             initialLoopData: {
+              name: "Test Loop",
               directory: "/workspaces/project-a",
               prompt: "Test",
               maxIterations: 5,

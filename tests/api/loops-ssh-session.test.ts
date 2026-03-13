@@ -138,6 +138,7 @@ describe("Loop SSH session API integration", () => {
       body: JSON.stringify({
         workspaceId,
         prompt: "Create a linked ssh session",
+        name: "Test Loop",
         planMode: true,
         useWorktree: true,
         model: {

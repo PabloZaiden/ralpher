@@ -140,27 +140,23 @@ describe("generateLoopName", () => {
     expect(capturedPrompt).not.toContain(part3.slice(0, 100));  // Should not contain chars after 1000
   });
 
-  test("falls back on backend error", async () => {
+  test("throws on backend error", async () => {
     const mockBackend: BackendInterface = {
       sendPrompt: mock(async () => {
         throw new Error("Backend unavailable");
       }),
     };
 
-    const name = await generateLoopName({
-      prompt: "Add user authentication",
-      backend: mockBackend,
-      sessionId: "test-session",
-    });
-
-    // Should return heuristic-based fallback with spaces preserved
-    expect(name).toBeTruthy();
-    expect(name.length).toBeGreaterThan(0);
-    expect(name).toContain("Add");
-    expect(name).toContain("user");
+    await expect(
+      generateLoopName({
+        prompt: "Add user authentication",
+        backend: mockBackend,
+        sessionId: "test-session",
+      })
+    ).rejects.toThrow("Failed to generate loop title");
   });
 
-  test("falls back on timeout", async () => {
+  test("throws on timeout", async () => {
     const mockBackend: BackendInterface = {
       sendPrompt: mock(async () => {
         // Simulate slow response
@@ -173,19 +169,17 @@ describe("generateLoopName", () => {
       }),
     };
 
-    const name = await generateLoopName({
-      prompt: "Add user authentication",
-      backend: mockBackend,
-      sessionId: "test-session",
-      timeoutMs: 100, // Very short timeout
-    });
-
-    // Should return fallback due to timeout
-    expect(name).toBeTruthy();
-    expect(name.length).toBeGreaterThan(0);
+    await expect(
+      generateLoopName({
+        prompt: "Add user authentication",
+        backend: mockBackend,
+        sessionId: "test-session",
+        timeoutMs: 100, // Very short timeout
+      })
+    ).rejects.toThrow("Failed to generate loop title");
   });
 
-  test("falls back on empty response", async () => {
+  test("throws on empty response", async () => {
     const mockBackend: BackendInterface = {
       sendPrompt: mock(async () => {
         return {
@@ -196,19 +190,16 @@ describe("generateLoopName", () => {
       }),
     };
 
-    const name = await generateLoopName({
-      prompt: "Add user authentication",
-      backend: mockBackend,
-      sessionId: "test-session",
-    });
-
-    // Should return heuristic-based fallback with original casing
-    expect(name).toBeTruthy();
-    expect(name).toContain("Add");
-    expect(name).toContain("user");
+    await expect(
+      generateLoopName({
+        prompt: "Add user authentication",
+        backend: mockBackend,
+        sessionId: "test-session",
+      })
+    ).rejects.toThrow("Title generation returned an empty response");
   });
 
-  test("falls back on very long response", async () => {
+  test("sanitizes very long responses by truncating to 100 characters", async () => {
     const mockBackend: BackendInterface = {
       sendPrompt: mock(async () => {
         return {
@@ -225,12 +216,10 @@ describe("generateLoopName", () => {
       sessionId: "test-session",
     });
 
-    // Should return heuristic-based fallback
-    expect(name).toBeTruthy();
-    expect(name.length).toBeGreaterThan(0);
+    expect(name).toHaveLength(100);
   });
 
-  test("falls back when sanitization produces empty string", async () => {
+  test("throws when sanitization produces empty string", async () => {
     const mockBackend: BackendInterface = {
       sendPrompt: mock(async () => {
         return {
@@ -241,16 +230,13 @@ describe("generateLoopName", () => {
       }),
     };
 
-    const name = await generateLoopName({
-      prompt: "Add user authentication",
-      backend: mockBackend,
-      sessionId: "test-session",
-    });
-
-    // Should return heuristic-based fallback
-    expect(name).toBeTruthy();
-    expect(name).toContain("Add");
-    expect(name).toContain("user");
+    await expect(
+      generateLoopName({
+        prompt: "Add user authentication",
+        backend: mockBackend,
+        sessionId: "test-session",
+      })
+    ).rejects.toThrow("Title generation returned an unusable title");
   });
 
   test("throws error on empty prompt", async () => {
@@ -293,27 +279,30 @@ describe("generateLoopName", () => {
     ).rejects.toThrow("Prompt cannot be empty");
   });
 
-  test("generates timestamp-based fallback for very short prompt", async () => {
+  test("throws for backend errors even with very short prompts", async () => {
     const mockBackend: BackendInterface = {
       sendPrompt: mock(async () => {
         throw new Error("Backend error");
       }),
     };
 
-    const name = await generateLoopName({
-      prompt: "a b",  // Very short, words too small
-      backend: mockBackend,
-      sessionId: "test-session",
-    });
-
-    // Should return timestamp-based fallback with spaces
-    expect(name).toMatch(/^Loop \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    await expect(
+      generateLoopName({
+        prompt: "a b",
+        backend: mockBackend,
+        sessionId: "test-session",
+      })
+    ).rejects.toThrow("Failed to generate loop title");
   });
 
-  test("heuristic fallback extracts key words with original casing", async () => {
+  test("preserves sanitized generated titles without fallback rewriting", async () => {
     const mockBackend: BackendInterface = {
       sendPrompt: mock(async () => {
-        throw new Error("Backend error");
+        return {
+          id: "test-id",
+          content: "  **Add OAuth Login**  ",
+          parts: [],
+        } as AgentResponse;
       }),
     };
 
@@ -323,10 +312,6 @@ describe("generateLoopName", () => {
       sessionId: "test-session",
     });
 
-    // Should extract meaningful words preserving casing
-    expect(name).toBeTruthy();
-    expect(name).toContain("Add");
-    expect(name).toContain("user");
-    expect(name).toContain("authentication");
+    expect(name).toBe("Add OAuth Login");
   });
 });

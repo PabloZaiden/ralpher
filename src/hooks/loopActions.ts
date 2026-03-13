@@ -8,6 +8,8 @@ import { appFetch } from "../lib/public-path";
 import type {
   Loop,
   CreateChatRequest,
+  GenerateLoopTitleRequest,
+  GenerateLoopTitleResponse,
   SendChatMessageResponse,
   SshSession,
   PlanAcceptResponse,
@@ -186,6 +188,23 @@ export async function updateBranchApi(loopId: string): Promise<PushLoopResult> {
     remoteBranch: data.remoteBranch,
     syncStatus: data.syncStatus as PushLoopResult["syncStatus"],
   };
+}
+
+/**
+ * Generate a loop title from a prompt via the API.
+ */
+export async function generateLoopTitleApi(request: GenerateLoopTitleRequest): Promise<string> {
+  const data = await apiCall<GenerateLoopTitleResponse>(
+    "/api/loops/title",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    },
+    "Generate loop title",
+    (errorData) => (errorData["message"] as string | undefined) ?? (errorData["error"] as string | undefined),
+  );
+  return data.title;
 }
 
 /**

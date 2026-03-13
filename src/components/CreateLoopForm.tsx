@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
-import type { CreateLoopRequest, ModelInfo, BranchInfo } from "../types";
+import type { CreateLoopRequest, CreateChatRequest, ModelInfo, BranchInfo } from "../types";
 import type { Workspace } from "../types/workspace";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import { Button } from "./common";
@@ -11,6 +11,8 @@ import { WorkspaceSelector } from "./WorkspaceSelector";
 import { ModelSelector, makeModelKey, parseModelKey, isModelEnabled, modelVariantExists, groupModelsByProvider } from "./ModelSelector";
 import { createLogger } from "../lib/logger";
 import { PROMPT_TEMPLATES, getTemplateById } from "../lib/prompt-templates";
+import { useToast } from "../hooks";
+import { generateLoopTitleApi } from "../hooks/loopActions";
 
 // Create a named logger for this component
 const log = createLogger("CreateLoopForm");
@@ -39,7 +41,7 @@ export interface CreateLoopFormActionState {
 
 export interface CreateLoopFormProps {
   /** Callback when form is submitted. Returns true if successful, false otherwise. */
-  onSubmit: (request: CreateLoopRequest) => Promise<boolean>;
+  onSubmit: (request: CreateLoopFormSubmitRequest) => Promise<boolean>;
   /** Callback when form is cancelled */
   onCancel: () => void;
   /** Whether form is submitting */
@@ -66,6 +68,7 @@ export interface CreateLoopFormProps {
   editLoopId?: string | null;
   /** Initial loop data for editing */
   initialLoopData?: {
+    name?: string;
     directory: string;
     prompt: string;
     model?: { providerID: string; modelID: string; variant?: string };
@@ -96,6 +99,8 @@ export interface CreateLoopFormProps {
   mode?: "loop" | "chat";
 }
 
+export type CreateLoopFormSubmitRequest = CreateLoopRequest | CreateChatRequest;
+
 export function CreateLoopForm({
   onSubmit,
   onCancel,
@@ -120,6 +125,7 @@ export function CreateLoopForm({
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
   const isChatMode = mode === "chat";
+  const toast = useToast();
   
   // Track if this is the first render to prevent infinite loops
   const isInitialMount = useRef(true);
@@ -137,6 +143,7 @@ export function CreateLoopForm({
     initialLoopData?.directory ?? ""
   );
   
+  const [name, setName] = useState(initialLoopData?.name ?? "");
   const [prompt, setPrompt] = useState(initialLoopData?.prompt ?? "");
   const [maxIterations, setMaxIterations] = useState<string>(initialLoopData?.maxIterations?.toString() ?? "");
   const [maxConsecutiveErrors, setMaxConsecutiveErrors] = useState<string>(initialLoopData?.maxConsecutiveErrors?.toString() ?? "10");
@@ -151,6 +158,7 @@ export function CreateLoopForm({
   const [clearPlanningFolder, setClearPlanningFolder] = useState(initialLoopData?.clearPlanningFolder ?? false);
   const [planMode, setPlanMode] = useState(initialLoopData?.planMode ?? true);
   const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [generatingTitle, setGeneratingTitle] = useState(false);
 
   // Sync prompt state when initialLoopData changes (safety measure for component reuse)
   // This handles both editing a draft (set to draft's prompt) and switching to create mode (reset to empty)
@@ -164,6 +172,10 @@ export function CreateLoopForm({
     setPrompt(newPrompt);
     promptRef.current = newPrompt;
   }, [initialLoopData?.prompt]);
+
+  useEffect(() => {
+    setName(initialLoopData?.name ?? "");
+  }, [initialLoopData?.name]);
 
   // Check if the selected model is enabled (connected)
   const selectedModelEnabled = selectedModel ? isModelEnabled(models, selectedModel) : false;
@@ -294,6 +306,9 @@ export function CreateLoopForm({
     if (!currentPrompt.trim()) {
       return;
     }
+    if (!isChatMode && !name.trim()) {
+      return;
+    }
     
     // Validate model is enabled if selected (required for all submissions including drafts)
     if (!selectedModel || !selectedModelEnabled) {
@@ -309,52 +324,70 @@ export function CreateLoopForm({
       return;
     }
 
-    const request: CreateLoopRequest = {
-      workspaceId: selectedWorkspaceId,
-      prompt: currentPrompt.trim(),
-      planMode: planMode, // planMode is required
-      model: { providerID: parsedModel.providerID, modelID: parsedModel.modelID, variant: parsedModel.variant },
-      useWorktree,
-      // Backend settings are now global (not per-loop)
-      // Git is always enabled - no toggle exposed to users
+    const model = {
+      providerID: parsedModel.providerID,
+      modelID: parsedModel.modelID,
+      variant: parsedModel.variant,
     };
 
-    if (maxIterations.trim()) {
-      const num = parseInt(maxIterations, 10);
-      if (!isNaN(num) && num > 0) {
-        request.maxIterations = num;
+    let request: CreateLoopFormSubmitRequest;
+
+    if (isChatMode) {
+      const chatRequest: CreateChatRequest = {
+        workspaceId: selectedWorkspaceId,
+        prompt: currentPrompt.trim(),
+        model,
+        useWorktree,
+      };
+
+      if (selectedBranch && selectedBranch !== currentBranch) {
+        chatRequest.baseBranch = selectedBranch;
       }
-    }
 
-    if (maxConsecutiveErrors.trim()) {
-      const num = parseInt(maxConsecutiveErrors, 10);
-      if (!isNaN(num) && num >= 0) {
-        // 0 means unlimited, positive number is the limit
-        request.maxConsecutiveErrors = num === 0 ? 0 : num;
+      request = chatRequest;
+    } else {
+      const loopRequest: CreateLoopRequest = {
+        name: name.trim(),
+        workspaceId: selectedWorkspaceId,
+        prompt: currentPrompt.trim(),
+        planMode,
+        model,
+        useWorktree,
+      };
+
+      if (maxIterations.trim()) {
+        const num = parseInt(maxIterations, 10);
+        if (!isNaN(num) && num > 0) {
+          loopRequest.maxIterations = num;
+        }
       }
-    }
 
-    if (activityTimeoutSeconds.trim()) {
-      const num = parseInt(activityTimeoutSeconds, 10);
-      if (!isNaN(num) && num >= 60) {
-        request.activityTimeoutSeconds = num;
+      if (maxConsecutiveErrors.trim()) {
+        const num = parseInt(maxConsecutiveErrors, 10);
+        if (!isNaN(num) && num >= 0) {
+          loopRequest.maxConsecutiveErrors = num === 0 ? 0 : num;
+        }
       }
-    }
 
-    // Add base branch if different from current
-    if (selectedBranch && selectedBranch !== currentBranch) {
-      request.baseBranch = selectedBranch;
-    }
+      if (activityTimeoutSeconds.trim()) {
+        const num = parseInt(activityTimeoutSeconds, 10);
+        if (!isNaN(num) && num >= 60) {
+          loopRequest.activityTimeoutSeconds = num;
+        }
+      }
 
-    // Always include clearPlanningFolder (persist in draft to remember user's choice)
-    request.clearPlanningFolder = clearPlanningFolder;
+      if (selectedBranch && selectedBranch !== currentBranch) {
+        loopRequest.baseBranch = selectedBranch;
+      }
 
-    // Always include planMode (persist in draft to remember user's choice)
-    request.planMode = planMode;
+      loopRequest.clearPlanningFolder = clearPlanningFolder;
+      loopRequest.planMode = planMode;
 
-    // Add draft flag if saving as draft
-    if (asDraft) {
-      request.draft = true;
+      if (asDraft) {
+        loopRequest.draft = true;
+      }
+
+      request = loopRequest;
     }
 
     try {
@@ -376,8 +409,10 @@ export function CreateLoopForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedWorkspaceId,
+    name,
     selectedModel,
     selectedModelEnabled,
+    isChatMode,
     planMode,
     maxIterations,
     maxConsecutiveErrors,
@@ -394,10 +429,12 @@ export function CreateLoopForm({
   const formRef = useRef<HTMLFormElement>(null);
   
   // Check if form can be saved as a draft (basic fields only, model connectivity not required)
-  const canSaveDraft = !!selectedWorkspaceId && !!prompt.trim();
+  const canSaveDraft = !!selectedWorkspaceId && !!prompt.trim() && (isChatMode || !!name.trim());
   
   // Check if form can be submitted to start a loop (also needs model to be enabled)
   const canSubmit = canSaveDraft && selectedModelEnabled;
+
+  const canGenerateTitle = !isChatMode && !!selectedWorkspaceId && !!prompt.trim() && !isSubmitting && !generatingTitle;
   
   // Handler for submit button click (when rendered externally)
   const handleSubmitClick = useCallback(() => {
@@ -470,6 +507,26 @@ export function CreateLoopForm({
     setSelectedWorkspaceDirectory(workspaceDirectory);
     // The useEffect watching selectedWorkspaceId will notify parent
   }
+
+  const handleGenerateTitle = useCallback(async () => {
+    if (!selectedWorkspaceId || !promptRef.current.trim()) {
+      return;
+    }
+
+    setGeneratingTitle(true);
+    try {
+      const generatedTitle = await generateLoopTitleApi({
+        workspaceId: selectedWorkspaceId,
+        prompt: promptRef.current.trim(),
+      });
+      setName(generatedTitle);
+    } catch (error) {
+      log.error("Failed to generate loop title:", error);
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setGeneratingTitle(false);
+    }
+  }, [selectedWorkspaceId, toast]);
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-3 sm:space-y-4">
@@ -632,6 +689,42 @@ export function CreateLoopForm({
           ) : null;
         })()}
       </div>
+      )}
+
+      {!isChatMode && (
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <label
+              htmlFor="name"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              Title <span className="text-red-500">*</span>
+            </label>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => void handleGenerateTitle()}
+              disabled={!canGenerateTitle}
+              loading={generatingTitle}
+              icon={<TitleSparkIcon className="h-4 w-4" />}
+            >
+              AI
+            </Button>
+          </div>
+          <input
+            id="name"
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Short loop title"
+            required
+            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Give the loop a clear title, or use AI to suggest one from the current prompt.
+          </p>
+        </div>
       )}
 
       {/* Prompt */}
@@ -854,3 +947,21 @@ export function CreateLoopForm({
 }
 
 export default CreateLoopForm;
+
+function TitleSparkIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+      />
+    </svg>
+  );
+}
