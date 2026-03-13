@@ -19,11 +19,15 @@ import type { LoopEvent } from "../types/events";
 import type { CommandExecutor } from "./command-executor";
 import {
   CommandExecutorImpl,
-  buildSshCommandArgs,
   buildSshRemoteShellCommand,
 } from "./remote-command-executor";
 import { GitService } from "./git-service";
 import { log } from "./logger";
+import {
+  buildSshProcessConfig,
+  getSshConnectionTargetFromSettings,
+  type SshConnectionTarget,
+} from "./ssh-connection-target";
 
 /**
  * Agent transports that require an explicit remote endpoint.
@@ -44,11 +48,7 @@ export type CommandExecutorFactory = (directory: string) => CommandExecutor;
 
 interface DerivedExecutionSettings {
   provider: "local" | "ssh";
-  host?: string;
-  port?: number;
-  user?: string;
-  password?: string;
-  identityFile?: string;
+  sshTarget?: SshConnectionTarget;
 }
 
 function getProviderAcpCommand(provider: "opencode" | "copilot"): { command: string; args: string[] } {
@@ -59,15 +59,12 @@ function getProviderAcpCommand(provider: "opencode" | "copilot"): { command: str
 }
 
 function deriveExecutionSettings(settings: ServerSettings): DerivedExecutionSettings {
-  if (settings.agent.transport === "ssh") {
-      return {
-        provider: "ssh",
-        host: settings.agent.hostname,
-        port: settings.agent.port ?? 22,
-        user: settings.agent.username?.trim() || undefined,
-        password: settings.agent.password?.trim() || undefined,
-        identityFile: settings.agent.identityFile?.trim() || undefined,
-      };
+  const sshTarget = getSshConnectionTargetFromSettings(settings);
+  if (sshTarget) {
+    return {
+      provider: "ssh",
+      sshTarget,
+    };
   }
 
   return { provider: "local" };
@@ -83,28 +80,18 @@ function buildAgentRuntimeCommand(settings: ServerSettings): { command: string; 
     return providerCommand;
   }
 
-  const sshTarget = settings.agent.username?.trim()
-    ? `${settings.agent.username.trim()}@${settings.agent.hostname}`
-    : settings.agent.hostname;
-  const password = settings.agent.password?.trim();
-  const sshArgs = buildSshCommandArgs({
-    authMode: password ? "password" : "batch",
-    port: settings.agent.port ?? 22,
+  const sshTarget = getSshConnectionTargetFromSettings(settings);
+  if (!sshTarget) {
+    return providerCommand;
+  }
+  const sshProcess = buildSshProcessConfig({
     target: sshTarget,
     remoteCommand,
-    identityFile: settings.agent.identityFile,
+    passwordHandling: "argument",
   });
-
-  if (password) {
-    return {
-      command: "sshpass",
-      args: ["-p", password, "ssh", ...sshArgs],
-    };
-  }
-
   return {
-    command: "ssh",
-    args: sshArgs,
+    command: sshProcess.command,
+    args: sshProcess.args,
   };
 }
 
@@ -183,16 +170,16 @@ interface LoopConnectionState {
  */
 export function buildConnectionConfig(settings: ServerSettings, directory: string): BackendConnectionConfig {
   const derivedCommand = buildAgentRuntimeCommand(settings);
-  const sshAgent = settings.agent.transport === "ssh" ? settings.agent : undefined;
+  const sshTarget = getSshConnectionTargetFromSettings(settings);
   return {
     mode: "spawn",
     provider: settings.agent.provider,
     transport: settings.agent.transport,
-    hostname: sshAgent?.hostname,
-    port: sshAgent?.port ?? (sshAgent ? 22 : undefined),
-    username: sshAgent?.username?.trim() || undefined,
-    password: sshAgent?.password,
-    identityFile: sshAgent?.identityFile?.trim() || undefined,
+    hostname: sshTarget?.host,
+    port: sshTarget?.port,
+    username: sshTarget?.username,
+    password: sshTarget?.password,
+    identityFile: sshTarget?.identityFile,
     command: derivedCommand.command,
     args: derivedCommand.args,
     directory,
@@ -203,10 +190,14 @@ export function buildConnectionConfig(settings: ServerSettings, directory: strin
  * Build a displayable server URL for agent transports that expose host/port.
  */
 function buildAgentServerUrl(settings: ServerSettings): string | undefined {
-  if (!REMOTE_AGENT_TRANSPORTS.has(settings.agent.transport) || settings.agent.transport !== "ssh") {
-    return undefined;
-  }
-  return `ssh://${settings.agent.hostname}:${settings.agent.port ?? 22}`;
+    if (!REMOTE_AGENT_TRANSPORTS.has(settings.agent.transport) || settings.agent.transport !== "ssh") {
+      return undefined;
+    }
+   const sshTarget = getSshConnectionTargetFromSettings(settings);
+   if (!sshTarget) {
+     return undefined;
+   }
+   return `ssh://${sshTarget.host}:${sshTarget.port}`;
 }
 
 /**
@@ -568,11 +559,11 @@ class BackendManager {
       const executor = new CommandExecutorImpl({
         provider: execution.provider,
         directory,
-        host: execution.host,
-        port: execution.port,
-        user: execution.user,
-        password: execution.password,
-        identityFile: execution.identityFile,
+        host: execution.sshTarget?.host,
+        port: execution.sshTarget?.port,
+        user: execution.sshTarget?.username,
+        password: execution.sshTarget?.password,
+        identityFile: execution.sshTarget?.identityFile,
         timeoutMs: this.connectionTimeoutMs,
       });
 
@@ -789,19 +780,19 @@ class BackendManager {
     const commandExecutorLogContext: Record<string, string | number> = {
       directory: dir,
       executionProvider: execution.provider,
-      ...(execution.host ? { host: execution.host } : {}),
-      ...(typeof execution.port === "number" ? { port: execution.port } : {}),
-      ...(execution.user ? { user: execution.user } : {}),
+      ...(execution.sshTarget?.host ? { host: execution.sshTarget.host } : {}),
+      ...(typeof execution.sshTarget?.port === "number" ? { port: execution.sshTarget.port } : {}),
+      ...(execution.sshTarget?.username ? { user: execution.sshTarget.username } : {}),
     };
     log.debug(`[BackendManager] Creating CommandExecutor for workspace ${workspaceId}`, commandExecutorLogContext);
     return new CommandExecutorImpl({
       provider: execution.provider,
       directory: dir,
-      host: execution.host,
-      port: execution.port,
-      user: execution.user,
-      password: execution.password,
-      identityFile: execution.identityFile,
+      host: execution.sshTarget?.host,
+      port: execution.sshTarget?.port,
+      user: execution.sshTarget?.username,
+      password: execution.sshTarget?.password,
+      identityFile: execution.sshTarget?.identityFile,
     });
   }
 

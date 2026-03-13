@@ -63,6 +63,8 @@ export interface Migration {
 const KNOWN_TABLE_NAMES = new Set([
   "loops",
   "ssh_sessions",
+  "ssh_servers",
+  "ssh_server_sessions",
   "forwarded_ports",
   "workspaces",
   "preferences",
@@ -352,6 +354,53 @@ export const migrations: Migration[] = [
       if (!columns.includes("pending_plan_question")) {
         db.run("ALTER TABLE loops ADD COLUMN pending_plan_question TEXT");
       }
+    },
+  },
+  {
+    version: 8,
+    name: "create_ssh_servers_and_sessions",
+    up: (db) => {
+      if (!tableExists(db, "ssh_servers")) {
+        db.run(`
+          CREATE TABLE ssh_servers (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            address TEXT NOT NULL,
+            username TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          )
+        `);
+      }
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_ssh_servers_name
+        ON ssh_servers(name COLLATE NOCASE, created_at ASC)
+      `);
+
+      if (!tableExists(db, "ssh_server_sessions")) {
+        db.run(`
+          CREATE TABLE ssh_server_sessions (
+            id TEXT PRIMARY KEY,
+            ssh_server_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            remote_session_name TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'ready',
+            last_connected_at TEXT,
+            error_message TEXT,
+            FOREIGN KEY (ssh_server_id) REFERENCES ssh_servers(id) ON DELETE CASCADE
+          )
+        `);
+      }
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_ssh_server_sessions_server_id
+        ON ssh_server_sessions(ssh_server_id, created_at DESC)
+      `);
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_ssh_server_sessions_created_at
+        ON ssh_server_sessions(created_at DESC)
+      `);
     },
   },
 ];

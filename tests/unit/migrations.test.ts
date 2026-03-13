@@ -264,6 +264,32 @@ describe("migration infrastructure", () => {
       }).toThrow();
     });
 
+    test("creates standalone SSH server and server-session tables", () => {
+      runMigrations(db);
+
+      expect(tableExists(db, "ssh_servers")).toBe(true);
+      expect(tableExists(db, "ssh_server_sessions")).toBe(true);
+      expect(getTableColumns(db, "ssh_servers")).toEqual([
+        "id",
+        "name",
+        "address",
+        "username",
+        "created_at",
+        "updated_at",
+      ]);
+      expect(getTableColumns(db, "ssh_server_sessions")).toEqual([
+        "id",
+        "ssh_server_id",
+        "name",
+        "remote_session_name",
+        "created_at",
+        "updated_at",
+        "status",
+        "last_connected_at",
+        "error_message",
+      ]);
+    });
+
     test("creates forwarded_ports with active local-port uniqueness", () => {
       db.run(`
         CREATE TABLE schema_migrations (

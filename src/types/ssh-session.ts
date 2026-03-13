@@ -28,11 +28,27 @@ export type PortForwardStatus =
 /**
  * Persistent SSH session configuration.
  */
-export interface SshSessionConfig {
+export interface SshSessionBaseConfig {
   /** Unique identifier (UUID v4) */
   id: string;
   /** Human-readable display name */
   name: string;
+  /** Remote tmux session name */
+  remoteSessionName: string;
+  /** ISO 8601 timestamp of when the session was created */
+  createdAt: string;
+  /** ISO 8601 timestamp of the last configuration update */
+  updatedAt: string;
+}
+
+/**
+ * Persistent SSH session configuration for workspace-backed sessions.
+ */
+export interface SshSessionConfig {
+  /** Common SSH session metadata */
+  id: SshSessionBaseConfig["id"];
+  /** Human-readable display name */
+  name: SshSessionBaseConfig["name"];
   /** Workspace that owns this session */
   workspaceId: string;
   /** Optional loop associated with this session */
@@ -40,11 +56,11 @@ export interface SshSessionConfig {
   /** Working directory used when creating the tmux session */
   directory: string;
   /** Remote tmux session name */
-  remoteSessionName: string;
+  remoteSessionName: SshSessionBaseConfig["remoteSessionName"];
   /** ISO 8601 timestamp of when the session was created */
-  createdAt: string;
+  createdAt: SshSessionBaseConfig["createdAt"];
   /** ISO 8601 timestamp of the last configuration update */
-  updatedAt: string;
+  updatedAt: SshSessionBaseConfig["updatedAt"];
 }
 
 /**

@@ -1,0 +1,56 @@
+/**
+ * Zod schemas for standalone SSH server and credential APIs.
+ */
+
+import { z } from "zod";
+
+const RequiredTrimmedStringSchema = z.string().trim().min(1, "value is required");
+
+export const SshKeyAlgorithmSchema = z.literal("RSA-OAEP-256");
+
+export const CreateSshServerRequestSchema = z.object({
+  name: RequiredTrimmedStringSchema,
+  address: RequiredTrimmedStringSchema,
+  username: RequiredTrimmedStringSchema,
+});
+
+export const UpdateSshServerRequestSchema = z.object({
+  name: RequiredTrimmedStringSchema.optional(),
+  address: RequiredTrimmedStringSchema.optional(),
+  username: RequiredTrimmedStringSchema.optional(),
+}).refine((value) => {
+  return value.name !== undefined || value.address !== undefined || value.username !== undefined;
+}, {
+  message: "at least one field must be provided",
+});
+
+export const SshServerEncryptedCredentialSchema = z.object({
+  algorithm: SshKeyAlgorithmSchema,
+  fingerprint: RequiredTrimmedStringSchema,
+  version: z.number().int().min(1, "version must be at least 1"),
+  ciphertext: RequiredTrimmedStringSchema,
+});
+
+export const SshCredentialExchangeRequestSchema = z.object({
+  encryptedCredential: SshServerEncryptedCredentialSchema,
+});
+
+export const SshCredentialTokenSchema = RequiredTrimmedStringSchema;
+
+export const CreateSshServerSessionRequestSchema = z.object({
+  name: z.string().trim().optional(),
+  credentialToken: SshCredentialTokenSchema,
+});
+
+export const DeleteSshServerSessionRequestSchema = z.object({
+  credentialToken: SshCredentialTokenSchema,
+});
+
+export type SshKeyAlgorithm = z.infer<typeof SshKeyAlgorithmSchema>;
+export type CreateSshServerRequest = z.infer<typeof CreateSshServerRequestSchema>;
+export type UpdateSshServerRequest = z.infer<typeof UpdateSshServerRequestSchema>;
+export type SshServerEncryptedCredential = z.infer<typeof SshServerEncryptedCredentialSchema>;
+export type SshCredentialExchangeRequest = z.infer<typeof SshCredentialExchangeRequestSchema>;
+export type SshCredentialToken = z.infer<typeof SshCredentialTokenSchema>;
+export type CreateSshServerSessionRequest = z.infer<typeof CreateSshServerSessionRequestSchema>;
+export type DeleteSshServerSessionRequest = z.infer<typeof DeleteSshServerSessionRequestSchema>;

@@ -9,4 +9,8 @@ export * from "./branch-name";
 export * from "./loop-engine";
 export * from "./loop-manager";
 export * from "./port-forward-manager";
+export * from "./ssh-credential-manager";
+export * from "./ssh-connection-target";
+export * from "./ssh-server-manager";
+export * from "./ssh-server-key-manager";
 export * from "./ssh-session-manager";

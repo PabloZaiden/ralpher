@@ -18,7 +18,10 @@ import {
 import { loadLoop } from "../persistence/loops";
 import { createLogger } from "./logger";
 import { sshSessionEventEmitter } from "./event-emitter";
-import { buildSshCommandArgs } from "./remote-command-executor";
+import {
+  buildSshProcessConfig,
+  getSshConnectionTargetFromWorkspace,
+} from "./ssh-connection-target";
 
 const log = createLogger("core:port-forward-manager");
 const LOCAL_FORWARD_HOST = "127.0.0.1";
@@ -41,71 +44,24 @@ interface RuntimeHandle {
   deleting: boolean;
 }
 
-function getSshWorkspaceSettings(workspace: Workspace) {
-  const settings = workspace.serverSettings.agent;
-  if (settings.transport !== "ssh") {
-    throw new Error("Port forwarding requires a workspace configured with ssh transport");
-  }
-
-  return settings;
-}
-
-function getWorkspaceSshHost(workspace: Workspace): string {
-  const hostname = getSshWorkspaceSettings(workspace).hostname.trim();
-  if (!hostname) {
-    throw new Error("Port forwarding requires a workspace configured with an ssh hostname");
-  }
-
-  return hostname;
-}
-
-function buildSshTarget(workspace: Workspace): string {
-  const settings = getSshWorkspaceSettings(workspace);
-  const hostname = getWorkspaceSshHost(workspace);
-
-  return settings.username?.trim()
-    ? `${settings.username.trim()}@${hostname}`
-    : hostname;
-}
-
 function buildSpawnConfig(workspace: Workspace, forward: PortForward): {
   command: string;
   args: string[];
   env: NodeJS.ProcessEnv;
 } {
-  const settings = getSshWorkspaceSettings(workspace);
-
-  const sharedArgs = (authMode: "batch" | "password") => [
-    "-N",
-    "-T",
-    "-o",
-    "ExitOnForwardFailure=yes",
-    "-L",
-    `${LOCAL_FORWARD_HOST}:${forward.config.localPort}:${forward.config.remoteHost}:${forward.config.remotePort}`,
-    ...buildSshCommandArgs({
-      authMode,
-      port: settings.port ?? 22,
-      target: buildSshTarget(workspace),
-      identityFile: settings.identityFile,
-    }),
-  ];
-
-  if (settings.password && settings.password.trim().length > 0) {
-    return {
-      command: "sshpass",
-      args: ["-e", "ssh", ...sharedArgs("password")],
-      env: {
-        ...process.env,
-        SSHPASS: settings.password,
-      },
-    };
-  }
-
-  return {
-    command: "ssh",
-    args: sharedArgs("batch"),
-    env: process.env,
-  };
+  const sshTarget = getSshConnectionTargetFromWorkspace(workspace);
+  return buildSshProcessConfig({
+    target: sshTarget,
+    extraArgs: [
+      "-N",
+      "-T",
+      "-o",
+      "ExitOnForwardFailure=yes",
+      "-L",
+      `${LOCAL_FORWARD_HOST}:${forward.config.localPort}:${forward.config.remoteHost}:${forward.config.remotePort}`,
+    ],
+    passwordHandling: "environment",
+  });
 }
 
 async function waitForProcessStartup(child: ChildProcess): Promise<void> {

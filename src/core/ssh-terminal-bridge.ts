@@ -5,10 +5,14 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import type { SshSession, Workspace } from "../types";
 import { getWorkspace } from "../persistence/workspaces";
-import { buildSshCommandArgs, buildSshRemoteShellCommand } from "./remote-command-executor";
+import { buildSshRemoteShellCommand } from "./remote-command-executor";
 import { sshSessionManager } from "./ssh-session-manager";
 import { createLogger } from "./logger";
 import { backendManager } from "./backend-manager";
+import {
+  buildSshProcessConfig,
+  getSshConnectionTargetFromWorkspace,
+} from "./ssh-connection-target";
 
 const log = createLogger("core:ssh-terminal-bridge");
 const TMUX_READY_POLL_INTERVAL_MS = 100;
@@ -67,41 +71,15 @@ function buildSshSpawnConfig(workspace: Workspace, session: SshSession): {
   args: string[];
   env: NodeJS.ProcessEnv;
 } {
-  const settings = workspace.serverSettings.agent;
-  if (settings.transport !== "ssh") {
-    throw new Error("SSH terminal bridge requires an SSH workspace");
-  }
-
-  const target = settings.username?.trim()
-    ? `${settings.username.trim()}@${settings.hostname}`
-    : settings.hostname;
+  const target = getSshConnectionTargetFromWorkspace(workspace);
   const remoteCommand = buildSshRemoteShellCommand(buildAttachCommand(session));
-  const sharedArgs = (authMode: "batch" | "password") => [
-    "-tt",
-    ...buildSshCommandArgs({
-      authMode,
-      port: settings.port ?? 22,
-      target,
-      remoteCommand,
-      identityFile: settings.identityFile,
-    }),
-  ];
-
-  if (settings.password && settings.password.trim().length > 0) {
-    return {
-      command: "sshpass",
-      args: ["-e", "ssh", ...sharedArgs("password")],
-      env: buildSpawnEnv({
-        SSHPASS: settings.password,
-      }),
-    };
-  }
-
-  return {
-    command: "ssh",
-    args: sharedArgs("batch"),
-    env: buildSpawnEnv(),
-  };
+  return buildSshProcessConfig({
+    target,
+    remoteCommand,
+    extraArgs: ["-tt"],
+    passwordHandling: "environment",
+    baseEnv: buildSpawnEnv(),
+  });
 }
 
 function buildResizeCommand(sessionName: string, cols: number, rows: number): string {
