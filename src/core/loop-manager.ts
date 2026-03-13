@@ -1658,19 +1658,11 @@ Follow the standard loop execution flow:
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const git = GitService.withExecutor(executor);
 
-      // Step 1: Remove the worktree (if it exists)
+      // Step 1: Remove the worktree and prune stale metadata (if it exists)
       const worktreePath = loop.state.git?.worktreePath;
       if (worktreePath) {
-        try {
-          const exists = await git.worktreeExists(loop.config.directory, worktreePath);
-          if (exists) {
-            await git.removeWorktree(loop.config.directory, worktreePath, { force: true });
-            log.debug(`[LoopManager] purgeLoop: Removed worktree for loop ${loopId}: ${worktreePath}`);
-          }
-        } catch (error) {
-          log.warn(`[LoopManager] purgeLoop: Failed to remove worktree: ${String(error)}`);
-          // Continue with purge even if worktree removal fails
-        }
+        await git.ensureWorktreeRemoved(loop.config.directory, worktreePath, { force: true });
+        log.debug(`[LoopManager] purgeLoop: Removed worktree and pruned metadata for loop ${loopId}: ${worktreePath}`);
       }
 
       // Step 2: Move the main checkout off the working branch when no worktree is used.
@@ -1706,15 +1698,8 @@ Follow the standard loop execution flow:
         }
       }
 
-      // Step 5: Prune stale worktree references
-      try {
-        await git.pruneWorktrees(loop.config.directory);
-      } catch (error) {
-        log.debug(`[LoopManager] purgeLoop: Worktree prune failed: ${String(error)}`);
-      }
     } catch (error) {
-      log.warn(`[LoopManager] purgeLoop: Git cleanup failed: ${String(error)}`);
-      // Continue with purge even if git cleanup fails
+      return { success: false, error: `Failed to clean up git state during purge: ${String(error)}` };
     }
 
     // Mark as non-addressable before deletion

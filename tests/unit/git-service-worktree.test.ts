@@ -273,6 +273,30 @@ describe("GitService Worktree Operations", () => {
     });
   });
 
+  describe("ensureWorktreeRemoved", () => {
+    test("prunes stale worktree metadata when the directory was deleted externally", async () => {
+      const worktreePath = join(testDir, ".ralph-worktrees", "externally-deleted");
+      await git.createWorktree(testDir, worktreePath, "ralph/externally-deleted");
+
+      await rm(worktreePath, { recursive: true, force: true });
+
+      await git.ensureWorktreeRemoved(testDir, worktreePath, { force: true });
+
+      const worktrees = await git.listWorktrees(testDir);
+      expect(worktrees.find((wt) => wt.path === worktreePath)).toBeUndefined();
+      expect(await git.worktreeExists(testDir, worktreePath)).toBe(false);
+    });
+
+    test("throws when a leftover worktree directory still exists after cleanup", async () => {
+      const orphanPath = join(testDir, ".ralph-worktrees", "orphaned-directory");
+      await Bun.$`mkdir -p ${orphanPath}`.quiet();
+
+      await expect(
+        git.ensureWorktreeRemoved(testDir, orphanPath, { force: true }),
+      ).rejects.toThrow("Worktree directory still exists after cleanup");
+    });
+  });
+
   describe("ensureWorktreeExcluded", () => {
     test("creates .git/info/exclude if it does not exist", async () => {
       // Remove the exclude file if it exists
