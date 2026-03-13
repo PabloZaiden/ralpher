@@ -17,7 +17,8 @@ export function setConfiguredPublicBasePath(basePath?: string | null): void {
     return;
   }
 
-  configuredPublicBasePath = normalizePublicBasePath(basePath);
+  const normalizedBasePath = normalizePublicBasePath(basePath);
+  configuredPublicBasePath = normalizedBasePath || undefined;
 }
 
 export function getConfiguredPublicBasePath(): string {

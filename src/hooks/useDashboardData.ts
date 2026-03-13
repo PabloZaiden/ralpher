@@ -76,7 +76,7 @@ export function useDashboardData(): UseDashboardDataResult {
     appFetch("/api/config")
       .then((res) => res.json())
       .then((config: AppConfig) => {
-        setConfiguredPublicBasePath(config.publicBasePath);
+        setConfiguredPublicBasePath(config.publicBasePath || undefined);
         setRemoteOnly(config.remoteOnly);
       })
       .catch(() => {

@@ -28,7 +28,7 @@ describe("GET /api/config", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ remoteOnly: false, publicBasePath: "" });
+    expect(body).toEqual({ remoteOnly: false });
   });
 
   test("returns remoteOnly: true when env var is 'true'", async () => {
@@ -38,7 +38,7 @@ describe("GET /api/config", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ remoteOnly: true, publicBasePath: "" });
+    expect(body).toEqual({ remoteOnly: true });
   });
 
   test("returns remoteOnly: true when env var is '1'", async () => {
@@ -48,7 +48,7 @@ describe("GET /api/config", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ remoteOnly: true, publicBasePath: "" });
+    expect(body).toEqual({ remoteOnly: true });
   });
 
   test("returns remoteOnly: true when env var is 'yes'", async () => {
@@ -58,7 +58,7 @@ describe("GET /api/config", () => {
 
     expect(response.status).toBe(200);
     const body = await response.json();
-    expect(body).toEqual({ remoteOnly: true, publicBasePath: "" });
+    expect(body).toEqual({ remoteOnly: true });
   });
 
   test("returns normalized publicBasePath from X-Forwarded-Prefix", async () => {

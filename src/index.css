@@ -3,7 +3,7 @@
 
 @layer base {
   :root {
-    @apply text-[rgba(255,255,255,0.87)] bg-gray-700 font-sans;
+    @apply text-[rgba(255,255,255,0.87)] bg-[#242424] font-sans;
 
     /* Safe area insets as CSS variables */
     --safe-area-inset-top: env(safe-area-inset-top, 0px);

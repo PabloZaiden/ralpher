@@ -49,14 +49,17 @@ export const settingsRoutes = {
       const publicBasePath = getPublicBasePathFromForwardedPrefix(
         req.headers.get("x-forwarded-prefix"),
       );
+      const responseConfig = publicBasePath
+        ? {
+            ...config,
+            publicBasePath,
+          }
+        : config;
       log.debug("Returning app config", {
         remoteOnly: config.remoteOnly,
-        publicBasePath,
+        publicBasePath: publicBasePath || undefined,
       });
-      return Response.json({
-        ...config,
-        publicBasePath,
-      });
+      return Response.json(responseConfig);
     },
   },
 

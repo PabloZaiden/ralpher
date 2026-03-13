@@ -1585,9 +1585,17 @@ Follow the standard loop execution flow:
    */
   async discardLoop(loopId: string): Promise<{ success: boolean; error?: string }> {
     // Use getLoop to check engine state first
-    const loop = await this.getLoop(loopId);
+    let loop = await this.getLoop(loopId);
     if (!loop) {
       return { success: false, error: "Loop not found" };
+    }
+
+    if (this.engines.has(loopId)) {
+      await this.stopLoop(loopId, "Loop discarded");
+      loop = await this.getLoop(loopId);
+      if (!loop) {
+        return { success: false, error: "Loop not found" };
+      }
     }
 
     // Must have git state (branch was created)

@@ -64,4 +64,11 @@ describe("public path helpers", () => {
 
     expect(appPath("/api/loops")).toBe("/proxy/api/loops");
   });
+
+  test("treats an empty configured base path as not configured", () => {
+    window.location.href = "https://example.com/ralpher/";
+    setConfiguredPublicBasePath("");
+
+    expect(appPath("/api/loops")).toBe("/ralpher/api/loops");
+  });
 });
