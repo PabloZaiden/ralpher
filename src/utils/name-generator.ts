@@ -5,6 +5,8 @@
 
 import type { PromptInput, AgentResponse } from "../backends/types";
 
+export const DEFAULT_LOOP_TITLE_TIMEOUT_MS = 30_000;
+
 /**
  * Backend interface for name generation.
  * Matches the interface used by LoopEngine.
@@ -23,7 +25,7 @@ export interface GenerateLoopNameOptions {
   backend: BackendInterface;
   /** Session ID to use for the generation */
   sessionId: string;
-  /** Timeout in milliseconds (default: 10000) */
+  /** Timeout in milliseconds (default: 30_000ms / 30s, see DEFAULT_LOOP_TITLE_TIMEOUT_MS) */
   timeoutMs?: number;
 }
 
@@ -57,7 +59,7 @@ export function sanitizeLoopName(name: string): string {
  * @throws Error if prompt is empty, the backend call fails, or the response is unusable
  */
 export async function generateLoopName(options: GenerateLoopNameOptions): Promise<string> {
-  const { prompt, backend, sessionId, timeoutMs = 10000 } = options;
+  const { prompt, backend, sessionId, timeoutMs = DEFAULT_LOOP_TITLE_TIMEOUT_MS } = options;
 
   // Validate inputs
   if (!prompt || !prompt.trim()) {
@@ -85,7 +87,10 @@ Output ONLY the title, nothing else. No quotes, no formatting, no explanation.`
     // so we can clear it when the race completes (prevents timer leak).
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error("Name generation timed out")), timeoutMs);
+      timeoutId = setTimeout(
+        () => reject(new Error(`Name generation timed out after ${timeoutMs}ms`)),
+        timeoutMs
+      );
     });
 
     // Race between generation and timeout
