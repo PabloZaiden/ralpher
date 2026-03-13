@@ -961,9 +961,11 @@ export const loopsControlRoutes = {
     /**
      * POST /api/loops/:id/pending - Set pending message and/or model for next iteration.
      * 
-     * Queues a message and/or model change. By default (immediate: true), the current
-     * iteration is interrupted and the pending values are applied immediately in a new
-     * iteration. Set immediate: false to wait for the current iteration to complete.
+     * Queues a message and/or model change. By default (`immediate: true`), running
+     * ACP-backed loops prefer staying on the active session and applying the pending
+     * values on the very next iteration without interrupting the current turn. If the
+     * backend cannot support that flow, it falls back to interrupting the current
+     * iteration. Set `immediate: false` to wait for the current iteration to complete.
      * Works for active loops (running, waiting, planning, starting) and can also
      * jumpstart loops in supported stopped states (completed, stopped, failed, max_iterations).
      * 

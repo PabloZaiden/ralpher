@@ -37,7 +37,7 @@ describe("LoopEngine Pending Model", () => {
   let capturedPrompts: PromptInput[];
 
   // Create a mock backend that captures prompts
-  function createMockBackend(responses: string[]): LoopBackend {
+  function createMockBackend(responses: string[], options?: { supportsActivePromptQueueing?: boolean }): LoopBackend {
     let responseIndex = 0;
     let connected = false;
     const sessions = new Map<string, AgentSession>();
@@ -86,6 +86,10 @@ describe("LoopEngine Pending Model", () => {
 
       async abortSession(_sessionId: string): Promise<void> {
         // Not used in tests
+      },
+
+      supportsActivePromptQueueing(): boolean {
+        return options?.supportsActivePromptQueueing ?? true;
       },
 
       async subscribeToEvents(_sessionId: string): Promise<EventStream<AgentEvent>> {
@@ -466,6 +470,210 @@ describe("LoopEngine Pending Model", () => {
       providerID: "openai",
       modelID: "gpt-4o",
     });
+  });
+
+  test("injectPendingNow queues on active session without abort when supported", async () => {
+    const loop = createTestLoop();
+    let abortCount = 0;
+    const backend = createMockBackend(["Still working"], { supportsActivePromptQueueing: true });
+    backend.abortSession = async (_sessionId: string): Promise<void> => {
+      abortCount += 1;
+    };
+
+    const engine = new LoopEngine({
+      loop,
+      backend,
+      gitService,
+      eventEmitter: emitter,
+    });
+    const internalEngine = engine as unknown as {
+      isLoopRunning: boolean;
+      sessionId: string | null;
+      injectionPending: boolean;
+    };
+    internalEngine.isLoopRunning = true;
+    internalEngine.sessionId = "active-session";
+
+    await engine.injectPendingNow({ message: "Queued message" });
+
+    expect(loop.state.pendingPrompt).toBe("Queued message");
+    expect(abortCount).toBe(0);
+    expect(internalEngine.injectionPending).toBe(false);
+  });
+
+  test("injectPendingNow falls back to abort when active-session queueing is unsupported", async () => {
+    const loop = createTestLoop();
+    let abortCount = 0;
+    const backend = createMockBackend(["Still working"], { supportsActivePromptQueueing: false });
+    backend.abortSession = async (_sessionId: string): Promise<void> => {
+      abortCount += 1;
+    };
+
+    const engine = new LoopEngine({
+      loop,
+      backend,
+      gitService,
+      eventEmitter: emitter,
+    });
+    const internalEngine = engine as unknown as {
+      isLoopRunning: boolean;
+      sessionId: string | null;
+      injectionPending: boolean;
+    };
+    internalEngine.isLoopRunning = true;
+    internalEngine.sessionId = "active-session";
+
+    await engine.injectPendingNow({ message: "Fallback message" });
+
+    expect(loop.state.pendingPrompt).toBe("Fallback message");
+    expect(abortCount).toBe(1);
+    expect(internalEngine.injectionPending).toBe(true);
+  });
+
+  test("abort-fallback injection errors are consumed without leaving injectionPending stuck", async () => {
+    const loop = createTestLoop();
+    loop.state.status = "running";
+    loop.state.currentIteration = 3;
+    loop.state.pendingPrompt = "Retry with queued input";
+    loop.state.consecutiveErrors = {
+      lastErrorMessage: "old error",
+      count: 2,
+    };
+    const engine = new LoopEngine({
+      loop,
+      backend: createMockBackend(["Still working"], { supportsActivePromptQueueing: false }),
+      gitService,
+      eventEmitter: emitter,
+    });
+    const internalEngine = engine as unknown as {
+      sessionId: string | null;
+      injectionPending: boolean;
+      aborted: boolean;
+      handleErrorOutcome: (result: {
+        continue: boolean;
+        outcome: "error";
+        responseContent: string;
+        error?: string;
+        messageCount: number;
+        toolCallCount: number;
+      }) => Promise<boolean>;
+    };
+    internalEngine.sessionId = "active-session";
+    internalEngine.injectionPending = true;
+    internalEngine.aborted = false;
+
+    const shouldExit = await internalEngine.handleErrorOutcome({
+      continue: false,
+      outcome: "error",
+      responseContent: "",
+      error: "session cancelled",
+      messageCount: 0,
+      toolCallCount: 0,
+    });
+
+    expect(shouldExit).toBe(false);
+    expect(loop.state.currentIteration).toBe(2);
+    expect(loop.state.consecutiveErrors).toBeUndefined();
+    expect(internalEngine.injectionPending).toBe(false);
+    expect(internalEngine.aborted).toBe(false);
+    expect(emittedEvents.some((event) => event.type === "loop.error")).toBe(false);
+  });
+
+  test("completed outcome keeps the active session alive when pending input is queued", async () => {
+    const loop = createTestLoop();
+    loop.state.status = "running";
+    loop.state.pendingPrompt = "Follow-up";
+    const engine = new LoopEngine({
+      loop,
+      backend: createMockBackend(["<promise>COMPLETE</promise>"], { supportsActivePromptQueueing: true }),
+      gitService,
+      eventEmitter: emitter,
+    });
+    const internalEngine = engine as unknown as {
+      sessionId: string | null;
+      handleCompletedOutcome: () => Promise<boolean>;
+    };
+    internalEngine.sessionId = "active-session";
+
+    const shouldExit = await internalEngine.handleCompletedOutcome();
+
+    expect(shouldExit).toBe(false);
+    expect(loop.state.status).toBe("running");
+  });
+
+  test("chat mode continues when queued input is waiting on the active session", () => {
+    const loop = createTestLoop({ mode: "chat" });
+    loop.state.status = "running";
+    loop.state.currentIteration = 1;
+    loop.state.pendingPrompt = "Queued follow-up";
+    const engine = new LoopEngine({
+      loop,
+      backend: createMockBackend(["Chat reply"], { supportsActivePromptQueueing: true }),
+      gitService,
+      eventEmitter: emitter,
+    });
+    const internalEngine = engine as unknown as {
+      sessionId: string | null;
+      shouldContinue: () => boolean;
+    };
+    internalEngine.sessionId = "active-session";
+
+    expect(internalEngine.shouldContinue()).toBe(true);
+  });
+
+  test("runLoop does not let queued-input continuation bypass maxIterations", async () => {
+    const loop = createTestLoop({ maxIterations: 1 });
+    loop.state.status = "running";
+    loop.state.pendingPrompt = "Queued follow-up";
+    const engine = new LoopEngine({
+      loop,
+      backend: createMockBackend(["Still working"], { supportsActivePromptQueueing: true }),
+      gitService,
+      eventEmitter: emitter,
+    });
+    const internalEngine = engine as unknown as {
+      sessionId: string | null;
+      runIteration: () => Promise<{
+        continue: boolean;
+        outcome: "continue";
+        responseContent: string;
+        messageCount: number;
+        toolCallCount: number;
+      }>;
+      handleIterationOutcome: () => Promise<boolean>;
+      hasReachedMaxIterations: () => Promise<boolean>;
+      shouldContinueWithQueuedPendingInput: () => boolean;
+      shouldContinue: () => boolean;
+      runLoop: () => Promise<void>;
+    };
+    const callOrder: string[] = [];
+    internalEngine.sessionId = "active-session";
+    internalEngine.runIteration = async () => {
+      loop.state.currentIteration = 1;
+      return {
+        continue: true,
+        outcome: "continue",
+        responseContent: "",
+        messageCount: 0,
+        toolCallCount: 0,
+      };
+    };
+    internalEngine.handleIterationOutcome = async () => false;
+    internalEngine.hasReachedMaxIterations = async () => {
+      callOrder.push("max");
+      loop.state.status = "max_iterations";
+      return true;
+    };
+    internalEngine.shouldContinueWithQueuedPendingInput = () => {
+      callOrder.push("queued");
+      return true;
+    };
+    internalEngine.shouldContinue = () => true;
+
+    await internalEngine.runLoop();
+
+    expect(callOrder).toEqual(["queued", "max"]);
+    expect(String(loop.state.status)).toBe("max_iterations");
   });
 
   test("pending message is persisted as user message when consumed", async () => {
