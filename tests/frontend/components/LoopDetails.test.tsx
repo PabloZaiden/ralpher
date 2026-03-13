@@ -550,82 +550,89 @@ describe("actions tab content", () => {
     });
   });
 
-  test("port-forward form only shows the remote port and submits only that value", async () => {
-    setupDefaultApi();
-    api.post("/api/loops/:id/port-forwards", (req) => {
-      expect(req.body).toEqual({ remotePort: 3000 });
-      return {
-        config: {
-          id: "forward-1",
-          loopId: LOOP_ID,
-          workspaceId: "workspace-1",
-          remoteHost: "localhost",
-          remotePort: 3000,
-          localPort: 43000,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        state: {
-          status: "active",
-        },
-      };
-    }, 201);
+  describe("info tab content", () => {
+    test("port-forward form only shows the remote port and submits only that value", async () => {
+      setupDefaultApi();
+      api.post("/api/loops/:id/port-forwards", (req) => {
+        expect(req.body).toEqual({ remotePort: 3000 });
+        return {
+          config: {
+            id: "forward-1",
+            loopId: LOOP_ID,
+            workspaceId: "workspace-1",
+            remoteHost: "localhost",
+            remotePort: 3000,
+            localPort: 43000,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          state: {
+            status: "active",
+          },
+        };
+      }, 201);
 
-    const {
-      getByLabelText,
-      getByRole,
-      getByText,
-      queryByText,
-      user,
-    } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+      const {
+        getByLabelText,
+        getByRole,
+        getByText,
+        queryByText,
+        user,
+      } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
 
-    await waitFor(() => {
-      expect(getByText("Test Loop")).toBeTruthy();
+      await waitFor(() => {
+        expect(getByText("Test Loop")).toBeTruthy();
+      });
+
+      await user.click(getByText("Info"));
+
+      await waitFor(() => {
+        expect(getByText("Forward a Port")).toBeTruthy();
+      });
+
+      expect(queryByText("Remote host")).toBeNull();
+
+      const remotePortInput = getByLabelText("Remote port") as HTMLInputElement;
+      expect(remotePortInput.getAttribute("placeholder")).toBe("");
+
+      await user.type(remotePortInput, "3000");
+      await user.click(getByRole("button", { name: "Create Port Forward" }));
+
+      await waitFor(() => {
+        expect(remotePortInput.value).toBe("");
+      });
     });
 
-    await user.click(getByText("Actions"));
+    test("deleted loops still show connect via ssh in the info tab before purge", async () => {
+      const loop = createLoopWithStatus("deleted", {
+        config: { id: LOOP_ID, name: "Deleted Loop" },
+      });
+      api.get("/api/loops/:id", () => loop);
+      api.get("/api/loops/:id/diff", () => []);
+      api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+      api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+      api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+      api.get("/api/models", () => []);
+      api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+      api.get("/api/preferences/log-level", () => ({ level: "info" }));
 
-    await waitFor(() => {
-      expect(getByText("Forward a Port")).toBeTruthy();
-    });
+      const { getByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
 
-    expect(queryByText("Remote host")).toBeNull();
+      await waitFor(() => {
+        expect(getByText("Deleted Loop")).toBeTruthy();
+      });
 
-    const remotePortInput = getByLabelText("Remote port") as HTMLInputElement;
-    expect(remotePortInput.getAttribute("placeholder")).toBe("");
+      await user.click(getByText("Info"));
 
-    await user.type(remotePortInput, "3000");
-    await user.click(getByRole("button", { name: "Create Port Forward" }));
+      await waitFor(() => {
+        expect(getByText("Connect via ssh")).toBeTruthy();
+      });
 
-    await waitFor(() => {
-      expect(remotePortInput.value).toBe("");
-    });
-  });
+      await user.click(getByText("Actions"));
 
-  test("deleted loops still show connect via ssh before purge", async () => {
-    const loop = createLoopWithStatus("deleted", {
-      config: { id: LOOP_ID, name: "Deleted Loop" },
-    });
-    api.get("/api/loops/:id", () => loop);
-    api.get("/api/loops/:id/diff", () => []);
-    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
-    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
-    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
-    api.get("/api/models", () => []);
-    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
-    api.get("/api/preferences/log-level", () => ({ level: "info" }));
-
-    const { getByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
-
-    await waitFor(() => {
-      expect(getByText("Deleted Loop")).toBeTruthy();
-    });
-
-    await user.click(getByText("Actions"));
-
-    await waitFor(() => {
-      expect(getByText("Connect via ssh")).toBeTruthy();
-      expect(getByText("Purge Loop")).toBeTruthy();
+      await waitFor(() => {
+        expect(getByText("Purge Loop")).toBeTruthy();
+      });
     });
   });
 
