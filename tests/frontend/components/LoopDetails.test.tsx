@@ -583,7 +583,7 @@ describe("actions tab content", () => {
       expect(getByText("Test Loop")).toBeTruthy();
     });
 
-    await user.click(getByText("Actions"));
+    await user.click(getByText("Info"));
 
     await waitFor(() => {
       expect(getByText("Forward a Port")).toBeTruthy();
@@ -602,7 +602,7 @@ describe("actions tab content", () => {
     });
   });
 
-  test("deleted loops still show connect via ssh before purge", async () => {
+  test("deleted loops still show connect via ssh in the info tab before purge", async () => {
     const loop = createLoopWithStatus("deleted", {
       config: { id: LOOP_ID, name: "Deleted Loop" },
     });
@@ -621,10 +621,15 @@ describe("actions tab content", () => {
       expect(getByText("Deleted Loop")).toBeTruthy();
     });
 
-    await user.click(getByText("Actions"));
+    await user.click(getByText("Info"));
 
     await waitFor(() => {
       expect(getByText("Connect via ssh")).toBeTruthy();
+    });
+
+    await user.click(getByText("Actions"));
+
+    await waitFor(() => {
       expect(getByText("Purge Loop")).toBeTruthy();
     });
   });

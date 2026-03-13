@@ -595,27 +595,6 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
   const isPlanningActive = isPlanning && !isPlanReady;
   // Log panel should show spinner during both regular activity and active planning
   const isLogActive = isActive || isPlanningActive;
-  const connectSshAction = (
-    <button
-      onClick={handleConnectViaSsh}
-      disabled={sshConnecting}
-      className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
-        <span className="text-sky-600 dark:text-sky-400 text-sm">⌁</span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-          {sshConnecting ? "Connecting..." : "Connect via ssh"}
-        </div>
-        <div className="text-xs text-gray-500 dark:text-gray-400">
-          Open or reconnect to this loop&apos;s persistent SSH session
-        </div>
-      </div>
-      <span className="text-gray-400 dark:text-gray-500">→</span>
-    </button>
-  );
-
   // Filter tabs for chat mode: hide Prompt and Plan tabs
   const visibleTabs = isChatMode
     ? tabs.filter((tab) => tab.id !== "prompt" && tab.id !== "plan")
@@ -914,7 +893,52 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                         </div>
                       </div>
 
-                      <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                      <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-4">
+                        <button
+                          onClick={handleConnectViaSsh}
+                          disabled={sshConnecting}
+                          className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                            <span className="text-sky-600 dark:text-sky-400 text-sm">⌁</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {sshConnecting ? "Connecting..." : "Connect via ssh"}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              Open or reconnect to this loop&apos;s persistent SSH session
+                            </div>
+                          </div>
+                          <span className="text-gray-400 dark:text-gray-500">→</span>
+                        </button>
+
+                        <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
+                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Forward a Port</div>
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            Expose a remote service through a Ralpher URL in a new browser window.
+                          </div>
+                          <div className="mt-3">
+                            <label className="text-sm">
+                              <span className="mb-1 block text-gray-500 dark:text-gray-400">Remote port</span>
+                              <input
+                                value={newForwardPort}
+                                onChange={(e) => setNewForwardPort(e.target.value)}
+                                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                                inputMode="numeric"
+                                placeholder=""
+                              />
+                            </label>
+                          </div>
+                          <Button
+                            className="mt-3"
+                            onClick={handleCreateForward}
+                            disabled={creatingForward}
+                          >
+                            {creatingForward ? "Creating..." : "Create Port Forward"}
+                          </Button>
+                        </div>
+
                         <div className="flex items-center justify-between gap-3 mb-3">
                           <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Port Forwards</h4>
                           {forwardsLoading && (
@@ -926,7 +950,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                         )}
                         {forwards.length === 0 ? (
                           <p className="text-sm text-gray-500 dark:text-gray-400">
-                            No forwarded ports yet. Create one from the Actions tab.
+                            No forwarded ports yet. Create one above.
                           </p>
                         ) : (
                           <div className="space-y-3">
@@ -1331,32 +1355,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
 
                   {activeTab === "actions" && (
                     <div className="p-4 flex-1 overflow-auto dark-scrollbar">
-                        <div className="max-w-md space-y-2">
-                          <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Forward a Port</div>
-                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                              Expose a remote service through a Ralpher URL in a new browser window.
-                            </div>
-                            <div className="mt-3">
-                              <label className="text-sm">
-                                <span className="mb-1 block text-gray-500 dark:text-gray-400">Remote port</span>
-                                <input
-                                  value={newForwardPort}
-                                  onChange={(e) => setNewForwardPort(e.target.value)}
-                                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                                  inputMode="numeric"
-                                  placeholder=""
-                                />
-                              </label>
-                            </div>
-                            <Button
-                              className="mt-3"
-                              onClick={handleCreateForward}
-                              disabled={creatingForward}
-                            >
-                              {creatingForward ? "Creating..." : "Create Port Forward"}
-                            </Button>
-                          </div>
+                          <div className="max-w-md space-y-2">
 
                           {isPlanning ? (
                           <>
@@ -1417,7 +1416,6 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                           </>
                         ) : isFinalState(state.status) ? (
                           <>
-                            {connectSshAction}
                             {state.reviewMode?.addressable && state.status !== "deleted" && (
                               <button
                                 onClick={() => setAddressCommentsModal(true)}
@@ -1479,7 +1477,6 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                           </>
                         ) : (
                           <>
-                            {connectSshAction}
                             {canAccept(state.status) && state.git && (
                               <button
                                 onClick={() => setAcceptModal(true)}
