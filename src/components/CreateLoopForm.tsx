@@ -130,9 +130,9 @@ export function CreateLoopForm({
   // Track if this is the first render to prevent infinite loops
   const isInitialMount = useRef(true);
   
-  // Ref to track current prompt value - used to avoid stale closures in callbacks
-  // passed to parent via renderActions. The ref is always up-to-date even when
-  // the callbacks aren't recreated (to avoid re-renders in parent).
+  // Refs track the latest form text values so submit callbacks passed through
+  // renderActions can always read current input without needing to recreate the callbacks.
+  const nameRef = useRef(initialLoopData?.name ?? "");
   const promptRef = useRef(initialLoopData?.prompt ?? "");
   
   // Workspace state - the only source of truth for directory
@@ -175,6 +175,7 @@ export function CreateLoopForm({
 
   useEffect(() => {
     setName(initialLoopData?.name ?? "");
+    nameRef.current = initialLoopData?.name ?? "";
   }, [initialLoopData?.name]);
 
   // Check if the selected model is enabled (connected)
@@ -289,6 +290,7 @@ export function CreateLoopForm({
     // Read the current prompt from ref to avoid stale closures
     // This ensures we get the actual current value even if the callback
     // reference wasn't updated (e.g., when passed via renderActions to parent)
+    const currentName = nameRef.current;
     const currentPrompt = promptRef.current;
 
     // Debug logging for form submission
@@ -306,7 +308,7 @@ export function CreateLoopForm({
     if (!currentPrompt.trim()) {
       return;
     }
-    if (!isChatMode && !name.trim()) {
+    if (!isChatMode && !currentName.trim()) {
       return;
     }
     
@@ -347,7 +349,7 @@ export function CreateLoopForm({
       request = chatRequest;
     } else {
       const loopRequest: CreateLoopRequest = {
-        name: name.trim(),
+        name: currentName.trim(),
         workspaceId: selectedWorkspaceId,
         prompt: currentPrompt.trim(),
         planMode,
@@ -404,12 +406,12 @@ export function CreateLoopForm({
     }
     // Note: onSubmit and onCancel are intentionally NOT in deps
     // They are callbacks from parent and shouldn't trigger recreation
-    // Note: prompt is NOT in deps because we read from promptRef.current
+    // Note: prompt and name are NOT in deps because we read from promptRef.current
+    // and nameRef.current instead of capturing potentially stale state values.
     // This avoids stale closures when callbacks are passed to parent via renderActions
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     selectedWorkspaceId,
-    name,
     selectedModel,
     selectedModelEnabled,
     isChatMode,
@@ -520,6 +522,7 @@ export function CreateLoopForm({
         prompt: promptRef.current.trim(),
       });
       setName(generatedTitle);
+      nameRef.current = generatedTitle;
     } catch (error) {
       log.error("Failed to generate loop title:", error);
       toast.error(error instanceof Error ? error.message : String(error));
@@ -704,7 +707,11 @@ export function CreateLoopForm({
               id="name"
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                const newValue = e.target.value;
+                setName(newValue);
+                nameRef.current = newValue;
+              }}
               placeholder="Short loop title"
               required
               maxLength={100}

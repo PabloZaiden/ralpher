@@ -295,6 +295,7 @@ describe("draft workflow scenario", () => {
       expect(calls.length).toBeGreaterThan(0);
       const body = calls[0]!.body as Record<string, unknown>;
       expect(body["draft"]).toBe(true);
+      expect(body["name"]).toBe("New Draft");
     });
   });
 });

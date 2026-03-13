@@ -7,8 +7,8 @@
  */
 
 import { test, expect, describe, mock } from "bun:test";
-import { CreateLoopForm, type CreateLoopFormSubmitRequest } from "@/components/CreateLoopForm";
-import { renderWithUser, waitFor } from "../helpers/render";
+import { CreateLoopForm, type CreateLoopFormActionState, type CreateLoopFormSubmitRequest } from "@/components/CreateLoopForm";
+import { renderWithUser, waitFor, act } from "../helpers/render";
 import {
   createModelInfo,
   createBranchInfo,
@@ -654,6 +654,49 @@ describe("CreateLoopForm", () => {
       // onCancel should NOT be called when submission fails
       expect(onCancel).not.toHaveBeenCalled();
     });
+
+    test("external submit action uses the latest multi-character title", async () => {
+      const onSubmit = mock(async (_req: CreateLoopFormSubmitRequest) => true);
+      let actionState: CreateLoopFormActionState | null = null;
+
+      const { getByLabelText, user } = renderWithUser(
+        <CreateLoopForm
+          {...defaultProps({
+            onSubmit,
+            renderActions: (state: CreateLoopFormActionState) => {
+              actionState = state;
+            },
+            workspaces: testWorkspaces(),
+            models: connectedModels(),
+          })}
+        />
+      );
+
+      const workspaceSelect = getByLabelText("Workspace *") as HTMLSelectElement;
+      await user.selectOptions(workspaceSelect, "ws-1");
+      await setInputValue(user, getByLabelText(/Prompt/) as HTMLTextAreaElement, "Do it");
+
+      await waitFor(() => {
+        expect(actionState).not.toBeNull();
+      });
+
+      await setInputValue(user, getByLabelText(/Title/) as HTMLInputElement, "Loop title");
+
+      await waitFor(() => {
+        expect(actionState?.canSubmit).toBe(true);
+      });
+
+      await act(async () => {
+        actionState?.onSubmit();
+      });
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+      });
+
+      const req = onSubmit.mock.calls[0]?.[0] as CreateLoopRequest;
+      expect(req.name).toBe("Loop title");
+    });
   });
 
   describe("save as draft", () => {
@@ -738,6 +781,50 @@ describe("CreateLoopForm", () => {
 
       const req = onSubmit.mock.calls[0]?.[0] as CreateLoopRequest;
       expect(req.useWorktree).toBe(false);
+    });
+
+    test("external save-as-draft action uses the latest multi-character title", async () => {
+      const onSubmit = mock(async (_req: CreateLoopFormSubmitRequest) => true);
+      let actionState: CreateLoopFormActionState | null = null;
+
+      const { getByLabelText, user } = renderWithUser(
+        <CreateLoopForm
+          {...defaultProps({
+            onSubmit,
+            renderActions: (state: CreateLoopFormActionState) => {
+              actionState = state;
+            },
+            workspaces: testWorkspaces(),
+            models: connectedModels(),
+          })}
+        />
+      );
+
+      const workspaceSelect = getByLabelText("Workspace *") as HTMLSelectElement;
+      await user.selectOptions(workspaceSelect, "ws-1");
+      await setInputValue(user, getByLabelText(/Prompt/) as HTMLTextAreaElement, "Draft");
+
+      await waitFor(() => {
+        expect(actionState).not.toBeNull();
+      });
+
+      await setInputValue(user, getByLabelText(/Title/) as HTMLInputElement, "Draft title");
+
+      await waitFor(() => {
+        expect(actionState?.canSaveDraft).toBe(true);
+      });
+
+      await act(async () => {
+        actionState?.onSaveAsDraft();
+      });
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+      });
+
+      const req = onSubmit.mock.calls[0]?.[0] as CreateLoopRequest;
+      expect(req.draft).toBe(true);
+      expect(req.name).toBe("Draft title");
     });
   });
 
