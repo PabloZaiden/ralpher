@@ -26,6 +26,16 @@ import {
 import type { z } from "zod";
 
 /**
+ * Response from GET /api/config.
+ */
+export interface AppConfig {
+  /** Whether remote-only mode is enabled */
+  remoteOnly: boolean;
+  /** Public base path inferred from reverse-proxy headers, if any */
+  publicBasePath?: string;
+}
+
+/**
  * Branch information returned by the git API.
  */
 export interface BranchInfo {

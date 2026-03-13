@@ -10,6 +10,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ServerSettings, ConnectionStatus } from "../types/settings";
 import type { Workspace } from "../types/workspace";
 import { log } from "../lib/logger";
+import { appFetch } from "../lib/public-path";
 
 export interface UseWorkspaceServerSettingsResult {
   /** Full workspace data (name, directory, serverSettings) - fetched fresh from API */
@@ -67,7 +68,7 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
     }
 
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}`);
+      const response = await appFetch(`/api/workspaces/${workspaceId}`);
       if (!response.ok) {
         throw new Error(`Failed to fetch workspace: ${response.statusText}`);
       }
@@ -86,7 +87,7 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
     }
 
     try {
-      const response = await fetch(`/api/workspaces/${workspaceId}/server-settings/status`);
+      const response = await appFetch(`/api/workspaces/${workspaceId}/server-settings/status`);
       if (!response.ok) {
         throw new Error(`Failed to fetch status: ${response.statusText}`);
       }
@@ -117,7 +118,7 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
       setSaving(true);
       setError(null);
       
-      const response = await fetch(`/api/workspaces/${workspaceId}/server-settings`, {
+      const response = await appFetch(`/api/workspaces/${workspaceId}/server-settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newSettings),
@@ -154,7 +155,7 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
       setSaving(true);
       setError(null);
       
-      const response = await fetch(`/api/workspaces/${workspaceId}`, {
+      const response = await appFetch(`/api/workspaces/${workspaceId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
@@ -188,7 +189,7 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
       setSaving(true);
       setError(null);
       
-      const response = await fetch(`/api/workspaces/${workspaceId}`, {
+      const response = await appFetch(`/api/workspaces/${workspaceId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, serverSettings: settings }),
@@ -225,7 +226,7 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
         setTesting(true);
         setError(null);
 
-        const response = await fetch(`/api/workspaces/${workspaceId}/server-settings/test`, {
+        const response = await appFetch(`/api/workspaces/${workspaceId}/server-settings/test`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: testSettings ? JSON.stringify(testSettings) : "{}",
@@ -253,7 +254,7 @@ export function useWorkspaceServerSettings(workspaceId: string | null): UseWorks
       setResettingConnection(true);
       setError(null);
 
-      const response = await fetch(`/api/workspaces/${workspaceId}/server-settings/reset`, {
+      const response = await appFetch(`/api/workspaces/${workspaceId}/server-settings/reset`, {
         method: "POST",
       });
 

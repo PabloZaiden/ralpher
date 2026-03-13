@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Workspace, CreateWorkspaceRequest, WorkspaceImportResult, WorkspaceExportData } from "../types/workspace";
 import { log } from "../lib/logger";
+import { appFetch } from "../lib/public-path";
 
 export interface UseWorkspacesResult {
   /** List of workspaces */
@@ -51,7 +52,7 @@ export function useWorkspaces(): UseWorkspacesResult {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("/api/workspaces");
+      const response = await appFetch("/api/workspaces");
       if (!response.ok) {
         throw new Error(`Failed to fetch workspaces: ${response.statusText}`);
       }
@@ -69,7 +70,7 @@ export function useWorkspaces(): UseWorkspacesResult {
     try {
       setSaving(true);
       setError(null);
-      const response = await fetch("/api/workspaces", {
+      const response = await appFetch("/api/workspaces", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
@@ -101,7 +102,7 @@ export function useWorkspaces(): UseWorkspacesResult {
     try {
       setSaving(true);
       setError(null);
-      const response = await fetch(`/api/workspaces/${id}`, {
+      const response = await appFetch(`/api/workspaces/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name }),
@@ -129,7 +130,7 @@ export function useWorkspaces(): UseWorkspacesResult {
     try {
       setSaving(true);
       setError(null);
-      const response = await fetch(`/api/workspaces/${id}`, {
+      const response = await appFetch(`/api/workspaces/${id}`, {
         method: "DELETE",
       });
 
@@ -152,7 +153,7 @@ export function useWorkspaces(): UseWorkspacesResult {
   // Get workspace by directory
   const getWorkspaceByDirectory = useCallback(async (directory: string): Promise<Workspace | null> => {
     try {
-      const response = await fetch(`/api/workspaces/by-directory?directory=${encodeURIComponent(directory)}`);
+      const response = await appFetch(`/api/workspaces/by-directory?directory=${encodeURIComponent(directory)}`);
       if (!response.ok) {
         if (response.status === 404 || response.status === 409) {
           return null;
@@ -171,7 +172,7 @@ export function useWorkspaces(): UseWorkspacesResult {
     try {
       setSaving(true);
       setError(null);
-      const response = await fetch("/api/workspaces/export");
+      const response = await appFetch("/api/workspaces/export");
       if (!response.ok) {
         const errorData = await response.json() as { message?: string };
         throw new Error(errorData.message || "Failed to export workspaces");
@@ -195,7 +196,7 @@ export function useWorkspaces(): UseWorkspacesResult {
     try {
       setSaving(true);
       setError(null);
-      const response = await fetch("/api/workspaces/import", {
+      const response = await appFetch("/api/workspaces/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),

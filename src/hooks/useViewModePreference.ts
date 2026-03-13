@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { DashboardViewMode } from "../types/preferences";
+import { appFetch } from "../lib/public-path";
 
 /**
  * Re-export DashboardViewMode so existing consumers of this module don't break.
@@ -47,7 +48,7 @@ export function useViewModePreference(): UseViewModePreferenceResult {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch("/api/preferences/dashboard-view-mode");
+      const response = await appFetch("/api/preferences/dashboard-view-mode");
       if (!response.ok) {
         throw new Error(`Failed to fetch preference: ${response.statusText}`);
       }
@@ -65,7 +66,7 @@ export function useViewModePreference(): UseViewModePreferenceResult {
     try {
       setSaving(true);
       setError(null);
-      const response = await fetch("/api/preferences/dashboard-view-mode", {
+      const response = await appFetch("/api/preferences/dashboard-view-mode", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: newMode }),

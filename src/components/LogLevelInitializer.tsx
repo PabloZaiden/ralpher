@@ -6,6 +6,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { setLogLevel, type LogLevelName, DEFAULT_LOG_LEVEL } from "../lib/logger";
+import { appFetch } from "../lib/public-path";
 
 interface LogLevelInitializerProps {
   children: ReactNode;
@@ -19,7 +20,7 @@ export function LogLevelInitializer({ children }: LogLevelInitializerProps) {
   useEffect(() => {
     async function initLogLevel() {
       try {
-        const response = await fetch("/api/preferences/log-level");
+        const response = await appFetch("/api/preferences/log-level");
         if (response.ok) {
           const data = (await response.json()) as { level: LogLevelName };
           setLogLevel(data.level);

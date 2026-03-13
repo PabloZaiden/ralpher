@@ -42,6 +42,7 @@ import {
     type SetPendingResult,
 } from "./loopActions";
 import { createLogger } from "../lib/logger";
+import { appFetch } from "../lib/public-path";
 
 const log = createLogger("useLoop");
 
@@ -278,7 +279,7 @@ export function useLoop(loopId: string): UseLoopResult {
         setLoading(true);
       }
       setError(null);
-      const response = await fetch(`/api/loops/${loopId}`, { signal: controller.signal });
+      const response = await appFetch(`/api/loops/${loopId}`, { signal: controller.signal });
       
       // Check if request was aborted during fetch
       if (controller.signal.aborted) return;
@@ -361,7 +362,7 @@ export function useLoop(loopId: string): UseLoopResult {
     async (request: UpdateLoopRequest): Promise<boolean> => {
       log.debug("Updating loop", { loopId, hasNameUpdate: request.name !== undefined });
       try {
-        const response = await fetch(`/api/loops/${loopId}`, {
+        const response = await appFetch(`/api/loops/${loopId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(request),
@@ -525,7 +526,7 @@ export function useLoop(loopId: string): UseLoopResult {
   const getDiff = useCallback(async (): Promise<FileDiff[]> => {
     log.debug("Getting diff", { loopId });
     try {
-      const response = await fetch(`/api/loops/${loopId}/diff`);
+      const response = await appFetch(`/api/loops/${loopId}/diff`);
       if (!response.ok) {
         // 400 "no_git_branch" is expected when loop is in planning mode or hasn't started yet
         if (response.status === 400) {
@@ -547,7 +548,7 @@ export function useLoop(loopId: string): UseLoopResult {
   const getPlan = useCallback(async (): Promise<FileContentResponse> => {
     log.debug("Getting plan", { loopId });
     try {
-      const response = await fetch(`/api/loops/${loopId}/plan`);
+      const response = await appFetch(`/api/loops/${loopId}/plan`);
       if (!response.ok) {
         throw new Error(`Failed to get plan: ${response.statusText}`);
       }
@@ -563,7 +564,7 @@ export function useLoop(loopId: string): UseLoopResult {
   const getStatusFile = useCallback(async (): Promise<FileContentResponse> => {
     log.debug("Getting status file", { loopId });
     try {
-      const response = await fetch(`/api/loops/${loopId}/status-file`);
+      const response = await appFetch(`/api/loops/${loopId}/status-file`);
       if (!response.ok) {
         throw new Error(`Failed to get status file: ${response.statusText}`);
       }

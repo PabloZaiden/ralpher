@@ -19,6 +19,7 @@ import { WorkspaceSettingsModal } from "./WorkspaceSettingsModal";
 import { CreateWorkspaceModal } from "./CreateWorkspaceModal";
 import { createLogger } from "../lib/logger";
 import { useToast } from "../hooks";
+import { appFetch } from "../lib/public-path";
 
 const log = createLogger("DashboardModals");
 
@@ -394,7 +395,7 @@ async function handleCreateLoopSubmit(
   if (isEditing && editLoop) {
     const persistDraftChanges = async (): Promise<boolean> => {
       try {
-        const response = await fetch(`/api/loops/${editLoop.config.id}`, {
+        const response = await appFetch(`/api/loops/${editLoop.config.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(request),
@@ -428,7 +429,7 @@ async function handleCreateLoopSubmit(
 
     // Otherwise, this is a "Start Loop" action - transition draft to execution
     try {
-      const startResponse = await fetch(`/api/loops/${editLoop.config.id}/draft/start`, {
+      const startResponse = await appFetch(`/api/loops/${editLoop.config.id}/draft/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ planMode: request.planMode ?? false }),
@@ -483,7 +484,7 @@ async function handleCreateLoopSubmit(
       const workspace = props.workspaces.find(w => w.id === request.workspaceId);
       if (workspace) {
         try {
-          await fetch("/api/preferences/last-directory", {
+          await appFetch("/api/preferences/last-directory", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ directory: workspace.directory }),
@@ -539,7 +540,7 @@ async function handleCreateChatSubmit(
       const workspace = props.workspaces.find(w => w.id === request.workspaceId);
       if (workspace) {
         try {
-          await fetch("/api/preferences/last-directory", {
+          await appFetch("/api/preferences/last-directory", {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ directory: workspace.directory }),

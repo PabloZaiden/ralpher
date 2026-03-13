@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { appWebSocketUrl } from "../lib/public-path";
 import { log } from "../lib/logger";
 
 export type WebSocketConnectionStatus = "connecting" | "open" | "closed" | "error";
@@ -39,8 +40,7 @@ export interface UseWebSocketResult<T> {
  * Handles both HTTP->WS and HTTPS->WSS protocol conversion.
  */
 function buildWebSocketUrl(path: string): string {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${window.location.host}${path}`;
+  return appWebSocketUrl(path);
 }
 
 /**

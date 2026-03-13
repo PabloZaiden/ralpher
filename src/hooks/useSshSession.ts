@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SshSession, SshSessionEvent, UpdateSshSessionRequest } from "../types";
 import { useWebSocket } from "./useWebSocket";
+import { appFetch } from "../lib/public-path";
 
 export interface UseSshSessionResult {
   session: SshSession | null;
@@ -27,7 +28,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
         setLoading(true);
       }
       setError(null);
-      const response = await fetch(`/api/ssh-sessions/${sessionId}`);
+      const response = await appFetch(`/api/ssh-sessions/${sessionId}`);
       if (!response.ok) {
         const data = await response.json() as { message?: string };
         throw new Error(data.message || "Failed to fetch SSH session");
@@ -68,7 +69,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
   const updateSession = useCallback(async (request: UpdateSshSessionRequest): Promise<SshSession | null> => {
     try {
       setError(null);
-      const response = await fetch(`/api/ssh-sessions/${sessionId}`, {
+      const response = await appFetch(`/api/ssh-sessions/${sessionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
@@ -89,7 +90,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
   const deleteSession = useCallback(async (): Promise<boolean> => {
     try {
       setError(null);
-      const response = await fetch(`/api/ssh-sessions/${sessionId}`, {
+      const response = await appFetch(`/api/ssh-sessions/${sessionId}`, {
         method: "DELETE",
       });
       if (!response.ok) {
