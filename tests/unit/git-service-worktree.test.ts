@@ -5,7 +5,7 @@
  */
 
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm, readFile, realpath } from "fs/promises";
+import { mkdir, mkdtemp, readFile, realpath, rm, symlink } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { GitService } from "../../src/core/git-service";
@@ -244,6 +244,29 @@ describe("GitService Worktree Operations", () => {
 
       expect(await git.worktreeExists(testDir, worktreePath)).toBe(false);
     });
+
+    test("matches stale worktree metadata through a symlinked parent path", async () => {
+      const physicalParent = join(testDir, "physical-worktrees");
+      const symlinkParent = join(testDir, "symlink-worktrees");
+      await mkdir(physicalParent, { recursive: true });
+      await symlink(physicalParent, symlinkParent);
+
+      const aliasedWorktreePath = join(symlinkParent, "stale-symlinked");
+      const canonicalWorktreePath = join(physicalParent, "stale-symlinked");
+      await mkdir(canonicalWorktreePath, { recursive: true });
+      await rm(canonicalWorktreePath, { recursive: true, force: true });
+
+      const originalListWorktrees = git.listWorktrees.bind(git);
+      git.listWorktrees = async () => [
+        { path: canonicalWorktreePath, head: "deadbeef", branch: "ralph/stale-symlinked" },
+      ];
+
+      try {
+        expect(await git.worktreeExists(testDir, aliasedWorktreePath)).toBe(true);
+      } finally {
+        git.listWorktrees = originalListWorktrees;
+      }
+    });
   });
 
   describe("pruneWorktrees", () => {
@@ -270,6 +293,30 @@ describe("GitService Worktree Operations", () => {
     test("succeeds when there are no stale worktrees", async () => {
       // Should not throw
       await git.pruneWorktrees(testDir);
+    });
+  });
+
+  describe("ensureWorktreeRemoved", () => {
+    test("prunes stale worktree metadata when the directory was deleted externally", async () => {
+      const worktreePath = join(testDir, ".ralph-worktrees", "externally-deleted");
+      await git.createWorktree(testDir, worktreePath, "ralph/externally-deleted");
+
+      await rm(worktreePath, { recursive: true, force: true });
+
+      await git.ensureWorktreeRemoved(testDir, worktreePath, { force: true });
+
+      const worktrees = await git.listWorktrees(testDir);
+      expect(worktrees.find((wt) => wt.path === worktreePath)).toBeUndefined();
+      expect(await git.worktreeExists(testDir, worktreePath)).toBe(false);
+    });
+
+    test("throws when a leftover worktree directory still exists after cleanup", async () => {
+      const orphanPath = join(testDir, ".ralph-worktrees", "orphaned-directory");
+      await Bun.$`mkdir -p ${orphanPath}`.quiet();
+
+      await expect(
+        git.ensureWorktreeRemoved(testDir, orphanPath, { force: true }),
+      ).rejects.toThrow("Worktree directory still exists after cleanup");
     });
   });
 

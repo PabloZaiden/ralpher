@@ -409,6 +409,45 @@ describe("LoopManager", () => {
       expect(purgeResult.error).toContain("Cannot purge loop in status");
     });
 
+    test("fails purge when worktree cleanup leaves an orphaned directory behind", async () => {
+      await Bun.$`git init ${testWorkDir}`.quiet();
+      await Bun.$`git -C ${testWorkDir} config user.email "test@test.com"`.quiet();
+      await Bun.$`git -C ${testWorkDir} config user.name "Test User"`.quiet();
+      await Bun.$`git -C ${testWorkDir} commit --allow-empty -m "Initial commit"`.quiet();
+
+      const loop = await manager.createLoop({
+        ...testModelFields,
+        directory: testWorkDir,
+        prompt: "Test",
+        name: "Test Loop",
+        workspaceId: testWorkspaceId,
+        planMode: false,
+        useWorktree: true,
+      });
+      const worktreePath = `${testWorkDir}/.ralph-worktrees/${loop.config.id}`;
+      await Bun.$`mkdir -p ${worktreePath}`.quiet();
+
+      await updateLoopState(loop.config.id, {
+        ...loop.state,
+        status: "deleted",
+        git: {
+          originalBranch: "main",
+          workingBranch: "purge-loop-a1b2c3d",
+          worktreePath,
+          commits: [],
+        },
+      });
+
+      const purgeResult = await manager.purgeLoop(loop.config.id);
+      expect(purgeResult.success).toBe(false);
+      expect(purgeResult.error).toContain("Failed to clean up git state during purge");
+      expect(purgeResult.error).toContain("Worktree directory still exists after cleanup");
+
+      const fetched = await manager.getLoop(loop.config.id);
+      expect(fetched).not.toBeNull();
+      expect(fetched!.state.status).toBe("deleted");
+    });
+
     test("returns false for non-existent loop", async () => {
       const deleted = await manager.deleteLoop("non-existent");
       expect(deleted).toBe(false);

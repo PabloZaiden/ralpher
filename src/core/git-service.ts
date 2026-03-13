@@ -5,7 +5,7 @@
  */
 
 import type { CommandExecutor } from "./command-executor";
-import { realpath } from "node:fs/promises";
+import { dirname, relative, resolve } from "node:path";
 import { log } from "./logger";
 
 /**
@@ -1321,6 +1321,47 @@ export class GitService {
   }
 
   /**
+   * Ensure a worktree is fully removed from both the filesystem and git metadata.
+   *
+   * This handles three cases:
+   * 1. A normal registered worktree directory that should be removed via `git worktree remove`
+   * 2. A stale worktree entry whose directory was already deleted externally
+   * 3. An already-clean state where neither the directory nor metadata remain
+   *
+   * The method only succeeds when the worktree is no longer registered in git
+   * and the directory no longer exists on the workspace host.
+   */
+  async ensureWorktreeRemoved(
+    repoDirectory: string,
+    worktreePath: string,
+    options?: { force?: boolean },
+  ): Promise<void> {
+    const registeredBefore = await this.worktreeExists(repoDirectory, worktreePath);
+
+    if (registeredBefore) {
+      const args = ["worktree", "remove", worktreePath];
+      if (options?.force) {
+        args.push("--force");
+      }
+      const result = await this.runGitCommand(repoDirectory, args, { allowFailure: true });
+      if (!result.success) {
+        log.warn(`[GitService] Worktree removal command failed for ${worktreePath}: ${result.stderr || result.stdout || "unknown error"}`);
+      }
+    }
+
+    await this.pruneWorktrees(repoDirectory);
+
+    const registeredAfter = await this.worktreeExists(repoDirectory, worktreePath);
+    if (registeredAfter) {
+      throw new Error(`Worktree is still registered after cleanup: ${worktreePath}`);
+    }
+
+    if (await this.executor.directoryExists(worktreePath)) {
+      throw new Error(`Worktree directory still exists after cleanup: ${worktreePath}`);
+    }
+  }
+
+  /**
    * List all worktrees for a repository.
    * 
    * @param repoDirectory - The main git repository directory
@@ -1396,16 +1437,8 @@ export class GitService {
     worktreePath: string
   ): Promise<boolean> {
     const worktrees = await this.listWorktrees(repoDirectory);
-    // Resolve symlinks in the worktree path before comparing, because
-    // git resolves symlinks in its output (e.g., macOS /var → /private/var).
-    let resolvedPath: string;
-    try {
-      resolvedPath = await realpath(worktreePath);
-    } catch {
-      // If the path doesn't exist, it can't be a worktree
-      return false;
-    }
-    return worktrees.some(wt => wt.path === resolvedPath);
+    const comparablePaths = await this.getComparableWorktreePaths(worktreePath);
+    return worktrees.some((wt) => comparablePaths.has(this.normalizeWorktreePath(wt.path)));
   }
 
   /**
@@ -1482,6 +1515,85 @@ export class GitService {
       await this.executor.exec("sh", ["-c", `cat > "${excludePath}" << 'EXCLUDE_EOF'\n${content}EXCLUDE_EOF`]);
       log.info(`[GitService] Created .git/info/exclude with .ralph-worktrees entry`);
     }
+  }
+
+  private normalizeWorktreePath(worktreePath: string): string {
+    return resolve(worktreePath).replace(/\/+$/, "");
+  }
+
+  private async getComparableWorktreePaths(worktreePath: string): Promise<Set<string>> {
+    const comparablePaths = new Set<string>([
+      this.normalizeWorktreePath(worktreePath),
+    ]);
+
+    const canonicalPath = await this.resolvePathThroughExistingParent(worktreePath);
+    if (canonicalPath) {
+      comparablePaths.add(canonicalPath);
+    }
+
+    if (await this.executor.directoryExists(worktreePath)) {
+      const cdupResult = await this.runGitCommand(
+        worktreePath,
+        ["rev-parse", "--show-cdup"],
+        { allowFailure: true },
+      );
+      const isWorktreeRoot = cdupResult.success && cdupResult.stdout.trim() === "";
+      if (!isWorktreeRoot) {
+        return comparablePaths;
+      }
+
+      const result = await this.runGitCommand(
+        worktreePath,
+        ["rev-parse", "--show-toplevel"],
+        { allowFailure: true },
+      );
+      const resolvedTopLevel = result.stdout.trim();
+      if (result.success && resolvedTopLevel) {
+        comparablePaths.add(this.normalizeWorktreePath(resolvedTopLevel));
+      }
+    }
+
+    return comparablePaths;
+  }
+
+  private async resolvePathThroughExistingParent(worktreePath: string): Promise<string | null> {
+    const normalizedPath = this.normalizeWorktreePath(worktreePath);
+    let existingParent = normalizedPath;
+
+    while (!(await this.executor.directoryExists(existingParent))) {
+      const parentPath = dirname(existingParent);
+      if (parentPath === existingParent) {
+        return null;
+      }
+      existingParent = parentPath;
+    }
+
+    const canonicalParent = await this.resolveExistingDirectory(existingParent);
+    if (!canonicalParent) {
+      return null;
+    }
+
+    const relativeSuffix = relative(existingParent, normalizedPath);
+    return this.normalizeWorktreePath(
+      relativeSuffix ? resolve(canonicalParent, relativeSuffix) : canonicalParent,
+    );
+  }
+
+  private async resolveExistingDirectory(directory: string): Promise<string | null> {
+    const result = await this.executor.exec("pwd", ["-P"], { cwd: directory });
+    if (!result.success) {
+      log.debug(
+        `[GitService] Failed to canonicalize directory ${directory}: ${result.stderr || result.stdout || "unknown error"}`,
+      );
+      return null;
+    }
+
+    const resolvedDirectory = result.stdout.trim();
+    if (!resolvedDirectory) {
+      return null;
+    }
+
+    return this.normalizeWorktreePath(resolvedDirectory);
   }
 
   /**
