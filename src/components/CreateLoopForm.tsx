@@ -719,10 +719,14 @@ export function CreateLoopForm({
             onChange={(e) => setName(e.target.value)}
             placeholder="Short loop title"
             required
+            maxLength={100}
             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
           />
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Give the loop a clear title, or use AI to suggest one from the current prompt.
+          </p>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {name.trim().length}/100 characters
           </p>
         </div>
       )}

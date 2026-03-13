@@ -52,7 +52,6 @@ export function sanitizeLoopName(name: string): string {
  * descriptive title for a coding task. The title is sanitized and validated
  * before being returned.
  *
- *
  * @param options - Options for name generation
  * @returns A sanitized loop title (max 100 chars, preserves spaces and casing)
  * @throws Error if prompt is empty, the backend call fails, or the response is unusable

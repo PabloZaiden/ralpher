@@ -292,6 +292,26 @@ describe("Loops CRUD API Integration", () => {
       expect(body.error).toBe("validation_error");
       expect(body.message).toContain("name");
     });
+
+    test("returns 400 for name longer than 100 characters", async () => {
+      const response = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          name: "a".repeat(101),
+          prompt: "Build something",
+          planMode: false,
+          model: testModel,
+          useWorktree: true,
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body.error).toBe("validation_error");
+      expect(body.message).toContain("100");
+    });
   });
 
   describe("POST /api/loops/title", () => {
@@ -1449,6 +1469,34 @@ Updated line 3`;
       const renameBody = await renameResponse.json();
       expect(renameBody.error).toBe("validation_error");
       expect(renameBody.message).toContain("name is required");
+    });
+
+    test("returns 400 for name longer than 100 characters", async () => {
+      const createResponse = await fetch(`${baseUrl}/api/loops`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Test long rename",
+          name: "Test Loop",
+          draft: true,
+          planMode: false,
+          model: testModel,
+          useWorktree: true,
+        }),
+      });
+      const createBody = await createResponse.json();
+      const loopId = createBody.config.id;
+
+      const renameResponse = await fetch(`${baseUrl}/api/loops/${loopId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "a".repeat(101) }),
+      });
+      expect(renameResponse.status).toBe(400);
+      const renameBody = await renameResponse.json();
+      expect(renameBody.error).toBe("validation_error");
+      expect(renameBody.message).toContain("100");
     });
   });
 });

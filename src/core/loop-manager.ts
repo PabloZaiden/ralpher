@@ -31,7 +31,7 @@ import { GitService } from "./git-service";
 import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
 import { log } from "./logger";
-import { generateLoopName } from "../utils/name-generator";
+import { generateLoopName, sanitizeLoopName } from "../utils/name-generator";
 import { assertValidTransition } from "./loop-state-machine";
 import { sshSessionManager } from "./ssh-session-manager";
 import { portForwardManager } from "./port-forward-manager";
@@ -278,7 +278,7 @@ export class LoopManager {
     // Create the loop with chat-specific config overrides
     const loop = await this.createLoop({
       ...options,
-      name: options.prompt.trim() || "New Chat",
+      name: sanitizeLoopName(options.prompt) || "New Chat",
       mode: "chat",
       planMode: false,
       maxIterations: 1,           // Single turn per iteration

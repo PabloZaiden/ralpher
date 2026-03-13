@@ -97,6 +97,18 @@ describe("LoopManager - Chat Mode", () => {
       const updated = await ctx.manager.getLoop(loop.config.id);
       expect(updated!.state.status).toMatch(/completed|max_iterations/);
     });
+
+    test("createChat sanitizes and truncates chat titles derived from the prompt", async () => {
+      const loop = await ctx.manager.createChat({
+        ...testModelFields,
+        directory: ctx.workDir,
+        prompt: `# **${"a".repeat(120)}**\n\n`,
+        workspaceId: testWorkspaceId,
+      });
+
+      expect(loop.config.name).toHaveLength(100);
+      expect(loop.config.name).toBe("a".repeat(100));
+    });
   });
 
   describe("sendChatMessage", () => {

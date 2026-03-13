@@ -45,7 +45,11 @@ export const GitConfigSchema = z.object({
   };
 });
 
-export const LoopNameSchema = z.string().trim().min(1, "name is required");
+export const LoopNameSchema = z
+  .string()
+  .trim()
+  .min(1, "name is required")
+  .max(100, "name cannot exceed 100 characters");
 
 /**
  * Schema for CreateLoopRequest - POST /api/loops

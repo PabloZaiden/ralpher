@@ -29,12 +29,10 @@ import { PROMPT_TEMPLATES, getTemplateById } from "@/lib/prompt-templates";
 async function setInputValue(
   user: ReturnType<typeof import("@testing-library/user-event")["default"]["setup"]>,
   element: HTMLTextAreaElement | HTMLInputElement,
-  _value: string,
+  value: string,
 ) {
-  // Type a single char - this is enough to make the prompt non-empty and
-  // trigger React's controlled component update. The actual content doesn't
-  // matter for form validation tests.
-  await user.type(element, "X");
+  await user.clear(element);
+  await user.type(element, value);
 }
 
 // Default props factory
@@ -115,7 +113,20 @@ describe("CreateLoopForm", () => {
       const { getByLabelText } = renderWithUser(
         <CreateLoopForm {...defaultProps()} />
       );
-      expect(getByLabelText(/Title/)).toBeInTheDocument();
+      const input = getByLabelText(/Title/) as HTMLInputElement;
+      expect(input).toBeInTheDocument();
+      expect(input.maxLength).toBe(100);
+    });
+
+    test("renders title character counter", async () => {
+      const { getByLabelText, getByText, user } = renderWithUser(
+        <CreateLoopForm {...defaultProps()} />
+      );
+      expect(getByText("0/100 characters")).toBeInTheDocument();
+      await setInputValue(user, getByLabelText(/Title/) as HTMLInputElement, "Loop title");
+      await waitFor(() => {
+        expect(getByText("10/100 characters")).toBeInTheDocument();
+      });
     });
 
     test("renders plan mode checkbox checked by default", () => {
@@ -592,8 +603,8 @@ describe("CreateLoopForm", () => {
 
       const req = onSubmit.mock.calls[0]?.[0] as CreateLoopRequest;
       expect(req.workspaceId).toBe("ws-1");
-      expect(req.name).toBe("X");
-      expect(req.prompt).toBe("X");
+      expect(req.name).toBe("Loop title");
+      expect(req.prompt).toBe("Do it");
       expect(req.planMode).toBe(true);
       expect(req.useWorktree).toBe(true);
       expect(req.model).toBeDefined();
