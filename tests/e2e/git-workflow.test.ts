@@ -70,7 +70,7 @@ describe("Git Workflow", () => {
       expect(finalLoop!.state.git!.worktreePath).toBeDefined();
     });
 
-    test("uses custom branch prefix", async () => {
+    test("starts branch names with the sanitized title even when a custom prefix is configured", async () => {
       const loop = await ctx.manager.createLoop({
         ...testModelFields,
         directory: ctx.workDir,
@@ -86,7 +86,7 @@ describe("Git Workflow", () => {
 
       // With worktrees, check the loop state's working branch, not the main checkout
       const finalLoop = await ctx.manager.getLoop(loop.config.id);
-      expect(finalLoop!.state.git!.workingBranch).toMatch(/^feature\//);
+      expect(finalLoop!.state.git!.workingBranch).toMatch(/^test-loop-[0-9a-f]{7}$/);
     });
 
     test("branch name includes loop name and prompt hash", async () => {

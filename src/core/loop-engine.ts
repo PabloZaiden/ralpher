@@ -894,9 +894,10 @@ export class LoopEngine {
     const originalBranch = await this.resolveOriginalBranch(directory);
     const branchName = await this.resolveBranchName(directory);
 
-    if (originalBranch.startsWith(this.config.git.branchPrefix) && !this.loop.state.git?.originalBranch) {
-      this.emitLog("warn", `Base branch is a working branch (${originalBranch}); preserving base branch but continuing`, {
+    if (originalBranch === branchName && !this.loop.state.git?.originalBranch) {
+      this.emitLog("warn", `Base branch matches generated working branch (${originalBranch}); preserving base branch but continuing`, {
         originalBranch,
+        branchName,
       });
     }
 
@@ -990,11 +991,7 @@ export class LoopEngine {
       return this.loop.state.git.workingBranch;
     }
 
-    const baseBranchName = buildLoopBranchName(
-      this.config.git.branchPrefix,
-      this.config.name,
-      this.config.prompt,
-    );
+    const baseBranchName = buildLoopBranchName(this.config.name, this.config.prompt);
 
     let branchName = baseBranchName;
     let collisionIndex = 2;

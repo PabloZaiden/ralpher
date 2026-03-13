@@ -36,11 +36,10 @@ export function normalizeBranchPrefix(prefix: string): string {
   return `${segments.join("/")}/`;
 }
 
-export function buildLoopBranchName(prefix: string, title: string, prompt: string): string {
-  const normalizedPrefix = normalizeBranchPrefix(prefix);
+export function buildLoopBranchName(title: string, prompt: string): string {
   const safeTitle = sanitizeBranchName(title);
   const shortPromptHash = buildShortPromptHash(prompt);
-  return `${normalizedPrefix}${safeTitle}-${shortPromptHash}`;
+  return `${safeTitle}-${shortPromptHash}`;
 }
 
 export function buildReviewBranchName(baseBranchName: string, reviewCycle: number): string {
