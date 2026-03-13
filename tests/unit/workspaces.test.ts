@@ -3,7 +3,7 @@
  */
 
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { mkdtemp, rm } from "fs/promises";
+import { access, mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { randomUUID } from "crypto";
@@ -51,6 +51,15 @@ function createConnectServerSettings(overrides?: {
   };
 }
 
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe("Workspace Persistence", () => {
   beforeEach(async () => {
     // Create a temp directory for each test
@@ -65,7 +74,7 @@ describe("Workspace Persistence", () => {
 
     // Clean up
     delete process.env["RALPHER_DATA_DIR"];
-    await rm(testDataDir, { recursive: true });
+    await rm(testDataDir, { recursive: true, force: true });
   });
 
   describe("CRUD operations", () => {
@@ -948,7 +957,11 @@ describe("Workspace Persistence", () => {
       expect(exported.workspaces).toHaveLength(2);
 
       // Clear database and re-import
+      const originalDataDir = testDataDir;
       closeDatabase();
+      await rm(testDataDir, { recursive: true, force: true });
+      expect(await pathExists(originalDataDir)).toBe(false);
+
       // Need fresh DB
       testDataDir = await mkdtemp(join(tmpdir(), "ralpher-workspace-test-"));
       process.env["RALPHER_DATA_DIR"] = testDataDir;

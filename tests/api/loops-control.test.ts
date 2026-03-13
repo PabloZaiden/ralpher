@@ -26,6 +26,7 @@ describe("Loops Control API Integration", () => {
   let server: Server<unknown>;
   let baseUrl: string;
   let testWorkspaceId: string;
+  const tempDirsToCleanup = new Set<string>();
 
   // Helper function to poll for loop completion
   async function waitForLoopCompletion(loopId: string, timeoutMs = 10000): Promise<void> {
@@ -71,6 +72,20 @@ describe("Loops Control API Integration", () => {
     }
     
     throw new Error(`Failed to create workspace: ${JSON.stringify(data)}`);
+  }
+
+  async function createTrackedTempDir(prefix: string): Promise<string> {
+    const directory = await mkdtemp(join(tmpdir(), prefix));
+    tempDirsToCleanup.add(directory);
+    return directory;
+  }
+
+  async function cleanupTrackedTempDirs(): Promise<void> {
+    const directories = Array.from(tempDirsToCleanup);
+    tempDirsToCleanup.clear();
+    await Promise.all(
+      directories.map((directory) => rm(directory, { recursive: true, force: true })),
+    );
   }
 
   beforeAll(async () => {
@@ -170,7 +185,10 @@ describe("Loops Control API Integration", () => {
   };
 
   beforeEach(cleanupActiveLoops);
-  afterEach(cleanupActiveLoops);
+  afterEach(async () => {
+    await cleanupActiveLoops();
+    await cleanupTrackedTempDirs();
+  });
 
   describe("POST /api/loops/:id/accept", () => {
     // Note: Loops are auto-started on creation by default, but they can still
@@ -254,7 +272,7 @@ describe("Loops Control API Integration", () => {
     });
 
     test("returns diff data for branch-only loops without a worktree", async () => {
-      const diffTestDir = await mkdtemp(join(tmpdir(), "ralpher-branch-only-diff-"));
+      const diffTestDir = await createTrackedTempDir("ralpher-branch-only-diff-");
       await Bun.$`git init ${diffTestDir}`.quiet();
       await Bun.$`git -C ${diffTestDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${diffTestDir} config user.name "Test User"`.quiet();
@@ -297,7 +315,7 @@ describe("Loops Control API Integration", () => {
   describe("GET /api/loops/:id/plan", () => {
     test("returns plan.md content", async () => {
       // Create a fresh workdir with .planning to avoid pollution from other tests
-      const planTestDir = await mkdtemp(join(tmpdir(), "ralpher-plan-test-"));
+      const planTestDir = await createTrackedTempDir("ralpher-plan-test-");
       await Bun.$`git init ${planTestDir}`.quiet();
       await Bun.$`git -C ${planTestDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${planTestDir} config user.name "Test User"`.quiet();
@@ -348,7 +366,7 @@ describe("Loops Control API Integration", () => {
     });
 
     test("returns plan.md content for branch-only loops without a worktree", async () => {
-      const branchOnlyPlanDir = await mkdtemp(join(tmpdir(), "ralpher-branch-only-plan-"));
+      const branchOnlyPlanDir = await createTrackedTempDir("ralpher-branch-only-plan-");
       await Bun.$`git init ${branchOnlyPlanDir}`.quiet();
       await Bun.$`git -C ${branchOnlyPlanDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${branchOnlyPlanDir} config user.name "Test User"`.quiet();
@@ -388,7 +406,7 @@ describe("Loops Control API Integration", () => {
 
     test("returns 400 for draft loop without worktree", async () => {
       // Create a new workdir (with git but without .planning)
-      const emptyWorkDir = await mkdtemp(join(tmpdir(), "ralpher-empty-work-"));
+      const emptyWorkDir = await createTrackedTempDir("ralpher-empty-work-");
       await Bun.$`git init ${emptyWorkDir}`.quiet();
       await Bun.$`git -C ${emptyWorkDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${emptyWorkDir} config user.name "Test User"`.quiet();
@@ -430,7 +448,7 @@ describe("Loops Control API Integration", () => {
   describe("GET /api/loops/:id/status-file", () => {
     test("returns status.md content", async () => {
       // Create a fresh workdir with .planning to avoid pollution from other tests
-      const statusTestDir = await mkdtemp(join(tmpdir(), "ralpher-status-test-"));
+      const statusTestDir = await createTrackedTempDir("ralpher-status-test-");
       await Bun.$`git init ${statusTestDir}`.quiet();
       await Bun.$`git -C ${statusTestDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${statusTestDir} config user.name "Test User"`.quiet();
@@ -481,7 +499,7 @@ describe("Loops Control API Integration", () => {
     });
 
     test("returns status.md content for branch-only loops without a worktree", async () => {
-      const branchOnlyStatusDir = await mkdtemp(join(tmpdir(), "ralpher-branch-only-status-"));
+      const branchOnlyStatusDir = await createTrackedTempDir("ralpher-branch-only-status-");
       await Bun.$`git init ${branchOnlyStatusDir}`.quiet();
       await Bun.$`git -C ${branchOnlyStatusDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${branchOnlyStatusDir} config user.name "Test User"`.quiet();
@@ -523,7 +541,7 @@ describe("Loops Control API Integration", () => {
   describe("Pending Prompt API", () => {
     test("PUT /api/loops/:id/pending-prompt returns 409 when loop is not running", async () => {
       // Use unique directory to avoid conflicts
-      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-pending-prompt-test-"));
+      const uniqueWorkDir = await createTrackedTempDir("ralpher-pending-prompt-test-");
       await Bun.$`git init ${uniqueWorkDir}`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
@@ -570,7 +588,7 @@ describe("Loops Control API Integration", () => {
 
     test("PUT /api/loops/:id/pending-prompt requires prompt in body", async () => {
       // Use unique directory to avoid conflicts
-      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-pending-body-test-"));
+      const uniqueWorkDir = await createTrackedTempDir("ralpher-pending-body-test-");
       await Bun.$`git init ${uniqueWorkDir}`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
@@ -613,7 +631,7 @@ describe("Loops Control API Integration", () => {
 
     test("PUT /api/loops/:id/pending-prompt rejects empty prompt", async () => {
       // Use unique directory to avoid conflicts
-      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-pending-empty-test-"));
+      const uniqueWorkDir = await createTrackedTempDir("ralpher-pending-empty-test-");
       await Bun.$`git init ${uniqueWorkDir}`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
@@ -656,7 +674,7 @@ describe("Loops Control API Integration", () => {
 
     test("DELETE /api/loops/:id/pending-prompt returns 409 when loop is not running", async () => {
       // Use unique directory to avoid conflicts
-      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-pending-del-test-"));
+      const uniqueWorkDir = await createTrackedTempDir("ralpher-pending-del-test-");
       await Bun.$`git init ${uniqueWorkDir}`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
@@ -718,7 +736,7 @@ describe("Loops Control API Integration", () => {
   describe("Review Comments API", () => {
     test("GET /api/loops/:id/comments returns empty array for new loop", async () => {
       // Use unique directory to avoid conflicts
-      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-empty-test-"));
+      const uniqueWorkDir = await createTrackedTempDir("ralpher-comments-empty-test-");
       await Bun.$`git init ${uniqueWorkDir}`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
@@ -762,8 +780,8 @@ describe("Loops Control API Integration", () => {
 
     test("POST /api/loops/:id/address-comments stores and returns comment IDs", async () => {
       // Use unique directory with bare repo to avoid conflicts
-      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-store-test-"));
-      const uniqueBareRepo = await mkdtemp(join(tmpdir(), "ralpher-comments-store-bare-"));
+      const uniqueWorkDir = await createTrackedTempDir("ralpher-comments-store-test-");
+      const uniqueBareRepo = await createTrackedTempDir("ralpher-comments-store-bare-");
       await Bun.$`git init --bare ${uniqueBareRepo}`.quiet();
       await Bun.$`git init ${uniqueWorkDir}`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
@@ -840,7 +858,7 @@ describe("Loops Control API Integration", () => {
 
     test("POST /api/loops/:id/address-comments returns 400 for loop not in review mode", async () => {
       // Use unique directory to avoid conflicts
-      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-notreview-test-"));
+      const uniqueWorkDir = await createTrackedTempDir("ralpher-comments-notreview-test-");
       await Bun.$`git init ${uniqueWorkDir}`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.name "Test User"`.quiet();
@@ -896,8 +914,8 @@ describe("Loops Control API Integration", () => {
 
     test("GET /api/loops/:id/comments returns comments in correct order", async () => {
       // Use unique directory with bare repo to avoid conflicts
-      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-order-test-"));
-      const uniqueBareRepo = await mkdtemp(join(tmpdir(), "ralpher-comments-order-bare-"));
+      const uniqueWorkDir = await createTrackedTempDir("ralpher-comments-order-test-");
+      const uniqueBareRepo = await createTrackedTempDir("ralpher-comments-order-bare-");
       await Bun.$`git init --bare ${uniqueBareRepo}`.quiet();
       await Bun.$`git init ${uniqueWorkDir}`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
@@ -957,8 +975,8 @@ describe("Loops Control API Integration", () => {
 
     test("Comments can be queried via GET endpoint", async () => {
       // Use unique directory with bare repo to avoid conflicts
-      const uniqueWorkDir = await mkdtemp(join(tmpdir(), "ralpher-comments-get-test-"));
-      const uniqueBareRepo = await mkdtemp(join(tmpdir(), "ralpher-comments-get-bare-"));
+      const uniqueWorkDir = await createTrackedTempDir("ralpher-comments-get-test-");
+      const uniqueBareRepo = await createTrackedTempDir("ralpher-comments-get-bare-");
       await Bun.$`git init --bare ${uniqueBareRepo}`.quiet();
       await Bun.$`git init ${uniqueWorkDir}`.quiet();
       await Bun.$`git -C ${uniqueWorkDir} config user.email "test@test.com"`.quiet();
