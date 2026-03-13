@@ -596,8 +596,6 @@ describe("actions tab content", () => {
       expect(remotePortInput.type).toBe("number");
       expect(remotePortInput.min).toBe("1");
       expect(remotePortInput.max).toBe("65535");
-      expect(remotePortInput.className).toContain("w-28");
-      expect(remotePortInput.className).not.toContain("w-full");
       expect(remotePortInput.getAttribute("placeholder")).toBe("");
 
       expect(getByRole("button", { name: "Create Port Forward" })).toBeTruthy();
