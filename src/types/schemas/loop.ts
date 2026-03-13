@@ -137,7 +137,17 @@ export const PlanAcceptRequestSchema = z.object({
 });
 
 export const AnswerPlanQuestionRequestSchema = z.object({
-  answers: z.array(z.array(z.string())),
+  answers: z.array(
+    z.array(
+      z.string().trim().min(1, {
+        message: "answer strings cannot be empty or whitespace-only",
+      }),
+    ).min(1, {
+      message: "answer groups must contain at least one answer",
+    }),
+  ).min(1, {
+    message: "answers must contain at least one answer group",
+  }),
 });
 
 /**

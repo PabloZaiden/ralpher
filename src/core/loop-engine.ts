@@ -515,7 +515,7 @@ export class LoopEngine {
   async stop(reason = "User requested stop"): Promise<void> {
     this.emitLog("info", `Stopping loop: ${reason}`);
     this.aborted = true;
-    this.rejectPendingPlanQuestion(new Error(`Loop stopped while waiting for a plan question answer: ${reason}`));
+    await this.cancelPendingPlanQuestion(new Error(`Loop stopped while waiting for a plan question answer: ${reason}`));
 
     // Clear the persistence callback to prevent stale async operations
     // from overwriting state after the loop is stopped/deleted
@@ -553,7 +553,7 @@ export class LoopEngine {
   async abortSessionOnly(reason = "Connection reset requested"): Promise<void> {
     this.emitLog("info", `Aborting session only (preserving status): ${reason}`);
     this.aborted = true;
-    this.rejectPendingPlanQuestion(new Error(`Session aborted while waiting for a plan question answer: ${reason}`));
+    await this.cancelPendingPlanQuestion(new Error(`Session aborted while waiting for a plan question answer: ${reason}`));
 
     // Clear the persistence callback to prevent stale async operations
     this.onPersistState = undefined;
@@ -669,7 +669,8 @@ export class LoopEngine {
       );
     }
 
-    await this.backend.replyToQuestion(pendingQuestion.requestId, answers);
+    const normalizedAnswers = this.normalizePendingPlanQuestionAnswers(answers, pendingQuestion);
+    await this.backend.replyToQuestion(pendingQuestion.requestId, normalizedAnswers);
     await this.clearPendingPlanQuestion();
     this.resolvePendingPlanQuestion(pendingQuestion.requestId);
   }
@@ -2207,6 +2208,7 @@ export class LoopEngine {
    */
   private async handleQuestionAsked(event: AgentEvent & { type: "question.asked" }): Promise<void> {
     if (this.loop.state.status === "planning" && this.config.planModeAutoReply === false) {
+      const waitForAnswer = this.waitForPendingPlanQuestionAnswer(event.requestId);
       const pendingQuestion: PendingPlanQuestion = {
         requestId: event.requestId,
         sessionId: event.sessionId,
@@ -2229,10 +2231,17 @@ export class LoopEngine {
         questionCount: event.questions.length,
       });
       await this.triggerPersistence();
-      await this.waitForPendingPlanQuestionAnswer(event.requestId);
-      this.emitLog("info", "Plan question answered successfully", {
-        requestId: event.requestId,
-      });
+      try {
+        await waitForAnswer;
+        this.emitLog("info", "Plan question answered successfully", {
+          requestId: event.requestId,
+        });
+      } catch (error) {
+        if (this.loop.state.planMode?.pendingQuestion?.requestId === event.requestId) {
+          await this.clearPendingPlanQuestion();
+        }
+        throw error;
+      }
       return;
     }
 
@@ -2277,6 +2286,13 @@ export class LoopEngine {
     await this.triggerPersistence();
   }
 
+  private async cancelPendingPlanQuestion(error: Error): Promise<void> {
+    this.rejectPendingPlanQuestion(error);
+    if (this.loop.state.planMode?.pendingQuestion) {
+      await this.clearPendingPlanQuestion();
+    }
+  }
+
   private waitForPendingPlanQuestionAnswer(requestId: string): Promise<void> {
     if (this.pendingPlanQuestionRejecter) {
       this.pendingPlanQuestionRejecter(new Error("A new plan question replaced a previous unanswered question."));
@@ -2305,6 +2321,35 @@ export class LoopEngine {
     this.pendingPlanQuestionResolver = undefined;
     this.pendingPlanQuestionRejecter = undefined;
     this.pendingPlanQuestionRequestId = undefined;
+  }
+
+  private normalizePendingPlanQuestionAnswers(
+    answers: string[][],
+    pendingQuestion: PendingPlanQuestion,
+  ): string[][] {
+    return answers.map((group, groupIndex) => {
+      if (group.length === 0) {
+        throw new Error(`Answer group ${groupIndex + 1} cannot be empty.`);
+      }
+
+      const normalizedGroup = group.map((answer, answerIndex) => {
+        const trimmedAnswer = answer.trim();
+        if (trimmedAnswer.length === 0) {
+          throw new Error(
+            `Answer ${answerIndex + 1} in group ${groupIndex + 1} cannot be empty or whitespace-only.`,
+          );
+        }
+        return trimmedAnswer;
+      });
+
+      if (normalizedGroup.length === 0) {
+        throw new Error(
+          `Expected at least one answer in group ${groupIndex + 1} for question "${pendingQuestion.questions[groupIndex]?.question ?? groupIndex + 1}".`,
+        );
+      }
+
+      return normalizedGroup;
+    });
   }
 
   /**

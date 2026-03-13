@@ -21,6 +21,7 @@ import { CreateWorkspaceModal } from "./CreateWorkspaceModal";
 import { createLogger } from "../lib/logger";
 import { useToast } from "../hooks";
 import { appFetch } from "../lib/public-path";
+import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 
 const log = createLogger("DashboardModals");
 
@@ -176,7 +177,7 @@ export function DashboardModals(props: DashboardModalsProps) {
     useWorktree: editLoop.config.useWorktree,
     clearPlanningFolder: editLoop.config.clearPlanningFolder,
     planMode: editLoop.config.planMode ?? false,
-    planModeAutoReply: editLoop.config.planModeAutoReply ?? true,
+    planModeAutoReply: editLoop.config.planModeAutoReply ?? DEFAULT_LOOP_CONFIG.planModeAutoReply,
     workspaceId: editLoop.config.workspaceId,
   } : null;
 
