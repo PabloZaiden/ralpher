@@ -417,6 +417,20 @@ export class LoopEngine {
     return this.sessionId !== null && this.supportsActivePromptQueueing() && this.hasPendingInputQueued();
   }
 
+  private shouldBypassMaxIterationsForQueuedPendingInput(): boolean {
+    return this.loop.state.status === "planning" && this.shouldContinueWithQueuedPendingInput();
+  }
+
+  private continueWithAbortFallbackInjection(errorMessage?: string): boolean {
+    this.emitLog("info", "Abort-based injection interrupted the current iteration - continuing with pending input", {
+      errorMessage,
+    });
+    this.aborted = false;
+    this.injectionPending = false;
+    this.updateState({ consecutiveErrors: undefined });
+    return false;
+  }
+
   /**
    * Wait for any ongoing loop iteration to complete.
    * Used to ensure state modifications happen between iterations.
@@ -1249,6 +1263,9 @@ export class LoopEngine {
         }
 
         if (this.shouldContinueWithQueuedPendingInput()) {
+          if (!this.shouldBypassMaxIterationsForQueuedPendingInput() && await this.hasReachedMaxIterations()) {
+            return;
+          }
           this.emitLog("debug", "Queued pending input detected after iteration - continuing on the active ACP session");
           continue;
         }
@@ -1429,13 +1446,18 @@ export class LoopEngine {
    */
   private async handleErrorOutcome(result: IterationResult): Promise<boolean> {
     const errorMessage = result.error ?? "Unknown error";
-    this.emitLog("error", `Iteration failed with error: ${errorMessage}`);
 
     // Error iterations don't count towards maxIterations - roll back the counter
     // This treats the error as a retry, not a completed iteration
     this.updateState({
       currentIteration: this.loop.state.currentIteration - 1,
     });
+
+    if (this.injectionPending) {
+      return this.continueWithAbortFallbackInjection(errorMessage);
+    }
+
+    this.emitLog("error", `Iteration failed with error: ${errorMessage}`);
 
     // Track consecutive identical errors
     const shouldFailsafe = this.trackConsecutiveError(errorMessage);

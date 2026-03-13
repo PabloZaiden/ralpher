@@ -530,6 +530,55 @@ describe("LoopEngine Pending Model", () => {
     expect(internalEngine.injectionPending).toBe(true);
   });
 
+  test("abort-fallback injection errors are consumed without leaving injectionPending stuck", async () => {
+    const loop = createTestLoop();
+    loop.state.status = "running";
+    loop.state.currentIteration = 3;
+    loop.state.pendingPrompt = "Retry with queued input";
+    loop.state.consecutiveErrors = {
+      lastErrorMessage: "old error",
+      count: 2,
+    };
+    const engine = new LoopEngine({
+      loop,
+      backend: createMockBackend(["Still working"], { supportsActivePromptQueueing: false }),
+      gitService,
+      eventEmitter: emitter,
+    });
+    const internalEngine = engine as unknown as {
+      sessionId: string | null;
+      injectionPending: boolean;
+      aborted: boolean;
+      handleErrorOutcome: (result: {
+        continue: boolean;
+        outcome: "error";
+        responseContent: string;
+        error?: string;
+        messageCount: number;
+        toolCallCount: number;
+      }) => Promise<boolean>;
+    };
+    internalEngine.sessionId = "active-session";
+    internalEngine.injectionPending = true;
+    internalEngine.aborted = false;
+
+    const shouldExit = await internalEngine.handleErrorOutcome({
+      continue: false,
+      outcome: "error",
+      responseContent: "",
+      error: "session cancelled",
+      messageCount: 0,
+      toolCallCount: 0,
+    });
+
+    expect(shouldExit).toBe(false);
+    expect(loop.state.currentIteration).toBe(2);
+    expect(loop.state.consecutiveErrors).toBeUndefined();
+    expect(internalEngine.injectionPending).toBe(false);
+    expect(internalEngine.aborted).toBe(false);
+    expect(emittedEvents.some((event) => event.type === "loop.error")).toBe(false);
+  });
+
   test("completed outcome keeps the active session alive when pending input is queued", async () => {
     const loop = createTestLoop();
     loop.state.status = "running";
@@ -570,6 +619,61 @@ describe("LoopEngine Pending Model", () => {
     internalEngine.sessionId = "active-session";
 
     expect(internalEngine.shouldContinue()).toBe(true);
+  });
+
+  test("runLoop does not let queued-input continuation bypass maxIterations", async () => {
+    const loop = createTestLoop({ maxIterations: 1 });
+    loop.state.status = "running";
+    loop.state.pendingPrompt = "Queued follow-up";
+    const engine = new LoopEngine({
+      loop,
+      backend: createMockBackend(["Still working"], { supportsActivePromptQueueing: true }),
+      gitService,
+      eventEmitter: emitter,
+    });
+    const internalEngine = engine as unknown as {
+      sessionId: string | null;
+      runIteration: () => Promise<{
+        continue: boolean;
+        outcome: "continue";
+        responseContent: string;
+        messageCount: number;
+        toolCallCount: number;
+      }>;
+      handleIterationOutcome: () => Promise<boolean>;
+      hasReachedMaxIterations: () => Promise<boolean>;
+      shouldContinueWithQueuedPendingInput: () => boolean;
+      shouldContinue: () => boolean;
+      runLoop: () => Promise<void>;
+    };
+    const callOrder: string[] = [];
+    internalEngine.sessionId = "active-session";
+    internalEngine.runIteration = async () => {
+      loop.state.currentIteration = 1;
+      return {
+        continue: true,
+        outcome: "continue",
+        responseContent: "",
+        messageCount: 0,
+        toolCallCount: 0,
+      };
+    };
+    internalEngine.handleIterationOutcome = async () => false;
+    internalEngine.hasReachedMaxIterations = async () => {
+      callOrder.push("max");
+      loop.state.status = "max_iterations";
+      return true;
+    };
+    internalEngine.shouldContinueWithQueuedPendingInput = () => {
+      callOrder.push("queued");
+      return true;
+    };
+    internalEngine.shouldContinue = () => true;
+
+    await internalEngine.runLoop();
+
+    expect(callOrder).toEqual(["queued", "max"]);
+    expect(String(loop.state.status)).toBe("max_iterations");
   });
 
   test("pending message is persisted as user message when consumed", async () => {
