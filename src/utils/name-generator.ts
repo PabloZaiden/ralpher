@@ -46,12 +46,12 @@ export function sanitizeLoopName(name: string): string {
 }
 
 /**
-/**
  * Generate a loop title from a prompt using the configured agent backend.
  *
  * This function sends a prompt to the backend asking it to generate a short,
  * descriptive title for a coding task. The title is sanitized and validated
  * before being returned.
+ *
  *
  * @param options - Options for name generation
  * @returns A sanitized loop title (max 100 chars, preserves spaces and casing)
