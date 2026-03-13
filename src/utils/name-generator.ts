@@ -25,7 +25,7 @@ export interface GenerateLoopNameOptions {
   backend: BackendInterface;
   /** Session ID to use for the generation */
   sessionId: string;
-  /** Timeout in milliseconds (default: DEFAULT_LOOP_TITLE_TIMEOUT_MS) */
+  /** Timeout in milliseconds (default: 30_000ms / 30s, see DEFAULT_LOOP_TITLE_TIMEOUT_MS) */
   timeoutMs?: number;
 }
 
