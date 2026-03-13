@@ -249,9 +249,9 @@ class BackendManager {
    */
   private getAgentCapabilities(settings: ServerSettings): string[] {
     if (settings.agent.provider === "opencode") {
-      return ["createSession", "sendPromptAsync", "abortSession", "subscribeToEvents", "models"];
+      return ["createSession", "sendPromptAsync", "abortSession", "queueActivePrompt", "subscribeToEvents", "models"];
     }
-    return ["createSession", "sendPromptAsync", "abortSession", "subscribeToEvents"];
+    return ["createSession", "sendPromptAsync", "abortSession", "queueActivePrompt", "subscribeToEvents"];
   }
 
   /**

@@ -1659,6 +1659,10 @@ export class AcpBackend implements Backend {
     log.debug("[AcpBackend] Session abort is not supported by current ACP provider", { sessionId });
   }
 
+  supportsActivePromptQueueing(): boolean {
+    return true;
+  }
+
   /**
    * Get available models for a directory.
    */

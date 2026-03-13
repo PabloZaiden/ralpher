@@ -23,6 +23,10 @@ describe("AcpBackend", () => {
     expect(backend.isConnected()).toBe(false);
   });
 
+  test("supports active prompt queueing", () => {
+    expect(backend.supportsActivePromptQueueing()).toBe(true);
+  });
+
   test("disconnect on unconnected backend does nothing", async () => {
     // Should not throw
     await backend.disconnect();
