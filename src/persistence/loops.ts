@@ -41,6 +41,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "use_worktree",
   "clear_planning_folder",
   "plan_mode",
+  "plan_mode_auto_reply",
   "status",
   "current_iteration",
   "started_at",
@@ -70,6 +71,7 @@ const ALLOWED_LOOP_COLUMNS = new Set([
   "plan_content",
   "planning_folder_cleared",
   "plan_is_ready",
+  "pending_plan_question",
   "review_mode",
   "todos",
   "git_worktree_path",
@@ -115,6 +117,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     use_worktree: config.useWorktree ? 1 : 0,
     clear_planning_folder: config.clearPlanningFolder ? 1 : 0,
     plan_mode: config.planMode ? 1 : 0,
+    plan_mode_auto_reply: (config.planModeAutoReply ?? DEFAULT_LOOP_CONFIG.planModeAutoReply) ? 1 : 0,
     mode: config.mode ?? "loop",
     // State fields
     status: state.status,
@@ -147,6 +150,7 @@ function loopToRow(loop: Loop): Record<string, unknown> {
     plan_content: state.planMode?.planContent ?? null,
     planning_folder_cleared: state.planMode?.planningFolderCleared ? 1 : 0,
     plan_is_ready: state.planMode?.isPlanReady ? 1 : 0,
+    pending_plan_question: state.planMode?.pendingQuestion ? JSON.stringify(state.planMode.pendingQuestion) : null,
     review_mode: state.reviewMode ? JSON.stringify(state.reviewMode) : null,
     todos: state.todos ? JSON.stringify(state.todos) : null,
   };
@@ -208,6 +212,7 @@ function rowToLoop(row: Record<string, unknown>): Loop {
     useWorktree: row["use_worktree"] === 1,
     clearPlanningFolder: row["clear_planning_folder"] === 1,
     planMode: row["plan_mode"] === 1,
+    planModeAutoReply: row["plan_mode_auto_reply"] !== 0,
     mode: (row["mode"] as string as LoopConfig["mode"]) ?? "loop",
   };
 
@@ -291,6 +296,9 @@ function rowToLoop(row: Record<string, unknown>): Loop {
       planContent: row["plan_content"] as string | undefined,
       planningFolderCleared: row["planning_folder_cleared"] === 1,
       isPlanReady: row["plan_is_ready"] === 1,
+      pendingQuestion: row["pending_plan_question"]
+        ? safeJsonParse(row["pending_plan_question"] as string, undefined, "pending_plan_question", rowId)
+        : undefined,
     };
   }
   // Reconstruct reviewMode from JSON

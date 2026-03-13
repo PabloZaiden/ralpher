@@ -22,6 +22,7 @@ export {
   AddressCommentsRequestSchema,
   PlanFeedbackRequestSchema,
   PlanAcceptRequestSchema,
+  AnswerPlanQuestionRequestSchema,
   PendingPromptRequestSchema,
   SetPendingRequestSchema,
   StartDraftRequestSchema,

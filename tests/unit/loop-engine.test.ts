@@ -193,6 +193,16 @@ describe("StopPatternDetector", () => {
     return { config, state };
   }
 
+  function createDeferred<T>() {
+    let resolve!: (value: T | PromiseLike<T>) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
   beforeEach(async () => {
     testDir = await mkdtemp(join(tmpdir(), "loop-engine-test-"));
     emittedEvents = [];
@@ -1075,6 +1085,297 @@ describe("StopPatternDetector", () => {
     );
     expect(questionLogs.length).toBeGreaterThan(0);
   }, 10000);
+
+  test("plan-mode questions wait for a manual answer when auto-reply is disabled", async () => {
+    const loop = createTestLoop({
+      planMode: true,
+      planModeAutoReply: false,
+    });
+    loop.state.status = "planning";
+    loop.state.planMode = {
+      active: true,
+      feedbackRounds: 0,
+      planningFolderCleared: false,
+      isPlanReady: false,
+    };
+
+    let repliedRequestId = "";
+    let repliedAnswers: string[][] = [];
+    mockBackend = {
+      ...createMockBackend([]),
+      async replyToQuestion(requestId: string, answers: string[][]): Promise<void> {
+        repliedRequestId = requestId;
+        repliedAnswers = answers;
+      },
+    };
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    const handleQuestionAsked = (engine as unknown as {
+      handleQuestionAsked: (event: AgentEvent & { type: "question.asked" }) => Promise<void>;
+    }).handleQuestionAsked.bind(engine);
+
+    const questionPromise = handleQuestionAsked({
+      type: "question.asked",
+      requestId: "question-manual-1",
+      sessionId: "session-1",
+      questions: [
+        {
+          header: "Choose an approach",
+          question: "Which path should I take?",
+          options: [
+            { label: "Option A", description: "Use option A" },
+            { label: "Option B", description: "Use option B" },
+          ],
+          custom: true,
+        },
+      ],
+    });
+
+    expect(engine.state.planMode?.pendingQuestion?.requestId).toBe("question-manual-1");
+    expect(repliedAnswers).toEqual([]);
+
+    await engine.answerPendingPlanQuestion([["Use option B, but adapt it for tests"]]);
+    await questionPromise;
+
+    expect(repliedRequestId).toBe("question-manual-1");
+    expect(repliedAnswers).toEqual([["Use option B, but adapt it for tests"]]);
+    expect(engine.state.planMode?.pendingQuestion).toBeUndefined();
+
+    const pendingEvent = emittedEvents.find(
+      (event) => event.type === "loop.pending.updated" && event.pendingPlanQuestion?.requestId === "question-manual-1",
+    );
+    expect(pendingEvent).toBeTruthy();
+  });
+
+  test("plan-mode questions can be answered before persistence finishes registering the waiter", async () => {
+    const loop = createTestLoop({
+      planMode: true,
+      planModeAutoReply: false,
+    });
+    loop.state.status = "planning";
+    loop.state.planMode = {
+      active: true,
+      feedbackRounds: 0,
+      planningFolderCleared: false,
+      isPlanReady: false,
+    };
+
+    let repliedRequestId = "";
+    let repliedAnswers: string[][] = [];
+    let persistenceCalls = 0;
+    const persistDeferred = createDeferred<void>();
+
+    mockBackend = {
+      ...createMockBackend([]),
+      async replyToQuestion(requestId: string, answers: string[][]): Promise<void> {
+        repliedRequestId = requestId;
+        repliedAnswers = answers;
+      },
+    };
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+      onPersistState: async () => {
+        persistenceCalls += 1;
+        if (persistenceCalls === 1) {
+          await persistDeferred.promise;
+        }
+      },
+    });
+
+    const handleQuestionAsked = (engine as unknown as {
+      handleQuestionAsked: (event: AgentEvent & { type: "question.asked" }) => Promise<void>;
+    }).handleQuestionAsked.bind(engine);
+
+    const questionPromise = handleQuestionAsked({
+      type: "question.asked",
+      requestId: "question-manual-race",
+      sessionId: "session-1",
+      questions: [
+        {
+          header: "Choose an approach",
+          question: "Which path should I take?",
+          options: [
+            { label: "Option A", description: "Use option A" },
+            { label: "Option B", description: "Use option B" },
+          ],
+        },
+      ],
+    });
+
+    expect(engine.state.planMode?.pendingQuestion?.requestId).toBe("question-manual-race");
+
+    await engine.answerPendingPlanQuestion([["  Option B  "]]);
+    persistDeferred.resolve();
+    await questionPromise;
+
+    expect(repliedRequestId).toBe("question-manual-race");
+    expect(repliedAnswers).toEqual([["Option B"]]);
+    expect(engine.state.planMode?.pendingQuestion).toBeUndefined();
+  });
+
+  test("stop clears a pending manual plan question from state", async () => {
+    const loop = createTestLoop({
+      planMode: true,
+      planModeAutoReply: false,
+    });
+    loop.state.status = "planning";
+    loop.state.planMode = {
+      active: true,
+      feedbackRounds: 0,
+      planningFolderCleared: false,
+      isPlanReady: false,
+    };
+
+    const persistedPendingQuestions: Array<string | undefined> = [];
+    mockBackend = createMockBackend([]);
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+      onPersistState: async (state: LoopState) => {
+        persistedPendingQuestions.push(state.planMode?.pendingQuestion?.requestId);
+      },
+    });
+
+    const handleQuestionAsked = (engine as unknown as {
+      handleQuestionAsked: (event: AgentEvent & { type: "question.asked" }) => Promise<void>;
+    }).handleQuestionAsked.bind(engine);
+
+    const questionPromise = handleQuestionAsked({
+      type: "question.asked",
+      requestId: "question-stop-clear",
+      sessionId: "session-1",
+      questions: [
+        {
+          header: "Confirm action",
+          question: "Need confirmation?",
+          options: [{ label: "Yes", description: "Confirm the action" }],
+        },
+      ],
+    });
+
+    await engine.stop("test stop");
+    await expect(questionPromise).rejects.toThrow("Loop stopped while waiting for a plan question answer: test stop");
+
+    expect(engine.state.planMode?.pendingQuestion).toBeUndefined();
+    expect(persistedPendingQuestions).toContain("question-stop-clear");
+    expect(persistedPendingQuestions).toContain(undefined);
+  });
+
+  test("abortSessionOnly clears a pending manual plan question from state", async () => {
+    const loop = createTestLoop({
+      planMode: true,
+      planModeAutoReply: false,
+    });
+    loop.state.status = "planning";
+    loop.state.planMode = {
+      active: true,
+      feedbackRounds: 0,
+      planningFolderCleared: false,
+      isPlanReady: false,
+    };
+
+    const persistedPendingQuestions: Array<string | undefined> = [];
+    mockBackend = createMockBackend([]);
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+      onPersistState: async (state: LoopState) => {
+        persistedPendingQuestions.push(state.planMode?.pendingQuestion?.requestId);
+      },
+    });
+
+    const handleQuestionAsked = (engine as unknown as {
+      handleQuestionAsked: (event: AgentEvent & { type: "question.asked" }) => Promise<void>;
+    }).handleQuestionAsked.bind(engine);
+
+    const questionPromise = handleQuestionAsked({
+      type: "question.asked",
+      requestId: "question-abort-clear",
+      sessionId: "session-1",
+      questions: [
+        {
+          header: "Confirm action",
+          question: "Need confirmation?",
+          options: [{ label: "Yes", description: "Confirm the action" }],
+        },
+      ],
+    });
+
+    await engine.abortSessionOnly("test abort");
+    await expect(questionPromise).rejects.toThrow("Session aborted while waiting for a plan question answer: test abort");
+
+    expect(engine.state.planMode?.pendingQuestion).toBeUndefined();
+    expect(persistedPendingQuestions).toContain("question-abort-clear");
+    expect(persistedPendingQuestions).toContain(undefined);
+  });
+
+  test("answerPendingPlanQuestion rejects blank or empty answer groups", async () => {
+    const loop = createTestLoop({
+      planMode: true,
+      planModeAutoReply: false,
+    });
+    loop.state.status = "planning";
+    loop.state.planMode = {
+      active: true,
+      feedbackRounds: 0,
+      planningFolderCleared: false,
+      isPlanReady: false,
+    };
+
+    mockBackend = createMockBackend([]);
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+    });
+
+    const handleQuestionAsked = (engine as unknown as {
+      handleQuestionAsked: (event: AgentEvent & { type: "question.asked" }) => Promise<void>;
+    }).handleQuestionAsked.bind(engine);
+
+    const questionPromise = handleQuestionAsked({
+      type: "question.asked",
+      requestId: "question-invalid-answer",
+      sessionId: "session-1",
+      questions: [
+        {
+          header: "Choose an approach",
+          question: "Which path should I take?",
+          options: [{ label: "Option A", description: "Use option A" }],
+        },
+      ],
+    });
+
+    await expect(engine.answerPendingPlanQuestion([["   "]])).rejects.toThrow(
+      "Answer 1 in group 1 cannot be empty or whitespace-only.",
+    );
+    await expect(engine.answerPendingPlanQuestion([[]])).rejects.toThrow(
+      "Answer group 1 cannot be empty.",
+    );
+
+    expect(engine.state.planMode?.pendingQuestion?.requestId).toBe("question-invalid-answer");
+
+    await engine.answerPendingPlanQuestion([["Option A"]]);
+    await questionPromise;
+  });
 
   test("session.status events are logged for debugging", async () => {
     const loop = createTestLoop({ maxIterations: 2 });

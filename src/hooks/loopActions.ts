@@ -340,6 +340,18 @@ export async function sendPlanFeedbackApi(
   );
 }
 
+export async function answerPlanQuestionApi(
+  loopId: string,
+  answers: string[][],
+): Promise<boolean> {
+  return apiActionWithBody(
+    `/api/loops/${loopId}/plan/question/answer`,
+    "POST",
+    { answers },
+    "Answer plan question",
+  );
+}
+
 /**
  * Accept a plan and start the loop execution via the API.
  */

@@ -53,6 +53,7 @@ import {
   SetPendingRequestSchema,
   PlanFeedbackRequestSchema,
   PlanAcceptRequestSchema,
+  AnswerPlanQuestionRequestSchema,
   AddressCommentsRequestSchema,
   CreateChatRequestSchema,
   SendChatMessageRequestSchema,
@@ -90,6 +91,7 @@ async function applyLoopUpdates(
     if (body.useWorktree !== undefined) updates.useWorktree = body.useWorktree;
     if (body.clearPlanningFolder !== undefined) updates.clearPlanningFolder = body.clearPlanningFolder;
     if (body.planMode !== undefined) updates.planMode = body.planMode;
+    if (body.planModeAutoReply !== undefined) updates.planModeAutoReply = body.planModeAutoReply;
 
     if (body.model !== undefined) {
       updates.model = {
@@ -347,6 +349,7 @@ export const loopsCrudRoutes = {
           useWorktree: body.useWorktree,
           clearPlanningFolder: body.clearPlanningFolder,
           planMode: body.planMode,
+          planModeAutoReply: body.planModeAutoReply,
           draft: body.draft,
         });
 
@@ -1198,6 +1201,32 @@ export const loopsControlRoutes = {
           return errorResponse("plan_not_ready", errorMsg, 400);
         }
         return errorResponse("accept_failed", errorMsg, 500);
+      }
+    },
+  },
+
+  "/api/loops/:id/plan/question/answer": {
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      const validation = await parseAndValidate(AnswerPlanQuestionRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
+      }
+
+      try {
+        await loopManager.answerPendingPlanQuestion(req.params.id, validation.data.answers);
+        return successResponse();
+      } catch (error) {
+        const errorMsg = String(error);
+        if (errorMsg.includes("There is no pending plan question")) {
+          return errorResponse("no_pending_plan_question", errorMsg, 409);
+        }
+        if (errorMsg.includes("not in planning status")) {
+          return errorResponse("not_planning", errorMsg, 400);
+        }
+        if (errorMsg.includes("Expected ")) {
+          return errorResponse("invalid_question_answer", errorMsg, 400);
+        }
+        return errorResponse("answer_plan_question_failed", errorMsg, 500);
       }
     },
   },

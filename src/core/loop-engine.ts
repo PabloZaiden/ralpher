@@ -12,6 +12,7 @@ import type {
   GitCommit,
   LoopLogEntry,
   ModelConfig,
+  PendingPlanQuestion,
 } from "../types/loop";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import { formatConventionalCommit, normalizeAiCommitMessage } from "./conventional-commits";
@@ -215,6 +216,9 @@ export class LoopEngine {
    * This is different from `aborted` which stops the loop entirely.
    */
   private injectionPending = false;
+  private pendingPlanQuestionResolver?: () => void;
+  private pendingPlanQuestionRejecter?: (error: Error) => void;
+  private pendingPlanQuestionRequestId?: string;
 
   constructor(options: LoopEngineOptions) {
     this.loop = options.loop;
@@ -511,6 +515,7 @@ export class LoopEngine {
   async stop(reason = "User requested stop"): Promise<void> {
     this.emitLog("info", `Stopping loop: ${reason}`);
     this.aborted = true;
+    await this.cancelPendingPlanQuestion(new Error(`Loop stopped while waiting for a plan question answer: ${reason}`));
 
     // Clear the persistence callback to prevent stale async operations
     // from overwriting state after the loop is stopped/deleted
@@ -548,6 +553,7 @@ export class LoopEngine {
   async abortSessionOnly(reason = "Connection reset requested"): Promise<void> {
     this.emitLog("info", `Aborting session only (preserving status): ${reason}`);
     this.aborted = true;
+    await this.cancelPendingPlanQuestion(new Error(`Session aborted while waiting for a plan question answer: ${reason}`));
 
     // Clear the persistence callback to prevent stale async operations
     this.onPersistState = undefined;
@@ -649,6 +655,24 @@ export class LoopEngine {
         this.emitLog("error", `Plan feedback iteration failed: ${String(error)}`);
       });
     }
+  }
+
+  async answerPendingPlanQuestion(answers: string[][]): Promise<void> {
+    const pendingQuestion = this.loop.state.planMode?.pendingQuestion;
+    if (!pendingQuestion) {
+      throw new Error("There is no pending plan question to answer.");
+    }
+
+    if (answers.length !== pendingQuestion.questions.length) {
+      throw new Error(
+        `Expected ${pendingQuestion.questions.length} answer group(s) for the pending plan question, received ${answers.length}.`,
+      );
+    }
+
+    const normalizedAnswers = this.normalizePendingPlanQuestionAnswers(answers, pendingQuestion);
+    await this.backend.replyToQuestion(pendingQuestion.requestId, normalizedAnswers);
+    await this.clearPendingPlanQuestion();
+    this.resolvePendingPlanQuestion(pendingQuestion.requestId);
   }
 
   /**
@@ -2184,6 +2208,44 @@ export class LoopEngine {
    * Auto-respond to a question from the AI with a default answer.
    */
   private async handleQuestionAsked(event: AgentEvent & { type: "question.asked" }): Promise<void> {
+    if (this.loop.state.status === "planning" && this.config.planModeAutoReply === false) {
+      const waitForAnswer = this.waitForPendingPlanQuestionAnswer(event.requestId);
+      const pendingQuestion: PendingPlanQuestion = {
+        requestId: event.requestId,
+        sessionId: event.sessionId,
+        questions: event.questions.map((question) => ({
+          header: question.header,
+          question: question.question,
+          options: question.options.map((option) => ({
+            label: option.label,
+            description: option.description,
+          })),
+          multiple: question.multiple,
+          custom: question.custom,
+        })),
+        askedAt: createTimestamp(),
+      };
+
+      this.setPendingPlanQuestion(pendingQuestion);
+      this.emitLog("info", "Waiting for a user answer to a plan-mode question", {
+        requestId: event.requestId,
+        questionCount: event.questions.length,
+      });
+      await this.triggerPersistence();
+      try {
+        await waitForAnswer;
+        this.emitLog("info", "Plan question answered successfully", {
+          requestId: event.requestId,
+        });
+      } catch (error) {
+        if (this.loop.state.planMode?.pendingQuestion?.requestId === event.requestId) {
+          await this.clearPendingPlanQuestion();
+        }
+        throw error;
+      }
+      return;
+    }
+
     this.emitLog("info", "Auto-responding to question from AI", {
       requestId: event.requestId,
       questionCount: event.questions.length,
@@ -2197,6 +2259,98 @@ export class LoopEngine {
     } catch (questionErr) {
       this.emitLog("warn", `Failed to answer question: ${String(questionErr)}`);
     }
+  }
+
+  private setPendingPlanQuestion(pendingQuestion: PendingPlanQuestion | undefined): void {
+    this.updateState({
+      planMode: {
+        active: this.loop.state.planMode?.active ?? this.loop.state.status === "planning",
+        planSessionId: this.loop.state.planMode?.planSessionId,
+        planServerUrl: this.loop.state.planMode?.planServerUrl,
+        feedbackRounds: this.loop.state.planMode?.feedbackRounds ?? 0,
+        planContent: this.loop.state.planMode?.planContent,
+        planningFolderCleared: this.loop.state.planMode?.planningFolderCleared ?? false,
+        isPlanReady: this.loop.state.planMode?.isPlanReady ?? false,
+        pendingQuestion,
+      },
+    });
+    this.emit({
+      type: "loop.pending.updated",
+      loopId: this.config.id,
+      pendingPlanQuestion: pendingQuestion,
+      timestamp: createTimestamp(),
+    });
+  }
+
+  private async clearPendingPlanQuestion(): Promise<void> {
+    this.setPendingPlanQuestion(undefined);
+    await this.triggerPersistence();
+  }
+
+  private async cancelPendingPlanQuestion(error: Error): Promise<void> {
+    this.rejectPendingPlanQuestion(error);
+    if (this.loop.state.planMode?.pendingQuestion) {
+      await this.clearPendingPlanQuestion();
+    }
+  }
+
+  private waitForPendingPlanQuestionAnswer(requestId: string): Promise<void> {
+    if (this.pendingPlanQuestionRejecter) {
+      this.pendingPlanQuestionRejecter(new Error("A new plan question replaced a previous unanswered question."));
+    }
+
+    this.pendingPlanQuestionRequestId = requestId;
+    return new Promise<void>((resolve, reject) => {
+      this.pendingPlanQuestionResolver = resolve;
+      this.pendingPlanQuestionRejecter = reject;
+    });
+  }
+
+  private resolvePendingPlanQuestion(requestId: string): void {
+    if (this.pendingPlanQuestionRequestId !== requestId) {
+      return;
+    }
+
+    this.pendingPlanQuestionResolver?.();
+    this.pendingPlanQuestionResolver = undefined;
+    this.pendingPlanQuestionRejecter = undefined;
+    this.pendingPlanQuestionRequestId = undefined;
+  }
+
+  private rejectPendingPlanQuestion(error: Error): void {
+    this.pendingPlanQuestionRejecter?.(error);
+    this.pendingPlanQuestionResolver = undefined;
+    this.pendingPlanQuestionRejecter = undefined;
+    this.pendingPlanQuestionRequestId = undefined;
+  }
+
+  private normalizePendingPlanQuestionAnswers(
+    answers: string[][],
+    pendingQuestion: PendingPlanQuestion,
+  ): string[][] {
+    return answers.map((group, groupIndex) => {
+      if (group.length === 0) {
+        throw new Error(`Answer group ${groupIndex + 1} cannot be empty.`);
+      }
+
+      const normalizedGroup = group.map((answer, answerIndex) => {
+        const trimmedAnswer = answer.trim();
+        if (trimmedAnswer.length === 0) {
+          throw new Error(
+            `Answer ${answerIndex + 1} in group ${groupIndex + 1} cannot be empty or whitespace-only.`,
+          );
+        }
+        return trimmedAnswer;
+      });
+
+      if (normalizedGroup.length === 0) {
+        throw new Error(
+          `Expected at least one answer in group ${groupIndex + 1} for question "${pendingQuestion.questions[groupIndex]?.question ?? groupIndex + 1}".`,
+        );
+      }
+
+      return normalizedGroup;
+    });
   }
 
   /**

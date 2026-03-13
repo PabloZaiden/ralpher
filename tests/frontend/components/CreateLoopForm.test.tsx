@@ -387,6 +387,14 @@ describe("CreateLoopForm", () => {
       expect((getByRole("checkbox", { name: /Plan Mode/ }) as HTMLInputElement).checked).toBe(true);
     });
 
+    test("plan-mode auto-reply is shown and enabled by default", () => {
+      const { getByRole } = renderWithUser(
+        <CreateLoopForm {...defaultProps()} />
+      );
+
+      expect((getByRole("checkbox", { name: /Auto-reply plan questions/i }) as HTMLInputElement).checked).toBe(true);
+    });
+
     test("toggling plan mode changes submit button text", async () => {
       const { getByRole, user } = renderWithUser(
         <CreateLoopForm
@@ -403,6 +411,43 @@ describe("CreateLoopForm", () => {
       // Toggle off
       await user.click(getByRole("checkbox", { name: /Plan Mode/ }));
       expect(getByRole("button", { name: "Create Loop" })).toBeInTheDocument();
+    });
+
+    test("submits planModeAutoReply=false when the checkbox is unchecked", async () => {
+      const onSubmit = mock(async (_req: CreateLoopFormSubmitRequest) => true);
+
+      const { getByLabelText, getByRole, user } = renderWithUser(
+        <CreateLoopForm
+          {...defaultProps({
+            onSubmit,
+            onCancel: mock(() => {}),
+            workspaces: testWorkspaces(),
+            models: connectedModels(),
+            branches: [createBranchInfo({ name: "main" })],
+            defaultBranch: "main",
+            currentBranch: "main",
+          })}
+        />
+      );
+
+      await user.selectOptions(getByLabelText("Workspace *") as HTMLSelectElement, "ws-1");
+      await setInputValue(user, getByLabelText(/Prompt/) as HTMLTextAreaElement, "Do it");
+      await setInputValue(user, getByLabelText(/Title/) as HTMLInputElement, "Loop title");
+
+      await waitFor(() => {
+        expect((getByLabelText("Model") as HTMLSelectElement).value).not.toBe("");
+      });
+
+      await user.click(getByRole("checkbox", { name: /Auto-reply plan questions/i }));
+      await user.click(getByRole("button", { name: "Create Plan" }));
+
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalledTimes(1);
+      });
+
+      const req = onSubmit.mock.calls[0]?.[0] as CreateLoopRequest;
+      expect(req.planMode).toBe(true);
+      expect(req.planModeAutoReply).toBe(false);
     });
 
   });
