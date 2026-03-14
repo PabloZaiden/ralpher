@@ -223,7 +223,9 @@ export const sshServersRoutes = {
     },
 
     async DELETE(req: Request & { params: { id: string } }): Promise<Response> {
-      const validation = await parseAndValidate(DeleteSshServerSessionRequestSchema, req);
+      const validation = await parseAndValidate(DeleteSshServerSessionRequestSchema, req, {
+        allowEmptyBody: true,
+      });
       if (!validation.success) {
         return validation.response;
       }

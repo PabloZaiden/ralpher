@@ -181,4 +181,36 @@ describe("Standalone SSH servers API integration", () => {
     const getSessionResponse = await fetch(`${baseUrl}/api/ssh-server-sessions/${session.config.id}`);
     expect(getSessionResponse.ok).toBe(true);
   });
+
+  test("deletes direct standalone SSH sessions without requiring a request body", async () => {
+    const createServerResponse = await fetch(`${baseUrl}/api/ssh-servers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Shared host",
+        address: "ssh.example.com",
+        username: "deploy",
+      }),
+    });
+    const createdServer = await createServerResponse.json() as { config: { id: string } };
+
+    const createSessionResponse = await fetch(`${baseUrl}/api/ssh-servers/${createdServer.config.id}/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Direct shell",
+        connectionMode: "direct",
+      }),
+    });
+    expect(createSessionResponse.status).toBe(201);
+    const session = await createSessionResponse.json() as { config: { id: string } };
+
+    const deleteSessionResponse = await fetch(`${baseUrl}/api/ssh-server-sessions/${session.config.id}`, {
+      method: "DELETE",
+    });
+    expect(deleteSessionResponse.ok).toBe(true);
+
+    const getDeletedSessionResponse = await fetch(`${baseUrl}/api/ssh-server-sessions/${session.config.id}`);
+    expect(getDeletedSessionResponse.status).toBe(404);
+  });
 });

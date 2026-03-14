@@ -19,6 +19,11 @@ export type ValidationResult<T> =
   | { success: true; data: T }
   | { success: false; response: Response };
 
+export interface ParseAndValidateOptions {
+  allowEmptyBody?: boolean;
+  emptyBodyValue?: unknown;
+}
+
 /**
  * Validate a request body against a Zod schema.
  *
@@ -85,6 +90,14 @@ function validationErrorResponse(error: ZodError): Response {
   return Response.json(body, { status: 400 });
 }
 
+function invalidJsonResponse(): Response {
+  const body: ErrorResponse = {
+    error: "invalid_json",
+    message: "Request body must be valid JSON",
+  };
+  return Response.json(body, { status: 400 });
+}
+
 /**
  * Parse request body as JSON and validate against a schema.
  * Combines JSON parsing and validation into a single operation.
@@ -104,17 +117,28 @@ function validationErrorResponse(error: ZodError): Response {
  */
 export async function parseAndValidate<T>(
   schema: z.ZodType<T>,
-  req: Request
+  req: Request,
+  options?: ParseAndValidateOptions,
 ): Promise<ValidationResult<T>> {
+  let rawBody: string;
+  try {
+    rawBody = await req.text();
+  } catch {
+    return { success: false, response: invalidJsonResponse() };
+  }
+
+  if (rawBody.trim() === "") {
+    if (!options?.allowEmptyBody) {
+      return { success: false, response: invalidJsonResponse() };
+    }
+    return validateRequest(schema, options.emptyBodyValue ?? {});
+  }
+
   let body: unknown;
   try {
-    body = await req.json();
+    body = JSON.parse(rawBody);
   } catch {
-    const errorBody: ErrorResponse = {
-      error: "invalid_json",
-      message: "Request body must be valid JSON",
-    };
-    return { success: false, response: Response.json(errorBody, { status: 400 }) };
+    return { success: false, response: invalidJsonResponse() };
   }
 
   return validateRequest(schema, body);
