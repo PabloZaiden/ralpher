@@ -1018,6 +1018,14 @@ export function SshSessionDetails({
         resizeDisposable = terminal.onResize(({ cols, rows }) => {
           sendTerminalResize(cols, rows);
         });
+        terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+          if (event.key !== "Tab" || !event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
+            return false;
+          }
+
+          void sendTerminalInput("\u001b[Z", { notifyOnFailure: false });
+          return true;
+        });
         removeMouseHandlers = installTerminalMouseHandlers({
           terminal,
           container: terminalContainerRef.current,

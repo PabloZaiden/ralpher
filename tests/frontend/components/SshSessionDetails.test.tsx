@@ -17,6 +17,7 @@ class MockTerminal {
   element: HTMLDivElement | null = null;
   canvas: HTMLCanvasElement | null = null;
   wheelHandler: ((event: WheelEvent) => boolean) | undefined;
+  keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
   mouseTracking = false;
   modes: Record<number, boolean> = {};
   wasmTerm = {};
@@ -102,6 +103,10 @@ class MockTerminal {
     this.wheelHandler = handler;
   }
 
+  attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean) {
+    this.keyHandler = handler;
+  }
+
   getMode(mode: number) {
     return this.modes[mode] ?? false;
   }
@@ -118,6 +123,7 @@ class MockTerminal {
     this.element = null;
     this.renderer = null;
     this.wheelHandler = undefined;
+    this.keyHandler = undefined;
   }
 }
 
@@ -338,6 +344,46 @@ describe("SshSessionDetails", () => {
     expect(terminalConnection.sentMessages).toContain(JSON.stringify({
       type: "terminal.input",
       data: "\u001b[<0;4;2m",
+    }));
+  });
+
+  test("sends BackTab for physical Shift+Tab instead of collapsing it into plain Tab", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Shift Tab" } }),
+    );
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-shift-tab-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Shift Tab")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal?.keyHandler).toBeDefined();
+    });
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.connected",
+        sshSessionId: "ssh-shift-tab-1",
+      });
+    });
+
+    const handled = lastTerminal!.keyHandler!(
+      new KeyboardEvent("keydown", {
+        key: "Tab",
+        code: "Tab",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(handled).toBe(true);
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b[Z",
     }));
   });
 
