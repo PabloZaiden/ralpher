@@ -44,6 +44,10 @@ export interface WebSocketData {
   loopId?: string;
   /** Optional SSH session ID to filter session events or attach a terminal */
   sshSessionId?: string;
+  /** Optional standalone SSH server session ID to filter session events or attach a terminal */
+  sshServerSessionId?: string;
+  /** Optional one-time credential token for standalone terminal connections */
+  credentialToken?: string;
   /** Optional forwarded port ID for proxied websocket traffic */
   portForwardId?: string;
   /** Whether this socket is a terminal transport socket */
@@ -77,6 +81,7 @@ export const websocketHandlers = {
     const {
       loopId,
       sshSessionId,
+      sshServerSessionId,
       terminalMode,
       portForwardMode,
       proxyTargetUrl,
@@ -103,8 +108,9 @@ export const websocketHandlers = {
     });
 
     // Terminal sockets attach directly to SSH/tmux and do not subscribe to app events.
-    if (terminalMode && sshSessionId) {
-      const bridge = new SshTerminalBridge(sshSessionId, {
+    const terminalSessionId = sshSessionId ?? sshServerSessionId;
+    if (terminalMode && terminalSessionId) {
+      const bridge = new SshTerminalBridge(terminalSessionId, {
         onOutput: (chunk) => {
           try {
             ws.send(JSON.stringify({ type: "terminal.output", data: chunk }));
@@ -137,19 +143,34 @@ export const websocketHandlers = {
             log.trace("Failed to send terminal close event", { error: String(sendError), sshSessionId });
           }
         },
-      });
+      }, sshServerSessionId
+        ? {
+            sessionKind: "standalone",
+            credentialToken: ws.data.credentialToken,
+          }
+        : undefined);
       ws.data.terminalBridge = bridge;
       void bridge.connect().then(() => {
         try {
-          ws.send(JSON.stringify({ type: "terminal.connected", sshSessionId }));
+          ws.send(JSON.stringify({
+            type: "terminal.connected",
+            sshSessionId: sshSessionId ?? null,
+            sshServerSessionId: sshServerSessionId ?? null,
+          }));
         } catch (sendError) {
-          log.trace("Failed to send terminal ready event", { error: String(sendError), sshSessionId });
+          log.trace("Failed to send terminal ready event", {
+            error: String(sendError),
+            sshSessionId: terminalSessionId,
+          });
         }
       }).catch(async (error: Error) => {
         try {
           ws.send(JSON.stringify({ type: "terminal.error", message: String(error) }));
         } catch (sendError) {
-          log.trace("Failed to send terminal startup error", { error: String(sendError), sshSessionId });
+          log.trace("Failed to send terminal startup error", {
+            error: String(sendError),
+            sshSessionId: terminalSessionId,
+          });
         }
         await bridge.dispose();
       });
@@ -187,7 +208,12 @@ export const websocketHandlers = {
     }
 
     // Send initial connection confirmation
-    ws.send(JSON.stringify({ type: "connected", loopId: loopId ?? null, sshSessionId: sshSessionId ?? null }));
+    ws.send(JSON.stringify({
+      type: "connected",
+      loopId: loopId ?? null,
+      sshSessionId: sshSessionId ?? null,
+      sshServerSessionId: sshServerSessionId ?? null,
+    }));
 
     const loopUnsubscribe = loopEventEmitter.subscribe((event: LoopEvent) => {
       // Filter by loopId if specified
@@ -203,7 +229,8 @@ export const websocketHandlers = {
     });
 
     const sshSessionUnsubscribe = sshSessionEventEmitter.subscribe((event: SshSessionEvent) => {
-      if (sshSessionId && event.sshSessionId !== sshSessionId) {
+      const expectedSessionId = sshSessionId ?? sshServerSessionId;
+      if (expectedSessionId && event.sshSessionId !== expectedSessionId) {
         return;
       }
 
@@ -266,6 +293,7 @@ export const websocketHandlers = {
           void ws.data.terminalBridge.resize(data.cols, data.rows).catch((error: Error) => {
             log.debug("Ignoring SSH terminal resize error", {
               sshSessionId: ws.data.sshSessionId,
+              sshServerSessionId: ws.data.sshServerSessionId,
               error: String(error),
             });
           });

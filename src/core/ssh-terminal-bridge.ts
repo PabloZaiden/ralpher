@@ -3,14 +3,17 @@
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import type { SshSession, Workspace } from "../types";
+import type { CommandExecutor } from "./command-executor";
+import type { SshServerSession, SshSession, Workspace } from "../types";
 import { getWorkspace } from "../persistence/workspaces";
 import { buildSshRemoteShellCommand } from "./remote-command-executor";
 import { sshSessionManager } from "./ssh-session-manager";
+import { sshServerManager } from "./ssh-server-manager";
 import { createLogger } from "./logger";
 import { backendManager } from "./backend-manager";
 import {
   buildSshProcessConfig,
+  type SshConnectionTarget,
   getSshConnectionTargetFromWorkspace,
 } from "./ssh-connection-target";
 
@@ -31,6 +34,11 @@ export interface SshTerminalBridgeOptions {
   readyTimeoutMs?: number;
 }
 
+export interface SshTerminalBridgeConnectOptions {
+  sessionKind?: "workspace" | "standalone";
+  credentialToken?: string;
+}
+
 interface ClipboardSequenceResult {
   visibleOutput: string;
   clipboardCopies: string[];
@@ -41,16 +49,18 @@ function quoteShell(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
-export function buildAttachCommand(session: SshSession): string {
-  const directory = quoteShell(session.config.directory);
+export function buildAttachCommand(session: { config: { remoteSessionName: string; directory?: string } }): string {
   const sessionName = quoteShell(session.config.remoteSessionName);
+  const createSessionCommand = session.config.directory
+    ? `tmux new-session -d -s ${sessionName} -c ${quoteShell(session.config.directory)};`
+    : `tmux new-session -d -s ${sessionName};`;
   return [
     "if ! command -v tmux >/dev/null 2>&1; then",
     "echo 'tmux is not installed on the remote host.' >&2;",
     "exit 127;",
     "fi;",
     `if ! tmux has-session -t ${sessionName} 2>/dev/null; then`,
-    `tmux new-session -d -s ${sessionName} -c ${directory};`,
+    createSessionCommand,
     "fi;",
     `tmux set-option -t ${sessionName} status off;`,
     `exec tmux attach-session -t ${sessionName}`,
@@ -72,6 +82,21 @@ function buildSshSpawnConfig(workspace: Workspace, session: SshSession): {
   env: NodeJS.ProcessEnv;
 } {
   const target = getSshConnectionTargetFromWorkspace(workspace);
+  const remoteCommand = buildSshRemoteShellCommand(buildAttachCommand(session));
+  return buildSshProcessConfig({
+    target,
+    remoteCommand,
+    extraArgs: ["-tt"],
+    passwordHandling: "environment",
+    baseEnv: buildSpawnEnv(),
+  });
+}
+
+function buildStandaloneSshSpawnConfig(target: SshConnectionTarget, session: SshServerSession): {
+  command: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+} {
   const remoteCommand = buildSshRemoteShellCommand(buildAttachCommand(session));
   return buildSshProcessConfig({
     target,
@@ -194,7 +219,10 @@ function extractClipboardSequences(buffer: string): ClipboardSequenceResult {
 export class SshTerminalBridge {
   private proc: ChildProcessWithoutNullStreams | null = null;
   private session: SshSession | null = null;
+  private standaloneSession: SshServerSession | null = null;
   private workspace: Workspace | null = null;
+  private standaloneExecutor: CommandExecutor | null = null;
+  private commandCwd = "/";
   private closing = false;
   private ready = false;
   private connectPromise: Promise<void> | null = null;
@@ -208,6 +236,7 @@ export class SshTerminalBridge {
   constructor(
     private readonly sessionId: string,
     private readonly options: SshTerminalBridgeOptions,
+    private readonly connectOptions: SshTerminalBridgeConnectOptions = {},
   ) {}
 
   async connect(): Promise<void> {
@@ -239,19 +268,38 @@ export class SshTerminalBridge {
     this.stderrBuffer = "";
 
     this.session = await sshSessionManager.getSession(this.sessionId);
-    if (!this.session) {
-      throw new Error(`SSH session not found: ${this.sessionId}`);
+    let spawnConfig: { command: string; args: string[]; env: NodeJS.ProcessEnv };
+    if (this.connectOptions.sessionKind === "standalone") {
+      const connection = await sshServerManager.getTerminalConnection(
+        this.sessionId,
+        this.connectOptions.credentialToken ?? "",
+      );
+      this.session = null;
+      this.workspace = null;
+      this.standaloneSession = connection.session;
+      this.standaloneExecutor = connection.executor;
+      this.commandCwd = "/";
+      await sshServerManager.markStatus(this.sessionId, "connecting");
+      spawnConfig = buildStandaloneSshSpawnConfig(connection.target, connection.session);
+    } else {
+      if (!this.session) {
+        throw new Error(`SSH session not found: ${this.sessionId}`);
+      }
+
+      this.workspace = await getWorkspace(this.session.config.workspaceId);
+      if (!this.workspace) {
+        throw new Error(`Workspace not found: ${this.session.config.workspaceId}`);
+      }
+
+      this.standaloneSession = null;
+      this.standaloneExecutor = null;
+      this.commandCwd = this.workspace.directory;
+
+      await sshSessionManager.ensureTmuxAvailable(this.workspace);
+      await sshSessionManager.markStatus(this.sessionId, "connecting");
+
+      spawnConfig = buildSshSpawnConfig(this.workspace, this.session);
     }
-
-    this.workspace = await getWorkspace(this.session.config.workspaceId);
-    if (!this.workspace) {
-      throw new Error(`Workspace not found: ${this.session.config.workspaceId}`);
-    }
-
-    await sshSessionManager.ensureTmuxAvailable(this.workspace);
-    await sshSessionManager.markStatus(this.sessionId, "connecting");
-
-    const spawnConfig = buildSshSpawnConfig(this.workspace, this.session);
     const proc = spawn(spawnConfig.command, spawnConfig.args, {
       env: spawnConfig.env,
       stdio: ["pipe", "pipe", "pipe"],
@@ -279,7 +327,7 @@ export class SshTerminalBridge {
 
           try {
             if (!skipStatusUpdate) {
-              await sshSessionManager.markStatus(this.sessionId, nextStatus, error);
+              await this.markStatus(nextStatus, error);
             }
           } catch (statusError) {
             log.error("Failed to update SSH session status after terminal close", {
@@ -312,7 +360,7 @@ export class SshTerminalBridge {
     try {
       await this.waitForRemoteSessionReady();
       this.ready = true;
-      await sshSessionManager.markStatus(this.sessionId, "connected");
+      await this.markStatus("connected");
     } catch (error) {
       const startupError = error instanceof Error ? error : new Error(String(error));
       this.ready = false;
@@ -320,7 +368,7 @@ export class SshTerminalBridge {
 
       if (!this.closing) {
         this.options.onError?.(startupError);
-        await sshSessionManager.markStatus(this.sessionId, "failed", startupError.message);
+        await this.markStatus("failed", startupError.message);
         this.skipCloseStatusUpdate = true;
       }
 
@@ -340,18 +388,18 @@ export class SshTerminalBridge {
   }
 
   async resize(cols: number, rows: number): Promise<void> {
-    if (!this.session || !this.workspace) {
+    if (!this.session && !this.standaloneSession) {
       throw new Error("SSH terminal is not connected");
     }
     await this.ensureReady();
     const normalizedCols = Math.max(2, Math.floor(cols));
     const normalizedRows = Math.max(1, Math.floor(rows));
-    const executor = await backendManager.getCommandExecutorAsync(this.workspace.id, this.workspace.directory);
+    const executor = await this.getCommandExecutor();
     const result = await executor.exec("bash", [
       "-lc",
-      buildResizeCommand(this.session.config.remoteSessionName, normalizedCols, normalizedRows),
+      buildResizeCommand(this.getRemoteSessionName(), normalizedCols, normalizedRows),
     ], {
-      cwd: this.workspace.directory,
+      cwd: this.commandCwd,
       timeout: 5_000,
     });
     if (!result.success) {
@@ -410,11 +458,11 @@ export class SshTerminalBridge {
   }
 
   private async waitForRemoteSessionReady(): Promise<void> {
-    if (!this.session || !this.workspace) {
+    if (!this.session && !this.standaloneSession) {
       throw new Error("SSH terminal is not connected");
     }
 
-    const executor = await backendManager.getCommandExecutorAsync(this.workspace.id, this.workspace.directory);
+    const executor = await this.getCommandExecutor();
     const deadline = Date.now() + (this.options.readyTimeoutMs ?? DEFAULT_TMUX_READY_TIMEOUT_MS);
     while (Date.now() < deadline) {
       if (!this.proc) {
@@ -428,10 +476,10 @@ export class SshTerminalBridge {
         "display-message",
         "-p",
         "-t",
-        this.session.config.remoteSessionName,
+        this.getRemoteSessionName(),
         "#{session_attached}",
       ], {
-        cwd: this.workspace.directory,
+        cwd: this.commandCwd,
         timeout: 1_000,
       });
       if (result.success && Number.parseInt(result.stdout.trim(), 10) > 0) {
@@ -447,7 +495,7 @@ export class SshTerminalBridge {
       await Bun.sleep(TMUX_READY_POLL_INTERVAL_MS);
     }
 
-    throw new Error(`Timed out waiting for tmux session ${this.session.config.remoteSessionName} to become ready`);
+    throw new Error(`Timed out waiting for tmux session ${this.getRemoteSessionName()} to become ready`);
   }
 
   private async waitForClose(): Promise<void> {
@@ -471,5 +519,39 @@ export class SshTerminalBridge {
     await this.waitForClose();
     this.connectPromise = null;
     log.debug("Disposed SSH terminal bridge", { sessionId: this.sessionId });
+  }
+
+  private async markStatus(status: "connecting" | "connected" | "disconnected" | "failed", error?: string): Promise<void> {
+    if (this.connectOptions.sessionKind === "standalone") {
+      await sshServerManager.markStatus(this.sessionId, status, error);
+      return;
+    }
+    await sshSessionManager.markStatus(this.sessionId, status, error);
+  }
+
+  private async getCommandExecutor(): Promise<CommandExecutor> {
+    if (this.connectOptions.sessionKind === "standalone") {
+      if (!this.standaloneExecutor) {
+        throw new Error("SSH terminal is not connected");
+      }
+      return this.standaloneExecutor;
+    }
+    if (!this.workspace) {
+      throw new Error("SSH terminal is not connected");
+    }
+    return await backendManager.getCommandExecutorAsync(this.workspace.id, this.workspace.directory);
+  }
+
+  private getRemoteSessionName(): string {
+    if (this.connectOptions.sessionKind === "standalone") {
+      if (!this.standaloneSession) {
+        throw new Error("SSH terminal is not connected");
+      }
+      return this.standaloneSession.config.remoteSessionName;
+    }
+    if (!this.session) {
+      throw new Error("SSH terminal is not connected");
+    }
+    return this.session.config.remoteSessionName;
   }
 }

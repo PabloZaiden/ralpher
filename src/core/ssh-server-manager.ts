@@ -8,10 +8,12 @@ import type {
   DeleteSshServerSessionRequest,
   SshServer,
   SshServerConfig,
+  SshSessionStatus,
   SshServerSession,
   UpdateSshServerRequest,
   UpdateSshSessionRequest,
 } from "../types";
+import type { CommandExecutor } from "./command-executor";
 import {
   countSshServerSessionsByServerId,
   deleteSshServer,
@@ -29,15 +31,21 @@ import { sshServerKeyManager } from "./ssh-server-key-manager";
 import { sshCredentialManager } from "./ssh-credential-manager";
 import { createLogger } from "./logger";
 import { CommandExecutorImpl } from "./remote-command-executor";
+import { sshSessionEventEmitter } from "./event-emitter";
+import type { SshConnectionTarget } from "./ssh-connection-target";
 import { getSshConnectionTargetFromServer } from "./ssh-connection-target";
 
 const log = createLogger("core:ssh-server-manager");
+
+type SshServerExecutorFactory = (server: SshServerConfig, password: string) => CommandExecutor;
 
 function buildRemoteSessionName(id: string): string {
   return `ralpher-${id.replace(/-/g, "").slice(0, 24)}`;
 }
 
 export class SshServerManager {
+  private testExecutorFactory: SshServerExecutorFactory | null = null;
+
   async listServers(): Promise<SshServer[]> {
     return await listSshServers();
   }
@@ -151,6 +159,53 @@ export class SshServerManager {
     return await deleteSshServerSession(id);
   }
 
+  async getTerminalConnection(
+    sessionId: string,
+    credentialToken: string,
+  ): Promise<{ session: SshServerSession; server: SshServerConfig; target: SshConnectionTarget; executor: CommandExecutor }> {
+    const session = await this.requireSession(sessionId);
+    const server = await this.requireServerConfig(session.config.sshServerId);
+    const trimmedToken = credentialToken.trim();
+    if (!trimmedToken) {
+      throw new Error("SSH credential token is required for standalone terminal connections");
+    }
+    const password = sshCredentialManager.consumeToken(server.id, trimmedToken);
+    const target = getSshConnectionTargetFromServer(server, password);
+    return {
+      session,
+      server,
+      target,
+      executor: this.buildExecutor(server, password),
+    };
+  }
+
+  async markStatus(id: string, status: SshSessionStatus, error?: string): Promise<SshServerSession> {
+    const session = await this.requireSession(id);
+    const updatedSession: SshServerSession = {
+      config: {
+        ...session.config,
+        updatedAt: new Date().toISOString(),
+      },
+      state: {
+        ...session.state,
+        status,
+        error: error?.trim() || undefined,
+        lastConnectedAt: status === "connected"
+          ? new Date().toISOString()
+          : session.state.lastConnectedAt,
+      },
+    };
+    await saveSshServerSession(updatedSession);
+    sshSessionEventEmitter.emit({
+      type: "ssh_session.status",
+      sshSessionId: id,
+      status,
+      error: updatedSession.state.error,
+      timestamp: updatedSession.config.updatedAt,
+    });
+    return updatedSession;
+  }
+
   private async ensureTmuxAvailable(server: SshServerConfig, password: string): Promise<void> {
     const executor = this.buildExecutor(server, password);
     const result = await executor.exec("tmux", ["-V"], { cwd: "/" });
@@ -165,7 +220,14 @@ export class SshServerManager {
     });
   }
 
-  private buildExecutor(server: SshServerConfig, password: string): CommandExecutorImpl {
+  setExecutorFactoryForTesting(factory: SshServerExecutorFactory | null): void {
+    this.testExecutorFactory = factory;
+  }
+
+  private buildExecutor(server: SshServerConfig, password: string): CommandExecutor {
+    if (this.testExecutorFactory) {
+      return this.testExecutorFactory(server, password);
+    }
     const sshTarget = getSshConnectionTargetFromServer(server, password);
     return new CommandExecutorImpl({
       provider: "ssh",

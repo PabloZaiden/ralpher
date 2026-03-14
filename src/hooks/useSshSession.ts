@@ -3,24 +3,59 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { SshSession, SshSessionEvent, UpdateSshSessionRequest } from "../types";
+import type {
+  SshServerSession,
+  SshSession,
+  SshSessionEvent,
+  UpdateSshSessionRequest,
+} from "../types";
 import { useWebSocket } from "./useWebSocket";
 import { appFetch } from "../lib/public-path";
+import { deleteStandaloneSshSessionApi } from "./sshServerActions";
+
+export type SshSessionKind = "workspace" | "standalone";
+export type AnySshSession = SshSession | SshServerSession;
 
 export interface UseSshSessionResult {
-  session: SshSession | null;
+  session: AnySshSession | null;
+  sessionKind: SshSessionKind | null;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  updateSession: (request: UpdateSshSessionRequest) => Promise<SshSession | null>;
-  deleteSession: () => Promise<boolean>;
+  updateSession: (request: UpdateSshSessionRequest) => Promise<AnySshSession | null>;
+  deleteSession: (options?: { password?: string }) => Promise<boolean>;
 }
 
 export function useSshSession(sessionId: string): UseSshSessionResult {
-  const [session, setSession] = useState<SshSession | null>(null);
+  const [session, setSession] = useState<AnySshSession | null>(null);
+  const [sessionKind, setSessionKind] = useState<SshSessionKind | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const initialLoadDoneRef = useRef(false);
+
+  const fetchSession = useCallback(async (): Promise<{ session: AnySshSession; kind: SshSessionKind }> => {
+    const workspaceResponse = await appFetch(`/api/ssh-sessions/${sessionId}`);
+    if (workspaceResponse.ok) {
+      return {
+        session: await workspaceResponse.json() as SshSession,
+        kind: "workspace",
+      };
+    }
+    if (workspaceResponse.status !== 404) {
+      const data = await workspaceResponse.json() as { message?: string };
+      throw new Error(data.message || "Failed to fetch SSH session");
+    }
+
+    const standaloneResponse = await appFetch(`/api/ssh-server-sessions/${sessionId}`);
+    if (!standaloneResponse.ok) {
+      const data = await standaloneResponse.json() as { message?: string };
+      throw new Error(data.message || "Failed to fetch SSH session");
+    }
+    return {
+      session: await standaloneResponse.json() as SshServerSession,
+      kind: "standalone",
+    };
+  }, [sessionId]);
 
   const refreshInternal = useCallback(async (showLoading: boolean) => {
     try {
@@ -28,20 +63,16 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
         setLoading(true);
       }
       setError(null);
-      const response = await appFetch(`/api/ssh-sessions/${sessionId}`);
-      if (!response.ok) {
-        const data = await response.json() as { message?: string };
-        throw new Error(data.message || "Failed to fetch SSH session");
-      }
-      const data = await response.json() as SshSession;
-      setSession(data);
+      const next = await fetchSession();
+      setSession(next.session);
+      setSessionKind(next.kind);
       initialLoadDoneRef.current = true;
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [fetchSession]);
 
   const refresh = useCallback(async () => {
     await refreshInternal(!initialLoadDoneRef.current);
@@ -62,14 +93,20 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
   }, [refreshInternal, sessionId]);
 
   useWebSocket<SshSessionEvent>({
-    url: `/api/ws?sshSessionId=${encodeURIComponent(sessionId)}`,
+    url: sessionKind === "standalone"
+      ? `/api/ws?sshServerSessionId=${encodeURIComponent(sessionId)}`
+      : `/api/ws?sshSessionId=${encodeURIComponent(sessionId)}`,
+    autoConnect: sessionKind !== null,
     onEvent: handleEvent,
   });
 
-  const updateSession = useCallback(async (request: UpdateSshSessionRequest): Promise<SshSession | null> => {
+  const updateSession = useCallback(async (request: UpdateSshSessionRequest): Promise<AnySshSession | null> => {
     try {
       setError(null);
-      const response = await appFetch(`/api/ssh-sessions/${sessionId}`, {
+      const endpoint = sessionKind === "standalone"
+        ? `/api/ssh-server-sessions/${sessionId}`
+        : `/api/ssh-sessions/${sessionId}`;
+      const response = await appFetch(endpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
@@ -78,18 +115,30 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
         const data = await response.json() as { message?: string };
         throw new Error(data.message || "Failed to update SSH session");
       }
-      const updated = await response.json() as SshSession;
+      const updated = await response.json() as AnySshSession;
       setSession(updated);
       return updated;
     } catch (err) {
       setError(String(err));
       return null;
     }
-  }, [sessionId]);
+  }, [sessionId, sessionKind]);
 
-  const deleteSession = useCallback(async (): Promise<boolean> => {
+  const deleteSession = useCallback(async (options?: { password?: string }): Promise<boolean> => {
     try {
       setError(null);
+      if (sessionKind === "standalone") {
+        if (!session || !("sshServerId" in session.config)) {
+          throw new Error("Standalone SSH session details are not loaded");
+        }
+        await deleteStandaloneSshSessionApi({
+          sessionId,
+          serverId: session.config.sshServerId,
+          password: options?.password,
+        });
+        setSession(null);
+        return true;
+      }
       const response = await appFetch(`/api/ssh-sessions/${sessionId}`, {
         method: "DELETE",
       });
@@ -103,11 +152,12 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
       setError(String(err));
       return false;
     }
-  }, [sessionId]);
+  }, [session, sessionId, sessionKind]);
 
   useEffect(() => {
     initialLoadDoneRef.current = false;
     setSession(null);
+    setSessionKind(null);
     setLoading(true);
     setError(null);
   }, [sessionId]);
@@ -118,6 +168,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
 
   return {
     session,
+    sessionKind,
     loading,
     error,
     refresh,

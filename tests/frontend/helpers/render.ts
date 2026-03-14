@@ -51,7 +51,9 @@ export function renderWithUser(
     window.location.hash = route;
   }
 
-  const user = userEvent.setup();
+  const user = userEvent.setup({
+    document: globalThis.document,
+  });
   const result = render(ui, { wrapper: AllProviders, ...renderOptions });
 
   return {
