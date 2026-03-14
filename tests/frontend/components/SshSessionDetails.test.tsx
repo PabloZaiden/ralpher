@@ -1449,9 +1449,19 @@ describe("SshSessionDetails", () => {
       expect(getByText("SSH password required")).toBeTruthy();
     });
 
+    const passwordInput = getByLabelText("SSH password") as HTMLInputElement;
+    expect(passwordInput.autocomplete).toBe("off");
+    expect(passwordInput.getAttribute("autocapitalize")).toBe("off");
+    expect(passwordInput.getAttribute("autocorrect")).toBe("off");
+    expect(passwordInput.getAttribute("data-1p-ignore")).toBe("true");
+    expect(passwordInput.getAttribute("data-bwignore")).toBe("true");
+    expect(passwordInput.getAttribute("data-form-type")).toBe("other");
+    expect(passwordInput.getAttribute("data-lpignore")).toBe("true");
+    expect(passwordInput.getAttribute("spellcheck")).toBe("false");
+
     expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(0);
 
-    await user.type(getByLabelText("SSH password"), "secret");
+    await user.type(passwordInput, "secret");
     await user.click(getByText("Continue"));
 
     await waitFor(() => {

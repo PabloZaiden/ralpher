@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FitAddon, init, Terminal } from "ghostty-web";
-import { Badge, Button, Card, ConfirmModal, Modal } from "./common";
+import { Badge, Button, Card, ConfirmModal, Modal, PASSWORD_INPUT_PROPS } from "./common";
 import { getSshServerApi, useSshSession, useToast } from "../hooks";
 import {
   defaultTerminalModifiers,
@@ -1611,6 +1611,7 @@ export function SshSessionDetails({
               value={standalonePassword}
               onChange={(event) => setStandalonePassword(event.target.value)}
               className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              {...PASSWORD_INPUT_PROPS}
             />
           </div>
         </div>
