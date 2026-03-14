@@ -140,7 +140,13 @@ This downloads the appropriate binary for your platform (Linux/macOS, x64/arm64)
 - **Git Integration** - Automatic branch per loop, commit per iteration, merge on accept
 - **Real-time Updates** - Live log streaming via WebSocket
 - **Model Selection** - Choose AI models from available providers
+- **Plan Mode** - Review, refine, and accept plans before autonomous execution starts
+- **Chat Mode** - Run interactive single-turn chats on the same workspace and git infrastructure
 - **Review Workflow** - Address reviewer comments iteratively on pushed or merged loops
+- **SSH Sessions** - Open persistent tmux-backed terminal sessions for SSH workspaces
+- **Port Forwarding** - Expose remote loop services through browser-safe local proxy routes
+- **Workspace-Scoped Settings** - Configure provider and transport per workspace
+- **AGENTS.md Optimization** - Preview and apply Ralpher-specific AGENTS.md guidance
 
 ---
 
@@ -170,8 +176,8 @@ The web UI will be available at `http://localhost:3000` (configurable via `RALPH
 1. Click **"New Loop"** in the dashboard
 2. Select a workspace (or create one with the project directory path)
 3. Write your task prompt (the PRD/requirements)
-4. Select a model and configure max iterations
-5. Click **"Create"** - the loop starts automatically and its name is auto-generated from the prompt
+4. Generate or enter a loop name, then select a model and configure the loop settings
+5. Click **"Create"** - the loop starts automatically unless you save it as a draft first
 
 ---
 
@@ -261,6 +267,24 @@ While a loop is running:
 - Use the **"Prompt"** tab to set a "pending prompt" for the next iteration
 - The current iteration continues with its original prompt
 - The next iteration will use your updated prompt
+
+</details>
+
+<details>
+<summary><strong>Using Plan Mode and Chat Mode</strong></summary>
+
+- **Plan mode** lets you review the generated `.planning/plan.md` before the loop starts editing code
+- Plans can be refined with feedback, accepted to start the loop, or handed off directly to an SSH session
+- **Chat mode** creates an interactive loop that runs one turn at a time on demand instead of cycling autonomously
+
+</details>
+
+<details>
+<summary><strong>SSH Sessions and Port Forwarding</strong></summary>
+
+- SSH workspaces can open persistent tmux-backed terminal sessions from the loop details view
+- Loop-linked port forwards expose remote services through browser-safe proxy URLs such as `/loop/<loopId>/port/<forwardId>/`
+- Port forwards support HTTP and WebSocket traffic and are tracked per loop
 
 </details>
 
@@ -364,7 +388,7 @@ To configure server settings for a workspace:
 
 1. Click the **gear icon** next to a workspace name in the dashboard header
 2. Select provider (**OpenCode** or **Copilot**) and transport (**stdio** or **ssh**)
-3. For `ssh`, enter hostname, port, and optional username/password
+3. For `ssh`, enter hostname, port, and optional username/password or identity file
 4. Click **Test Connection** to verify the settings
 5. Click **Save Changes** to apply
 
@@ -388,6 +412,8 @@ services:
 volumes:
   ralpher-data:
 ```
+
+The container image listens on port `8080` by default because it runs as a non-root user. Local/native runs still default to `3000` unless you override `RALPHER_PORT`.
 
 ---
 
