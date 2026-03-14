@@ -2,6 +2,14 @@
  * Shared helpers for persistent SSH sessions backed by dtach.
  */
 
+const DTACH_INSTALL_HINT = [
+  "dtach is not available on the remote host.",
+  "Ralpher switched this session to Direct SSH.",
+  "Install dtach on Linux with your package manager",
+  "(for example: sudo apt install dtach, sudo dnf install dtach, or sudo pacman -S dtach)",
+  "or on macOS with brew install dtach.",
+].join(" ");
+
 export interface PersistentSshSessionConfigLike {
   id: string;
   remoteSessionName: string;
@@ -231,4 +239,8 @@ export function buildPersistentSessionDeleteCommand(session: {
 
 export function buildPersistentSessionBackendProbeCommand(): string {
   return "command -v dtach >/dev/null 2>&1 && dtach --help 2>&1 | head -n 1";
+}
+
+export function buildPersistentSessionBackendInstallHint(): string {
+  return DTACH_INSTALL_HINT;
 }

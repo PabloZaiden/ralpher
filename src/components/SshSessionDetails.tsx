@@ -14,7 +14,12 @@ import {
   type TerminalModifierState,
   type TerminalSpecialKey,
 } from "../utils/terminal-keys";
-import { getSshConnectionModeLabel, writeTextToClipboard } from "../utils";
+import {
+  getEffectiveSshConnectionMode,
+  getSshConnectionModeLabel,
+  isPersistentSshSession,
+  writeTextToClipboard,
+} from "../utils";
 import { appWebSocketUrl } from "../lib/public-path";
 import { getStoredSshCredentialToken, storeSshServerPassword } from "../lib/ssh-browser-credentials";
 import type { SshServer } from "../types";
@@ -482,7 +487,8 @@ export function SshSessionDetails({
   onBack,
   copyTextToClipboard = writeTextToClipboard,
 }: SshSessionDetailsProps) {
-  const { error: showErrorToast } = useToast();
+  const toast = useToast();
+  const { error: showErrorToast, warning: showWarningToast } = toast;
   const { session, sessionKind, loading, error, deleteSession, refresh } = useSshSession(sshSessionId);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -496,6 +502,7 @@ export function SshSessionDetails({
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const terminalConnectInFlightRef = useRef(false);
   const standaloneTokenRecoveryAttemptedRef = useRef(false);
+  const lastShownNoticeRef = useRef<string | null>(null);
   const [socketStatus, setSocketStatus] = useState<"connecting" | "open" | "closed">("connecting");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -547,19 +554,30 @@ export function SshSessionDetails({
       terminalModifiers.shift ? "Shift" : null,
     ].filter(Boolean).join(" + ");
   }, [terminalModifiers]);
+  const effectiveConnectionMode = useMemo(() => {
+    return session ? getEffectiveSshConnectionMode(session) : null;
+  }, [session]);
+  const hasPersistentSession = useMemo(() => {
+    return session ? isPersistentSshSession(session) : false;
+  }, [session]);
   const sessionInfoSummary = useMemo(() => {
     if (!session) {
       return null;
     }
     return (
       <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden text-xs text-gray-500 dark:text-gray-400">
-        <Badge variant={session.config.connectionMode === "direct" ? "info" : "default"} className="shrink-0">
-          {getSshConnectionModeLabel(session.config.connectionMode)}
+        <Badge variant={effectiveConnectionMode === "direct" ? "info" : "default"} className="shrink-0">
+          {getSshConnectionModeLabel(effectiveConnectionMode ?? session.config.connectionMode)}
         </Badge>
-        {session.config.connectionMode !== "direct" ? (
+        {hasPersistentSession ? (
           <span className="min-w-0 truncate font-mono">{session.config.remoteSessionName}</span>
         ) : (
           <span className="min-w-0 truncate">fresh shell on reconnect</span>
+        )}
+        {session.state.notice && (
+          <Badge variant="warning" className="shrink-0">
+            fallback
+          </Badge>
         )}
         {session.state.error && (
           <Badge variant="error" className="shrink-0">
@@ -586,11 +604,24 @@ export function SshSessionDetails({
         </span>
       </div>
     );
-  }, [activeModifierLabel, session?.config.connectionMode, terminalModifiers]);
+  }, [activeModifierLabel, terminalModifiers]);
 
   useEffect(() => {
     terminalModifiersRef.current = terminalModifiers;
   }, [terminalModifiers]);
+
+  useEffect(() => {
+    const notice = session?.state.notice ?? null;
+    if (!notice) {
+      lastShownNoticeRef.current = null;
+      return;
+    }
+    if (notice === lastShownNoticeRef.current) {
+      return;
+    }
+    lastShownNoticeRef.current = notice;
+    showWarningToast(notice, { duration: 12_000 });
+  }, [session?.state.notice, showWarningToast]);
 
   useEffect(() => {
     standaloneCredentialTokenRef.current = standaloneCredentialToken;
@@ -1129,7 +1160,7 @@ export function SshSessionDetails({
   async function handleDelete() {
     const success = await deleteSession();
     if (!success) {
-      if (session && isStandaloneSession(session) && session.config.connectionMode !== "direct") {
+      if (session && isStandaloneSession(session) && isPersistentSshSession(session)) {
         setPendingStandaloneAction("delete");
         setShowPasswordPrompt(true);
       }
@@ -1203,12 +1234,17 @@ export function SshSessionDetails({
             <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
               {session.config.name}
             </h1>
-            <Badge variant={session.config.connectionMode === "direct" ? "info" : "default"}>
-              {getSshConnectionModeLabel(session.config.connectionMode)}
+            <Badge variant={effectiveConnectionMode === "direct" ? "info" : "default"}>
+              {getSshConnectionModeLabel(effectiveConnectionMode ?? session.config.connectionMode)}
             </Badge>
             <Badge variant={getStatusVariant(session.state.status)}>
               {session.state.status}
             </Badge>
+            {session.state.notice && (
+              <Badge variant="warning">
+                fallback
+              </Badge>
+            )}
             <Badge variant={socketStatus === "open" ? "success" : socketStatus === "connecting" ? "info" : "warning"}>
               {socketStatus}
             </Badge>
@@ -1232,7 +1268,7 @@ export function SshSessionDetails({
             <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">Mode</dt>
               <dd className="text-gray-900 dark:text-gray-100">
-                {getSshConnectionModeLabel(session.config.connectionMode)}
+                {getSshConnectionModeLabel(effectiveConnectionMode ?? session.config.connectionMode)}
               </dd>
             </div>
             <div className="min-w-0">
@@ -1251,7 +1287,7 @@ export function SshSessionDetails({
                 {isStandaloneSession(session) ? standaloneServerTarget : session.config.directory}
               </dd>
             </div>
-            {session.config.connectionMode !== "direct" ? (
+            {hasPersistentSession ? (
               <div className="min-w-0">
                 <dt className="text-gray-500 dark:text-gray-400">Persistent session ID</dt>
                 <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.remoteSessionName}</dd>
@@ -1266,6 +1302,12 @@ export function SshSessionDetails({
               <dt className="text-gray-500 dark:text-gray-400">Last connected</dt>
               <dd className="text-gray-900 dark:text-gray-100">{session.state.lastConnectedAt ?? "Never"}</dd>
             </div>
+            {session.state.notice && (
+              <div className="min-w-0 sm:col-span-2">
+                <dt className="text-gray-500 dark:text-gray-400">Notice</dt>
+                <dd className="break-words text-amber-700 dark:text-amber-300">{session.state.notice}</dd>
+              </div>
+            )}
             {session.state.error && (
               <div className="min-w-0 sm:col-span-2">
                 <dt className="text-gray-500 dark:text-gray-400">Last error</dt>
@@ -1514,7 +1556,7 @@ export function SshSessionDetails({
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={() => void handleDelete()}
         title="Delete SSH session?"
-        message={session.config.connectionMode !== "direct"
+        message={hasPersistentSession
           ? "This removes the Ralpher session metadata and attempts to stop the remote persistent session."
           : "This removes the saved Ralpher session metadata. Direct SSH mode does not keep a remote persistent session."}
         confirmLabel="Delete"
@@ -1527,7 +1569,7 @@ export function SshSessionDetails({
           setPendingStandaloneAction(null);
         }}
         title="SSH password required"
-        description={session.config.connectionMode !== "direct"
+        description={hasPersistentSession
           ? "Standalone persistent SSH sessions need the password from this browser before they can connect or be deleted."
           : "Standalone direct SSH sessions need the password from this browser before they can connect."}
         size="sm"
@@ -1551,7 +1593,9 @@ export function SshSessionDetails({
         <div className="space-y-3">
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {pendingStandaloneAction === "delete"
-              ? "Enter the SSH password to delete the remote persistent session and local metadata."
+              ? hasPersistentSession
+                ? "Enter the SSH password to delete the remote persistent session and local metadata."
+                : "Enter the SSH password to delete the standalone session metadata."
               : "Enter the SSH password to open the standalone terminal session."}
           </p>
           <div>

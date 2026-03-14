@@ -4,7 +4,7 @@
 
 import { z } from "zod";
 
-export const SshConnectionModeSchema = z.enum(["tmux", "direct"]);
+export const SshConnectionModeSchema = z.enum(["dtach", "direct"]);
 
 export const CreateSshSessionRequestSchema = z.object({
   workspaceId: z.string().min(1, "workspaceId is required"),

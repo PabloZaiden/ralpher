@@ -102,19 +102,18 @@ describe("SshServerManager", () => {
     expect(await sshServerManager.getServer(server.config.id)).toBeNull();
   });
 
-  test("creates and deletes standalone SSH sessions with one-time credential tokens", async () => {
+  test("creates standalone SSH sessions without requiring a credential token up front", async () => {
     const server = await sshServerManager.createServer({
       name: "Shared host",
       address: "ssh.example.com",
       username: "deploy",
     });
 
-    const createToken = await issueCredentialToken(server.config.id);
     const session = await sshServerManager.createSession(server.config.id, {
       name: "Deploy shell",
-      credentialToken: createToken,
     });
     expect(session.config.name).toBe("Deploy shell");
+    expect(session.config.connectionMode).toBe("dtach");
 
     const deleteToken = await issueCredentialToken(server.config.id);
     expect(await sshServerManager.deleteSession(session.config.id, {
@@ -123,7 +122,7 @@ describe("SshServerManager", () => {
     expect(executor.deleteCommands.some((command) => command.includes(session.config.remoteSessionName))).toBe(true);
   });
 
-  test("rejects session creation when dtach is unavailable", async () => {
+  test("still creates standalone sessions when dtach is unavailable at creation time", async () => {
     sshServerManager.setExecutorFactoryForTesting(() => new MissingDtachExecutor());
     const server = await sshServerManager.createServer({
       name: "Shared host",
@@ -131,9 +130,7 @@ describe("SshServerManager", () => {
       username: "deploy",
     });
 
-    const token = await issueCredentialToken(server.config.id);
-    await expect(sshServerManager.createSession(server.config.id, {
-      credentialToken: token,
-    })).rejects.toThrow("dtach is not available");
+    const session = await sshServerManager.createSession(server.config.id, {});
+    expect(session.config.connectionMode).toBe("dtach");
   });
 });

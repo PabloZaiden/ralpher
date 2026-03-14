@@ -246,7 +246,7 @@ describe("SSH sessions API integration", () => {
     expect(data.message).toContain("ssh transport");
   });
 
-  test("treats missing dtach as invalid session configuration", async () => {
+  test("creates SSH sessions even when dtach is unavailable at creation time", async () => {
     backendManager.setExecutorFactoryForTesting(() => new MissingDtachExecutor());
     const workspace = await createWorkspace({ transport: "ssh" });
 
@@ -259,10 +259,17 @@ describe("SSH sessions API integration", () => {
       }),
     });
 
-    expect(response.status).toBe(400);
-    const data = await response.json() as { error: string; message: string };
-    expect(data.error).toBe("invalid_session_configuration");
-    expect(data.message).toContain("dtach is not available");
+    expect(response.status).toBe(201);
+    const session = await response.json() as {
+      config: { workspaceId: string; name: string; connectionMode: string };
+      state: { status: string; runtimeConnectionMode?: string; notice?: string };
+    };
+    expect(session.config.workspaceId).toBe(workspace.id);
+    expect(session.config.name).toBe("Needs Persistent SSH");
+    expect(session.config.connectionMode).toBe("dtach");
+    expect(session.state.status).toBe("ready");
+    expect(session.state.runtimeConnectionMode).toBeUndefined();
+    expect(session.state.notice).toBeUndefined();
   });
 
   test("treats persistent session cleanup failures as server errors", async () => {

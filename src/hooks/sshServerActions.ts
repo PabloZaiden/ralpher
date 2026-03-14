@@ -92,17 +92,14 @@ export async function deleteSshServerApi(id: string): Promise<boolean> {
 export async function createStandaloneSshSessionApi(options: {
   serverId: string;
   name?: string;
-  password?: string;
-  connectionMode?: "tmux" | "direct";
+  connectionMode?: "dtach" | "direct";
 }): Promise<SshServerSession> {
-  const credentialToken = await resolveCredentialToken(options.serverId, options.password);
   return await apiCall<SshServerSession>(
     `/api/ssh-servers/${options.serverId}/sessions`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          credentialToken,
           ...(options.name?.trim() ? { name: options.name.trim() } : {}),
           ...(options.connectionMode ? { connectionMode: options.connectionMode } : {}),
         }),

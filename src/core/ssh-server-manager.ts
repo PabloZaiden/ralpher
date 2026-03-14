@@ -29,19 +29,14 @@ import {
   saveSshServerSession,
 } from "../persistence/ssh-servers";
 import { buildDefaultSshSessionName } from "../utils";
+import { isPersistentSshSession } from "../utils";
 import { sshServerKeyManager } from "./ssh-server-key-manager";
 import { sshCredentialManager } from "./ssh-credential-manager";
-import { createLogger } from "./logger";
 import { CommandExecutorImpl } from "./remote-command-executor";
 import { sshSessionEventEmitter } from "./event-emitter";
 import type { SshConnectionTarget } from "./ssh-connection-target";
 import { getSshConnectionTargetFromServer } from "./ssh-connection-target";
-import {
-  buildPersistentSessionBackendProbeCommand,
-  buildPersistentSessionDeleteCommand,
-} from "./ssh-persistent-session";
-
-const log = createLogger("core:ssh-server-manager");
+import { buildPersistentSessionDeleteCommand } from "./ssh-persistent-session";
 
 type SshServerExecutorFactory = (server: SshServerConfig, password: string) => CommandExecutor;
 
@@ -112,10 +107,6 @@ export class SshServerManager {
   async createSession(serverId: string, request: CreateSshServerSessionRequest): Promise<SshServerSession> {
     const server = await this.requireServerConfig(serverId);
     const connectionMode = this.getConnectionMode(request);
-    const password = sshCredentialManager.consumeToken(serverId, request.credentialToken);
-    if (connectionMode !== "direct") {
-      await this.ensurePersistentSessionBackendAvailable(server, password);
-    }
 
     const now = new Date().toISOString();
     const sessionCount = await countSshServerSessionsByServerId(serverId);
@@ -135,6 +126,13 @@ export class SshServerManager {
       },
     };
     await saveSshServerSession(session);
+    sshSessionEventEmitter.emit({
+      type: "ssh_session.status",
+      sshSessionId: session.config.id,
+      status: session.state.status,
+      error: session.state.error,
+      timestamp: session.config.updatedAt,
+    });
     return session;
   }
 
@@ -154,7 +152,7 @@ export class SshServerManager {
 
   async deleteSession(id: string, request: DeleteSshServerSessionRequest): Promise<boolean> {
     const session = await this.requireSession(id);
-    if (session.config.connectionMode !== "direct") {
+    if (isPersistentSshSession(session)) {
       const server = await this.requireServerConfig(session.config.sshServerId);
       const credentialToken = request.credentialToken?.trim();
       if (!credentialToken) {
@@ -219,18 +217,31 @@ export class SshServerManager {
     return updatedSession;
   }
 
-  private async ensurePersistentSessionBackendAvailable(server: SshServerConfig, password: string): Promise<void> {
-    const executor = this.buildExecutor(server, password);
-    const result = await executor.exec("bash", ["-lc", buildPersistentSessionBackendProbeCommand()], { cwd: "/" });
-    if (!result.success) {
-      const detail = result.stderr.trim() || result.stdout.trim();
-      throw new Error(detail ? `dtach is not available on the remote host: ${detail}` : "dtach is not available");
-    }
-    log.debug("Validated standalone persistent SSH backend availability", {
-      serverId: server.id,
-      address: server.address,
-      detail: result.stdout.trim(),
+  async updateRuntimeConnectionState(
+    id: string,
+    options: { runtimeConnectionMode?: SshConnectionMode; notice?: string },
+  ): Promise<SshServerSession> {
+    const session = await this.requireSession(id);
+    const updatedSession: SshServerSession = {
+      config: {
+        ...session.config,
+        updatedAt: new Date().toISOString(),
+      },
+      state: {
+        ...session.state,
+        runtimeConnectionMode: options.runtimeConnectionMode,
+        notice: options.notice?.trim() || undefined,
+      },
+    };
+    await saveSshServerSession(updatedSession);
+    sshSessionEventEmitter.emit({
+      type: "ssh_session.status",
+      sshSessionId: updatedSession.config.id,
+      status: updatedSession.state.status,
+      error: updatedSession.state.error,
+      timestamp: updatedSession.config.updatedAt,
     });
+    return updatedSession;
   }
 
   setExecutorFactoryForTesting(factory: SshServerExecutorFactory | null): void {

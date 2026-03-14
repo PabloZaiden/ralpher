@@ -25,4 +25,9 @@ export { buildDefaultSshSessionName, buildLoopSshSessionName } from "./ssh-sessi
 
 export { writeTextToClipboard } from "./clipboard";
 
-export { getSshConnectionModeLabel } from "./ssh-connection-mode";
+export {
+  getEffectiveSshConnectionMode,
+  getSshConnectionModeLabel,
+  isPersistentSshConnectionMode,
+  isPersistentSshSession,
+} from "./ssh-connection-mode";

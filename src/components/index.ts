@@ -13,5 +13,4 @@ export { SshSessionDetails } from "./SshSessionDetails";
 export { LogViewer } from "./LogViewer";
 export { CreateLoopForm } from "./CreateLoopForm";
 export { LoopActionBar } from "./LoopActionBar";
-export { CreateSshSessionModal } from "./CreateSshSessionModal";
 export { SshSessionSection } from "./SshSessionSection";

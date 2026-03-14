@@ -40,7 +40,7 @@ export const SshCredentialTokenSchema = RequiredTrimmedStringSchema;
 
 export const CreateSshServerSessionRequestSchema = z.object({
   name: z.string().trim().optional(),
-  credentialToken: SshCredentialTokenSchema,
+  credentialToken: SshCredentialTokenSchema.optional(),
   connectionMode: SshConnectionModeSchema.optional(),
 });
 

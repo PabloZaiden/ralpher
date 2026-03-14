@@ -9,6 +9,8 @@ import { getWorkspace } from "../persistence/workspaces";
 import { buildSshRemoteShellCommand } from "./remote-command-executor";
 import {
   buildPersistentSessionAttachCommand,
+  buildPersistentSessionBackendInstallHint,
+  buildPersistentSessionBackendProbeCommand,
   buildPersistentSessionReadyCommand,
   buildPersistentSessionResizeCommand,
 } from "./ssh-persistent-session";
@@ -21,6 +23,7 @@ import {
   type SshConnectionTarget,
   getSshConnectionTargetFromWorkspace,
 } from "./ssh-connection-target";
+import { getEffectiveSshConnectionMode } from "../utils";
 
 const log = createLogger("core:ssh-terminal-bridge");
 const SESSION_READY_POLL_INTERVAL_MS = 100;
@@ -83,9 +86,12 @@ function buildDirectShellCommand(session: { config: { id: string; directory?: st
 }
 
 function buildSessionStartupCommand(
-  session: { config: { id: string; remoteSessionName: string; directory?: string; connectionMode: SshConnectionMode } },
+  session: {
+    config: { id: string; remoteSessionName: string; directory?: string; connectionMode: SshConnectionMode };
+    state?: { runtimeConnectionMode?: SshConnectionMode };
+  },
 ): string {
-  return session.config.connectionMode === "direct"
+  return getEffectiveSshConnectionMode(session) === "direct"
     ? buildDirectShellCommand(session)
     : buildPersistentSessionAttachCommand(session);
 }
@@ -302,11 +308,11 @@ export class SshTerminalBridge {
       );
       this.session = null;
       this.workspace = null;
-      this.standaloneSession = connection.session;
+      this.standaloneSession = await this.resolveStandaloneSessionMode(connection.session, connection.executor);
       this.standaloneExecutor = connection.executor;
       this.commandCwd = "/";
       await sshServerManager.markStatus(this.sessionId, "connecting");
-      spawnConfig = buildStandaloneSshSpawnConfig(connection.target, connection.session);
+      spawnConfig = buildStandaloneSshSpawnConfig(connection.target, this.standaloneSession);
     } else {
       if (!this.session) {
         throw new Error(`SSH session not found: ${this.sessionId}`);
@@ -321,9 +327,7 @@ export class SshTerminalBridge {
       this.standaloneExecutor = null;
       this.commandCwd = this.workspace.directory;
 
-      if (this.session.config.connectionMode !== "direct") {
-        await sshSessionManager.ensurePersistentSessionBackendAvailable(this.workspace);
-      }
+      this.session = await this.resolveWorkspaceSessionMode(this.session, this.workspace);
       await sshSessionManager.markStatus(this.sessionId, "connecting");
 
       spawnConfig = buildSshSpawnConfig(this.workspace, this.session);
@@ -597,12 +601,79 @@ export class SshTerminalBridge {
       if (!this.standaloneSession) {
         throw new Error("SSH terminal is not connected");
       }
-      return this.standaloneSession.config.connectionMode;
+      return getEffectiveSshConnectionMode(this.standaloneSession);
     }
     if (!this.session) {
       throw new Error("SSH terminal is not connected");
     }
-    return this.session.config.connectionMode;
+    return getEffectiveSshConnectionMode(this.session);
+  }
+
+  private async resolveWorkspaceSessionMode(session: SshSession, workspace: Workspace): Promise<SshSession> {
+    const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
+    return await this.resolvePersistentBackendMode(
+      session,
+      executor,
+      async (options) => await sshSessionManager.updateRuntimeConnectionState(session.config.id, options),
+    );
+  }
+
+  private async resolveStandaloneSessionMode(
+    session: SshServerSession,
+    executor: CommandExecutor,
+  ): Promise<SshServerSession> {
+    return await this.resolvePersistentBackendMode(
+      session,
+      executor,
+      async (options) => await sshServerManager.updateRuntimeConnectionState(session.config.id, options),
+    );
+  }
+
+  private async resolvePersistentBackendMode<TSession extends {
+    config: { id: string; connectionMode: SshConnectionMode };
+    state: { runtimeConnectionMode?: SshConnectionMode; notice?: string };
+  }>(
+    session: TSession,
+    executor: CommandExecutor,
+    updateRuntimeState: (options: { runtimeConnectionMode?: SshConnectionMode; notice?: string }) => Promise<TSession>,
+  ): Promise<TSession> {
+    if (session.config.connectionMode === "direct") {
+      if (session.state.runtimeConnectionMode || session.state.notice) {
+        return await updateRuntimeState({});
+      }
+      return session;
+    }
+
+    const result = await executor.exec("bash", ["-lc", buildPersistentSessionBackendProbeCommand()], {
+      cwd: "/",
+      timeout: 5_000,
+    });
+    if (result.success) {
+      if (session.state.runtimeConnectionMode || session.state.notice) {
+        return await updateRuntimeState({});
+      }
+      return session;
+    }
+
+    if (!this.isMissingPersistentBackendResult(result.exitCode)) {
+      const detail = result.stderr.trim() || result.stdout.trim();
+      throw new Error(detail || "Failed to verify persistent SSH backend availability");
+    }
+
+    const notice = buildPersistentSessionBackendInstallHint();
+    log.warn("Persistent SSH backend unavailable, falling back to direct mode", {
+      sessionId: session.config.id,
+      exitCode: result.exitCode,
+      detail: result.stderr.trim() || result.stdout.trim(),
+    });
+    return await updateRuntimeState({
+      runtimeConnectionMode: "direct",
+      notice,
+    });
+  }
+
+  private isMissingPersistentBackendResult(exitCode: number): boolean {
+    return exitCode === 1 || exitCode === 127;
   }
 
   private getTrackedSessionId(): string {

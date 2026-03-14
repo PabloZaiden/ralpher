@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   CreateSshServerRequest,
+  SshConnectionMode,
   SshServer,
   SshServerSession,
   UpdateSshServerRequest,
@@ -27,8 +28,8 @@ export interface UseSshServersResult {
   deleteServer: (id: string) => Promise<boolean>;
   createSession: (
     serverId: string,
-    options?: { name?: string; password?: string; connectionMode?: "tmux" | "direct" },
-  ) => Promise<SshServerSession | null>;
+    options?: { name?: string; connectionMode?: SshConnectionMode },
+  ) => Promise<SshServerSession>;
   hasStoredCredential: (serverId: string) => boolean;
 }
 
@@ -109,14 +110,13 @@ export function useSshServers(): UseSshServersResult {
 
   const createSession = useCallback(async (
     serverId: string,
-    options: { name?: string; password?: string; connectionMode?: "tmux" | "direct" } = {},
-  ): Promise<SshServerSession | null> => {
+    options: { name?: string; connectionMode?: SshConnectionMode } = {},
+  ): Promise<SshServerSession> => {
     try {
       setError(null);
       const session = await createStandaloneSshSessionApi({
         serverId,
         name: options.name,
-        password: options.password,
         connectionMode: options.connectionMode,
       });
       setSessionsByServerId((prev) => ({
@@ -125,8 +125,9 @@ export function useSshServers(): UseSshServersResult {
       }));
       return session;
     } catch (err) {
-      setError(String(err));
-      return null;
+      const message = String(err);
+      setError(message);
+      throw err instanceof Error ? err : new Error(message);
     }
   }, []);
 

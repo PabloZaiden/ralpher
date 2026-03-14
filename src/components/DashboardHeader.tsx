@@ -15,7 +15,7 @@ export interface DashboardHeaderProps {
   onOpenCreateWorkspace: () => void;
   onOpenCreateLoop: () => void;
   onOpenCreateChat: () => void;
-  onOpenCreateSshSession: () => void;
+  onCreateSshSession: () => void;
 }
 
 export function DashboardHeader({
@@ -26,17 +26,17 @@ export function DashboardHeader({
   onOpenCreateWorkspace,
   onOpenCreateLoop,
   onOpenCreateChat,
-  onOpenCreateSshSession,
+  onCreateSshSession,
 }: DashboardHeaderProps) {
   // Memoize action menu items to avoid re-creating on every render
   const actionMenuItems: ActionMenuItem[] = useMemo(
         () => [
           { label: "New Workspace", onClick: onOpenCreateWorkspace },
-          { label: "New SSH Session", onClick: onOpenCreateSshSession },
+          { label: "New SSH Session", onClick: onCreateSshSession },
           { label: "New Chat", onClick: onOpenCreateChat },
           { label: "New Loop", onClick: onOpenCreateLoop },
         ],
-    [onOpenCreateWorkspace, onOpenCreateSshSession, onOpenCreateChat, onOpenCreateLoop],
+    [onOpenCreateWorkspace, onCreateSshSession, onOpenCreateChat, onOpenCreateLoop],
   );
 
   return (
@@ -103,7 +103,7 @@ export function DashboardHeader({
               </Button>
               <Button
                 variant="secondary"
-                onClick={onOpenCreateSshSession}
+                onClick={onCreateSshSession}
                 className="whitespace-nowrap"
               >
                 New SSH Session

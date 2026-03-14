@@ -218,7 +218,7 @@ describe("ssh section", () => {
         id: "server-session-1",
         sshServerId: "server-1",
         name: "Deploy shell",
-        connectionMode: "tmux",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-serversession1",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -279,23 +279,12 @@ describe("standalone ssh servers section", () => {
       },
     }]);
     api.get("/api/ssh-servers/:id/sessions", () => []);
-    api.get("/api/ssh-servers/:id/public-key", () => ({
-      algorithm: "RSA-OAEP-256",
-      publicKey: "-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----",
-      fingerprint: "fp-1",
-      version: 1,
-      createdAt: new Date().toISOString(),
-    }));
-    api.post("/api/ssh-servers/:id/credentials", () => ({
-      credentialToken: "token-123",
-      expiresAt: new Date().toISOString(),
-    }));
     api.post("/api/ssh-servers/:id/sessions", (req) => ({
       config: {
         id: "server-session-1",
         sshServerId: req.params["id"]!,
         name: (req.body as { name?: string }).name ?? "Deploy shell",
-        connectionMode: "tmux",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-serversession1",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -304,7 +293,7 @@ describe("standalone ssh servers section", () => {
     }));
 
     const onSelectSshSession: string[] = [];
-    const { getByRole, getByLabelText, user } = renderWithUser(
+    const { getByRole, user } = renderWithUser(
       <Dashboard onSelectSshSession={(sessionId) => onSelectSshSession.push(sessionId)} />,
     );
 
@@ -319,14 +308,12 @@ describe("standalone ssh servers section", () => {
     });
 
     await user.click(getByRole("button", { name: "New Session" }));
-    await user.type(getByLabelText("Session name (optional)"), "Deploy shell");
-    await user.click(getByRole("button", { name: "Create Session" }));
 
     await waitFor(() => {
       expect(onSelectSshSession).toEqual(["server-session-1"]);
     });
 
-    expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(1);
+    expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(0);
     expect(api.calls("/api/ssh-servers/:id/sessions", "POST")).toHaveLength(1);
   });
 });

@@ -6,10 +6,13 @@
  * `dtach`-backed shell or open a direct SSH shell for debugging.
  */
 
-/** The `"tmux"` value is kept for backwards-compatible persistence of saved session mode records. */
-export type SshConnectionMode = "tmux" | "direct";
+export type SshConnectionMode = "dtach" | "direct";
 
-export const DEFAULT_SSH_CONNECTION_MODE: SshConnectionMode = "tmux";
+export const DEFAULT_SSH_CONNECTION_MODE: SshConnectionMode = "dtach";
+
+export function normalizeSshConnectionMode(value: unknown): SshConnectionMode {
+  return value === "direct" ? "direct" : "dtach";
+}
 
 /**
  * Runtime status for an SSH session.
@@ -83,6 +86,13 @@ export interface SshSessionState {
   lastConnectedAt?: string;
   /** Last recorded error message */
   error?: string;
+  /**
+   * Runtime override used when the configured persistent backend is unavailable
+   * and the current connection had to fall back to a different mode.
+   */
+  runtimeConnectionMode?: SshConnectionMode;
+  /** User-visible notice about non-fatal SSH session behavior changes */
+  notice?: string;
 }
 
 /**

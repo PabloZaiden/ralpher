@@ -2,7 +2,13 @@
  * Persistence layer for standalone SSH servers and server-owned SSH sessions.
  */
 
-import { DEFAULT_SSH_CONNECTION_MODE, type SshServer, type SshServerConfig, type SshServerSession } from "../types";
+import {
+  DEFAULT_SSH_CONNECTION_MODE,
+  normalizeSshConnectionMode,
+  type SshServer,
+  type SshServerConfig,
+  type SshServerSession,
+} from "../types";
 import { createLogger } from "../core/logger";
 import { getDatabase } from "./database";
 import {
@@ -32,6 +38,8 @@ const ALLOWED_SSH_SERVER_SESSION_COLUMNS = new Set([
   "status",
   "last_connected_at",
   "error_message",
+  "runtime_connection_mode",
+  "notice_message",
 ]);
 
 function validateColumnNames(columns: string[], allowedColumns: Set<string>, label: string): void {
@@ -76,6 +84,8 @@ function sshServerSessionToRow(session: SshServerSession): Record<string, unknow
     status: session.state.status,
     last_connected_at: session.state.lastConnectedAt ?? null,
     error_message: session.state.error ?? null,
+    runtime_connection_mode: session.state.runtimeConnectionMode ?? null,
+    notice_message: session.state.notice ?? null,
   };
 }
 
@@ -85,8 +95,9 @@ function rowToSshServerSession(row: Record<string, unknown>): SshServerSession {
         id: row["id"] as string,
         sshServerId: row["ssh_server_id"] as string,
         name: row["name"] as string,
-        connectionMode: (row["connection_mode"] as SshServerSession["config"]["connectionMode"] | null)
-          ?? DEFAULT_SSH_CONNECTION_MODE,
+        connectionMode: normalizeSshConnectionMode(
+          (row["connection_mode"] as SshServerSession["config"]["connectionMode"] | null) ?? DEFAULT_SSH_CONNECTION_MODE,
+        ),
         remoteSessionName: row["remote_session_name"] as string,
         createdAt: row["created_at"] as string,
         updatedAt: row["updated_at"] as string,
@@ -95,6 +106,10 @@ function rowToSshServerSession(row: Record<string, unknown>): SshServerSession {
       status: row["status"] as SshServerSession["state"]["status"],
       lastConnectedAt: (row["last_connected_at"] as string | null) ?? undefined,
       error: (row["error_message"] as string | null) ?? undefined,
+      runtimeConnectionMode: (row["runtime_connection_mode"] as string | null)
+        ? normalizeSshConnectionMode(row["runtime_connection_mode"])
+        : undefined,
+      notice: (row["notice_message"] as string | null) ?? undefined,
     },
   };
 }

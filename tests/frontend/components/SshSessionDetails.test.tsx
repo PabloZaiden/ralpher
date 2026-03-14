@@ -269,13 +269,22 @@ describe("SshSessionDetails", () => {
     });
 
     await act(async () => {
-      lastTerminal!.canvas!.dispatchEvent(new WheelEvent("wheel", {
+      const event = new WheelEvent("wheel", {
         deltaY: 120,
-        clientX: 100,
-        clientY: 40,
         bubbles: true,
         cancelable: true,
-      }));
+      });
+      Object.defineProperties(event, {
+        clientX: {
+          configurable: true,
+          value: 100,
+        },
+        clientY: {
+          configurable: true,
+          value: 40,
+        },
+      });
+      lastTerminal!.canvas!.dispatchEvent(event);
     });
 
     expect(terminalConnection.sentMessages).toContain(JSON.stringify({
@@ -624,7 +633,7 @@ describe("SshSessionDetails", () => {
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Wrapped Controls" } }),
     );
 
-    const { getByText, getByTestId, user } = renderWithUser(
+    const { getByRole, getByText, getByTestId, user } = renderWithUser(
       <SshSessionDetails sshSessionId="ssh-mobile-wrap" onBack={() => {}} />,
     );
 
@@ -635,7 +644,7 @@ describe("SshSessionDetails", () => {
     await user.click(getByText("Touch controls"));
 
     await waitFor(() => {
-      expect(getByText("Pane ↓")).toBeTruthy();
+      expect(getByRole("button", { name: "↓" })).toBeTruthy();
     });
 
     const layout = getByTestId("ssh-touch-controls-layout");
@@ -989,7 +998,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Standalone Session",
-        connectionMode: "tmux",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-1",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1064,7 +1073,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Standalone Focus Recovery",
-        connectionMode: "tmux",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-focus",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1185,7 +1194,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Standalone Focus Refresh Failure",
-        connectionMode: "tmux",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-refresh-failure",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1311,7 +1320,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Refresh Stable Session",
-        connectionMode: "tmux",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-refresh",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1395,7 +1404,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Password Prompt Session",
-        connectionMode: "tmux",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-2",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1460,7 +1469,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Password Failure Session",
-        connectionMode: "tmux",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-failure",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

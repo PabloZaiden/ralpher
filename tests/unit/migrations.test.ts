@@ -281,17 +281,19 @@ describe("migration infrastructure", () => {
         "id",
         "ssh_server_id",
         "name",
-        "connection_mode",
         "remote_session_name",
         "created_at",
         "updated_at",
         "status",
         "last_connected_at",
         "error_message",
+        "connection_mode",
+        "runtime_connection_mode",
+        "notice_message",
       ]);
     });
 
-    test("adds connection_mode to existing SSH session tables", () => {
+    test("adds connection and notice columns to existing SSH session tables", () => {
       db.run(`
         CREATE TABLE ssh_sessions (
           id TEXT PRIMARY KEY,
@@ -320,6 +322,10 @@ describe("migration infrastructure", () => {
 
       expect(getTableColumns(db, "ssh_sessions")).toContain("connection_mode");
       expect(getTableColumns(db, "ssh_server_sessions")).toContain("connection_mode");
+      expect(getTableColumns(db, "ssh_sessions")).toContain("runtime_connection_mode");
+      expect(getTableColumns(db, "ssh_sessions")).toContain("notice_message");
+      expect(getTableColumns(db, "ssh_server_sessions")).toContain("runtime_connection_mode");
+      expect(getTableColumns(db, "ssh_server_sessions")).toContain("notice_message");
 
       db.run(
         `INSERT INTO ssh_sessions (
@@ -371,8 +377,92 @@ describe("migration infrastructure", () => {
         "SELECT connection_mode FROM ssh_server_sessions WHERE id = 'ssh-server-session-1'",
       ).get() as { connection_mode: string };
 
-      expect(workspaceRow.connection_mode).toBe("tmux");
-      expect(standaloneRow.connection_mode).toBe("tmux");
+      expect(workspaceRow.connection_mode).toBe("dtach");
+      expect(standaloneRow.connection_mode).toBe("dtach");
+    });
+
+    test("normalizes legacy persistent connection modes to dtach", () => {
+      db.run(`
+        CREATE TABLE ssh_sessions (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          workspace_id TEXT NOT NULL,
+          directory TEXT NOT NULL,
+          connection_mode TEXT NOT NULL DEFAULT 'legacy-persistent',
+          remote_session_name TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'ready'
+        )
+      `);
+      db.run(`
+        CREATE TABLE ssh_server_sessions (
+          id TEXT PRIMARY KEY,
+          ssh_server_id TEXT NOT NULL,
+          name TEXT NOT NULL,
+          connection_mode TEXT NOT NULL DEFAULT 'legacy-persistent',
+          remote_session_name TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'ready'
+        )
+      `);
+      db.run(`
+        INSERT INTO ssh_sessions (
+          id,
+          name,
+          workspace_id,
+          directory,
+          connection_mode,
+          remote_session_name,
+          created_at,
+          updated_at,
+          status
+        ) VALUES (
+          'ssh-1',
+          'Workspace Session',
+          'workspace-1',
+          '/tmp/workspace',
+          'legacy-persistent',
+          'ralpher-workspace',
+          '2025-01-01T00:00:00.000Z',
+          '2025-01-01T00:00:00.000Z',
+          'ready'
+        )
+      `);
+      db.run(`
+        INSERT INTO ssh_server_sessions (
+          id,
+          ssh_server_id,
+          name,
+          connection_mode,
+          remote_session_name,
+          created_at,
+          updated_at,
+          status
+        ) VALUES (
+          'ssh-server-session-1',
+          'server-1',
+          'Standalone Session',
+          'legacy-persistent',
+          'ralpher-standalone',
+          '2025-01-01T00:00:00.000Z',
+          '2025-01-01T00:00:00.000Z',
+          'ready'
+        )
+      `);
+
+      runMigrations(db);
+
+      const workspaceRow = db.query(
+        "SELECT connection_mode FROM ssh_sessions WHERE id = 'ssh-1'",
+      ).get() as { connection_mode: string };
+      const standaloneRow = db.query(
+        "SELECT connection_mode FROM ssh_server_sessions WHERE id = 'ssh-server-session-1'",
+      ).get() as { connection_mode: string };
+
+      expect(workspaceRow.connection_mode).toBe("dtach");
+      expect(standaloneRow.connection_mode).toBe("dtach");
     });
 
     test("creates forwarded_ports with active local-port uniqueness", () => {

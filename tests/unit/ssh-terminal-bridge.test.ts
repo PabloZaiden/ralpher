@@ -119,7 +119,7 @@ function createTestSession(workspaceId: string, directory: string): SshSession {
       name: "SSH Session",
       workspaceId,
       directory,
-      connectionMode: "tmux",
+      connectionMode: "dtach",
       remoteSessionName: "ralpher-session-1",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -203,7 +203,7 @@ describe("SshTerminalBridge", () => {
     expect(command).toContain("session_socket='/tmp/ralpher-session-1.dtach.sock'");
     expect(command).toContain("client_tty_file='/tmp/ralpher-terminal-ssh-session-1.tty'");
     expect(command).toContain("session_tty_file='/tmp/ralpher-terminal-ssh-session-1.session.tty'");
-    expect(command).toContain("cd '/workspaces/example' || exit 1;");
+    expect(command).toMatch(/cd .*\/workspaces\/example.*\|\| exit 1;/);
     expect(command).toContain("dtach -N \"$session_socket\" -Ez bash -lc");
     expect(command).toContain("dtach -a \"$session_socket\" -E -z -r winch");
   });
@@ -393,9 +393,7 @@ describe("SshTerminalBridge", () => {
       address: "ssh.example.com",
       username: "deploy",
     });
-    const createToken = await issueStandaloneCredentialToken(server.config.id);
     const standaloneSession = await sshServerManager.createSession(server.config.id, {
-      credentialToken: createToken,
       name: "Deploy shell",
     });
     const terminalToken = await issueStandaloneCredentialToken(server.config.id);

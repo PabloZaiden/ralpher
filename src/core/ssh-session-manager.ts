@@ -23,16 +23,11 @@ import {
 } from "../persistence/ssh-sessions";
 import { loadLoop } from "../persistence/loops";
 import { backendManager } from "./backend-manager";
-import { createLogger } from "./logger";
 import { sshSessionEventEmitter } from "./event-emitter";
 import { buildDefaultSshSessionName, buildLoopSshSessionName } from "../utils";
+import { isPersistentSshSession } from "../utils";
 import { portForwardManager } from "./port-forward-manager";
-import {
-  buildPersistentSessionBackendProbeCommand,
-  buildPersistentSessionDeleteCommand,
-} from "./ssh-persistent-session";
-
-const log = createLogger("core:ssh-session-manager");
+import { buildPersistentSessionDeleteCommand } from "./ssh-persistent-session";
 
 function buildRemoteSessionName(id: string): string {
   return `ralpher-${id.replace(/-/g, "").slice(0, 24)}`;
@@ -68,9 +63,6 @@ export class SshSessionManager {
   async createSession(request: CreateSshSessionRequest): Promise<SshSession> {
     const workspace = await requireSshWorkspace(request.workspaceId);
     const connectionMode = request.connectionMode ?? DEFAULT_SSH_CONNECTION_MODE;
-    if (connectionMode !== "direct") {
-      await this.ensurePersistentSessionBackendAvailable(workspace);
-    }
     await touchWorkspace(workspace.id);
 
     const requestedName = request.name?.trim();
@@ -108,7 +100,7 @@ export class SshSessionManager {
   async deleteSession(id: string): Promise<boolean> {
     const session = await this.requireSession(id);
     await portForwardManager.deleteForwardsBySshSessionId(id);
-    if (session.config.connectionMode !== "direct") {
+    if (isPersistentSshSession(session)) {
       const workspace = await requireSshWorkspace(session.config.workspaceId);
       const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
       const killResult = await executor.exec("bash", ["-lc", buildPersistentSessionDeleteCommand(session)], {
@@ -143,7 +135,6 @@ export class SshSessionManager {
     }
 
     const workspace = await requireSshWorkspace(loop.config.workspaceId);
-    await this.ensurePersistentSessionBackendAvailable(workspace);
     await touchWorkspace(workspace.id);
 
     const directory = loop.config.useWorktree
@@ -197,23 +188,30 @@ export class SshSessionManager {
     return updatedSession;
   }
 
-  async ensurePersistentSessionBackendAvailable(workspace: Workspace): Promise<void> {
-    const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
-    const result = await executor.exec("bash", ["-lc", buildPersistentSessionBackendProbeCommand()], {
-      cwd: workspace.directory,
+  async updateRuntimeConnectionState(
+    id: string,
+    options: { runtimeConnectionMode?: SshConnectionMode; notice?: string },
+  ): Promise<SshSession> {
+    const session = await this.requireSession(id);
+    const updatedSession: SshSession = {
+      config: {
+        ...session.config,
+        updatedAt: new Date().toISOString(),
+      },
+      state: {
+        ...session.state,
+        runtimeConnectionMode: options.runtimeConnectionMode,
+        notice: options.notice?.trim() || undefined,
+      },
+    };
+    await saveSshSession(updatedSession);
+    sshSessionEventEmitter.emit({
+      type: "ssh_session.updated",
+      sshSessionId: updatedSession.config.id,
+      session: updatedSession,
+      timestamp: updatedSession.config.updatedAt,
     });
-    if (!result.success) {
-      const detail = result.stderr.trim() || result.stdout.trim();
-      const message = detail
-        ? `dtach is not available on the remote host: ${detail}`
-        : "dtach is not available on the remote host";
-      throw new Error(message);
-    }
-    log.debug("Validated persistent SSH backend availability", {
-      workspaceId: workspace.id,
-      directory: workspace.directory,
-      detail: result.stdout.trim(),
-    });
+    return updatedSession;
   }
 
   private async buildDefaultSessionName(workspace: Workspace): Promise<string> {
