@@ -3,12 +3,23 @@
  */
 
 export async function writeTextToClipboard(text: string): Promise<void> {
+  let clipboardApiError: unknown;
   if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-    await navigator.clipboard.writeText(text);
-    return;
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (error) {
+      clipboardApiError = error;
+    }
   }
 
   if (typeof document === "undefined" || typeof document.execCommand !== "function") {
+    if (clipboardApiError instanceof Error) {
+      throw clipboardApiError;
+    }
+    if (clipboardApiError !== undefined) {
+      throw new Error(String(clipboardApiError));
+    }
     throw new Error("Browser clipboard access is unavailable.");
   }
 
@@ -29,6 +40,12 @@ export async function writeTextToClipboard(text: string): Promise<void> {
     textarea.remove();
   }
   if (!didCopy) {
+    if (clipboardApiError instanceof Error) {
+      throw clipboardApiError;
+    }
+    if (clipboardApiError !== undefined) {
+      throw new Error(String(clipboardApiError));
+    }
     throw new Error("Browser clipboard access is unavailable.");
   }
 }

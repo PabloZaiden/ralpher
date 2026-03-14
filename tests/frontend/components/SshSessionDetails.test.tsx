@@ -743,6 +743,60 @@ describe("SshSessionDetails", () => {
     });
   });
 
+  test("shows a copy-now fallback when automatic clipboard writes are blocked", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Clipboard Fallback" } }),
+    );
+
+    const copyAttempts: string[] = [];
+    const { getByLabelText, getByText, queryByTestId, user } = renderWithUser(
+      <SshSessionDetails
+        sshSessionId="ssh-clipboard-fallback-1"
+        onBack={() => {}}
+        copyTextToClipboard={async (text) => {
+          copyAttempts.push(text);
+          if (copyAttempts.length === 1) {
+            throw new Error("NotAllowedError: blocked");
+          }
+          clipboardWrites.push(text);
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Clipboard Fallback")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+    });
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await waitFor(() => {
+      expect(terminalConnection.isOpen).toBe(true);
+    });
+
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.clipboard",
+        text: "copied from remote",
+      });
+    });
+
+    await waitFor(() => {
+      expect(getByLabelText("Pending terminal clipboard text")).toBeTruthy();
+      expect(queryByTestId("ssh-terminal-clipboard-fallback")).toBeTruthy();
+    });
+
+    await user.click(getByText((content, element) =>
+      content === "Copy now" && element?.tagName.toLowerCase() === "button"
+    ));
+
+    await waitFor(() => {
+      expect(clipboardWrites).toEqual(["copied from remote"]);
+      expect(queryByTestId("ssh-terminal-clipboard-fallback")).toBeNull();
+    });
+
+    expect(copyAttempts).toEqual(["copied from remote", "copied from remote"]);
+  });
+
   test("connects a standalone SSH session terminal with a stored browser credential", async () => {
     globalThis.localStorage?.setItem("ralpher.sshServerCredential.server-1", JSON.stringify({
       encryptedCredential: {

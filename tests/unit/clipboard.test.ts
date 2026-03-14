@@ -132,6 +132,36 @@ describe("writeTextToClipboard", () => {
     expect(documentStub.getCurrentTextarea()).toBeNull();
   });
 
+  test("falls back to document.execCommand when navigator.clipboard.writeText rejects", async () => {
+    const writes: string[] = [];
+    const documentStub = createDocumentStub((command, textarea) => {
+      expect(command).toBe("copy");
+      expect(textarea?.value).toBe("fallback after rejection");
+      writes.push(textarea?.value ?? "");
+      return true;
+    });
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: {
+        clipboard: {
+          writeText: async () => {
+            throw new Error("writeText blocked");
+          },
+        },
+      },
+    });
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: documentStub.document,
+    });
+
+    await writeTextToClipboard("fallback after rejection");
+
+    expect(writes).toEqual(["fallback after rejection"]);
+    expect(documentStub.bodyChildren).toHaveLength(0);
+    expect(documentStub.getCurrentTextarea()).toBeNull();
+  });
+
   test("removes the temporary textarea when execCommand throws", async () => {
     const documentStub = createDocumentStub(() => {
       throw new Error("copy blocked");
