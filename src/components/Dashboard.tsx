@@ -125,47 +125,50 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 safe-area-bottom space-y-8">
           <section className="border-b border-gray-200 pb-6 dark:border-gray-800">
             <CollapsibleSection
-              title="Standalone SSH Servers"
-              count={sshServers.length}
-              idPrefix="standalone-ssh-servers"
+              title="SSH"
+              count={sshServers.length + sessions.length}
+              defaultCollapsed={true}
+              idPrefix="ssh"
             >
-              <SshServerSection
-                servers={sshServers}
-                sessionsByServerId={sessionsByServerId}
-                loading={sshServersLoading}
-                error={sshServersError}
-                hasStoredCredential={hasStoredCredential}
-                onOpenCreateServer={() => {
-                  setEditingSshServer(null);
-                  setShowCreateSshServerModal(true);
-                }}
-                onOpenEditServer={(server) => {
-                  setEditingSshServer(server);
-                  setShowCreateSshServerModal(true);
-                }}
-                onDeleteServer={async (serverId) => {
-                  await deleteServer(serverId);
-                }}
-                onOpenCreateSession={(server) => {
-                  setSelectedStandaloneServer(server);
-                }}
-                onSelectSession={(sessionId) => onSelectSshSession?.(sessionId)}
-              />
-            </CollapsibleSection>
-          </section>
+              <div className="space-y-6">
+                <SshServerSection
+                  servers={sshServers}
+                  sessionsByServerId={sessionsByServerId}
+                  loading={sshServersLoading}
+                  error={sshServersError}
+                  hasStoredCredential={hasStoredCredential}
+                  onOpenCreateServer={() => {
+                    setEditingSshServer(null);
+                    setShowCreateSshServerModal(true);
+                  }}
+                  onOpenEditServer={(server) => {
+                    setEditingSshServer(server);
+                    setShowCreateSshServerModal(true);
+                  }}
+                  onDeleteServer={async (serverId) => {
+                    await deleteServer(serverId);
+                  }}
+                  onOpenCreateSession={(server) => {
+                    setSelectedStandaloneServer(server);
+                  }}
+                  onSelectSession={(sessionId) => onSelectSshSession?.(sessionId)}
+                />
 
-          <section className="border-b border-gray-200 pb-6 dark:border-gray-800">
-            <CollapsibleSection
-              title="SSH Sessions"
-              count={sessions.length}
-              idPrefix="ssh-sessions"
-            >
-              <SshSessionSection
-                sessions={sessions}
-                loading={sshSessionsLoading}
-                error={sshSessionsError}
-                onSelect={(sessionId) => onSelectSshSession?.(sessionId)}
-              />
+                <div className="space-y-3">
+                  <div className="px-1">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Workspace SSH Sessions</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Persistent tmux-backed terminal sessions for SSH-configured workspaces.
+                    </p>
+                  </div>
+                  <SshSessionSection
+                    sessions={sessions}
+                    loading={sshSessionsLoading}
+                    error={sshSessionsError}
+                    onSelect={(sessionId) => onSelectSshSession?.(sessionId)}
+                  />
+                </div>
+              </div>
             </CollapsibleSection>
           </section>
 
