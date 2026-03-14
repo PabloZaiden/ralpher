@@ -111,8 +111,8 @@ describe("empty state", () => {
   });
 });
 
-describe("ssh sessions section", () => {
-  test("renders ssh sessions inside the shared dashboard scroll area", async () => {
+describe("ssh section", () => {
+  test("renders a single collapsed SSH section that can reveal workspace sessions", async () => {
     const workspace = createWorkspace({ id: "ws-1", name: "Project" });
     const loop = createLoopWithStatus("running", {
       config: { id: "loop-1", name: "Visible Loop", workspaceId: "ws-1" },
@@ -126,20 +126,25 @@ describe("ssh sessions section", () => {
     api.get("/api/workspaces", () => [workspace]);
     api.get("/api/ssh-sessions", () => [session]);
 
-    const { getByRole } = renderWithUser(<Dashboard />);
+    const { getByRole, queryByText, user } = renderWithUser(<Dashboard />);
 
     await waitFor(() => {
-      expect(getByRole("button", { name: /SSH Sessions \(1\)/ })).toBeTruthy();
+      expect(getByRole("button", { name: /SSH \(1\)/ })).toBeTruthy();
     });
 
-    const scrollRegion = getByRole("main");
+    expect(queryByText("Remote Shell")).toBeNull();
+    expect(queryByText("Workspace SSH Sessions")).toBeNull();
+
+    await user.click(getByRole("button", { name: /SSH \(1\)/ }));
+
     await waitFor(() => {
-      expect(scrollRegion.textContent).toContain("Remote Shell");
-      expect(scrollRegion.textContent).toContain("Visible Loop");
+      expect(queryByText("Remote Shell")).toBeTruthy();
+      expect(queryByText("Workspace SSH Sessions")).toBeTruthy();
+      expect(queryByText("Visible Loop")).toBeTruthy();
     });
   });
 
-  test("can collapse ssh sessions without hiding loops", async () => {
+  test("can collapse the unified ssh section without hiding loops", async () => {
     const workspace = createWorkspace({ id: "ws-1", name: "Project" });
     const loop = createLoopWithStatus("running", {
       config: { id: "loop-1", name: "Loop Still Visible", workspaceId: "ws-1" },
@@ -156,14 +161,26 @@ describe("ssh sessions section", () => {
     const { getByRole, getByText, queryByText, user } = renderWithUser(<Dashboard />);
 
     await waitFor(() => {
-      expect(getByText("Collapsible SSH")).toBeTruthy();
+      expect(getByRole("button", { name: /SSH \(1\)/ })).toBeTruthy();
     });
 
     await waitFor(() => {
       expect(getByText("Loop Still Visible")).toBeTruthy();
     });
 
-    await user.click(getByRole("button", { name: /SSH Sessions \(1\)/ }));
+    expect(queryByText("Collapsible SSH")).toBeNull();
+
+    await waitFor(() => {
+      expect(getByText("Loop Still Visible")).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: /SSH \(1\)/ }));
+
+    await waitFor(() => {
+      expect(getByText("Collapsible SSH")).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: /SSH \(1\)/ }));
 
     await waitFor(() => {
       expect(queryByText("Collapsible SSH")).toBeNull();
@@ -171,10 +188,14 @@ describe("ssh sessions section", () => {
 
     expect(getByText("Loop Still Visible")).toBeTruthy();
   });
-});
+ 
+  test("renders standalone servers and workspace sessions inside the same SSH section", async () => {
+    const workspaceSession = createSshSession({
+      config: { id: "ssh-1", name: "Workspace shell" },
+      state: { status: "connected" },
+    });
 
-describe("standalone ssh servers section", () => {
-  test("renders standalone servers and their sessions in the dashboard", async () => {
+    api.get("/api/ssh-sessions", () => [workspaceSession]);
     api.get("/api/ssh-servers", () => [{
       config: {
         id: "server-1",
@@ -204,14 +225,29 @@ describe("standalone ssh servers section", () => {
       state: { status: "ready" },
     }]);
 
-    const { getByText } = renderWithUser(<Dashboard />);
+    const { getByRole, queryByText, user } = renderWithUser(<Dashboard />);
 
     await waitFor(() => {
-      expect(getByText("Shared host")).toBeTruthy();
-      expect(getByText("Deploy shell")).toBeTruthy();
-      expect(getByText("deploy@ssh.example.com")).toBeTruthy();
+      expect(getByRole("button", { name: /SSH \(2\)/ })).toBeTruthy();
+    });
+
+    expect(queryByText("Shared host")).toBeNull();
+    expect(queryByText("Workspace shell")).toBeNull();
+
+    await user.click(getByRole("button", { name: /SSH \(2\)/ }));
+
+    await waitFor(() => {
+      expect(queryByText("Standalone SSH Servers")).toBeTruthy();
+      expect(queryByText("Workspace SSH Sessions")).toBeTruthy();
+      expect(queryByText("Shared host")).toBeTruthy();
+      expect(queryByText("Deploy shell")).toBeTruthy();
+      expect(queryByText("deploy@ssh.example.com")).toBeTruthy();
+      expect(queryByText("Workspace shell")).toBeTruthy();
     });
   });
+});
+
+describe("standalone ssh servers section", () => {
 
   test("creates a standalone session using a browser-stored encrypted credential", async () => {
     globalThis.localStorage?.setItem("ralpher.sshServerCredential.server-1", JSON.stringify({
@@ -269,6 +305,12 @@ describe("standalone ssh servers section", () => {
     const { getByRole, getByLabelText, user } = renderWithUser(
       <Dashboard onSelectSshSession={(sessionId) => onSelectSshSession.push(sessionId)} />,
     );
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: /SSH \(1\)/ })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: /SSH \(1\)/ }));
 
     await waitFor(() => {
       expect(getByRole("button", { name: "New Session" })).toBeTruthy();
