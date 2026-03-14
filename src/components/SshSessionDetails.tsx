@@ -117,6 +117,10 @@ function createSshTerminalOptions(): ITerminalOptions {
   };
 }
 
+function isStandaloneCredentialTokenError(message: string): boolean {
+  return message.includes("SSH credential token") || message.includes("credential token");
+}
+
 export function SshSessionDetails({
   sshSessionId,
   onBack,
@@ -130,9 +134,13 @@ export function SshSessionDetails({
   const terminalSocketRef = useRef<WebSocket | null>(null);
   const terminalReadyRef = useRef(false);
   const terminalModifiersRef = useRef<TerminalModifierState>(defaultTerminalModifiers);
+  const standaloneCredentialTokenRef = useRef<string | null>(null);
+  const pendingStandaloneActionRef = useRef<"terminal" | "delete" | null>(null);
   const pendingOutputRef = useRef<string[]>([]);
   const resizeAnimationFrameRef = useRef<number | null>(null);
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  const terminalConnectInFlightRef = useRef(false);
+  const standaloneTokenRecoveryAttemptedRef = useRef(false);
   const [socketStatus, setSocketStatus] = useState<"connecting" | "open" | "closed">("connecting");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -171,13 +179,11 @@ export function SshSessionDetails({
         return null;
       }
       if (isStandaloneSession(session)) {
-        return standaloneCredentialToken
-          ? `/api/ssh-terminal?sshServerSessionId=${encodeURIComponent(sshSessionId)}`
-          : null;
+        return `/api/ssh-terminal?sshServerSessionId=${encodeURIComponent(sshSessionId)}`;
       }
       return `/api/ssh-terminal?sshSessionId=${encodeURIComponent(sshSessionId)}`;
     },
-    [session, sshSessionId, standaloneCredentialToken],
+    [session, sshSessionId],
   );
   const activeModifierLabel = useMemo(() => {
     return [
@@ -223,6 +229,14 @@ export function SshSessionDetails({
   useEffect(() => {
     terminalModifiersRef.current = terminalModifiers;
   }, [terminalModifiers]);
+
+  useEffect(() => {
+    standaloneCredentialTokenRef.current = standaloneCredentialToken;
+  }, [standaloneCredentialToken]);
+
+  useEffect(() => {
+    pendingStandaloneActionRef.current = pendingStandaloneAction;
+  }, [pendingStandaloneAction]);
 
   const focusTerminal = useCallback(() => {
     terminalRef.current?.focus();
@@ -317,6 +331,7 @@ export function SshSessionDetails({
       return;
     }
     terminalReadyRef.current = true;
+    standaloneTokenRecoveryAttemptedRef.current = false;
     lastSentResizeRef.current = null;
     setSocketStatus("open");
     scheduleResize();
@@ -428,95 +443,175 @@ export function SshSessionDetails({
     void copyTerminalClipboardText(pendingTerminalClipboardText, { userInitiated: true });
   }, [copyTerminalClipboardText, pendingTerminalClipboardText]);
 
-  const connectTerminal = useCallback(() => {
+  const loadStandaloneCredentialToken = useCallback(async (
+    options?: { forceRefresh?: boolean; promptOnFailure?: boolean },
+  ): Promise<string | null> => {
+    if (!standaloneServerId) {
+      setStandaloneCredentialToken(null);
+      return null;
+    }
+
+    if (!options?.forceRefresh && standaloneCredentialTokenRef.current) {
+      return standaloneCredentialTokenRef.current;
+    }
+
+    try {
+      const token = await getStoredSshCredentialToken(standaloneServerId);
+      setStandaloneCredentialToken(token);
+      if (token) {
+        if (pendingStandaloneActionRef.current !== "delete") {
+          setShowPasswordPrompt(false);
+          setPendingStandaloneAction(null);
+        }
+        return token;
+      }
+
+      if ((options?.promptOnFailure ?? true) && pendingStandaloneActionRef.current !== "delete") {
+        setPendingStandaloneAction("terminal");
+        setShowPasswordPrompt(true);
+      }
+      return null;
+    } catch (error) {
+      setStandaloneCredentialToken(null);
+      setSocketStatus("closed");
+      showErrorToast(`Failed to refresh the stored SSH credential: ${String(error)}`);
+      if ((options?.promptOnFailure ?? true) && pendingStandaloneActionRef.current !== "delete") {
+        setPendingStandaloneAction("terminal");
+        setShowPasswordPrompt(true);
+      }
+      return null;
+    }
+  }, [showErrorToast, standaloneServerId]);
+
+  const connectTerminal = useCallback(async (
+    options?: { refreshStandaloneCredential?: boolean; standaloneCredentialToken?: string },
+  ) => {
     if (!terminalUrl) {
       return;
     }
-    terminalSocketRef.current?.close();
-    terminalReadyRef.current = false;
-    pendingOutputRef.current = [];
-    lastSentResizeRef.current = null;
-    if (resizeAnimationFrameRef.current !== null && typeof window !== "undefined") {
-      window.cancelAnimationFrame(resizeAnimationFrameRef.current);
-      resizeAnimationFrameRef.current = null;
+    if (terminalConnectInFlightRef.current) {
+      return;
     }
-    setSocketStatus("connecting");
-
-    const ws = new WebSocket(appWebSocketUrl(terminalUrl));
-    terminalSocketRef.current = ws;
-    const standaloneAuthToken = sessionKind === "standalone" ? standaloneCredentialToken : null;
-
-    ws.onopen = () => {
-      if (standaloneAuthToken) {
-        ws.send(JSON.stringify({
-          type: "terminal.auth",
-          credentialToken: standaloneAuthToken,
-        }));
+    terminalConnectInFlightRef.current = true;
+    try {
+      let standaloneAuthToken = options?.standaloneCredentialToken ?? null;
+      if (sessionKind === "standalone") {
+        if (!standaloneAuthToken) {
+          standaloneAuthToken = await loadStandaloneCredentialToken({
+            forceRefresh: options?.refreshStandaloneCredential ?? false,
+          });
+        }
+        if (!standaloneAuthToken) {
+          return;
+        }
       }
-    };
-    ws.onmessage = (event) => {
-      if (terminalSocketRef.current !== ws) {
-        return;
+      terminalSocketRef.current?.close();
+      terminalReadyRef.current = false;
+      pendingOutputRef.current = [];
+      lastSentResizeRef.current = null;
+      if (resizeAnimationFrameRef.current !== null && typeof window !== "undefined") {
+        window.cancelAnimationFrame(resizeAnimationFrameRef.current);
+        resizeAnimationFrameRef.current = null;
       }
-      const data = JSON.parse(event.data) as {
-        type: string;
-        data?: string;
-        message?: string;
-        text?: string;
+      setSocketStatus("connecting");
+
+      const ws = new WebSocket(appWebSocketUrl(terminalUrl));
+      terminalSocketRef.current = ws;
+
+      ws.onopen = () => {
+        if (standaloneAuthToken) {
+          ws.send(JSON.stringify({
+            type: "terminal.auth",
+            credentialToken: standaloneAuthToken,
+          }));
+        }
       };
-      if (data.type === "terminal.connected") {
-        markTerminalReady();
-      }
-      if (data.type === "terminal.clipboard" && typeof data.text === "string") {
-        void copyTerminalClipboardText(data.text);
-      }
-      if (data.type === "terminal.output" && data.data) {
-        if (!terminalReadyRef.current) {
+      ws.onmessage = (event) => {
+        if (terminalSocketRef.current !== ws) {
+          return;
+        }
+        const data = JSON.parse(event.data) as {
+          type: string;
+          data?: string;
+          message?: string;
+          text?: string;
+        };
+        if (data.type === "terminal.connected") {
           markTerminalReady();
         }
-        if (!terminalRef.current) {
-          pendingOutputRef.current.push(data.data);
-        } else {
-          terminalRef.current.write(data.data);
+        if (data.type === "terminal.clipboard" && typeof data.text === "string") {
+          void copyTerminalClipboardText(data.text);
         }
-      }
-      if (data.type === "terminal.error" && data.message) {
-        terminalRef.current?.writeln(`\r\n${data.message}`);
-        showErrorToast(data.message);
-      }
-      if (data.type === "terminal.closed") {
+        if (data.type === "terminal.output" && data.data) {
+          if (!terminalReadyRef.current) {
+            markTerminalReady();
+          }
+          if (!terminalRef.current) {
+            pendingOutputRef.current.push(data.data);
+          } else {
+            terminalRef.current.write(data.data);
+          }
+        }
+        if (data.type === "terminal.error" && data.message) {
+          terminalRef.current?.writeln(`\r\n${data.message}`);
+          if (
+            sessionKind === "standalone"
+            && isStandaloneCredentialTokenError(data.message)
+          ) {
+            setStandaloneCredentialToken(null);
+            if (standaloneTokenRecoveryAttemptedRef.current) {
+              setPendingStandaloneAction("terminal");
+              setShowPasswordPrompt(true);
+              showErrorToast("Failed to refresh the SSH session automatically. Re-enter the SSH password to continue.");
+              return;
+            }
+            standaloneTokenRecoveryAttemptedRef.current = true;
+            terminalReadyRef.current = false;
+            lastSentResizeRef.current = null;
+            setSocketStatus("closed");
+            if (terminalSocketRef.current === ws) {
+              terminalSocketRef.current = null;
+            }
+            ws.close();
+            void connectTerminal({ refreshStandaloneCredential: true });
+            return;
+          }
+          showErrorToast(data.message);
+        }
+        if (data.type === "terminal.closed") {
+          terminalReadyRef.current = false;
+          lastSentResizeRef.current = null;
+          setSocketStatus("closed");
+        }
+      };
+      ws.onclose = () => {
+        if (terminalSocketRef.current !== ws) {
+          return;
+        }
+        terminalSocketRef.current = null;
         terminalReadyRef.current = false;
         lastSentResizeRef.current = null;
         setSocketStatus("closed");
-      }
-    };
-    ws.onclose = () => {
-      if (terminalSocketRef.current !== ws) {
-        return;
-      }
-      terminalSocketRef.current = null;
-      terminalReadyRef.current = false;
-      lastSentResizeRef.current = null;
-      setSocketStatus("closed");
-    };
-    ws.onerror = () => {
-      if (terminalSocketRef.current !== ws) {
-        return;
-      }
-      terminalReadyRef.current = false;
-      lastSentResizeRef.current = null;
-      setSocketStatus("closed");
-    };
+      };
+      ws.onerror = () => {
+        if (terminalSocketRef.current !== ws) {
+          return;
+        }
+        terminalReadyRef.current = false;
+        lastSentResizeRef.current = null;
+        setSocketStatus("closed");
+      };
+    } finally {
+      terminalConnectInFlightRef.current = false;
+    }
   }, [
-    copyTextToClipboard,
-    copyTerminalClipboardText,
-    focusTerminal,
-    markTerminalReady,
-    sessionKind,
-    standaloneCredentialToken,
-    terminalUrl,
-    showErrorToast,
-  ]);
+      copyTerminalClipboardText,
+      loadStandaloneCredentialToken,
+      markTerminalReady,
+      sessionKind,
+      terminalUrl,
+      showErrorToast,
+    ]);
 
   const recoverTerminalOnForeground = useCallback(() => {
     if (!terminalUrl) {
@@ -529,8 +624,8 @@ export function SshSessionDetails({
     if (readyState === WebSocket.OPEN || readyState === WebSocket.CONNECTING) {
       return;
     }
-    connectTerminal();
-  }, [connectTerminal, terminalUrl]);
+    void connectTerminal({ refreshStandaloneCredential: sessionKind === "standalone" });
+  }, [connectTerminal, sessionKind, terminalUrl]);
 
   useEffect(() => {
     if (!terminalContainerRef.current || terminalRef.current) {
@@ -615,7 +710,7 @@ export function SshSessionDetails({
     if (!terminalUrl) {
       return;
     }
-    connectTerminal();
+    void connectTerminal();
     return () => {
       terminalReadyRef.current = false;
       terminalSocketRef.current?.close();
@@ -675,53 +770,12 @@ export function SshSessionDetails({
   }, [showErrorToast, standaloneServerId]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function ensureStandaloneCredentialToken() {
-      if (!standaloneServerId) {
-        setStandaloneCredentialToken(null);
-        return;
-      }
-
-      if (standaloneCredentialToken) {
-        return;
-      }
-
-      const token = await getStoredSshCredentialToken(standaloneServerId);
-      if (cancelled) {
-        return;
-      }
-
-      if (token) {
-        setStandaloneCredentialToken(token);
-        setShowPasswordPrompt(false);
-        setPendingStandaloneAction(null);
-        return;
-      }
-
-      setStandaloneCredentialToken(null);
-      setPendingStandaloneAction("terminal");
-      setShowPasswordPrompt(true);
-    }
-
-    if (sessionKind === "standalone") {
-      void ensureStandaloneCredentialToken().catch((error) => {
-        if (!cancelled) {
-          showErrorToast(String(error));
-          setPendingStandaloneAction("terminal");
-          setShowPasswordPrompt(true);
-        }
-      });
-    } else {
+    if (sessionKind !== "standalone") {
       setStandaloneCredentialToken(null);
       setShowPasswordPrompt(false);
       setPendingStandaloneAction(null);
     }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionKind, showErrorToast, standaloneCredentialToken, standaloneServerId]);
+  }, [sessionKind]);
 
   async function handleDelete() {
     const success = await deleteSession();
@@ -772,6 +826,7 @@ export function SshSessionDetails({
       setStandaloneCredentialToken(token);
       setShowPasswordPrompt(false);
       setPendingStandaloneAction(null);
+      void connectTerminal({ standaloneCredentialToken: token });
     } catch (error) {
       showErrorToast(String(error));
     }
