@@ -22,6 +22,10 @@ describe("GitService", () => {
     await Bun.$`git init`.cwd(testDir).quiet();
     await Bun.$`git config user.email "test@test.com"`.cwd(testDir).quiet();
     await Bun.$`git config user.name "Test User"`.cwd(testDir).quiet();
+    // Disable repo-local maintenance in ephemeral test repos so git stash/pop
+    // does not occasionally stall when the full suite creates a lot of objects.
+    await Bun.$`git config gc.auto 0`.cwd(testDir).quiet();
+    await Bun.$`git config maintenance.auto false`.cwd(testDir).quiet();
 
     await writeFile(join(testDir, "README.md"), "# Test\n");
     await Bun.$`git add -A`.cwd(testDir).quiet();
