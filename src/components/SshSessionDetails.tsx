@@ -455,22 +455,33 @@ export function SshSessionDetails({
       return standaloneCredentialTokenRef.current;
     }
 
-    const token = await getStoredSshCredentialToken(standaloneServerId);
-    setStandaloneCredentialToken(token);
-    if (token) {
-      if (pendingStandaloneActionRef.current !== "delete") {
-        setShowPasswordPrompt(false);
-        setPendingStandaloneAction(null);
+    try {
+      const token = await getStoredSshCredentialToken(standaloneServerId);
+      setStandaloneCredentialToken(token);
+      if (token) {
+        if (pendingStandaloneActionRef.current !== "delete") {
+          setShowPasswordPrompt(false);
+          setPendingStandaloneAction(null);
+        }
+        return token;
       }
-      return token;
-    }
 
-    if ((options?.promptOnFailure ?? true) && pendingStandaloneActionRef.current !== "delete") {
-      setPendingStandaloneAction("terminal");
-      setShowPasswordPrompt(true);
+      if ((options?.promptOnFailure ?? true) && pendingStandaloneActionRef.current !== "delete") {
+        setPendingStandaloneAction("terminal");
+        setShowPasswordPrompt(true);
+      }
+      return null;
+    } catch (error) {
+      setStandaloneCredentialToken(null);
+      setSocketStatus("closed");
+      showErrorToast(`Failed to refresh the stored SSH credential: ${String(error)}`);
+      if ((options?.promptOnFailure ?? true) && pendingStandaloneActionRef.current !== "delete") {
+        setPendingStandaloneAction("terminal");
+        setShowPasswordPrompt(true);
+      }
+      return null;
     }
-    return null;
-  }, [standaloneServerId]);
+  }, [showErrorToast, standaloneServerId]);
 
   const connectTerminal = useCallback(async (
     options?: { refreshStandaloneCredential?: boolean; standaloneCredentialToken?: string },
