@@ -204,10 +204,11 @@ describe("SshTerminalBridge", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  test("buildAttachCommand disables the tmux status bar before attaching", () => {
+  test("buildAttachCommand enables clipboard support and disables the tmux status bar before attaching", () => {
     const command = buildAttachCommand(session);
 
     expect(command).toContain("tmux new-session -d -s 'ralpher-session-1' -c '/workspaces/example';");
+    expect(command).toContain("tmux set-option -s set-clipboard on;");
     expect(command).toContain("tmux set-option -t 'ralpher-session-1' status off;");
     expect(command).toContain("exec tmux attach-session -t 'ralpher-session-1'");
   });

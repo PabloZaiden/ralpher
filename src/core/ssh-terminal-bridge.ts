@@ -62,6 +62,7 @@ export function buildAttachCommand(session: { config: { remoteSessionName: strin
     `if ! tmux has-session -t ${sessionName} 2>/dev/null; then`,
     createSessionCommand,
     "fi;",
+    "tmux set-option -s set-clipboard on;",
     `tmux set-option -t ${sessionName} status off;`,
     `exec tmux attach-session -t ${sessionName}`,
   ].join(" ");

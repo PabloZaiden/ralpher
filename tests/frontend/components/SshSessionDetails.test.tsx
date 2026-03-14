@@ -5,6 +5,7 @@ import { createSshSession } from "../helpers/factories";
 import { act, renderWithUser, waitFor } from "../helpers/render";
 
 let clipboardWrites: string[] = [];
+let lastTerminalOptions: Record<string, unknown> | null = null;
 
 class MockTerminal {
   cols = 80;
@@ -13,8 +14,9 @@ class MockTerminal {
   writes: string[] = [];
   focusCalls = 0;
 
-  constructor() {
+  constructor(options?: Record<string, unknown>) {
     lastTerminal = this;
+    lastTerminalOptions = options ?? null;
   }
 
   loadAddon() {}
@@ -85,6 +87,7 @@ describe("SshSessionDetails", () => {
     ws.reset();
     ws.install();
     lastTerminal = null;
+    lastTerminalOptions = null;
     clipboardWrites = [];
   });
 
@@ -123,6 +126,36 @@ describe("SshSessionDetails", () => {
     await waitFor(() => {
       expect(getByText("Ctrl")).toBeTruthy();
     });
+  });
+
+  test("initializes the terminal with modern rendering options for box drawing and glyph sizing", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Terminal Rendering" } }),
+    );
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-rendering-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Terminal Rendering")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal).not.toBeNull();
+      expect(lastTerminalOptions).not.toBeNull();
+    });
+
+    expect(lastTerminalOptions).toEqual(expect.objectContaining({
+      cursorBlink: true,
+      convertEol: true,
+      fontSize: 13,
+      fontFamily: "\"SFMono-Regular\", \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", \"DejaVu Sans Mono\", \"Noto Sans Mono\", monospace",
+      lineHeight: 1.15,
+      customGlyphs: true,
+      rescaleOverlappingGlyphs: true,
+      theme: {
+        background: "#111827",
+      },
+    }));
   });
 
   test("applies active modifiers to the next typed terminal key and touch key", async () => {
@@ -708,6 +741,60 @@ describe("SshSessionDetails", () => {
     await waitFor(() => {
       expect(clipboardWrites).toEqual(["copied from remote"]);
     });
+  });
+
+  test("shows a copy-now fallback when automatic clipboard writes are blocked", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Clipboard Fallback" } }),
+    );
+
+    const copyAttempts: string[] = [];
+    const { getByLabelText, getByText, queryByTestId, user } = renderWithUser(
+      <SshSessionDetails
+        sshSessionId="ssh-clipboard-fallback-1"
+        onBack={() => {}}
+        copyTextToClipboard={async (text) => {
+          copyAttempts.push(text);
+          if (copyAttempts.length === 1) {
+            throw new Error("NotAllowedError: blocked");
+          }
+          clipboardWrites.push(text);
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Clipboard Fallback")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+    });
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await waitFor(() => {
+      expect(terminalConnection.isOpen).toBe(true);
+    });
+
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.clipboard",
+        text: "copied from remote",
+      });
+    });
+
+    await waitFor(() => {
+      expect(getByLabelText("Pending terminal clipboard text")).toBeTruthy();
+      expect(queryByTestId("ssh-terminal-clipboard-fallback")).toBeTruthy();
+    });
+
+    await user.click(getByText((content, element) =>
+      content === "Copy now" && element?.tagName.toLowerCase() === "button"
+    ));
+
+    await waitFor(() => {
+      expect(clipboardWrites).toEqual(["copied from remote"]);
+      expect(queryByTestId("ssh-terminal-clipboard-fallback")).toBeNull();
+    });
+
+    expect(copyAttempts).toEqual(["copied from remote", "copied from remote"]);
   });
 
   test("connects a standalone SSH session terminal with a stored browser credential", async () => {

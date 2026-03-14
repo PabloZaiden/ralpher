@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type ITerminalOptions } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { Badge, Button, Card, ConfirmModal, Modal } from "./common";
@@ -91,6 +91,32 @@ function CompactBar({
 
 const touchButtonClassName = "min-h-[28px] shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[11px]";
 
+const sshTerminalFontFamily = [
+  "\"SFMono-Regular\"",
+  "\"SF Mono\"",
+  "Menlo",
+  "Consolas",
+  "\"Liberation Mono\"",
+  "\"DejaVu Sans Mono\"",
+  "\"Noto Sans Mono\"",
+  "monospace",
+].join(", ");
+
+function createSshTerminalOptions(): ITerminalOptions {
+  return {
+    cursorBlink: true,
+    convertEol: true,
+    fontSize: 13,
+    fontFamily: sshTerminalFontFamily,
+    lineHeight: 1.15,
+    customGlyphs: true,
+    rescaleOverlappingGlyphs: true,
+    theme: {
+      background: "#111827",
+    },
+  };
+}
+
 export function SshSessionDetails({
   sshSessionId,
   onBack,
@@ -113,6 +139,7 @@ export function SshSessionDetails({
   const [sessionInfoExpanded, setSessionInfoExpanded] = useState(false);
   const [touchControlsExpanded, setTouchControlsExpanded] = useState(false);
   const [terminalModifiers, setTerminalModifiers] = useState<TerminalModifierState>(defaultTerminalModifiers);
+  const [pendingTerminalClipboardText, setPendingTerminalClipboardText] = useState<string | null>(null);
   const [standalonePassword, setStandalonePassword] = useState("");
   const [standaloneCredentialToken, setStandaloneCredentialToken] = useState<string | null>(null);
   const [pendingStandaloneAction, setPendingStandaloneAction] = useState<"terminal" | "delete" | null>(null);
@@ -377,6 +404,30 @@ export function SshSessionDetails({
     }
   }, [resetTerminalModifiers, sendTerminalInput, showErrorToast]);
 
+  const copyTerminalClipboardText = useCallback(async (
+    text: string,
+    options?: { userInitiated?: boolean },
+  ) => {
+    try {
+      await copyTextToClipboard(text);
+      setPendingTerminalClipboardText(null);
+    } catch (error) {
+      setPendingTerminalClipboardText(text);
+      if (options?.userInitiated) {
+        showErrorToast(`Failed to copy terminal text to the clipboard: ${String(error)}`);
+      }
+    } finally {
+      focusTerminal();
+    }
+  }, [copyTextToClipboard, focusTerminal, showErrorToast]);
+
+  const retryPendingTerminalClipboardCopy = useCallback(() => {
+    if (!pendingTerminalClipboardText) {
+      return;
+    }
+    void copyTerminalClipboardText(pendingTerminalClipboardText, { userInitiated: true });
+  }, [copyTerminalClipboardText, pendingTerminalClipboardText]);
+
   const connectTerminal = useCallback(() => {
     if (!terminalUrl) {
       return;
@@ -401,15 +452,6 @@ export function SshSessionDetails({
           type: "terminal.auth",
           credentialToken: standaloneAuthToken,
         }));
-      }
-    };
-    const copyTerminalClipboardText = async (text: string) => {
-      try {
-        await copyTextToClipboard(text);
-      } catch (error) {
-        showErrorToast(`Failed to copy terminal text to the clipboard: ${String(error)}`);
-      } finally {
-        focusTerminal();
       }
     };
     ws.onmessage = (event) => {
@@ -467,6 +509,7 @@ export function SshSessionDetails({
     };
   }, [
     copyTextToClipboard,
+    copyTerminalClipboardText,
     focusTerminal,
     markTerminalReady,
     sessionKind,
@@ -494,14 +537,7 @@ export function SshSessionDetails({
       return;
     }
 
-    const terminal = new Terminal({
-      cursorBlink: true,
-      convertEol: true,
-      fontSize: 14,
-      theme: {
-        background: "#111827",
-      },
-    });
+    const terminal = new Terminal(createSshTerminalOptions());
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(terminalContainerRef.current);
@@ -509,6 +545,9 @@ export function SshSessionDetails({
     if (terminalElement) {
       terminalElement.style.width = "100%";
       terminalElement.style.height = "100%";
+      terminalElement.style.fontFamily = sshTerminalFontFamily;
+      terminalElement.style.fontVariantLigatures = "none";
+      terminalElement.style.fontFeatureSettings = "\"liga\" 0, \"calt\" 0";
 
       const viewport = terminalElement.querySelector<HTMLElement>(".xterm-viewport");
       if (viewport) {
@@ -520,6 +559,18 @@ export function SshSessionDetails({
       if (screen) {
         screen.style.width = "100%";
         screen.style.height = "100%";
+      }
+
+      const accessibilityTree = terminalElement.querySelector<HTMLElement>(".xterm-accessibility-tree");
+      if (accessibilityTree) {
+        accessibilityTree.style.fontFamily = sshTerminalFontFamily;
+        accessibilityTree.style.fontVariantLigatures = "none";
+        accessibilityTree.style.fontFeatureSettings = "\"liga\" 0, \"calt\" 0";
+      }
+
+      const helperTextarea = terminalElement.querySelector<HTMLElement>(".xterm-helper-textarea");
+      if (helperTextarea) {
+        helperTextarea.style.fontFamily = sshTerminalFontFamily;
       }
     }
     terminal.focus();
@@ -1020,6 +1071,41 @@ export function SshSessionDetails({
 
           </div>
         </CompactBar>
+
+        {pendingTerminalClipboardText !== null && (
+          <Card
+            data-testid="ssh-terminal-clipboard-fallback"
+            className="border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/40"
+            bodyClassName="flex flex-col gap-2"
+          >
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+                  Browser blocked automatic clipboard access.
+                </p>
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  Click <span className="font-semibold">Copy now</span> or copy the pending text manually below.
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button variant="primary" size="xs" onClick={retryPendingTerminalClipboardCopy}>
+                  Copy now
+                </Button>
+                <Button variant="ghost" size="xs" onClick={() => setPendingTerminalClipboardText(null)}>
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+            <textarea
+              aria-label="Pending terminal clipboard text"
+              readOnly
+              value={pendingTerminalClipboardText}
+              onFocus={(event) => event.currentTarget.select()}
+              onClick={(event) => event.currentTarget.select()}
+              className="min-h-24 w-full rounded-md border border-amber-200 bg-white/90 p-2 font-mono text-xs text-gray-900 shadow-sm outline-none focus:border-amber-400 dark:border-amber-800 dark:bg-gray-900 dark:text-gray-100"
+            />
+          </Card>
+        )}
 
         <Card
           padding={false}
