@@ -238,7 +238,7 @@ export function buildPersistentSessionDeleteCommand(session: {
 }
 
 export function buildPersistentSessionBackendProbeCommand(): string {
-  return "command -v dtach >/dev/null 2>&1 && dtach --help 2>&1 | head -n 1";
+  return "command -v dtach >/dev/null 2>&1 && dtach --help >/dev/null 2>&1";
 }
 
 export function buildPersistentSessionBackendInstallHint(): string {
