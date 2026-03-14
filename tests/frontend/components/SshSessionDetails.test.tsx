@@ -585,6 +585,93 @@ describe("SshSessionDetails", () => {
     });
   });
 
+  test("reconnects the terminal when the tab becomes visible again after a disconnect", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Focus Recovery" } }),
+    );
+
+    let visibilityState = "visible";
+    const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibilityState,
+    });
+
+    try {
+      const { getByText } = renderWithUser(
+        <SshSessionDetails sshSessionId="ssh-focus-recovery" onBack={() => {}} />,
+      );
+
+      await waitFor(() => {
+        expect(getByText("SSH Focus Recovery")).toBeTruthy();
+        expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      });
+
+      const initialConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+      await act(async () => {
+        ws.sendEventTo(initialConnection, {
+          type: "terminal.connected",
+          sshSessionId: "ssh-focus-recovery",
+        });
+      });
+
+      await waitFor(() => {
+        expect(api.calls("/api/ssh-sessions/:id", "GET")).toHaveLength(2);
+        expect(getByText("open")).toBeTruthy();
+      });
+
+      await act(async () => {
+        initialConnection.instance.close(1006, "network lost");
+      });
+
+      await waitFor(() => {
+        expect(getByText("closed")).toBeTruthy();
+      });
+
+      visibilityState = "hidden";
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+
+      visibilityState = "visible";
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("focus"));
+      });
+
+      await waitFor(() => {
+        expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(2);
+      });
+
+      const recoveredConnections = ws.getConnections("/api/ssh-terminal");
+      const recoveredConnection = recoveredConnections[recoveredConnections.length - 1]!;
+      expect(recoveredConnection).not.toBe(initialConnection);
+
+      await act(async () => {
+        ws.sendEventTo(recoveredConnection, {
+          type: "terminal.connected",
+          sshSessionId: "ssh-focus-recovery",
+        });
+      });
+
+      await waitFor(() => {
+        expect(getByText("open")).toBeTruthy();
+        expect(api.calls("/api/ssh-sessions/:id", "GET")).toHaveLength(3);
+      });
+    } finally {
+      if (originalVisibilityState) {
+        Object.defineProperty(document, "visibilityState", originalVisibilityState);
+      } else {
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          get: () => "visible",
+        });
+      }
+    }
+  });
+
   test("copies terminal clipboard messages to the browser clipboard", async () => {
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Clipboard" } }),
