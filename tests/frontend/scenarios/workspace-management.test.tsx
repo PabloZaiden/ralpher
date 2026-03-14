@@ -124,6 +124,13 @@ describe("workspace management scenario", () => {
       ).toBe(true);
     });
 
+    const providerSelect = document.querySelector("#agent-provider") as HTMLSelectElement;
+    const transportSelect = document.querySelector("#agent-transport") as HTMLSelectElement;
+    const hostnameInput = document.querySelector("#agent-hostname") as HTMLInputElement;
+    expect(providerSelect.value).toBe("copilot");
+    expect(transportSelect.value).toBe("ssh");
+    expect(hostnameInput.value).toBe("localhost");
+
     // Fill name
     const nameInput = document.querySelector("#workspace-name") as HTMLInputElement;
     await user.type(nameInput, "X");
@@ -154,8 +161,10 @@ describe("workspace management scenario", () => {
       directory: "/",
       serverSettings: {
         agent: {
-          provider: "opencode",
-          transport: "stdio",
+          provider: "copilot",
+          transport: "ssh",
+          hostname: "localhost",
+          port: 22,
         },
       },
     });
