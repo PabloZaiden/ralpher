@@ -50,6 +50,7 @@ describe("AddressCommentsModal", () => {
         <AddressCommentsModal {...defaultProps()} />
       );
       expect(getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+      expect(getByRole("button", { name: "Insert PR review prompt" })).toBeInTheDocument();
       expect(getByRole("button", { name: "Submit Comments" })).toBeInTheDocument();
     });
 
@@ -103,6 +104,33 @@ describe("AddressCommentsModal", () => {
   });
 
   describe("submission", () => {
+    test("inserts the canned PR review prompt into the textarea", async () => {
+      const { getByRole, getByLabelText, user } = renderWithUser(
+        <AddressCommentsModal {...defaultProps()} />
+      );
+
+      await user.click(getByRole("button", { name: "Insert PR review prompt" }));
+
+      expect(getByLabelText("Reviewer Comments")).toHaveValue(
+        "Find the PR associated to this branch and address the unresolved comments",
+      );
+    });
+
+    test("appends the canned PR review prompt without duplicating it", async () => {
+      const { getByRole, getByLabelText, user } = renderWithUser(
+        <AddressCommentsModal {...defaultProps()} />
+      );
+
+      const textarea = getByLabelText("Reviewer Comments");
+      await user.type(textarea, "Please also verify CI");
+      await user.click(getByRole("button", { name: "Insert PR review prompt" }));
+      await user.click(getByRole("button", { name: "Insert PR review prompt" }));
+
+      expect(textarea).toHaveValue(
+        "Please also verify CI\n\nFind the PR associated to this branch and address the unresolved comments",
+      );
+    });
+
     test("calls onSubmit with comment text on submit", async () => {
       const props = defaultProps();
       const { getByRole, getByLabelText, user } = renderWithUser(
