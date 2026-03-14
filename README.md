@@ -143,7 +143,7 @@ This downloads the appropriate binary for your platform (Linux/macOS, x64/arm64)
 - **Plan Mode** - Review, refine, and accept plans before autonomous execution starts
 - **Chat Mode** - Run interactive single-turn chats on the same workspace and git infrastructure
 - **Review Workflow** - Address reviewer comments iteratively on pushed or merged loops
-- **SSH Sessions** - Open persistent tmux-backed terminal sessions for SSH workspaces
+- **SSH Sessions** - Open persistent dtach-backed terminal sessions for SSH workspaces
 - **Port Forwarding** - Expose remote loop services through browser-safe local proxy routes
 - **Workspace-Scoped Settings** - Configure provider and transport per workspace
 - **AGENTS.md Optimization** - Preview and apply Ralpher-specific AGENTS.md guidance
@@ -282,7 +282,7 @@ While a loop is running:
 <details>
 <summary><strong>SSH Sessions and Port Forwarding</strong></summary>
 
-- SSH workspaces can open persistent tmux-backed terminal sessions from the loop details view
+- SSH workspaces can open persistent dtach-backed terminal sessions from the loop details view
 - Loop-linked port forwards expose remote services through browser-safe proxy URLs such as `/loop/<loopId>/port/<forwardId>/`
 - Port forwards support HTTP and WebSocket traffic and are tracked per loop
 

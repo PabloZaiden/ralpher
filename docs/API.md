@@ -1950,7 +1950,7 @@ The server sends a success response before scheduling the exit to ensure the cli
 
 ### SSH Sessions
 
-Workspace-backed SSH sessions are persistent tmux sessions created against SSH-configured workspaces.
+Workspace-backed SSH sessions are persistent dtach-backed sessions created against SSH-configured workspaces.
 
 #### GET /api/ssh-sessions
 
@@ -1987,7 +1987,7 @@ Returns the created SSH session object with status `201 Created`.
 
 | Status | Error | Description |
 |--------|-------|-------------|
-| 400 | `invalid_session_configuration` | The workspace cannot open an SSH/tmux session with its current setup |
+| 400 | `invalid_session_configuration` | The workspace cannot open a persistent SSH session with its current setup |
 | 400 | `validation_error` | Missing or invalid request fields |
 | 404 | `not_found` | Workspace not found |
 | 500 | `ssh_session_error` | Failed to create the session |

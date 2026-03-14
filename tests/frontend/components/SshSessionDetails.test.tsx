@@ -11,16 +11,66 @@ class MockTerminal {
   cols = 80;
   rows = 24;
   dataHandler: ((data: string) => void) | null = null;
+  resizeHandler: ((size: { cols: number; rows: number }) => void) | null = null;
   writes: string[] = [];
   focusCalls = 0;
+  element: HTMLDivElement | null = null;
+  canvas: HTMLCanvasElement | null = null;
+  wheelHandler: ((event: WheelEvent) => boolean) | undefined;
+  keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
+  mouseTracking = false;
+  modes: Record<number, boolean> = {};
+  wasmTerm = {};
+  renderer: {
+    getCanvas: () => HTMLCanvasElement;
+    getMetrics: () => { width: number; height: number; baseline: number };
+    remeasureFont: () => void;
+    resize: () => void;
+    render: () => void;
+  } | null = null;
 
   constructor(options?: Record<string, unknown>) {
     lastTerminal = this;
     lastTerminalOptions = options ?? null;
   }
 
-  loadAddon() {}
-  open() {}
+  loadAddon(addon: { activate?: (terminal: MockTerminal) => void }) {
+    addon.activate?.(this);
+  }
+  open(parent?: HTMLElement) {
+    if (!(parent instanceof HTMLDivElement)) {
+      return;
+    }
+
+    this.element = parent;
+    const canvas = document.createElement("canvas");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        left: 0,
+        top: 0,
+        right: 800,
+        bottom: 480,
+        width: 800,
+        height: 480,
+        x: 0,
+        y: 0,
+        toJSON: () => null,
+      }),
+    });
+    parent.appendChild(canvas);
+    this.canvas = canvas;
+    canvas.addEventListener("wheel", (event) => {
+      this.wheelHandler?.(event as WheelEvent);
+    });
+    this.renderer = {
+      getCanvas: () => canvas,
+      getMetrics: () => ({ width: 10, height: 20, baseline: 16 }),
+      remeasureFont: () => {},
+      resize: () => {},
+      render: () => {},
+    };
+  }
   focus() {
     this.focusCalls += 1;
   }
@@ -40,26 +90,56 @@ class MockTerminal {
     };
   }
 
+  onResize(handler: (size: { cols: number; rows: number }) => void) {
+    this.resizeHandler = handler;
+    return {
+      dispose: () => {
+        this.resizeHandler = null;
+      },
+    };
+  }
+
+  attachCustomWheelEventHandler(handler?: (event: WheelEvent) => boolean) {
+    this.wheelHandler = handler;
+  }
+
+  attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean) {
+    this.keyHandler = handler;
+  }
+
+  getMode(mode: number) {
+    return this.modes[mode] ?? false;
+  }
+
+  hasMouseTracking() {
+    return this.mouseTracking;
+  }
+
   dispose() {
     this.dataHandler = null;
+    this.resizeHandler = null;
+    this.canvas?.remove();
+    this.canvas = null;
+    this.element = null;
+    this.renderer = null;
+    this.wheelHandler = undefined;
+    this.keyHandler = undefined;
   }
 }
 
 class MockFitAddon {
+  activate() {}
   fit() {}
+  observeResize() {}
 }
 
 let lastTerminal: MockTerminal | null = null;
 
-mock.module("@xterm/xterm", () => ({
+mock.module("ghostty-web", () => ({
+  init: async () => {},
   Terminal: MockTerminal,
-}));
-
-mock.module("@xterm/addon-fit", () => ({
   FitAddon: MockFitAddon,
 }));
-
-mock.module("@xterm/xterm/css/xterm.css", () => ({}));
 
 const { SshSessionDetails } = await import("@/components/SshSessionDetails");
 
@@ -128,7 +208,7 @@ describe("SshSessionDetails", () => {
     });
   });
 
-  test("initializes the terminal with modern rendering options for box drawing and glyph sizing", async () => {
+  test("initializes the terminal with the configured ghostty-web font size and without xterm-specific rendering tweaks", async () => {
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Terminal Rendering" } }),
     );
@@ -141,20 +221,178 @@ describe("SshSessionDetails", () => {
       expect(getByText("SSH Terminal Rendering")).toBeTruthy();
       expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
       expect(lastTerminal).not.toBeNull();
-      expect(lastTerminalOptions).not.toBeNull();
     });
 
-    expect(lastTerminalOptions).toEqual(expect.objectContaining({
-      cursorBlink: true,
-      convertEol: true,
-      fontSize: 13,
-      fontFamily: "\"SFMono-Regular\", \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", \"DejaVu Sans Mono\", \"Noto Sans Mono\", monospace",
-      lineHeight: 1.15,
-      customGlyphs: true,
-      rescaleOverlappingGlyphs: true,
+    expect(lastTerminalOptions).toEqual({
+      fontSize: 12,
+      fontFamily: "\"Ralpher Terminal Nerd Font\", \"Liga SFMono Nerd Font\", \"MesloLGS NF\", \"MonaspiceNe Nerd Font Mono\", \"MonaspiceXe Nerd Font Mono\", \"Iosevka Nerd Font\", \"RecMonoLinear Nerd Font Mono\", \"Terminess Nerd Font Mono\", \"FiraCode Nerd Font Mono\", \"CaskaydiaMono Nerd Font Mono\", \"CaskaydiaCove Nerd Font Mono\", \"JetBrainsMono Nerd Font Mono\", \"JetBrainsMono Nerd Font\", \"Hack Nerd Font Mono\", \"SauceCodePro Nerd Font Mono\", \"Symbols Nerd Font Mono\", \"Symbols Nerd Font\", \"SF Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", monospace",
       theme: {
         background: "#111827",
+        foreground: "#d1d5db",
+        cursor: "#f9fafb",
+        cursorAccent: "#111827",
+        selectionBackground: "#374151",
+        selectionForeground: "#f9fafb",
+        black: "#111827",
+        white: "#d1d5db",
+        brightBlack: "#4b5563",
+        brightWhite: "#f9fafb",
       },
+    });
+  });
+
+  test("forwards wheel events as SGR mouse input when terminal mouse tracking is enabled", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Mouse Wheel" } }),
+    );
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-mouse-wheel-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Mouse Wheel")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal?.canvas).not.toBeNull();
+    });
+
+    lastTerminal!.mouseTracking = true;
+    lastTerminal!.modes[1000] = true;
+    lastTerminal!.modes[1006] = true;
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.connected",
+        sshSessionId: "ssh-mouse-wheel-1",
+      });
+    });
+
+    await act(async () => {
+      const event = new WheelEvent("wheel", {
+        deltaY: 120,
+        bubbles: true,
+        cancelable: true,
+      });
+      Object.defineProperties(event, {
+        clientX: {
+          configurable: true,
+          value: 100,
+        },
+        clientY: {
+          configurable: true,
+          value: 40,
+        },
+      });
+      lastTerminal!.canvas!.dispatchEvent(event);
+    });
+
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b[<65;11;3M",
+    }));
+  });
+
+  test("forwards click press and release as SGR mouse input when terminal mouse tracking is enabled", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Mouse Click" } }),
+    );
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-mouse-click-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Mouse Click")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal?.canvas).not.toBeNull();
+    });
+
+    lastTerminal!.mouseTracking = true;
+    lastTerminal!.modes[1000] = true;
+    lastTerminal!.modes[1006] = true;
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.connected",
+        sshSessionId: "ssh-mouse-click-1",
+      });
+    });
+
+    await act(async () => {
+      lastTerminal!.canvas!.dispatchEvent(new MouseEvent("mousedown", {
+        button: 0,
+        buttons: 1,
+        clientX: 30,
+        clientY: 20,
+        bubbles: true,
+        cancelable: true,
+      }));
+      lastTerminal!.canvas!.dispatchEvent(new MouseEvent("mouseup", {
+        button: 0,
+        buttons: 0,
+        clientX: 30,
+        clientY: 20,
+        bubbles: true,
+        cancelable: true,
+      }));
+      lastTerminal!.canvas!.dispatchEvent(new MouseEvent("click", {
+        button: 0,
+        clientX: 30,
+        clientY: 20,
+        bubbles: true,
+        cancelable: true,
+      }));
+    });
+
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b[<0;4;2M",
+    }));
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b[<0;4;2m",
+    }));
+  });
+
+  test("sends BackTab for physical Shift+Tab instead of collapsing it into plain Tab", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Shift Tab" } }),
+    );
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-shift-tab-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Shift Tab")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal?.keyHandler).toBeDefined();
+    });
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.connected",
+        sshSessionId: "ssh-shift-tab-1",
+      });
+    });
+
+    const handled = lastTerminal!.keyHandler!(
+      new KeyboardEvent("keydown", {
+        key: "Tab",
+        code: "Tab",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(handled).toBe(true);
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b[Z",
     }));
   });
 
@@ -395,7 +633,7 @@ describe("SshSessionDetails", () => {
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Wrapped Controls" } }),
     );
 
-    const { getByText, getByTestId, user } = renderWithUser(
+    const { getByRole, getByText, getByTestId, user } = renderWithUser(
       <SshSessionDetails sshSessionId="ssh-mobile-wrap" onBack={() => {}} />,
     );
 
@@ -406,7 +644,7 @@ describe("SshSessionDetails", () => {
     await user.click(getByText("Touch controls"));
 
     await waitFor(() => {
-      expect(getByText("Pane ↓")).toBeTruthy();
+      expect(getByRole("button", { name: "↓" })).toBeTruthy();
     });
 
     const layout = getByTestId("ssh-touch-controls-layout");
@@ -448,59 +686,7 @@ describe("SshSessionDetails", () => {
       "Install fresh",
       "Fresh",
     ]);
-    expect(separators).toHaveLength(4);
-  });
-
-  test("sends tmux helper shortcuts from touch controls", async () => {
-    api.get("/api/ssh-sessions/:id", (req) =>
-      createSshSession({ config: { id: req.params["id"]!, name: "SSH Tmux Helpers" } }),
-    );
-
-    const { getByText, user } = renderWithUser(
-      <SshSessionDetails sshSessionId="ssh-mobile-3" onBack={() => {}} />,
-    );
-
-    await waitFor(() => {
-      expect(getByText("SSH Tmux Helpers")).toBeTruthy();
-    });
-
-    await waitFor(() => {
-      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
-      expect(lastTerminal).not.toBeNull();
-    });
-
-    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
-    await act(async () => {
-      ws.sendEventTo(terminalConnection, {
-        type: "terminal.connected",
-        sshSessionId: "ssh-mobile-3",
-      });
-    });
-
-    await user.click(getByText("Touch controls"));
-    await user.click(getByText("Split"));
-    await user.click(getByText("Next"));
-    await user.click(getByText("Pane ↑"));
-    await user.click(getByText("Pane ↓"));
-
-    await waitFor(() => {
-      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
-        type: "terminal.input",
-        data: "\u0002\"",
-      }));
-      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
-        type: "terminal.input",
-        data: "\u0002o",
-      }));
-      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
-        type: "terminal.input",
-        data: "\u0002\u001b[1;5A",
-      }));
-      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
-        type: "terminal.input",
-        data: "\u0002\u001b[1;5B",
-      }));
-    });
+    expect(separators).toHaveLength(3);
   });
 
   test("waits for terminal readiness before sending the initial resize", async () => {
@@ -812,6 +998,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Standalone Session",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-1",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -886,6 +1073,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Standalone Focus Recovery",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-focus",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1006,6 +1194,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Standalone Focus Refresh Failure",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-refresh-failure",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1131,6 +1320,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Refresh Stable Session",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-refresh",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1214,6 +1404,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Password Prompt Session",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-2",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1258,9 +1449,19 @@ describe("SshSessionDetails", () => {
       expect(getByText("SSH password required")).toBeTruthy();
     });
 
+    const passwordInput = getByLabelText("SSH password") as HTMLInputElement;
+    expect(passwordInput.autocomplete).toBe("off");
+    expect(passwordInput.getAttribute("autocapitalize")).toBe("off");
+    expect(passwordInput.getAttribute("autocorrect")).toBe("off");
+    expect(passwordInput.getAttribute("data-1p-ignore")).toBe("true");
+    expect(passwordInput.getAttribute("data-bwignore")).toBe("true");
+    expect(passwordInput.getAttribute("data-form-type")).toBe("other");
+    expect(passwordInput.getAttribute("data-lpignore")).toBe("true");
+    expect(passwordInput.getAttribute("spellcheck")).toBe("false");
+
     expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(0);
 
-    await user.type(getByLabelText("SSH password"), "secret");
+    await user.type(passwordInput, "secret");
     await user.click(getByText("Continue"));
 
     await waitFor(() => {
@@ -1278,6 +1479,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Password Failure Session",
+        connectionMode: "dtach",
         remoteSessionName: "ralpher-standalone-failure",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

@@ -3,6 +3,7 @@
  */
 
 import { z } from "zod";
+import { SshConnectionModeSchema } from "./ssh-session";
 
 const RequiredTrimmedStringSchema = z.string().trim().min(1, "value is required");
 
@@ -39,11 +40,12 @@ export const SshCredentialTokenSchema = RequiredTrimmedStringSchema;
 
 export const CreateSshServerSessionRequestSchema = z.object({
   name: z.string().trim().optional(),
-  credentialToken: SshCredentialTokenSchema,
+  credentialToken: SshCredentialTokenSchema.optional(),
+  connectionMode: SshConnectionModeSchema.optional(),
 });
 
 export const DeleteSshServerSessionRequestSchema = z.object({
-  credentialToken: SshCredentialTokenSchema,
+  credentialToken: SshCredentialTokenSchema.optional(),
 });
 
 export type SshKeyAlgorithm = z.infer<typeof SshKeyAlgorithmSchema>;

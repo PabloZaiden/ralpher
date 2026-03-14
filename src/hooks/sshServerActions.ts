@@ -2,6 +2,7 @@ import type {
   CreateSshServerRequest,
   ListSshServersResponse,
   SshServer,
+  SshConnectionMode,
   SshServerSession,
   UpdateSshServerRequest,
 } from "../types";
@@ -92,17 +93,16 @@ export async function deleteSshServerApi(id: string): Promise<boolean> {
 export async function createStandaloneSshSessionApi(options: {
   serverId: string;
   name?: string;
-  password?: string;
+  connectionMode?: SshConnectionMode;
 }): Promise<SshServerSession> {
-  const credentialToken = await resolveCredentialToken(options.serverId, options.password);
   return await apiCall<SshServerSession>(
     `/api/ssh-servers/${options.serverId}/sessions`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        credentialToken,
         ...(options.name?.trim() ? { name: options.name.trim() } : {}),
+        ...(options.connectionMode ? { connectionMode: options.connectionMode } : {}),
       }),
     },
     "Create standalone SSH session",
@@ -113,15 +113,23 @@ export async function deleteStandaloneSshSessionApi(options: {
   sessionId: string;
   serverId: string;
   password?: string;
+  requireCredential?: boolean;
 }): Promise<boolean> {
-  const credentialToken = await resolveCredentialToken(options.serverId, options.password);
-  await apiCall(
-    `/api/ssh-server-sessions/${options.sessionId}`,
-    {
+  const credentialToken = options.requireCredential === false
+    ? undefined
+    : await resolveCredentialToken(options.serverId, options.password);
+  const requestOptions: RequestInit = credentialToken
+    ? {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ credentialToken }),
-    },
+    }
+    : {
+      method: "DELETE",
+    };
+  await apiCall(
+    `/api/ssh-server-sessions/${options.sessionId}`,
+    requestOptions,
     "Delete standalone SSH session",
   );
   return true;

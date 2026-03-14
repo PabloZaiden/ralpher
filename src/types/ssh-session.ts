@@ -1,9 +1,18 @@
 /**
  * SSH session domain types.
  *
- * SSH sessions represent persistent remote terminal sessions backed by `tmux`
- * on an SSH-configured workspace host.
+ * SSH sessions represent saved remote terminal connections on an
+ * SSH-configured workspace host. Sessions can either attach to a persistent
+ * `dtach`-backed shell or open a direct SSH shell for debugging.
  */
+
+export type SshConnectionMode = "dtach" | "direct";
+
+export const DEFAULT_SSH_CONNECTION_MODE: SshConnectionMode = "dtach";
+
+export function normalizeSshConnectionMode(value: unknown): SshConnectionMode {
+  return value === "direct" ? "direct" : "dtach";
+}
 
 /**
  * Runtime status for an SSH session.
@@ -33,7 +42,9 @@ export interface SshSessionBaseConfig {
   id: string;
   /** Human-readable display name */
   name: string;
-  /** Remote tmux session name */
+  /** How this saved session connects to the remote host */
+  connectionMode: SshConnectionMode;
+  /** Remote identifier used for persistent session sockets and direct-shell tty tracking */
   remoteSessionName: string;
   /** ISO 8601 timestamp of when the session was created */
   createdAt: string;
@@ -53,9 +64,11 @@ export interface SshSessionConfig {
   workspaceId: string;
   /** Optional loop associated with this session */
   loopId?: string;
-  /** Working directory used when creating the tmux session */
+  /** Working directory used when creating the persistent session shell or direct shell */
   directory: string;
-  /** Remote tmux session name */
+  /** How this saved session connects to the remote host */
+  connectionMode: SshSessionBaseConfig["connectionMode"];
+  /** Remote identifier used for persistent session sockets and direct-shell tty tracking */
   remoteSessionName: SshSessionBaseConfig["remoteSessionName"];
   /** ISO 8601 timestamp of when the session was created */
   createdAt: SshSessionBaseConfig["createdAt"];
@@ -73,6 +86,13 @@ export interface SshSessionState {
   lastConnectedAt?: string;
   /** Last recorded error message */
   error?: string;
+  /**
+   * Runtime override used when the configured persistent backend is unavailable
+   * and the current connection had to fall back to a different mode.
+   */
+  runtimeConnectionMode?: SshConnectionMode;
+  /** User-visible notice about non-fatal SSH session behavior changes */
+  notice?: string;
 }
 
 /**

@@ -136,7 +136,7 @@ function mapLoopSshSessionError(error: unknown): Response {
   }
   if (
     message.includes("ssh transport")
-    || message.includes("tmux is not available")
+    || message.includes("dtach is not available")
     || message.includes("Loop working directory is not available")
   ) {
     return errorResponse("invalid_session_configuration", message, 400);

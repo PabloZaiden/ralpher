@@ -5,6 +5,7 @@
 
 import { useLoops, useSshServers, useSshSessions, useWorkspaces, useViewModePreference } from "../hooks";
 import { useWorkspaceServerSettings } from "../hooks";
+import { useToast } from "../hooks/useToast";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useDashboardModals } from "../hooks/useDashboardModals";
 import { useLoopGrouping } from "../hooks/useLoopGrouping";
@@ -12,12 +13,11 @@ import { CollapsibleSection } from "./common";
 import { DashboardHeader } from "./DashboardHeader";
 import { LoopGrid } from "./LoopGrid";
 import { DashboardModals } from "./DashboardModals";
-import { CreateSshSessionModal } from "./CreateSshSessionModal";
 import { SshSessionSection } from "./SshSessionSection";
 import { CreateSshServerModal } from "./CreateSshServerModal";
-import { CreateStandaloneSshSessionModal } from "./CreateStandaloneSshSessionModal";
+import { CreateSshSessionModal } from "./CreateSshSessionModal";
 import { SshServerSection } from "./SshServerSection";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { SshServer } from "../types";
 
 export interface DashboardProps {
@@ -47,9 +47,10 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
     createSession,
   } = useSshSessions();
   const [showCreateSshSessionModal, setShowCreateSshSessionModal] = useState(false);
+  const [creatingWorkspaceSshSession, setCreatingWorkspaceSshSession] = useState(false);
+  const [createWorkspaceSshSessionError, setCreateWorkspaceSshSessionError] = useState<string | null>(null);
   const [showCreateSshServerModal, setShowCreateSshServerModal] = useState(false);
   const [editingSshServer, setEditingSshServer] = useState<SshServer | null>(null);
-  const [selectedStandaloneServer, setSelectedStandaloneServer] = useState<SshServer | null>(null);
   const {
     servers: sshServers,
     sessionsByServerId,
@@ -61,6 +62,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
     createSession: createStandaloneSession,
     hasStoredCredential,
   } = useSshServers();
+  const toast = useToast();
 
   const {
     workspaces,
@@ -82,6 +84,9 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
 
   // Loop grouping hook (memoized)
   const { workspaceGroups, unassignedLoops, unassignedStatusGroups } = useLoopGrouping(loops, workspaces);
+  const sshWorkspaces = useMemo(() => {
+    return workspaces.filter((workspace) => workspace.serverSettings.agent.transport === "ssh");
+  }, [workspaces]);
 
   // Mode-aware selection handler: routes chats to #/chat/:id, loops to #/loop/:id
   const handleSelectItem = (loopId: string) => {
@@ -95,6 +100,75 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
 
   // View mode preference hook
   const { viewMode, toggle: toggleViewMode } = useViewModePreference();
+
+  async function createWorkspaceSshSessionFor(workspaceId: string, options?: { fromModal?: boolean }) {
+    const workspace = sshWorkspaces.find((item) => item.id === workspaceId);
+    const reportError = (message: string) => {
+      if (options?.fromModal) {
+        setCreateWorkspaceSshSessionError(message);
+        return;
+      }
+      toast.error(message);
+    };
+
+    if (!workspace) {
+      reportError("The selected SSH workspace is no longer available.");
+      return;
+    }
+
+    try {
+      setCreatingWorkspaceSshSession(true);
+      setCreateWorkspaceSshSessionError(null);
+      const session = await createSession({ workspaceId: workspace.id });
+      setShowCreateSshSessionModal(false);
+      onSelectSshSession?.(session.config.id);
+    } catch (error) {
+      reportError(String(error));
+    } finally {
+      setCreatingWorkspaceSshSession(false);
+    }
+  }
+
+  function handleCloseCreateSshSessionModal() {
+    if (creatingWorkspaceSshSession) {
+      return;
+    }
+    setCreateWorkspaceSshSessionError(null);
+    setShowCreateSshSessionModal(false);
+  }
+
+  async function handleCreateWorkspaceSshSession() {
+    if (workspacesLoading) {
+      toast.info("Loading SSH workspaces...");
+      return;
+    }
+    if (workspaceError) {
+      toast.error(workspaceError);
+      return;
+    }
+
+    if (sshWorkspaces.length === 0) {
+      toast.error("Create or configure a workspace with SSH transport before starting an SSH session.");
+      return;
+    }
+
+    if (sshWorkspaces.length === 1) {
+      await createWorkspaceSshSessionFor(sshWorkspaces[0]!.id);
+      return;
+    }
+
+    setCreateWorkspaceSshSessionError(null);
+    setShowCreateSshSessionModal(true);
+  }
+
+  async function handleCreateStandaloneSshSession(server: SshServer) {
+    try {
+      const session = await createStandaloneSession(server.config.id);
+      onSelectSshSession?.(session.config.id);
+    } catch (error) {
+      toast.error(String(error));
+    }
+  }
 
   // Workspace server settings hook for the workspace being edited
   const {
@@ -118,7 +192,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         onOpenCreateWorkspace={() => modals.setShowCreateWorkspaceModal(true)}
         onOpenCreateLoop={() => modals.handleOpenCreateLoop()}
         onOpenCreateChat={() => modals.handleOpenCreateChat()}
-        onOpenCreateSshSession={() => setShowCreateSshSessionModal(true)}
+        onCreateSshSession={() => void handleCreateWorkspaceSshSession()}
       />
 
       <main className="flex-1 min-h-0 overflow-auto dark-scrollbar">
@@ -148,8 +222,8 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
                   onDeleteServer={async (serverId) => {
                     await deleteServer(serverId);
                   }}
-                  onOpenCreateSession={(server) => {
-                    setSelectedStandaloneServer(server);
+                  onCreateSession={(server) => {
+                    void handleCreateStandaloneSshSession(server);
                   }}
                   onSelectSession={(sessionId) => onSelectSshSession?.(sessionId)}
                 />
@@ -158,7 +232,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
                   <div className="px-1">
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Workspace SSH Sessions</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Persistent tmux-backed terminal sessions for SSH-configured workspaces.
+                      Saved terminal sessions for SSH-configured workspaces. Use persistent SSH to keep shells alive across reconnects, or direct SSH for a fresh shell.
                     </p>
                   </div>
                   <SshSessionSection
@@ -253,17 +327,6 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         onCreateWorkspace={createWorkspace}
       />
 
-      <CreateSshSessionModal
-        isOpen={showCreateSshSessionModal}
-        onClose={() => setShowCreateSshSessionModal(false)}
-        onCreate={createSession}
-        sessions={sessions}
-        workspaces={workspaces}
-        workspacesLoading={workspacesLoading}
-        workspaceError={workspaceError}
-        onCreated={(sessionId) => onSelectSshSession?.(sessionId)}
-      />
-
       <CreateSshServerModal
         isOpen={showCreateSshServerModal}
         onClose={() => {
@@ -279,13 +342,15 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         }}
       />
 
-      <CreateStandaloneSshSessionModal
-        isOpen={selectedStandaloneServer !== null}
-        server={selectedStandaloneServer}
-        hasStoredCredential={selectedStandaloneServer ? hasStoredCredential(selectedStandaloneServer.config.id) : false}
-        onClose={() => setSelectedStandaloneServer(null)}
-        onCreate={createStandaloneSession}
-        onCreated={(sessionId) => onSelectSshSession?.(sessionId)}
+      <CreateSshSessionModal
+        isOpen={showCreateSshSessionModal}
+        onClose={handleCloseCreateSshSessionModal}
+        workspaces={sshWorkspaces}
+        onCreate={async (workspaceId) => {
+          await createWorkspaceSshSessionFor(workspaceId, { fromModal: true });
+        }}
+        loading={creatingWorkspaceSshSession}
+        error={createWorkspaceSshSessionError}
       />
     </div>
   );

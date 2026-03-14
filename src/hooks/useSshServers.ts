@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   CreateSshServerRequest,
+  SshConnectionMode,
   SshServer,
   SshServerSession,
   UpdateSshServerRequest,
@@ -25,7 +26,10 @@ export interface UseSshServersResult {
   createServer: (request: CreateSshServerRequest, password?: string) => Promise<SshServer | null>;
   updateServer: (id: string, request: UpdateSshServerRequest, password?: string) => Promise<SshServer | null>;
   deleteServer: (id: string) => Promise<boolean>;
-  createSession: (serverId: string, options?: { name?: string; password?: string }) => Promise<SshServerSession | null>;
+  createSession: (
+    serverId: string,
+    options?: { name?: string; connectionMode?: SshConnectionMode },
+  ) => Promise<SshServerSession>;
   hasStoredCredential: (serverId: string) => boolean;
 }
 
@@ -106,14 +110,14 @@ export function useSshServers(): UseSshServersResult {
 
   const createSession = useCallback(async (
     serverId: string,
-    options: { name?: string; password?: string } = {},
-  ): Promise<SshServerSession | null> => {
+    options: { name?: string; connectionMode?: SshConnectionMode } = {},
+  ): Promise<SshServerSession> => {
     try {
       setError(null);
       const session = await createStandaloneSshSessionApi({
         serverId,
         name: options.name,
-        password: options.password,
+        connectionMode: options.connectionMode,
       });
       setSessionsByServerId((prev) => ({
         ...prev,
@@ -121,8 +125,9 @@ export function useSshServers(): UseSshServersResult {
       }));
       return session;
     } catch (err) {
-      setError(String(err));
-      return null;
+      const message = String(err);
+      setError(message);
+      throw err instanceof Error ? err : new Error(message);
     }
   }, []);
 

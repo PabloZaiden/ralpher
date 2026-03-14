@@ -1,4 +1,5 @@
 import type { SshServer, SshServerSession } from "../types";
+import { getEffectiveSshConnectionMode, getSshConnectionModeLabel, isPersistentSshSession } from "../utils";
 import { Badge, Button, Card } from "./common";
 
 function getBadgeVariant(status: SshServerSession["state"]["status"]) {
@@ -25,7 +26,7 @@ export interface SshServerSectionProps {
   onOpenCreateServer: () => void;
   onOpenEditServer: (server: SshServer) => void;
   onDeleteServer: (serverId: string) => Promise<void>;
-  onOpenCreateSession: (server: SshServer) => void;
+  onCreateSession: (server: SshServer) => void;
   onSelectSession: (sessionId: string) => void;
 }
 
@@ -38,7 +39,7 @@ export function SshServerSection({
   onOpenCreateServer,
   onOpenEditServer,
   onDeleteServer,
-  onOpenCreateSession,
+  onCreateSession,
   onSelectSession,
 }: SshServerSectionProps) {
   return (
@@ -60,7 +61,7 @@ export function SshServerSection({
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : servers.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          No standalone SSH servers yet. Add one to create persistent remote sessions outside a workspace.
+          No standalone SSH servers yet. Add one to create saved remote sessions outside a workspace.
         </p>
       ) : (
         <div className="space-y-4">
@@ -89,7 +90,7 @@ export function SshServerSection({
                     <Button size="sm" variant="ghost" onClick={() => onOpenEditServer(server)}>
                       Edit
                     </Button>
-                    <Button size="sm" variant="ghost" onClick={() => onOpenCreateSession(server)}>
+                    <Button size="sm" variant="ghost" onClick={() => onCreateSession(server)}>
                       New Session
                     </Button>
                     <Button size="sm" variant="danger" onClick={() => void onDeleteServer(server.config.id)}>
@@ -104,28 +105,36 @@ export function SshServerSection({
                     </p>
                   ) : (
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      {sessions.map((session) => (
-                        <button
-                          key={session.config.id}
-                          type="button"
-                          onClick={() => onSelectSession(session.config.id)}
-                          className="rounded-md border border-gray-200 bg-gray-50 p-3 text-left transition-colors hover:border-gray-300 hover:bg-white dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600 dark:hover:bg-gray-900"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
-                                {session.config.name}
-                              </p>
-                              <p className="mt-1 truncate text-xs font-mono text-gray-500 dark:text-gray-400">
-                                tmux: {session.config.remoteSessionName}
-                              </p>
+                      {sessions.map((session) => {
+                        const effectiveConnectionMode = getEffectiveSshConnectionMode(session);
+                        return (
+                          <button
+                            key={session.config.id}
+                            type="button"
+                            onClick={() => onSelectSession(session.config.id)}
+                            className="rounded-md border border-gray-200 bg-gray-50 p-3 text-left transition-colors hover:border-gray-300 hover:bg-white dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600 dark:hover:bg-gray-900"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                                  {session.config.name}
+                                </p>
+                                <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                                  Mode: {getSshConnectionModeLabel(effectiveConnectionMode)}
+                                </p>
+                                {isPersistentSshSession(session) && (
+                                  <p className="mt-1 truncate text-xs font-mono text-gray-500 dark:text-gray-400">
+                                    Persistent ID: {session.config.remoteSessionName}
+                                  </p>
+                                )}
+                              </div>
+                              <Badge variant={getBadgeVariant(session.state.status)}>
+                                {session.state.status}
+                              </Badge>
                             </div>
-                            <Badge variant={getBadgeVariant(session.state.status)}>
-                              {session.state.status}
-                            </Badge>
-                          </div>
-                        </button>
-                      ))}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

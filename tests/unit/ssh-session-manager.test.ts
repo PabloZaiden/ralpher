@@ -15,21 +15,19 @@ import { portForwardManager } from "../../src/core/port-forward-manager";
 import { spawn } from "node:child_process";
 
 class SshCapableExecutor extends TestCommandExecutor {
-  public killTargets: string[] = [];
+  public deleteCommands: string[] = [];
 
   override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
-    if (command === "tmux" && args[0] === "-V") {
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
       return {
         success: true,
-        stdout: "tmux 3.4\n",
+        stdout: "dtach - version 0.9\n",
         stderr: "",
         exitCode: 0,
       };
     }
-    if (command === "tmux" && args[0] === "kill-session") {
-      if (args[2]) {
-        this.killTargets.push(args[2]);
-      }
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes(".dtach.sock")) {
+      this.deleteCommands.push(args[1]);
       return {
         success: true,
         stdout: "",
@@ -130,7 +128,7 @@ describe("SshSessionManager loop-linked sessions", () => {
     expect(secondSession.config.id).toBe(firstSession.config.id);
   });
 
-  test("purgeLoop deletes the linked SSH session and kills the tmux session", async () => {
+  test("purgeLoop deletes the linked SSH session and stops the persistent session", async () => {
     const loop = await manager.createLoop({
       ...modelFields,
       directory: workDir,
@@ -158,7 +156,7 @@ describe("SshSessionManager loop-linked sessions", () => {
 
     expect(result).toEqual({ success: true });
     expect(await sshSessionManager.getSession(session.config.id)).toBeNull();
-    expect(executor.killTargets).toContain(session.config.remoteSessionName);
+    expect(executor.deleteCommands.some((command) => command.includes(session.config.remoteSessionName))).toBe(true);
   });
 
   test("purgeLoop deletes loop-owned port forwards", async () => {

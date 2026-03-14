@@ -203,7 +203,7 @@ export const websocketHandlers = {
       activeConnections: activeConnections.size,
     });
 
-    // Terminal sockets attach directly to SSH/tmux and do not subscribe to app events.
+    // Terminal sockets attach directly to SSH sessions and do not subscribe to app events.
     const terminalSessionId = sshSessionId ?? sshServerSessionId;
     if (terminalMode && terminalSessionId) {
       if (sshServerSessionId) {

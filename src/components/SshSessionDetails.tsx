@@ -3,22 +3,23 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Terminal, type ITerminalOptions } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import "@xterm/xterm/css/xterm.css";
-import { Badge, Button, Card, ConfirmModal, Modal } from "./common";
+import { FitAddon, init, Terminal } from "ghostty-web";
+import { Badge, Button, Card, ConfirmModal, Modal, PASSWORD_INPUT_PROPS } from "./common";
 import { getSshServerApi, useSshSession, useToast } from "../hooks";
 import {
   defaultTerminalModifiers,
   encodeTerminalDataInput,
   encodeTerminalInput,
-  encodeTmuxShortcut,
   hasActiveTerminalModifiers,
   type TerminalModifierState,
   type TerminalSpecialKey,
-  type TmuxShortcut,
 } from "../utils/terminal-keys";
-import { writeTextToClipboard } from "../utils";
+import {
+  getEffectiveSshConnectionMode,
+  getSshConnectionModeLabel,
+  isPersistentSshSession,
+  writeTextToClipboard,
+} from "../utils";
 import { appWebSocketUrl } from "../lib/public-path";
 import { getStoredSshCredentialToken, storeSshServerPassword } from "../lib/ssh-browser-credentials";
 import type { SshServer } from "../types";
@@ -90,30 +91,390 @@ function CompactBar({
 }
 
 const touchButtonClassName = "min-h-[28px] shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[11px]";
-
-const sshTerminalFontFamily = [
-  "\"SFMono-Regular\"",
-  "\"SF Mono\"",
+const TERMINAL_FONT_SIZE_PX = 12;
+const TERMINAL_NERD_FONT_FAMILIES = [
+  "Ralpher Terminal Nerd Font",
+  "Liga SFMono Nerd Font",
+  "MesloLGS NF",
+  "MonaspiceNe Nerd Font Mono",
+  "MonaspiceXe Nerd Font Mono",
+  "Iosevka Nerd Font",
+  "RecMonoLinear Nerd Font Mono",
+  "Terminess Nerd Font Mono",
+  "FiraCode Nerd Font Mono",
+  "CaskaydiaMono Nerd Font Mono",
+  "CaskaydiaCove Nerd Font Mono",
+  "JetBrainsMono Nerd Font Mono",
+  "JetBrainsMono Nerd Font",
+  "Hack Nerd Font Mono",
+  "SauceCodePro Nerd Font Mono",
+  "Symbols Nerd Font Mono",
+  "Symbols Nerd Font",
+] as const;
+const TERMINAL_TEXT_FONT_FAMILIES = [
+  "SF Mono",
   "Menlo",
+  "Monaco",
   "Consolas",
-  "\"Liberation Mono\"",
-  "\"DejaVu Sans Mono\"",
-  "\"Noto Sans Mono\"",
+  "Liberation Mono",
   "monospace",
-].join(", ");
+] as const;
+const TERMINAL_GLYPH_SAMPLE = "\ue62b\uf07b\uf15b\uf002";
 
-function createSshTerminalOptions(): ITerminalOptions {
+function formatTerminalFontFamily(fontFamily: string) {
+  return fontFamily === "monospace" || !fontFamily.includes(" ") ? fontFamily : `"${fontFamily}"`;
+}
+
+function buildTerminalFontFamily(fontFamilies: readonly string[]) {
+  return fontFamilies.map((fontFamily) => formatTerminalFontFamily(fontFamily)).join(", ");
+}
+
+// Safari canvas rendering does not reliably fall back for Nerd Font private-use glyphs,
+// so prefer patched monospace families before the plain text-only system fonts.
+const TERMINAL_FONT_FAMILY = buildTerminalFontFamily([
+  ...TERMINAL_NERD_FONT_FAMILIES,
+  ...TERMINAL_TEXT_FONT_FAMILIES,
+]);
+const TERMINAL_PADDING_X_PX = 2;
+const TERMINAL_PADDING_BOTTOM_PX = 2;
+const TERMINAL_PADDING_TOP_PX = 4;
+const TERMINAL_MOUSE_BUTTON_MODE = 1000;
+const TERMINAL_MOUSE_DRAG_MODE = 1002;
+const TERMINAL_MOUSE_ANY_MOTION_MODE = 1003;
+const TERMINAL_MOUSE_SGR_MODE = 1006;
+const TERMINAL_THEME = {
+  background: "#111827",
+  foreground: "#d1d5db",
+  cursor: "#f9fafb",
+  cursorAccent: "#111827",
+  selectionBackground: "#374151",
+  selectionForeground: "#f9fafb",
+  black: "#111827",
+  white: "#d1d5db",
+  brightBlack: "#4b5563",
+  brightWhite: "#f9fafb",
+} as const;
+
+let ghosttyInitPromise: Promise<void> | null = null;
+
+function initializeGhosttyWeb(): Promise<void> {
+  if (!ghosttyInitPromise) {
+    ghosttyInitPromise = init().catch((error) => {
+      ghosttyInitPromise = null;
+      throw error;
+    });
+  }
+
+  return ghosttyInitPromise;
+}
+
+async function resolveTerminalFontFamily() {
+  if (typeof document === "undefined" || !("fonts" in document)) {
+    return TERMINAL_FONT_FAMILY;
+  }
+
+  await Promise.allSettled(
+    TERMINAL_NERD_FONT_FAMILIES.map((fontFamily) =>
+      document.fonts.load(
+        `${TERMINAL_FONT_SIZE_PX}px ${buildTerminalFontFamily([fontFamily])}`,
+        TERMINAL_GLYPH_SAMPLE,
+      ),
+    ),
+  );
+  await document.fonts.ready;
+
+  for (const fontFamily of TERMINAL_NERD_FONT_FAMILIES) {
+    if (
+      document.fonts.check(
+        `${TERMINAL_FONT_SIZE_PX}px ${buildTerminalFontFamily([fontFamily])}`,
+        TERMINAL_GLYPH_SAMPLE,
+      )
+    ) {
+      return buildTerminalFontFamily([fontFamily, ...TERMINAL_TEXT_FONT_FAMILIES]);
+    }
+  }
+
+  return TERMINAL_FONT_FAMILY;
+}
+
+async function remeasureTerminalFont(terminal: Terminal, fitAddon: FitAddon | null) {
+  if (typeof document === "undefined" || !("fonts" in document) || !terminal.renderer || !terminal.wasmTerm) {
+    return;
+  }
+
+  await document.fonts.ready;
+  terminal.renderer.remeasureFont();
+
+  const nextDimensions = fitAddon?.proposeDimensions();
+  if (
+    nextDimensions &&
+    (nextDimensions.cols !== terminal.cols || nextDimensions.rows !== terminal.rows)
+  ) {
+    terminal.resize(nextDimensions.cols, nextDimensions.rows);
+    return;
+  }
+
+  terminal.renderer.resize(terminal.cols, terminal.rows);
+  terminal.renderer.render(terminal.wasmTerm, true, terminal.getViewportY());
+}
+
+type TerminalMousePosition = {
+  column: number;
+  row: number;
+};
+
+type TerminalMouseModes = {
+  trackingEnabled: boolean;
+  sgr: boolean;
+  button: boolean;
+  drag: boolean;
+  anyMotion: boolean;
+};
+
+function readTerminalMouseModes(terminal: Terminal): TerminalMouseModes {
   return {
-    cursorBlink: true,
-    convertEol: true,
-    fontSize: 13,
-    fontFamily: sshTerminalFontFamily,
-    lineHeight: 1.15,
-    customGlyphs: true,
-    rescaleOverlappingGlyphs: true,
-    theme: {
-      background: "#111827",
-    },
+    trackingEnabled: terminal.hasMouseTracking(),
+    sgr: terminal.getMode(TERMINAL_MOUSE_SGR_MODE),
+    button: terminal.getMode(TERMINAL_MOUSE_BUTTON_MODE),
+    drag: terminal.getMode(TERMINAL_MOUSE_DRAG_MODE),
+    anyMotion: terminal.getMode(TERMINAL_MOUSE_ANY_MOTION_MODE),
+  };
+}
+
+function isTerminalMouseForwardingEnabled(terminal: Terminal): boolean {
+  const modes = readTerminalMouseModes(terminal);
+  return modes.trackingEnabled && modes.sgr;
+}
+
+function getTerminalMouseModifiers(event: MouseEvent | WheelEvent): number {
+  let modifiers = 0;
+  if (event.shiftKey) {
+    modifiers += 4;
+  }
+  if (event.altKey || event.metaKey) {
+    modifiers += 8;
+  }
+  if (event.ctrlKey) {
+    modifiers += 16;
+  }
+  return modifiers;
+}
+
+function getTerminalMousePosition(terminal: Terminal, clientX: number, clientY: number): TerminalMousePosition | null {
+  const canvas = terminal.renderer?.getCanvas();
+  if (!canvas || terminal.cols <= 0 || terminal.rows <= 0) {
+    return null;
+  }
+
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
+
+  const relativeX = Math.min(Math.max(clientX - rect.left, 0), rect.width - 1);
+  const relativeY = Math.min(Math.max(clientY - rect.top, 0), rect.height - 1);
+  return {
+    column: Math.min(terminal.cols, Math.max(1, Math.floor(relativeX / rect.width * terminal.cols) + 1)),
+    row: Math.min(terminal.rows, Math.max(1, Math.floor(relativeY / rect.height * terminal.rows) + 1)),
+  };
+}
+
+function encodeSgrMouseSequence(
+  buttonCode: number,
+  position: TerminalMousePosition,
+  options?: { release?: boolean },
+): string {
+  return `\u001b[<${buttonCode};${position.column};${position.row}${options?.release ? "m" : "M"}`;
+}
+
+function getMouseButtonCode(button: number): number | null {
+  switch (button) {
+    case 0:
+      return 0;
+    case 1:
+      return 1;
+    case 2:
+      return 2;
+    default:
+      return null;
+  }
+}
+
+function getPressedMouseButtonCode(buttons: number): number {
+  if (buttons & 1) {
+    return 0;
+  }
+  if (buttons & 4) {
+    return 1;
+  }
+  if (buttons & 2) {
+    return 2;
+  }
+  return 3;
+}
+
+function encodeTerminalMouseButtonEvent(
+  event: MouseEvent,
+  position: TerminalMousePosition,
+  options?: { release?: boolean },
+): string | null {
+  const buttonCode = getMouseButtonCode(event.button);
+  if (buttonCode === null) {
+    return null;
+  }
+
+  return encodeSgrMouseSequence(
+    buttonCode + getTerminalMouseModifiers(event),
+    position,
+    options,
+  );
+}
+
+function encodeTerminalMouseMoveEvent(
+  event: MouseEvent,
+  position: TerminalMousePosition,
+): string {
+  return encodeSgrMouseSequence(
+    32 + getPressedMouseButtonCode(event.buttons) + getTerminalMouseModifiers(event),
+    position,
+  );
+}
+
+function encodeTerminalMouseWheelEvent(
+  event: WheelEvent,
+  position: TerminalMousePosition,
+): string | null {
+  const useHorizontalAxis = Math.abs(event.deltaX) > Math.abs(event.deltaY);
+  const dominantDelta = useHorizontalAxis ? event.deltaX : event.deltaY;
+  if (dominantDelta === 0) {
+    return null;
+  }
+
+  const buttonCode = useHorizontalAxis
+    ? dominantDelta < 0 ? 66 : 67
+    : dominantDelta < 0 ? 64 : 65;
+  return encodeSgrMouseSequence(buttonCode + getTerminalMouseModifiers(event), position);
+}
+
+function isTerminalMouseEventTarget(container: HTMLElement, target: EventTarget | null): boolean {
+  return target instanceof Node && container.contains(target);
+}
+
+function stopTerminalMouseEvent(event: MouseEvent | WheelEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+}
+
+function installTerminalMouseHandlers(options: {
+  terminal: Terminal;
+  container: HTMLElement;
+  sendInput: (data: string) => boolean;
+}) {
+  const { terminal, container, sendInput } = options;
+  const ownerDocument = container.ownerDocument;
+  let trackedMouseButton = false;
+
+  terminal.attachCustomWheelEventHandler((event: WheelEvent) => {
+    if (!isTerminalMouseForwardingEnabled(terminal)) {
+      return false;
+    }
+
+    const position = getTerminalMousePosition(terminal, event.clientX, event.clientY);
+    const sequence = position ? encodeTerminalMouseWheelEvent(event, position) : null;
+    if (!sequence) {
+      return false;
+    }
+
+    void sendInput(sequence);
+    return true;
+  });
+
+  const handleMouseDown = (event: MouseEvent) => {
+    if (!isTerminalMouseEventTarget(container, event.target) || !isTerminalMouseForwardingEnabled(terminal)) {
+      return;
+    }
+
+    const modes = readTerminalMouseModes(terminal);
+    if (!modes.button && !modes.drag && !modes.anyMotion) {
+      return;
+    }
+
+    const position = getTerminalMousePosition(terminal, event.clientX, event.clientY);
+    const sequence = position ? encodeTerminalMouseButtonEvent(event, position) : null;
+    if (!sequence) {
+      return;
+    }
+
+    stopTerminalMouseEvent(event);
+    trackedMouseButton = true;
+    void sendInput(sequence);
+  };
+
+  const handleMouseMove = (event: MouseEvent) => {
+    if (!isTerminalMouseForwardingEnabled(terminal)) {
+      return;
+    }
+
+    const modes = readTerminalMouseModes(terminal);
+    const insideTerminal = isTerminalMouseEventTarget(container, event.target);
+    const shouldSendMotion = modes.anyMotion || (modes.drag && event.buttons !== 0);
+    if (!shouldSendMotion || (!insideTerminal && !trackedMouseButton)) {
+      return;
+    }
+
+    const position = getTerminalMousePosition(terminal, event.clientX, event.clientY);
+    if (!position) {
+      return;
+    }
+
+    stopTerminalMouseEvent(event);
+    void sendInput(encodeTerminalMouseMoveEvent(event, position));
+  };
+
+  const handleMouseUp = (event: MouseEvent) => {
+    const insideTerminal = isTerminalMouseEventTarget(container, event.target);
+    if ((!insideTerminal && !trackedMouseButton) || !isTerminalMouseForwardingEnabled(terminal)) {
+      trackedMouseButton = false;
+      return;
+    }
+
+    const modes = readTerminalMouseModes(terminal);
+    if (!modes.button && !modes.drag && !modes.anyMotion) {
+      trackedMouseButton = false;
+      return;
+    }
+
+    const position = getTerminalMousePosition(terminal, event.clientX, event.clientY);
+    const sequence = position ? encodeTerminalMouseButtonEvent(event, position, { release: true }) : null;
+    trackedMouseButton = false;
+    if (!sequence) {
+      return;
+    }
+
+    stopTerminalMouseEvent(event);
+    void sendInput(sequence);
+  };
+
+  const swallowMouseEvent = (event: MouseEvent) => {
+    if (isTerminalMouseEventTarget(container, event.target) && isTerminalMouseForwardingEnabled(terminal)) {
+      stopTerminalMouseEvent(event);
+    }
+  };
+
+  ownerDocument.addEventListener("mousedown", handleMouseDown, true);
+  ownerDocument.addEventListener("mousemove", handleMouseMove, true);
+  ownerDocument.addEventListener("mouseup", handleMouseUp, true);
+  ownerDocument.addEventListener("click", swallowMouseEvent, true);
+  ownerDocument.addEventListener("contextmenu", swallowMouseEvent, true);
+
+  return () => {
+    terminal.attachCustomWheelEventHandler(undefined);
+    ownerDocument.removeEventListener("mousedown", handleMouseDown, true);
+    ownerDocument.removeEventListener("mousemove", handleMouseMove, true);
+    ownerDocument.removeEventListener("mouseup", handleMouseUp, true);
+    ownerDocument.removeEventListener("click", swallowMouseEvent, true);
+    ownerDocument.removeEventListener("contextmenu", swallowMouseEvent, true);
   };
 }
 
@@ -126,7 +487,8 @@ export function SshSessionDetails({
   onBack,
   copyTextToClipboard = writeTextToClipboard,
 }: SshSessionDetailsProps) {
-  const { error: showErrorToast } = useToast();
+  const toast = useToast();
+  const { error: showErrorToast, warning: showWarningToast } = toast;
   const { session, sessionKind, loading, error, deleteSession, refresh } = useSshSession(sshSessionId);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -137,10 +499,10 @@ export function SshSessionDetails({
   const standaloneCredentialTokenRef = useRef<string | null>(null);
   const pendingStandaloneActionRef = useRef<"terminal" | "delete" | null>(null);
   const pendingOutputRef = useRef<string[]>([]);
-  const resizeAnimationFrameRef = useRef<number | null>(null);
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const terminalConnectInFlightRef = useRef(false);
   const standaloneTokenRecoveryAttemptedRef = useRef(false);
+  const lastShownNoticeRef = useRef<string | null>(null);
   const [socketStatus, setSocketStatus] = useState<"connecting" | "open" | "closed">("connecting");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -192,13 +554,31 @@ export function SshSessionDetails({
       terminalModifiers.shift ? "Shift" : null,
     ].filter(Boolean).join(" + ");
   }, [terminalModifiers]);
+  const effectiveConnectionMode = useMemo(() => {
+    return session ? getEffectiveSshConnectionMode(session) : null;
+  }, [session]);
+  const hasPersistentSession = useMemo(() => {
+    return session ? isPersistentSshSession(session) : false;
+  }, [session]);
   const sessionInfoSummary = useMemo(() => {
     if (!session) {
       return null;
     }
     return (
       <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden text-xs text-gray-500 dark:text-gray-400">
-        <span className="min-w-0 truncate font-mono">{session.config.remoteSessionName}</span>
+        <Badge variant={effectiveConnectionMode === "direct" ? "info" : "default"} className="shrink-0">
+          {getSshConnectionModeLabel(effectiveConnectionMode ?? session.config.connectionMode)}
+        </Badge>
+        {hasPersistentSession ? (
+          <span className="min-w-0 truncate font-mono">{session.config.remoteSessionName}</span>
+        ) : (
+          <span className="min-w-0 truncate">fresh shell on reconnect</span>
+        )}
+        {session.state.notice && (
+          <Badge variant="warning" className="shrink-0">
+            fallback
+          </Badge>
+        )}
         {session.state.error && (
           <Badge variant="error" className="shrink-0">
             error
@@ -220,7 +600,7 @@ export function SshSessionDetails({
           </Badge>
         )}
         <span className="hidden min-w-0 truncate text-xs text-gray-500 dark:text-gray-400 sm:block">
-          Touch keys and tmux shortcuts
+          Touch keys
         </span>
       </div>
     );
@@ -229,6 +609,19 @@ export function SshSessionDetails({
   useEffect(() => {
     terminalModifiersRef.current = terminalModifiers;
   }, [terminalModifiers]);
+
+  useEffect(() => {
+    const notice = session?.state.notice ?? null;
+    if (!notice) {
+      lastShownNoticeRef.current = null;
+      return;
+    }
+    if (notice === lastShownNoticeRef.current) {
+      return;
+    }
+    lastShownNoticeRef.current = notice;
+    showWarningToast(notice, { duration: 12_000 });
+  }, [session?.state.notice, showWarningToast]);
 
   useEffect(() => {
     standaloneCredentialTokenRef.current = standaloneCredentialToken;
@@ -267,54 +660,38 @@ export function SshSessionDetails({
     }, options);
   }, [sendTerminalPayload]);
 
-  const performResize = useCallback(() => {
-    const terminal = terminalRef.current;
-    const fitAddon = fitAddonRef.current;
-    const container = terminalContainerRef.current;
-    if (!terminal || !fitAddon || !container) {
+  const sendTerminalResize = useCallback((cols: number, rows: number) => {
+    if (cols <= 0 || rows <= 0) {
       return;
     }
 
-    fitAddon.fit();
-    if (terminal.cols <= 0 || terminal.rows <= 0) {
-      return;
-    }
-
-    const nextSize = {
-      cols: terminal.cols,
-      rows: terminal.rows,
-    };
     const previousSize = lastSentResizeRef.current;
-    if (
-      previousSize &&
-      previousSize.cols === nextSize.cols &&
-      previousSize.rows === nextSize.rows
-    ) {
+    if (previousSize && previousSize.cols === cols && previousSize.rows === rows) {
       return;
     }
 
     const didSend = sendTerminalPayload({
       type: "terminal.resize",
-      ...nextSize,
+      cols,
+      rows,
     }, { focusTerminal: false, notifyOnFailure: false });
     if (didSend) {
-      lastSentResizeRef.current = nextSize;
+      lastSentResizeRef.current = { cols, rows };
     }
   }, [sendTerminalPayload]);
 
-  const scheduleResize = useCallback(() => {
-    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
-      performResize();
+  const syncTerminalSize = useCallback((options?: { fit?: boolean }) => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
       return;
     }
-    if (resizeAnimationFrameRef.current !== null) {
-      return;
+
+    if (options?.fit) {
+      fitAddonRef.current?.fit();
     }
-    resizeAnimationFrameRef.current = window.requestAnimationFrame(() => {
-      resizeAnimationFrameRef.current = null;
-      performResize();
-    });
-  }, [performResize]);
+
+    sendTerminalResize(terminal.cols, terminal.rows);
+  }, [sendTerminalResize]);
 
   const flushPendingOutput = useCallback(() => {
     if (!terminalRef.current || pendingOutputRef.current.length === 0) {
@@ -334,10 +711,10 @@ export function SshSessionDetails({
     standaloneTokenRecoveryAttemptedRef.current = false;
     lastSentResizeRef.current = null;
     setSocketStatus("open");
-    scheduleResize();
+    syncTerminalSize({ fit: true });
     flushPendingOutput();
     void refresh();
-  }, [flushPendingOutput, refresh, scheduleResize]);
+  }, [flushPendingOutput, refresh, syncTerminalSize]);
 
   const resetTerminalModifiers = useCallback(() => {
     setTerminalModifiers(defaultTerminalModifiers);
@@ -363,19 +740,6 @@ export function SshSessionDetails({
       resetTerminalModifiers();
     }
   }, [resetTerminalModifiers, sendTerminalInput, terminalModifiers, showErrorToast]);
-
-  const sendTmuxShortcut = useCallback((shortcut: TmuxShortcut) => {
-    const encoded = encodeTmuxShortcut(shortcut);
-    if (!encoded) {
-      showErrorToast("That tmux shortcut is not supported.");
-      return;
-    }
-
-    const didSend = sendTerminalInput(encoded);
-    if (didSend) {
-      resetTerminalModifiers();
-    }
-  }, [resetTerminalModifiers, sendTerminalInput, showErrorToast]);
 
   const sendCtrlC = useCallback(() => {
     const encoded = encodeTerminalInput("c", {
@@ -509,10 +873,6 @@ export function SshSessionDetails({
       terminalReadyRef.current = false;
       pendingOutputRef.current = [];
       lastSentResizeRef.current = null;
-      if (resizeAnimationFrameRef.current !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(resizeAnimationFrameRef.current);
-        resizeAnimationFrameRef.current = null;
-      }
       setSocketStatus("connecting");
 
       const ws = new WebSocket(appWebSocketUrl(terminalUrl));
@@ -628,83 +988,103 @@ export function SshSessionDetails({
   }, [connectTerminal, sessionKind, terminalUrl]);
 
   useEffect(() => {
-    if (!terminalContainerRef.current || terminalRef.current) {
-      return;
+    let disposed = false;
+    let terminal: Terminal | null = null;
+    let fitAddon: FitAddon | null = null;
+    let dataDisposable: { dispose(): void } | null = null;
+    let resizeDisposable: { dispose(): void } | null = null;
+    let removeMouseHandlers: (() => void) | null = null;
+
+    async function setupTerminal() {
+      if (!terminalContainerRef.current || terminalRef.current) {
+        return;
+      }
+
+      try {
+        await initializeGhosttyWeb();
+        if (disposed || !terminalContainerRef.current || terminalRef.current) {
+          return;
+        }
+        const terminalFontFamily = await resolveTerminalFontFamily();
+        if (disposed || !terminalContainerRef.current || terminalRef.current) {
+          return;
+        }
+
+        terminal = new Terminal({
+          fontSize: TERMINAL_FONT_SIZE_PX,
+          fontFamily: terminalFontFamily,
+          theme: TERMINAL_THEME,
+        });
+        fitAddon = new FitAddon();
+        terminal.loadAddon(fitAddon);
+        terminal.open(terminalContainerRef.current);
+        fitAddon.observeResize();
+        terminal.focus();
+        terminalRef.current = terminal;
+        fitAddonRef.current = fitAddon;
+        flushPendingOutput();
+
+        dataDisposable = terminal.onData((data: string) => {
+          void sendTerminalKeystroke(data);
+        });
+        resizeDisposable = terminal.onResize(({ cols, rows }) => {
+          sendTerminalResize(cols, rows);
+        });
+        terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+          if (event.key !== "Tab" || !event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
+            return false;
+          }
+
+          void sendTerminalInput("\u001b[Z", { notifyOnFailure: false });
+          return true;
+        });
+        removeMouseHandlers = installTerminalMouseHandlers({
+          terminal,
+          container: terminalContainerRef.current,
+          sendInput: (data: string) => sendTerminalInput(data, { notifyOnFailure: false }),
+        });
+
+        syncTerminalSize({ fit: true });
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+              if (!disposed && terminalRef.current === terminal) {
+                syncTerminalSize({ fit: true });
+              }
+            });
+          });
+        }
+        if (terminalReadyRef.current) {
+          syncTerminalSize();
+        }
+        void remeasureTerminalFont(terminal, fitAddon);
+      } catch (error) {
+        if (!disposed) {
+          showErrorToast(`Failed to initialize the terminal renderer: ${String(error)}`);
+        }
+      }
     }
 
-    const terminal = new Terminal(createSshTerminalOptions());
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(terminalContainerRef.current);
-    const terminalElement = terminal.element;
-    if (terminalElement) {
-      terminalElement.style.width = "100%";
-      terminalElement.style.height = "100%";
-      terminalElement.style.fontFamily = sshTerminalFontFamily;
-      terminalElement.style.fontVariantLigatures = "none";
-      terminalElement.style.fontFeatureSettings = "\"liga\" 0, \"calt\" 0";
-
-      const viewport = terminalElement.querySelector<HTMLElement>(".xterm-viewport");
-      if (viewport) {
-        viewport.style.width = "100%";
-        viewport.style.height = "100%";
-      }
-
-      const screen = terminalElement.querySelector<HTMLElement>(".xterm-screen");
-      if (screen) {
-        screen.style.width = "100%";
-        screen.style.height = "100%";
-      }
-
-      const accessibilityTree = terminalElement.querySelector<HTMLElement>(".xterm-accessibility-tree");
-      if (accessibilityTree) {
-        accessibilityTree.style.fontFamily = sshTerminalFontFamily;
-        accessibilityTree.style.fontVariantLigatures = "none";
-        accessibilityTree.style.fontFeatureSettings = "\"liga\" 0, \"calt\" 0";
-      }
-
-      const helperTextarea = terminalElement.querySelector<HTMLElement>(".xterm-helper-textarea");
-      if (helperTextarea) {
-        helperTextarea.style.fontFamily = sshTerminalFontFamily;
-      }
-    }
-    terminal.focus();
-    terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-    flushPendingOutput();
-
-    const disposable = terminal.onData((data: string) => {
-      void sendTerminalKeystroke(data);
-    });
-
-    scheduleResize();
-
-    const onWindowResize = () => {
-      scheduleResize();
-    };
-    window.addEventListener("resize", onWindowResize);
-
-    let resizeObserver: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined") {
-      resizeObserver = new ResizeObserver(() => {
-        scheduleResize();
-      });
-      resizeObserver.observe(terminalContainerRef.current);
-    }
+    void setupTerminal();
 
     return () => {
-      disposable.dispose();
-      resizeObserver?.disconnect();
-      window.removeEventListener("resize", onWindowResize);
-      if (resizeAnimationFrameRef.current !== null) {
-        window.cancelAnimationFrame(resizeAnimationFrameRef.current);
-        resizeAnimationFrameRef.current = null;
-      }
-      terminal.dispose();
+      disposed = true;
+      removeMouseHandlers?.();
+      dataDisposable?.dispose();
+      resizeDisposable?.dispose();
+      terminal?.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [flushPendingOutput, scheduleResize, sendTerminalKeystroke, session?.config.id]);
+  }, [
+      flushPendingOutput,
+      sendTerminalInput,
+      sendTerminalKeystroke,
+      sendTerminalResize,
+      session?.config.id,
+      showErrorToast,
+      syncTerminalSize,
+    ]);
 
   useEffect(() => {
     if (!terminalUrl) {
@@ -780,7 +1160,7 @@ export function SshSessionDetails({
   async function handleDelete() {
     const success = await deleteSession();
     if (!success) {
-      if (session && isStandaloneSession(session)) {
+      if (session && isStandaloneSession(session) && isPersistentSshSession(session)) {
         setPendingStandaloneAction("delete");
         setShowPasswordPrompt(true);
       }
@@ -854,9 +1234,17 @@ export function SshSessionDetails({
             <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
               {session.config.name}
             </h1>
+            <Badge variant={effectiveConnectionMode === "direct" ? "info" : "default"}>
+              {getSshConnectionModeLabel(effectiveConnectionMode ?? session.config.connectionMode)}
+            </Badge>
             <Badge variant={getStatusVariant(session.state.status)}>
               {session.state.status}
             </Badge>
+            {session.state.notice && (
+              <Badge variant="warning">
+                fallback
+              </Badge>
+            )}
             <Badge variant={socketStatus === "open" ? "success" : socketStatus === "connecting" ? "info" : "warning"}>
               {socketStatus}
             </Badge>
@@ -878,6 +1266,12 @@ export function SshSessionDetails({
         >
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div className="min-w-0">
+              <dt className="text-gray-500 dark:text-gray-400">Mode</dt>
+              <dd className="text-gray-900 dark:text-gray-100">
+                {getSshConnectionModeLabel(effectiveConnectionMode ?? session.config.connectionMode)}
+              </dd>
+            </div>
+            <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">
                 {isStandaloneSession(session) ? "Server" : "Workspace ID"}
               </dt>
@@ -893,14 +1287,27 @@ export function SshSessionDetails({
                 {isStandaloneSession(session) ? standaloneServerTarget : session.config.directory}
               </dd>
             </div>
-            <div className="min-w-0">
-              <dt className="text-gray-500 dark:text-gray-400">tmux session</dt>
-              <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.remoteSessionName}</dd>
-            </div>
+            {hasPersistentSession ? (
+              <div className="min-w-0">
+                <dt className="text-gray-500 dark:text-gray-400">Persistent session ID</dt>
+                <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.remoteSessionName}</dd>
+              </div>
+            ) : (
+              <div className="min-w-0">
+                <dt className="text-gray-500 dark:text-gray-400">Reconnect behavior</dt>
+                <dd className="text-gray-900 dark:text-gray-100">Opens a fresh shell each time</dd>
+              </div>
+            )}
             <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">Last connected</dt>
               <dd className="text-gray-900 dark:text-gray-100">{session.state.lastConnectedAt ?? "Never"}</dd>
             </div>
+            {session.state.notice && (
+              <div className="min-w-0 sm:col-span-2">
+                <dt className="text-gray-500 dark:text-gray-400">Notice</dt>
+                <dd className="break-words text-amber-700 dark:text-amber-300">{session.state.notice}</dd>
+              </div>
+            )}
             {session.state.error && (
               <div className="min-w-0 sm:col-span-2">
                 <dt className="text-gray-500 dark:text-gray-400">Last error</dt>
@@ -1043,39 +1450,6 @@ export function SshSessionDetails({
                   variant="secondary"
                   size="xs"
                   className={touchButtonClassName}
-                  onClick={() => sendTmuxShortcut("split-pane")}
-                >
-                  Split
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  className={touchButtonClassName}
-                  onClick={() => sendTmuxShortcut("next-pane")}
-                >
-                  Next
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  className={touchButtonClassName}
-                  onClick={() => sendTmuxShortcut("resize-pane-up")}
-                >
-                  Pane ↑
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  className={touchButtonClassName}
-                  onClick={() => sendTmuxShortcut("resize-pane-down")}
-                >
-                  Pane ↓
-                </Button>
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  className={touchButtonClassName}
                   onClick={() => sendTerminalTextShortcut("sudo apt update && sudo apt install neovim")}
                 >
                   Install Neovim
@@ -1164,12 +1538,15 @@ export function SshSessionDetails({
 
         <Card
           padding={false}
-          className="min-h-0 flex flex-1 flex-col overflow-hidden"
-          bodyClassName="min-h-0 flex flex-1 flex-col"
+          className="min-h-0 flex flex-1 flex-col overflow-visible rounded-sm bg-gray-900 dark:bg-gray-900"
+          bodyClassName="min-h-0 flex flex-1 flex-col bg-gray-900"
         >
           <div
             ref={terminalContainerRef}
-            className="min-h-0 flex-1 overflow-hidden rounded-lg bg-gray-900 w-full [&>.xterm]:h-full [&>.xterm]:w-full [&_.xterm-screen]:h-full [&_.xterm-screen]:w-full [&_.xterm-viewport]:h-full [&_.xterm-viewport]:w-full"
+            className="relative box-border min-h-0 h-full flex-1 bg-gray-900 w-full"
+            style={{
+              padding: `${TERMINAL_PADDING_TOP_PX}px ${TERMINAL_PADDING_X_PX}px ${TERMINAL_PADDING_BOTTOM_PX}px`,
+            }}
           />
         </Card>
       </div>
@@ -1179,7 +1556,9 @@ export function SshSessionDetails({
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={() => void handleDelete()}
         title="Delete SSH session?"
-        message="This removes the Ralpher session metadata and attempts to kill the remote tmux session."
+        message={hasPersistentSession
+          ? "This removes the Ralpher session metadata and attempts to stop the remote persistent session."
+          : "This removes the saved Ralpher session metadata. Direct SSH mode does not keep a remote persistent session."}
         confirmLabel="Delete"
         loading={false}
       />
@@ -1190,7 +1569,9 @@ export function SshSessionDetails({
           setPendingStandaloneAction(null);
         }}
         title="SSH password required"
-        description="Standalone SSH sessions need the password from this browser before they can connect or be deleted."
+        description={hasPersistentSession
+          ? "Standalone persistent SSH sessions need the password from this browser before they can connect or be deleted."
+          : "Standalone direct SSH sessions need the password from this browser before they can connect."}
         size="sm"
         footer={(
           <>
@@ -1212,7 +1593,9 @@ export function SshSessionDetails({
         <div className="space-y-3">
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {pendingStandaloneAction === "delete"
-              ? "Enter the SSH password to delete the remote tmux session and local metadata."
+              ? hasPersistentSession
+                ? "Enter the SSH password to delete the remote persistent session and local metadata."
+                : "Enter the SSH password to delete the standalone session metadata."
               : "Enter the SSH password to open the standalone terminal session."}
           </p>
           <div>
@@ -1228,6 +1611,7 @@ export function SshSessionDetails({
               value={standalonePassword}
               onChange={(event) => setStandalonePassword(event.target.value)}
               className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              {...PASSWORD_INPUT_PROPS}
             />
           </div>
         </div>

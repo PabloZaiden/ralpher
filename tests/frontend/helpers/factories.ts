@@ -156,6 +156,7 @@ export function createSshSession(overrides?: {
       name: "SSH Session",
       workspaceId: "workspace-1",
       directory: "/workspaces/test-project",
+      connectionMode: "dtach",
       remoteSessionName: `ralpher-${id.replace(/-/g, "").slice(0, 24)}`,
       createdAt: isoNow(),
       updatedAt: isoNow(),

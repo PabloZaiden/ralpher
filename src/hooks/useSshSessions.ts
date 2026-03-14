@@ -12,7 +12,7 @@ export interface UseSshSessionsResult {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  createSession: (request: CreateSshSessionRequest) => Promise<SshSession | null>;
+  createSession: (request: CreateSshSessionRequest) => Promise<SshSession>;
   updateSession: (id: string, request: UpdateSshSessionRequest) => Promise<SshSession | null>;
   deleteSession: (id: string) => Promise<boolean>;
   getSession: (id: string) => SshSession | undefined;
@@ -88,7 +88,7 @@ export function useSshSessions(): UseSshSessionsResult {
     onEvent: handleEvent,
   });
 
-  const createSession = useCallback(async (request: CreateSshSessionRequest): Promise<SshSession | null> => {
+  const createSession = useCallback(async (request: CreateSshSessionRequest): Promise<SshSession> => {
     try {
       setError(null);
       const response = await appFetch("/api/ssh-sessions", {
@@ -100,10 +100,13 @@ export function useSshSessions(): UseSshSessionsResult {
         const data = await response.json() as { message?: string };
         throw new Error(data.message || "Failed to create SSH session");
       }
-      return await response.json() as SshSession;
+      const session = await response.json() as SshSession;
+      setSessions((prev) => [session, ...prev.filter((item) => item.config.id !== session.config.id)]);
+      return session;
     } catch (err) {
-      setError(String(err));
-      return null;
+      const message = String(err);
+      setError(message);
+      throw err instanceof Error ? err : new Error(message);
     }
   }, []);
 
@@ -161,4 +164,3 @@ export function useSshSessions(): UseSshSessionsResult {
     getSession: (id: string) => sessions.find((session) => session.config.id === id),
   };
 }
-

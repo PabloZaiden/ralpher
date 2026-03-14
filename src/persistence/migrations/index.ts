@@ -403,6 +403,62 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 9,
+    name: "add_ssh_connection_mode",
+    up: (db) => {
+      if (tableExists(db, "ssh_sessions")) {
+        const sshSessionColumns = getTableColumns(db, "ssh_sessions");
+        if (!sshSessionColumns.includes("connection_mode")) {
+          db.run("ALTER TABLE ssh_sessions ADD COLUMN connection_mode TEXT NOT NULL DEFAULT 'dtach'");
+        }
+      }
+
+      if (tableExists(db, "ssh_server_sessions")) {
+        const sshServerSessionColumns = getTableColumns(db, "ssh_server_sessions");
+        if (!sshServerSessionColumns.includes("connection_mode")) {
+          db.run("ALTER TABLE ssh_server_sessions ADD COLUMN connection_mode TEXT NOT NULL DEFAULT 'dtach'");
+        }
+      }
+    },
+  },
+  {
+    version: 10,
+    name: "normalize_ssh_connection_modes_and_add_notices",
+    up: (db) => {
+      if (tableExists(db, "ssh_sessions")) {
+        const sshSessionColumns = getTableColumns(db, "ssh_sessions");
+        if (!sshSessionColumns.includes("runtime_connection_mode")) {
+          db.run("ALTER TABLE ssh_sessions ADD COLUMN runtime_connection_mode TEXT");
+        }
+        if (!sshSessionColumns.includes("notice_message")) {
+          db.run("ALTER TABLE ssh_sessions ADD COLUMN notice_message TEXT");
+        }
+        db.run(`
+          UPDATE ssh_sessions
+          SET connection_mode = 'dtach'
+          WHERE connection_mode IS NULL
+            OR (connection_mode <> 'direct' AND connection_mode <> 'dtach')
+        `);
+      }
+
+      if (tableExists(db, "ssh_server_sessions")) {
+        const sshServerSessionColumns = getTableColumns(db, "ssh_server_sessions");
+        if (!sshServerSessionColumns.includes("runtime_connection_mode")) {
+          db.run("ALTER TABLE ssh_server_sessions ADD COLUMN runtime_connection_mode TEXT");
+        }
+        if (!sshServerSessionColumns.includes("notice_message")) {
+          db.run("ALTER TABLE ssh_server_sessions ADD COLUMN notice_message TEXT");
+        }
+        db.run(`
+          UPDATE ssh_server_sessions
+          SET connection_mode = 'dtach'
+          WHERE connection_mode IS NULL
+            OR (connection_mode <> 'direct' AND connection_mode <> 'dtach')
+        `);
+      }
+    },
+  },
 ];
 
 /**

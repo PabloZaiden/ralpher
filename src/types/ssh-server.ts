@@ -68,7 +68,7 @@ export interface SshServerSessionConfig extends SshSessionBaseConfig {
 
 /**
  * Standalone SSH session backed by a registered SSH server rather than a
- * workspace.
+ * workspace. Like workspace SSH sessions, these can use persistent or direct SSH.
  */
 export interface SshServerSession {
   config: SshServerSessionConfig;

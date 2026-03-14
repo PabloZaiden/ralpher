@@ -7,6 +7,9 @@ import { useState } from "react";
 import { Modal, Button } from "./common";
 import { log } from "../lib/logger";
 
+const ADDRESS_UNRESOLVED_PR_COMMENTS_PROMPT =
+  "Find the PR associated to this branch and address the unresolved comments";
+
 export interface AddressCommentsModalProps {
   /** Whether the modal is open */
   isOpen: boolean;
@@ -32,6 +35,18 @@ export function AddressCommentsModal({
 }: AddressCommentsModalProps) {
   const [comments, setComments] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  function handleInsertPrPrompt() {
+    setComments((current) => {
+      if (current.includes(ADDRESS_UNRESOLVED_PR_COMMENTS_PROMPT)) {
+        return current;
+      }
+      if (!current.trim()) {
+        return ADDRESS_UNRESOLVED_PR_COMMENTS_PROMPT;
+      }
+      return `${current.trim()}\n\n${ADDRESS_UNRESOLVED_PR_COMMENTS_PROMPT}`;
+    });
+  }
 
   async function handleSubmit() {
     if (!comments.trim()) {
@@ -97,6 +112,17 @@ export function AddressCommentsModal({
           >
             Reviewer Comments
           </label>
+          <div className="mb-2 flex justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleInsertPrPrompt}
+              disabled={submitting}
+            >
+              Insert PR review prompt
+            </Button>
+          </div>
           <textarea
             id="reviewer-comments"
             value={comments}

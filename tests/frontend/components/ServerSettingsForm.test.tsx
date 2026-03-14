@@ -47,6 +47,15 @@ describe("ServerSettingsForm", () => {
     const userInput = getByLabelText("Username (optional)") as HTMLInputElement;
     const passInput = getByLabelText("Password (optional)") as HTMLInputElement;
 
+    expect(passInput.autocomplete).toBe("off");
+    expect(passInput.getAttribute("autocapitalize")).toBe("off");
+    expect(passInput.getAttribute("autocorrect")).toBe("off");
+    expect(passInput.getAttribute("data-1p-ignore")).toBe("true");
+    expect(passInput.getAttribute("data-bwignore")).toBe("true");
+    expect(passInput.getAttribute("data-form-type")).toBe("other");
+    expect(passInput.getAttribute("data-lpignore")).toBe("true");
+    expect(passInput.getAttribute("spellcheck")).toBe("false");
+
     await user.clear(hostInput);
     await user.type(hostInput, "remote-host");
     await user.clear(portInput);

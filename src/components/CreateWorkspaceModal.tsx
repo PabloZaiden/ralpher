@@ -3,13 +3,23 @@
  * Allows setting workspace name, directory, and server connection settings.
  */
 
-import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useCallback, useMemo, type FormEvent } from "react";
 import { Modal, Button } from "./common";
 import { ServerSettingsForm } from "./ServerSettingsForm";
-import { getDefaultServerSettings } from "../types/settings";
 import type { ServerSettings } from "../types/settings";
 import type { CreateWorkspaceRequest } from "../types/workspace";
 import { appFetch } from "../lib/public-path";
+
+function getCreateWorkspaceDefaultServerSettings(): ServerSettings {
+  return {
+    agent: {
+      provider: "copilot",
+      transport: "ssh",
+      hostname: "localhost",
+      port: 22,
+    },
+  };
+}
 
 export interface CreateWorkspaceModalProps {
   /** Whether the modal is open */
@@ -37,13 +47,15 @@ export function CreateWorkspaceModal({
   error,
   remoteOnly = false,
 }: CreateWorkspaceModalProps) {
+  const defaultServerSettings = useMemo(() => getCreateWorkspaceDefaultServerSettings(), []);
+
   // Workspace form state
   const [name, setName] = useState("");
   const [directory, setDirectory] = useState("");
   
   // Server settings state
   const [serverSettings, setServerSettings] = useState<ServerSettings>(
-    getDefaultServerSettings(remoteOnly)
+    defaultServerSettings,
   );
   const [isServerSettingsValid, setIsServerSettingsValid] = useState(true);
   
@@ -55,11 +67,11 @@ export function CreateWorkspaceModal({
     if (isOpen) {
       setName("");
       setDirectory("");
-      setServerSettings(getDefaultServerSettings(remoteOnly));
+      setServerSettings(defaultServerSettings);
       setIsServerSettingsValid(true);
       setTesting(false);
     }
-  }, [isOpen, remoteOnly]);
+  }, [defaultServerSettings, isOpen]);
 
   // Handle form submission
   async function handleSubmit(e: FormEvent) {
@@ -178,6 +190,7 @@ export function CreateWorkspaceModal({
 
         {/* Server Settings Form (shared component) */}
         <ServerSettingsForm
+          initialSettings={defaultServerSettings}
           onChange={handleServerSettingsChange}
           onTest={handleTestConnection}
           testing={testing}

@@ -10,21 +10,19 @@ import { sshServerKeyManager } from "../../src/core/ssh-server-key-manager";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 
 class SshServerTestExecutor extends TestCommandExecutor {
-  public killTargets: string[] = [];
+  public deleteCommands: string[] = [];
 
   override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
-    if (command === "tmux" && args[0] === "-V") {
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
       return {
         success: true,
-        stdout: "tmux 3.4\n",
+        stdout: "dtach - version 0.9\n",
         stderr: "",
         exitCode: 0,
       };
     }
-    if (command === "tmux" && args[0] === "kill-session") {
-      if (args[2]) {
-        this.killTargets.push(args[2]);
-      }
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes(".dtach.sock")) {
+      this.deleteCommands.push(args[1]);
       return {
         success: true,
         stdout: "",
@@ -36,13 +34,13 @@ class SshServerTestExecutor extends TestCommandExecutor {
   }
 }
 
-class MissingTmuxExecutor extends SshServerTestExecutor {
+class MissingDtachExecutor extends SshServerTestExecutor {
   override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
-    if (command === "tmux" && args[0] === "-V") {
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
       return {
         success: false,
         stdout: "",
-        stderr: "tmux missing",
+        stderr: "dtach missing",
         exitCode: 127,
       };
     }
@@ -104,38 +102,35 @@ describe("SshServerManager", () => {
     expect(await sshServerManager.getServer(server.config.id)).toBeNull();
   });
 
-  test("creates and deletes standalone SSH sessions with one-time credential tokens", async () => {
+  test("creates standalone SSH sessions without requiring a credential token up front", async () => {
     const server = await sshServerManager.createServer({
       name: "Shared host",
       address: "ssh.example.com",
       username: "deploy",
     });
 
-    const createToken = await issueCredentialToken(server.config.id);
     const session = await sshServerManager.createSession(server.config.id, {
       name: "Deploy shell",
-      credentialToken: createToken,
     });
     expect(session.config.name).toBe("Deploy shell");
+    expect(session.config.connectionMode).toBe("dtach");
 
     const deleteToken = await issueCredentialToken(server.config.id);
     expect(await sshServerManager.deleteSession(session.config.id, {
       credentialToken: deleteToken,
     })).toBe(true);
-    expect(executor.killTargets).toContain(session.config.remoteSessionName);
+    expect(executor.deleteCommands.some((command) => command.includes(session.config.remoteSessionName))).toBe(true);
   });
 
-  test("rejects session creation when tmux is unavailable", async () => {
-    sshServerManager.setExecutorFactoryForTesting(() => new MissingTmuxExecutor());
+  test("still creates standalone sessions when dtach is unavailable at creation time", async () => {
+    sshServerManager.setExecutorFactoryForTesting(() => new MissingDtachExecutor());
     const server = await sshServerManager.createServer({
       name: "Shared host",
       address: "ssh.example.com",
       username: "deploy",
     });
 
-    const token = await issueCredentialToken(server.config.id);
-    await expect(sshServerManager.createSession(server.config.id, {
-      credentialToken: token,
-    })).rejects.toThrow("tmux is not available");
+    const session = await sshServerManager.createSession(server.config.id, {});
+    expect(session.config.connectionMode).toBe("dtach");
   });
 });

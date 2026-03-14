@@ -1,6 +1,14 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+@font-face {
+  font-family: "Ralpher Terminal Nerd Font";
+  src: url("./assets/fonts/JetBrainsMonoNerdFontMono-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+}
+
 @layer base {
   :root {
     @apply text-[rgba(255,255,255,0.87)] bg-[#242424] font-sans;

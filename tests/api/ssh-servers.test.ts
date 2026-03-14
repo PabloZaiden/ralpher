@@ -12,18 +12,10 @@ import { TestCommandExecutor } from "../mocks/mock-executor";
 
 class SshServerApiExecutor extends TestCommandExecutor {
   override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
-    if (command === "tmux" && args[0] === "-V") {
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
       return {
         success: true,
-        stdout: "tmux 3.4\n",
-        stderr: "",
-        exitCode: 0,
-      };
-    }
-    if (command === "tmux" && args[0] === "kill-session") {
-      return {
-        success: true,
-        stdout: "",
+        stdout: "dtach - version 0.9\n",
         stderr: "",
         exitCode: 0,
       };
@@ -159,7 +151,7 @@ describe("Standalone SSH servers API integration", () => {
     expect(getSessionResponse.ok).toBe(true);
   });
 
-  test("returns a dedicated invalid credential token error when a session request uses a bad token", async () => {
+  test("accepts legacy credential tokens when creating standalone SSH sessions", async () => {
     const createServerResponse = await fetch(`${baseUrl}/api/ssh-servers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -179,10 +171,46 @@ describe("Standalone SSH servers API integration", () => {
         name: "Deploy shell",
       }),
     });
-    expect(createSessionResponse.status).toBe(400);
-    expect(await createSessionResponse.json()).toEqual({
-      error: "invalid_credential_token",
-      message: "SSH credential token is missing or expired",
+    expect(createSessionResponse.status).toBe(201);
+    const session = await createSessionResponse.json() as {
+      config: { id: string; name: string; connectionMode: string };
+    };
+    expect(session.config.name).toBe("Deploy shell");
+    expect(session.config.connectionMode).toBe("dtach");
+
+    const getSessionResponse = await fetch(`${baseUrl}/api/ssh-server-sessions/${session.config.id}`);
+    expect(getSessionResponse.ok).toBe(true);
+  });
+
+  test("deletes direct standalone SSH sessions without requiring a request body", async () => {
+    const createServerResponse = await fetch(`${baseUrl}/api/ssh-servers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Shared host",
+        address: "ssh.example.com",
+        username: "deploy",
+      }),
     });
+    const createdServer = await createServerResponse.json() as { config: { id: string } };
+
+    const createSessionResponse = await fetch(`${baseUrl}/api/ssh-servers/${createdServer.config.id}/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Direct shell",
+        connectionMode: "direct",
+      }),
+    });
+    expect(createSessionResponse.status).toBe(201);
+    const session = await createSessionResponse.json() as { config: { id: string } };
+
+    const deleteSessionResponse = await fetch(`${baseUrl}/api/ssh-server-sessions/${session.config.id}`, {
+      method: "DELETE",
+    });
+    expect(deleteSessionResponse.ok).toBe(true);
+
+    const getDeletedSessionResponse = await fetch(`${baseUrl}/api/ssh-server-sessions/${session.config.id}`);
+    expect(getDeletedSessionResponse.status).toBe(404);
   });
 });
