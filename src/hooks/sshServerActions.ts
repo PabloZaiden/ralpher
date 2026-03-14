@@ -1,5 +1,6 @@
 import type {
   CreateSshServerRequest,
+  ListSshServersResponse,
   SshServer,
   SshServerSession,
   UpdateSshServerRequest,
@@ -43,8 +44,8 @@ async function resolveCredentialToken(serverId: string, password?: string): Prom
   return token;
 }
 
-export async function listSshServersApi(): Promise<SshServer[]> {
-  return await apiCall<SshServer[]>("/api/ssh-servers", { method: "GET" }, "List SSH servers");
+export async function listSshServersApi(): Promise<ListSshServersResponse> {
+  return await apiCall<ListSshServersResponse>("/api/ssh-servers", { method: "GET" }, "List SSH servers");
 }
 
 export async function getSshServerApi(serverId: string): Promise<SshServer> {

@@ -110,12 +110,13 @@ export class SshServerManager {
 
     const now = new Date().toISOString();
     const sessionCount = await countSshServerSessionsByServerId(serverId);
+    const sessionId = crypto.randomUUID();
     const session: SshServerSession = {
       config: {
-        id: crypto.randomUUID(),
+        id: sessionId,
         sshServerId: serverId,
         name: request.name?.trim() || buildDefaultSshSessionName(server.name, sessionCount),
-        remoteSessionName: buildRemoteSessionName(crypto.randomUUID()),
+        remoteSessionName: buildRemoteSessionName(sessionId),
         createdAt: now,
         updatedAt: now,
       },
@@ -123,7 +124,6 @@ export class SshServerManager {
         status: "ready",
       },
     };
-    session.config.remoteSessionName = buildRemoteSessionName(session.config.id);
     await saveSshServerSession(session);
     return session;
   }

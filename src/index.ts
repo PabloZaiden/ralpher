@@ -66,18 +66,13 @@ try {
         const url = new URL(req.url);
         const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
         const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
-        const credentialToken = url.searchParams.get("credentialToken") ?? undefined;
 
         if (!sshSessionId && !sshServerSessionId) {
           return new Response("sshSessionId or sshServerSessionId is required", { status: 400 });
         }
 
-        if (sshServerSessionId && !credentialToken) {
-          return new Response("credentialToken is required for standalone SSH terminals", { status: 400 });
-        }
-
         const upgraded = server.upgrade(req, {
-          data: { sshSessionId, sshServerSessionId, credentialToken, terminalMode: true } as WebSocketData,
+          data: { sshSessionId, sshServerSessionId, terminalMode: true } as WebSocketData,
         });
 
         if (upgraded) {

@@ -190,14 +190,14 @@ export function buildConnectionConfig(settings: ServerSettings, directory: strin
  * Build a displayable server URL for agent transports that expose host/port.
  */
 function buildAgentServerUrl(settings: ServerSettings): string | undefined {
-    if (!REMOTE_AGENT_TRANSPORTS.has(settings.agent.transport) || settings.agent.transport !== "ssh") {
-      return undefined;
-    }
-   const sshTarget = getSshConnectionTargetFromSettings(settings);
-   if (!sshTarget) {
-     return undefined;
-   }
-   return `ssh://${sshTarget.host}:${sshTarget.port}`;
+  if (!REMOTE_AGENT_TRANSPORTS.has(settings.agent.transport) || settings.agent.transport !== "ssh") {
+    return undefined;
+  }
+  const sshTarget = getSshConnectionTargetFromSettings(settings);
+  if (!sshTarget) {
+    return undefined;
+  }
+  return `ssh://${sshTarget.host}:${sshTarget.port}`;
 }
 
 /**

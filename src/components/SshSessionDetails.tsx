@@ -145,7 +145,7 @@ export function SshSessionDetails({
       }
       if (isStandaloneSession(session)) {
         return standaloneCredentialToken
-          ? `/api/ssh-terminal?sshServerSessionId=${encodeURIComponent(sshSessionId)}&credentialToken=${encodeURIComponent(standaloneCredentialToken)}`
+          ? `/api/ssh-terminal?sshServerSessionId=${encodeURIComponent(sshSessionId)}`
           : null;
       }
       return `/api/ssh-terminal?sshSessionId=${encodeURIComponent(sshSessionId)}`;
@@ -392,8 +392,16 @@ export function SshSessionDetails({
 
     const ws = new WebSocket(appWebSocketUrl(terminalUrl));
     terminalSocketRef.current = ws;
+    const standaloneAuthToken = sessionKind === "standalone" ? standaloneCredentialToken : null;
 
-    ws.onopen = () => {};
+    ws.onopen = () => {
+      if (standaloneAuthToken) {
+        ws.send(JSON.stringify({
+          type: "terminal.auth",
+          credentialToken: standaloneAuthToken,
+        }));
+      }
+    };
     const copyTerminalClipboardText = async (text: string) => {
       try {
         await copyTextToClipboard(text);
@@ -446,7 +454,15 @@ export function SshSessionDetails({
       lastSentResizeRef.current = null;
       setSocketStatus("closed");
     };
-  }, [copyTextToClipboard, focusTerminal, markTerminalReady, terminalUrl, showErrorToast]);
+  }, [
+    copyTextToClipboard,
+    focusTerminal,
+    markTerminalReady,
+    sessionKind,
+    standaloneCredentialToken,
+    terminalUrl,
+    showErrorToast,
+  ]);
 
   useEffect(() => {
     if (!terminalContainerRef.current || terminalRef.current) {
@@ -633,29 +649,34 @@ export function SshSessionDetails({
       return;
     }
 
-    await storeSshServerPassword(session.config.sshServerId, trimmedPassword);
-    setStandalonePassword("");
+    try {
+      await storeSshServerPassword(session.config.sshServerId, trimmedPassword);
 
-    if (pendingStandaloneAction === "delete") {
-      const success = await deleteSession({ password: trimmedPassword });
-      if (success) {
-        setShowPasswordPrompt(false);
-        setPendingStandaloneAction(null);
-        setShowDeleteConfirm(false);
-        onBack();
+      if (pendingStandaloneAction === "delete") {
+        const success = await deleteSession({ password: trimmedPassword });
+        if (success) {
+          setStandalonePassword("");
+          setShowPasswordPrompt(false);
+          setPendingStandaloneAction(null);
+          setShowDeleteConfirm(false);
+          onBack();
+        }
+        return;
       }
-      return;
-    }
 
-    const token = await getStoredSshCredentialToken(session.config.sshServerId);
-    if (!token) {
-      showErrorToast("Failed to retrieve a valid SSH credential token.");
-      return;
-    }
+      const token = await getStoredSshCredentialToken(session.config.sshServerId);
+      if (!token) {
+        showErrorToast("Failed to retrieve a valid SSH credential token.");
+        return;
+      }
 
-    setStandaloneCredentialToken(token);
-    setShowPasswordPrompt(false);
-    setPendingStandaloneAction(null);
+      setStandalonePassword("");
+      setStandaloneCredentialToken(token);
+      setShowPasswordPrompt(false);
+      setPendingStandaloneAction(null);
+    } catch (error) {
+      showErrorToast(String(error));
+    }
   }
 
   if (loading && !session) {

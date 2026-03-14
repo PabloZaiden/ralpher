@@ -156,9 +156,7 @@ export type DeleteSshServerSessionRequest = z.infer<typeof DeleteSshServerSessio
 /**
  * Response from GET /api/ssh-servers.
  */
-export interface ListSshServersResponse {
-  servers: SshServer[];
-}
+export type ListSshServersResponse = SshServer[];
 
 /**
  * Request body for POST /api/loops/:id/address-comments endpoint.

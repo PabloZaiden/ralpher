@@ -158,4 +158,31 @@ describe("Standalone SSH servers API integration", () => {
     const getSessionResponse = await fetch(`${baseUrl}/api/ssh-server-sessions/${session.config.id}`);
     expect(getSessionResponse.ok).toBe(true);
   });
+
+  test("returns a dedicated invalid credential token error when a session request uses a bad token", async () => {
+    const createServerResponse = await fetch(`${baseUrl}/api/ssh-servers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Shared host",
+        address: "ssh.example.com",
+        username: "deploy",
+      }),
+    });
+    const createdServer = await createServerResponse.json() as { config: { id: string } };
+
+    const createSessionResponse = await fetch(`${baseUrl}/api/ssh-servers/${createdServer.config.id}/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        credentialToken: "not-a-real-token",
+        name: "Deploy shell",
+      }),
+    });
+    expect(createSessionResponse.status).toBe(400);
+    expect(await createSessionResponse.json()).toEqual({
+      error: "invalid_credential_token",
+      message: "SSH credential token is missing or expired",
+    });
+  });
 });

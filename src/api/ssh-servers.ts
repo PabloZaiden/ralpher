@@ -20,7 +20,7 @@ import {
 const log = createLogger("api:ssh-servers");
 
 function mapSshServerError(error: unknown): Response {
-  const message = String(error);
+  const message = error instanceof Error ? error.message : String(error);
   if (message.includes("SSH server not found")) {
     return errorResponse("not_found", message, 404);
   }
@@ -31,9 +31,11 @@ function mapSshServerError(error: unknown): Response {
     message.includes("does not match the current registered server key")
     || message.includes("algorithm does not match")
     || message.includes("oaep decoding error")
-    || message.includes("credential token")
   ) {
     return errorResponse("invalid_encrypted_credential", message, 400);
+  }
+  if (message.includes("credential token")) {
+    return errorResponse("invalid_credential_token", message, 400);
   }
   return errorResponse("ssh_server_error", message, 500);
 }

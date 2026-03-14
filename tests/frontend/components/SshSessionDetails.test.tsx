@@ -684,7 +684,10 @@ describe("SshSessionDetails", () => {
 
     const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
     expect(terminalConnection.queryParams["sshServerSessionId"]).toBe("standalone-ssh-1");
-    expect(terminalConnection.queryParams["credentialToken"]).toBe("token-123");
+    expect(terminalConnection.queryParams["credentialToken"]).toBeUndefined();
+    expect(terminalConnection.sentMessages).toContain(
+      JSON.stringify({ type: "terminal.auth", credentialToken: "token-123" }),
+    );
 
     await user.click(getByText("Session Info"));
     await waitFor(() => {
@@ -787,7 +790,10 @@ describe("SshSessionDetails", () => {
     expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(1);
     expect(ws.getConnections("/api/ws")).toHaveLength(1);
     expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
-    expect(ws.getConnections("/api/ssh-terminal")[0]?.queryParams["credentialToken"]).toBe("token-123");
+    expect(ws.getConnections("/api/ssh-terminal")[0]?.queryParams["credentialToken"]).toBeUndefined();
+    expect(ws.getConnections("/api/ssh-terminal")[0]?.sentMessages).toContain(
+      JSON.stringify({ type: "terminal.auth", credentialToken: "token-123" }),
+    );
   });
 
   test("prompts for a standalone SSH password when no browser credential is stored", async () => {
@@ -852,5 +858,65 @@ describe("SshSessionDetails", () => {
 
     expect(api.calls("/api/ssh-servers/:id/credentials", "POST")[0]?.params["id"]).toBe("server-1");
     expect(globalThis.localStorage?.getItem("ralpher.sshServerCredential.server-1")).toBeTruthy();
+  });
+
+  test("keeps the standalone password prompt open and shows a toast when password submission fails", async () => {
+    api.get("/api/ssh-server-sessions/:id", (req) => ({
+      config: {
+        id: req.params["id"]!,
+        sshServerId: "server-1",
+        name: "Password Failure Session",
+        remoteSessionName: "ralpher-standalone-failure",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      state: { status: "ready" },
+    }));
+    api.get("/api/ssh-servers/:id", (req) => ({
+      config: {
+        id: req.params["id"]!,
+        name: "Failure Host",
+        address: "failure.example.com",
+        username: "admin",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      publicKey: {
+        algorithm: "RSA-OAEP-256",
+        publicKey: TEST_PUBLIC_KEY,
+        fingerprint: "fp-1",
+        version: 1,
+        createdAt: new Date().toISOString(),
+      },
+    }));
+    api.get("/api/ssh-servers/:id/public-key", () => ({
+      algorithm: "RSA-OAEP-256",
+      publicKey: TEST_PUBLIC_KEY,
+      fingerprint: "fp-1",
+      version: 1,
+      createdAt: new Date().toISOString(),
+    }));
+    api.post("/api/ssh-servers/:id/credentials", () => ({
+      message: "Credential exchange exploded",
+    }), 500);
+
+    const { getByLabelText, getByText, user } = renderWithUser(
+      <SshSessionDetails sshSessionId="standalone-ssh-failure" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("Password Failure Session")).toBeTruthy();
+      expect(getByText("SSH password required")).toBeTruthy();
+    });
+
+    await user.type(getByLabelText("SSH password"), "secret");
+    await user.click(getByText("Continue"));
+
+    await waitFor(() => {
+      expect(getByText("SSH password required")).toBeTruthy();
+      expect(getByText(/Credential exchange exploded/)).toBeTruthy();
+    });
+
+    expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(0);
   });
 });
