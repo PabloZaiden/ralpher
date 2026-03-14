@@ -68,7 +68,7 @@ export interface SshServerSessionConfig extends SshSessionBaseConfig {
 
 /**
  * Standalone SSH session backed by a registered SSH server rather than a
- * workspace. Like workspace SSH sessions, these can use tmux or direct SSH.
+ * workspace. Like workspace SSH sessions, these can use persistent or direct SSH.
  */
 export interface SshServerSession {
   config: SshServerSessionConfig;

@@ -3,7 +3,6 @@ import {
   defaultTerminalModifiers,
   encodeTerminalDataInput,
   encodeTerminalInput,
-  encodeTmuxShortcut,
   hasActiveTerminalModifiers,
 } from "../../src/utils/terminal-keys";
 
@@ -41,12 +40,5 @@ describe("terminal key encoding", () => {
     expect(encodeTerminalDataInput("\t", { ctrl: false, alt: false, shift: true })).toBe("\u001b[Z");
     expect(encodeTerminalDataInput("\u001b[A", { ctrl: false, alt: true, shift: false })).toBe("\u001b[1;3A");
     expect(encodeTerminalDataInput("c", defaultTerminalModifiers)).toBe("c");
-  });
-
-  test("encodes tmux helper shortcuts", () => {
-    expect(encodeTmuxShortcut("split-pane")).toBe("\u0002\"");
-    expect(encodeTmuxShortcut("next-pane")).toBe("\u0002o");
-    expect(encodeTmuxShortcut("resize-pane-up")).toBe("\u0002\u001b[1;5A");
-    expect(encodeTmuxShortcut("resize-pane-down")).toBe("\u0002\u001b[1;5B");
   });
 });

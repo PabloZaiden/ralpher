@@ -17,8 +17,8 @@ function mapSessionError(error: unknown): Response {
   }
   if (
     message.includes("ssh transport")
-    || message.includes("tmux is not available")
-    || message.includes("tmux is not installed")
+    || message.includes("dtach is not available")
+    || message.includes("dtach is not installed")
   ) {
     return errorResponse("invalid_session_configuration", message, 400);
   }

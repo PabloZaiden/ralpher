@@ -111,7 +111,7 @@ export function CreateSshSessionModal({
       isOpen={isOpen}
       onClose={onClose}
       title="New SSH Session"
-      description="Create a saved SSH terminal for an SSH workspace, using tmux or a direct shell."
+      description="Create a saved SSH terminal for an SSH workspace, using a persistent shell or a direct shell."
       size="md"
       footer={(
         <>
@@ -172,13 +172,13 @@ export function CreateSshSessionModal({
             onChange={(e) => setConnectionMode(e.target.value as SshConnectionMode)}
             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
           >
-            <option value="tmux">tmux (persistent across reconnects)</option>
-            <option value="direct">Direct SSH (fresh shell, bypass tmux)</option>
+            <option value="tmux">Persistent SSH (dtach, survives reconnects)</option>
+            <option value="direct">Direct SSH (fresh shell)</option>
           </select>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             {connectionMode === "tmux"
-              ? "tmux keeps the remote shell alive and is the current default."
-              : "Direct SSH skips tmux so you can compare terminal behavior without it."}
+              ? "Persistent SSH uses dtach to keep the remote shell alive across reconnects."
+              : "Direct SSH opens a fresh shell each time and skips the persistent session backend."}
           </p>
         </div>
         {directory && (

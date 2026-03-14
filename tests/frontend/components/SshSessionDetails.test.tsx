@@ -677,59 +677,7 @@ describe("SshSessionDetails", () => {
       "Install fresh",
       "Fresh",
     ]);
-    expect(separators).toHaveLength(4);
-  });
-
-  test("sends tmux helper shortcuts from touch controls", async () => {
-    api.get("/api/ssh-sessions/:id", (req) =>
-      createSshSession({ config: { id: req.params["id"]!, name: "SSH Tmux Helpers" } }),
-    );
-
-    const { getByText, user } = renderWithUser(
-      <SshSessionDetails sshSessionId="ssh-mobile-3" onBack={() => {}} />,
-    );
-
-    await waitFor(() => {
-      expect(getByText("SSH Tmux Helpers")).toBeTruthy();
-    });
-
-    await waitFor(() => {
-      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
-      expect(lastTerminal).not.toBeNull();
-    });
-
-    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
-    await act(async () => {
-      ws.sendEventTo(terminalConnection, {
-        type: "terminal.connected",
-        sshSessionId: "ssh-mobile-3",
-      });
-    });
-
-    await user.click(getByText("Touch controls"));
-    await user.click(getByText("Split"));
-    await user.click(getByText("Next"));
-    await user.click(getByText("Pane ↑"));
-    await user.click(getByText("Pane ↓"));
-
-    await waitFor(() => {
-      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
-        type: "terminal.input",
-        data: "\u0002\"",
-      }));
-      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
-        type: "terminal.input",
-        data: "\u0002o",
-      }));
-      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
-        type: "terminal.input",
-        data: "\u0002\u001b[1;5A",
-      }));
-      expect(terminalConnection.sentMessages).toContain(JSON.stringify({
-        type: "terminal.input",
-        data: "\u0002\u001b[1;5B",
-      }));
-    });
+    expect(separators).toHaveLength(3);
   });
 
   test("waits for terminal readiness before sending the initial resize", async () => {

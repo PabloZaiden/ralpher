@@ -1,4 +1,5 @@
 import type { SshServer, SshServerSession } from "../types";
+import { getSshConnectionModeLabel } from "../utils";
 import { Badge, Button, Card } from "./common";
 
 function getBadgeVariant(status: SshServerSession["state"]["status"]) {
@@ -14,10 +15,6 @@ function getBadgeVariant(status: SshServerSession["state"]["status"]) {
     default:
       return "default";
   }
-}
-
-function getConnectionModeLabel(mode: SshServerSession["config"]["connectionMode"]): string {
-  return mode === "direct" ? "Direct SSH" : "tmux";
 }
 
 export interface SshServerSectionProps {
@@ -121,11 +118,11 @@ export function SshServerSection({
                                 {session.config.name}
                               </p>
                               <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
-                                Mode: {getConnectionModeLabel(session.config.connectionMode)}
+                                Mode: {getSshConnectionModeLabel(session.config.connectionMode)}
                               </p>
                               {session.config.connectionMode !== "direct" && (
                                 <p className="mt-1 truncate text-xs font-mono text-gray-500 dark:text-gray-400">
-                                  tmux: {session.config.remoteSessionName}
+                                  Persistent ID: {session.config.remoteSessionName}
                                 </p>
                               )}
                             </div>

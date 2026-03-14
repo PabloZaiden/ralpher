@@ -11,15 +11,15 @@ import { tmpdir } from "os";
 
 class SshSessionTestExecutor extends TestCommandExecutor {
   override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
-    if (command === "tmux" && args[0] === "-V") {
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
       return {
         success: true,
-        stdout: "tmux 3.4\n",
+        stdout: "dtach - version 0.9\n",
         stderr: "",
         exitCode: 0,
       };
     }
-    if (command === "tmux" && args[0] === "kill-session") {
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes(".dtach.sock")) {
       return {
         success: true,
         stdout: "",
@@ -31,13 +31,13 @@ class SshSessionTestExecutor extends TestCommandExecutor {
   }
 }
 
-class MissingTmuxExecutor extends SshSessionTestExecutor {
+class MissingDtachExecutor extends SshSessionTestExecutor {
   override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
-    if (command === "tmux" && args[0] === "-V") {
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
       return {
         success: false,
         stdout: "",
-        stderr: "tmux missing",
+        stderr: "dtach missing",
         exitCode: 127,
       };
     }
@@ -45,13 +45,13 @@ class MissingTmuxExecutor extends SshSessionTestExecutor {
   }
 }
 
-class FailingTmuxKillExecutor extends SshSessionTestExecutor {
+class FailingPersistentCleanupExecutor extends SshSessionTestExecutor {
   override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
-    if (command === "tmux" && args[0] === "kill-session") {
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes(".dtach.sock")) {
       return {
         success: false,
         stdout: "",
-        stderr: "Failed to kill remote tmux session",
+        stderr: "Failed to stop remote persistent SSH session",
         exitCode: 1,
       };
     }
@@ -246,8 +246,8 @@ describe("SSH sessions API integration", () => {
     expect(data.message).toContain("ssh transport");
   });
 
-  test("treats missing tmux as invalid session configuration", async () => {
-    backendManager.setExecutorFactoryForTesting(() => new MissingTmuxExecutor());
+  test("treats missing dtach as invalid session configuration", async () => {
+    backendManager.setExecutorFactoryForTesting(() => new MissingDtachExecutor());
     const workspace = await createWorkspace({ transport: "ssh" });
 
     const response = await fetch(`${baseUrl}/api/ssh-sessions`, {
@@ -255,17 +255,17 @@ describe("SSH sessions API integration", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         workspaceId: workspace.id,
-        name: "Needs Tmux",
+        name: "Needs Persistent SSH",
       }),
     });
 
     expect(response.status).toBe(400);
     const data = await response.json() as { error: string; message: string };
     expect(data.error).toBe("invalid_session_configuration");
-    expect(data.message).toContain("tmux is not available");
+    expect(data.message).toContain("dtach is not available");
   });
 
-  test("treats tmux cleanup failures as server errors", async () => {
+  test("treats persistent session cleanup failures as server errors", async () => {
     const workspace = await createWorkspace({ transport: "ssh" });
 
     const createResponse = await fetch(`${baseUrl}/api/ssh-sessions`, {
@@ -280,7 +280,7 @@ describe("SSH sessions API integration", () => {
     expect(createResponse.status).toBe(201);
     const created = await createResponse.json() as { config: { id: string } };
 
-    backendManager.setExecutorFactoryForTesting(() => new FailingTmuxKillExecutor());
+    backendManager.setExecutorFactoryForTesting(() => new FailingPersistentCleanupExecutor());
 
     const deleteResponse = await fetch(`${baseUrl}/api/ssh-sessions/${created.config.id}`, {
       method: "DELETE",
@@ -289,6 +289,6 @@ describe("SSH sessions API integration", () => {
     expect(deleteResponse.status).toBe(500);
     const data = await deleteResponse.json() as { error: string; message: string };
     expect(data.error).toBe("ssh_session_error");
-    expect(data.message).toContain("Failed to kill remote tmux session");
+    expect(data.message).toContain("Failed to stop remote persistent SSH session");
   });
 });

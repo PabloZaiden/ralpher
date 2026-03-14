@@ -11,21 +11,19 @@ import { createMockBackend } from "../mocks/mock-backend";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 
 class LoopSshExecutor extends TestCommandExecutor {
-  public killTargets: string[] = [];
+  public deleteCommands: string[] = [];
 
   override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
-    if (command === "tmux" && args[0] === "-V") {
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
       return {
         success: true,
-        stdout: "tmux 3.4\n",
+        stdout: "dtach - version 0.9\n",
         stderr: "",
         exitCode: 0,
       };
     }
-    if (command === "tmux" && args[0] === "kill-session") {
-      if (args[2]) {
-        this.killTargets.push(args[2]);
-      }
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes(".dtach.sock")) {
+      this.deleteCommands.push(args[1]);
       return {
         success: true,
         stdout: "",
@@ -80,7 +78,7 @@ describe("Loop SSH session API integration", () => {
     db.run("DELETE FROM ssh_sessions");
     db.run("DELETE FROM loops WHERE workspace_id IS NOT NULL");
     db.run("DELETE FROM workspaces");
-    executor.killTargets = [];
+    executor.deleteCommands = [];
   });
 
   afterEach(async () => {
@@ -247,6 +245,6 @@ describe("Loop SSH session API integration", () => {
 
     const getSessionResponse = await fetch(`${baseUrl}/api/ssh-sessions/${session.config.id}`);
     expect(getSessionResponse.status).toBe(404);
-    expect(executor.killTargets).toContain(session.config.remoteSessionName);
+    expect(executor.deleteCommands.some((command) => command.includes(session.config.remoteSessionName))).toBe(true);
   });
 });

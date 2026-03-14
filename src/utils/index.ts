@@ -24,3 +24,5 @@ export { formatRelativeTime } from "./format";
 export { buildDefaultSshSessionName, buildLoopSshSessionName } from "./ssh-session-name";
 
 export { writeTextToClipboard } from "./clipboard";
+
+export { getSshConnectionModeLabel } from "./ssh-connection-mode";

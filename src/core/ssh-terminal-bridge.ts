@@ -7,6 +7,11 @@ import type { CommandExecutor } from "./command-executor";
 import type { SshConnectionMode, SshServerSession, SshSession, Workspace } from "../types";
 import { getWorkspace } from "../persistence/workspaces";
 import { buildSshRemoteShellCommand } from "./remote-command-executor";
+import {
+  buildPersistentSessionAttachCommand,
+  buildPersistentSessionReadyCommand,
+  buildPersistentSessionResizeCommand,
+} from "./ssh-persistent-session";
 import { sshSessionManager } from "./ssh-session-manager";
 import { sshServerManager } from "./ssh-server-manager";
 import { createLogger } from "./logger";
@@ -18,8 +23,8 @@ import {
 } from "./ssh-connection-target";
 
 const log = createLogger("core:ssh-terminal-bridge");
-const TMUX_READY_POLL_INTERVAL_MS = 100;
-const DEFAULT_TMUX_READY_TIMEOUT_MS = 15_000;
+const SESSION_READY_POLL_INTERVAL_MS = 100;
+const DEFAULT_SESSION_READY_TIMEOUT_MS = 15_000;
 const DEFAULT_SSH_TERM = "xterm-256color";
 const OSC_52_SEQUENCE_START = "\u001b]52;";
 const OSC_SEQUENCE_BELL = "\u0007";
@@ -49,24 +54,8 @@ function quoteShell(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
-export function buildAttachCommand(session: { config: { remoteSessionName: string; directory?: string } }): string {
-  const sessionName = quoteShell(session.config.remoteSessionName);
-  const createSessionCommand = session.config.directory
-    ? `tmux new-session -d -s ${sessionName} -c ${quoteShell(session.config.directory)};`
-    : `tmux new-session -d -s ${sessionName};`;
-  return [
-    "if ! command -v tmux >/dev/null 2>&1; then",
-    "echo 'tmux is not installed on the remote host.' >&2;",
-    "exit 127;",
-    "fi;",
-    `if ! tmux has-session -t ${sessionName} 2>/dev/null; then`,
-    createSessionCommand,
-    "fi;",
-    "tmux set-option -s set-clipboard on;",
-    `tmux set-option -t ${sessionName} mouse on;`,
-    `tmux set-option -t ${sessionName} status off;`,
-    `exec tmux attach-session -t ${sessionName}`,
-  ].join(" ");
+export function buildAttachCommand(session: { config: { id: string; remoteSessionName: string; directory?: string } }): string {
+  return buildPersistentSessionAttachCommand(session);
 }
 
 function buildDirectTtyFilePath(sessionId: string): string {
@@ -98,7 +87,7 @@ function buildSessionStartupCommand(
 ): string {
   return session.config.connectionMode === "direct"
     ? buildDirectShellCommand(session)
-    : buildAttachCommand(session);
+    : buildPersistentSessionAttachCommand(session);
 }
 
 function buildSpawnEnv(extraEnv?: Record<string, string>): NodeJS.ProcessEnv {
@@ -139,16 +128,6 @@ function buildStandaloneSshSpawnConfig(target: SshConnectionTarget, session: Ssh
     passwordHandling: "environment",
     baseEnv: buildSpawnEnv(),
   });
-}
-
-function buildTmuxResizeCommand(sessionName: string, cols: number, rows: number): string {
-  const quotedSessionName = quoteShell(sessionName);
-  return [
-    `session_name=${quotedSessionName}`,
-    `cols=${String(cols)}`,
-    `rows=${String(rows)}`,
-    "exec tmux resize-window -t \"$session_name\" -x \"$cols\" -y \"$rows\"",
-  ].join("\n");
 }
 
 function buildDirectReadyCommand(sessionId: string): string {
@@ -278,7 +257,6 @@ export class SshTerminalBridge {
   private closePromise: Promise<void> | null = null;
   private skipCloseStatusUpdate = false;
   private startupError: string | undefined;
-  private receivedStdout = false;
   private stdoutBuffer = "";
   private stderrBuffer = "";
 
@@ -312,7 +290,6 @@ export class SshTerminalBridge {
     this.ready = false;
     this.skipCloseStatusUpdate = false;
     this.startupError = undefined;
-    this.receivedStdout = false;
     this.stdoutBuffer = "";
     this.stderrBuffer = "";
 
@@ -344,8 +321,8 @@ export class SshTerminalBridge {
       this.standaloneExecutor = null;
       this.commandCwd = this.workspace.directory;
 
-      if (this.session.config.connectionMode === "tmux") {
-        await sshSessionManager.ensureTmuxAvailable(this.workspace);
+      if (this.session.config.connectionMode !== "direct") {
+        await sshSessionManager.ensurePersistentSessionBackendAvailable(this.workspace);
       }
       await sshSessionManager.markStatus(this.sessionId, "connecting");
 
@@ -395,9 +372,6 @@ export class SshTerminalBridge {
     });
 
     proc.stdout.on("data", (chunk: string) => {
-      if (chunk.length > 0) {
-        this.receivedStdout = true;
-      }
       this.handleOutputChunk(chunk, "stdout");
     });
     proc.stderr.on("data", (chunk: string) => {
@@ -448,7 +422,7 @@ export class SshTerminalBridge {
     const executor = await this.getCommandExecutor();
     const resizeCommand = this.getConnectionMode() === "direct"
       ? buildDirectResizeCommand(this.getTrackedSessionId(), normalizedCols, normalizedRows)
-      : buildTmuxResizeCommand(this.getRemoteSessionName(), normalizedCols, normalizedRows);
+      : buildPersistentSessionResizeCommand(this.getTrackedSessionId(), normalizedCols, normalizedRows);
     const result = await executor.exec("bash", [
       "-lc",
       resizeCommand,
@@ -517,7 +491,7 @@ export class SshTerminalBridge {
     }
 
     const executor = await this.getCommandExecutor();
-    const deadline = Date.now() + (this.options.readyTimeoutMs ?? DEFAULT_TMUX_READY_TIMEOUT_MS);
+    const deadline = Date.now() + (this.options.readyTimeoutMs ?? DEFAULT_SESSION_READY_TIMEOUT_MS);
     if (this.getConnectionMode() === "direct") {
       while (Date.now() < deadline) {
         if (!this.proc) {
@@ -538,7 +512,7 @@ export class SshTerminalBridge {
           return;
         }
 
-        await Bun.sleep(TMUX_READY_POLL_INTERVAL_MS);
+        await Bun.sleep(SESSION_READY_POLL_INTERVAL_MS);
       }
 
       throw new Error("Timed out waiting for the direct SSH shell to become ready");
@@ -549,33 +523,29 @@ export class SshTerminalBridge {
         throw new Error("SSH terminal is not connected");
       }
       if (this.proc.exitCode !== null || this.proc.signalCode !== null) {
-        throw new Error(this.startupError ?? "SSH terminal exited before the tmux session was ready");
+        throw new Error(this.startupError ?? "SSH terminal exited before the persistent SSH session was ready");
       }
 
-      const result = await executor.exec("tmux", [
-        "display-message",
-        "-p",
-        "-t",
-        this.getRemoteSessionName(),
-        "#{session_attached}",
+      const result = await executor.exec("bash", [
+        "-lc",
+        buildPersistentSessionReadyCommand({
+          config: {
+            id: this.getTrackedSessionId(),
+            remoteSessionName: this.getRemoteSessionName(),
+          },
+        }),
       ], {
         cwd: this.commandCwd,
         timeout: 1_000,
       });
-      if (result.success && Number.parseInt(result.stdout.trim(), 10) > 0) {
-        return;
-      }
-      if (this.receivedStdout) {
-        log.debug("Treating live terminal output as readiness fallback", {
-          sessionId: this.sessionId,
-        });
+      if (result.success) {
         return;
       }
 
-      await Bun.sleep(TMUX_READY_POLL_INTERVAL_MS);
+      await Bun.sleep(SESSION_READY_POLL_INTERVAL_MS);
     }
 
-    throw new Error(`Timed out waiting for tmux session ${this.getRemoteSessionName()} to become ready`);
+    throw new Error(`Timed out waiting for persistent SSH session ${this.getRemoteSessionName()} to become ready`);
   }
 
   private async waitForClose(): Promise<void> {

@@ -12,18 +12,10 @@ import { TestCommandExecutor } from "../mocks/mock-executor";
 
 class SshServerApiExecutor extends TestCommandExecutor {
   override async exec(command: string, args: string[], options?: Parameters<TestCommandExecutor["exec"]>[2]) {
-    if (command === "tmux" && args[0] === "-V") {
+    if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
       return {
         success: true,
-        stdout: "tmux 3.4\n",
-        stderr: "",
-        exitCode: 0,
-      };
-    }
-    if (command === "tmux" && args[0] === "kill-session") {
-      return {
-        success: true,
-        stdout: "",
+        stdout: "dtach - version 0.9\n",
         stderr: "",
         exitCode: 0,
       };

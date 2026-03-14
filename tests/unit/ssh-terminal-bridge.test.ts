@@ -170,18 +170,10 @@ describe("SshTerminalBridge", () => {
     await saveSshSession(session);
 
     execImpl = async (command: string, args: string[]) => {
-      if (command === "tmux" && args[0] === "-V") {
+      if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
         return {
           success: true,
-          stdout: "tmux 3.4\n",
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      if (command === "tmux" && args[0] === "display-message") {
-        return {
-          success: true,
-          stdout: "1\n",
+          stdout: "dtach - version 0.9\n",
           stderr: "",
           exitCode: 0,
         };
@@ -205,25 +197,27 @@ describe("SshTerminalBridge", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  test("buildAttachCommand enables clipboard and mouse support and disables the tmux status bar before attaching", () => {
+  test("buildAttachCommand creates or reattaches a dtach-backed persistent session", () => {
     const command = buildAttachCommand(session);
 
-    expect(command).toContain("tmux new-session -d -s 'ralpher-session-1' -c '/workspaces/example';");
-    expect(command).toContain("tmux set-option -s set-clipboard on;");
-    expect(command).toContain("tmux set-option -t 'ralpher-session-1' mouse on;");
-    expect(command).toContain("tmux set-option -t 'ralpher-session-1' status off;");
-    expect(command).toContain("exec tmux attach-session -t 'ralpher-session-1'");
+    expect(command).toContain("session_socket='/tmp/ralpher-session-1.dtach.sock'");
+    expect(command).toContain("client_tty_file='/tmp/ralpher-terminal-ssh-session-1.tty'");
+    expect(command).toContain("session_tty_file='/tmp/ralpher-terminal-ssh-session-1.session.tty'");
+    expect(command).toContain("cd '/workspaces/example' || exit 1;");
+    expect(command).toContain("dtach -N \"$session_socket\" -Ez bash -lc");
+    expect(command).toContain("dtach -a \"$session_socket\" -E -z -r winch");
   });
 
   test("buildAttachCommand omits the working directory for standalone sessions", () => {
     const command = buildAttachCommand({
       config: {
+        id: "standalone-session-1",
         remoteSessionName: "ralpher-server-session-1",
       },
     });
 
-    expect(command).toContain("tmux new-session -d -s 'ralpher-server-session-1';");
-    expect(command).not.toContain(" -c ");
+    expect(command).toContain("session_socket='/tmp/ralpher-server-session-1.dtach.sock'");
+    expect(command).not.toContain("cd '");
   });
 
   test("uses a fallback TERM when the server environment does not define one", async () => {
@@ -276,15 +270,15 @@ describe("SshTerminalBridge", () => {
 
   test("marks startup probe failures as failed and tears down the SSH process", async () => {
     execImpl = async (command: string, args: string[]) => {
-      if (command === "tmux" && args[0] === "-V") {
+      if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
         return {
           success: true,
-          stdout: "tmux 3.4\n",
+          stdout: "dtach - version 0.9\n",
           stderr: "",
           exitCode: 0,
         };
       }
-      throw new Error("tmux probe failed");
+      throw new Error("persistent session probe failed");
     };
 
     const onErrorCalls: string[] = [];
@@ -295,10 +289,10 @@ describe("SshTerminalBridge", () => {
       },
     });
 
-    await expect(bridge.connect()).rejects.toThrow("tmux probe failed");
+    await expect(bridge.connect()).rejects.toThrow("persistent session probe failed");
 
     expect(currentProc?.killedSignals).toEqual(["SIGTERM"]);
-    expect(onErrorCalls.some((message) => message.includes("tmux probe failed"))).toBe(true);
+    expect(onErrorCalls.some((message) => message.includes("persistent session probe failed"))).toBe(true);
   });
 
   test("dispose waits for close and allows reconnecting the same bridge instance", async () => {
@@ -327,49 +321,6 @@ describe("SshTerminalBridge", () => {
 
     await bridge.connect();
     expect(spawnCount).toBe(2);
-  });
-
-  test("treats live stdout as a readiness fallback when tmux probing lags", async () => {
-    execImpl = async (command: string, args: string[]) => {
-      if (command === "tmux" && args[0] === "-V") {
-        return {
-          success: true,
-          stdout: "tmux 3.4\n",
-          stderr: "",
-          exitCode: 0,
-        };
-      }
-      if (command === "tmux" && args[0] === "display-message") {
-        return {
-          success: false,
-          stdout: "",
-          stderr: "session missing",
-          exitCode: 1,
-        };
-      }
-      return {
-        success: true,
-        stdout: "",
-        stderr: "",
-        exitCode: 0,
-      };
-    };
-
-    const outputChunks: string[] = [];
-    const bridge = new SshTerminalBridge(session.config.id, {
-      onOutput: (chunk) => {
-        outputChunks.push(chunk);
-      },
-      readyTimeoutMs: 500,
-    });
-
-    const connectPromise = bridge.connect();
-    await Bun.sleep(0);
-
-    currentProc?.stdout.emit("data", "tester@host:~$ ");
-
-    await expect(connectPromise).resolves.toBeUndefined();
-    expect(outputChunks).toContain("tester@host:~$ ");
   });
 
   test("extracts OSC 52 clipboard copies from terminal output", async () => {

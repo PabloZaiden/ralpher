@@ -7,7 +7,6 @@ import { createWorkspace } from "../../src/persistence/workspaces";
 import { initializeDatabase, closeDatabase } from "../../src/persistence/database";
 import { saveSshSession } from "../../src/persistence/ssh-sessions";
 import { backendManager } from "../../src/core/backend-manager";
-import { buildSshRemoteShellCommand } from "../../src/core/remote-command-executor";
 import { SshTerminalBridge } from "../../src/core/ssh-terminal-bridge";
 import type { SshSession, Workspace } from "../../src/types";
 
@@ -94,7 +93,7 @@ const canRunRealSshBridge = async () =>
   && await commandExists("sshd")
   && await commandExists("ssh")
   && await commandExists("ssh-keygen")
-  && await commandExists("tmux");
+  && await commandExists("dtach");
 
 function startStreamingCapture(stream: ReadableStream<Uint8Array>): { read: () => string; done: Promise<void> } {
   const reader = stream.getReader();
@@ -114,10 +113,6 @@ function startStreamingCapture(stream: ReadableStream<Uint8Array>): { read: () =
     read: () => output,
     done,
   };
-}
-
-function quoteShell(value: string): string {
-  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
 describe("SshTerminalBridge integration", () => {
@@ -260,30 +255,6 @@ describe("SshTerminalBridge integration", () => {
         },
       };
       await saveSshSession(session);
-
-      await runQuiet([
-        "ssh",
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "IdentityAgent=none",
-        "-o",
-        "IdentitiesOnly=yes",
-        "-i",
-        join(sshDir, "id_rsa"),
-        "-o",
-        "StrictHostKeyChecking=no",
-        "-o",
-        "UserKnownHostsFile=/dev/null",
-        "-p",
-        String(port),
-        `${username}@127.0.0.1`,
-        "--",
-        buildSshRemoteShellCommand(
-          `tmux has-session -t ${quoteShell(session.config.remoteSessionName)} 2>/dev/null || `
-          + `tmux new-session -d -s ${quoteShell(session.config.remoteSessionName)} -c ${quoteShell(workspaceDir)}`,
-        ),
-      ]);
 
       let output = "";
       const bridge = new SshTerminalBridge(session.config.id, {

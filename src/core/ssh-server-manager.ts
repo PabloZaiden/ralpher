@@ -36,6 +36,10 @@ import { CommandExecutorImpl } from "./remote-command-executor";
 import { sshSessionEventEmitter } from "./event-emitter";
 import type { SshConnectionTarget } from "./ssh-connection-target";
 import { getSshConnectionTargetFromServer } from "./ssh-connection-target";
+import {
+  buildPersistentSessionBackendProbeCommand,
+  buildPersistentSessionDeleteCommand,
+} from "./ssh-persistent-session";
 
 const log = createLogger("core:ssh-server-manager");
 
@@ -109,8 +113,8 @@ export class SshServerManager {
     const server = await this.requireServerConfig(serverId);
     const connectionMode = this.getConnectionMode(request);
     const password = sshCredentialManager.consumeToken(serverId, request.credentialToken);
-    if (connectionMode === "tmux") {
-      await this.ensureTmuxAvailable(server, password);
+    if (connectionMode !== "direct") {
+      await this.ensurePersistentSessionBackendAvailable(server, password);
     }
 
     const now = new Date().toISOString();
@@ -150,22 +154,19 @@ export class SshServerManager {
 
   async deleteSession(id: string, request: DeleteSshServerSessionRequest): Promise<boolean> {
     const session = await this.requireSession(id);
-    if (session.config.connectionMode === "tmux") {
+    if (session.config.connectionMode !== "direct") {
       const server = await this.requireServerConfig(session.config.sshServerId);
       const credentialToken = request.credentialToken?.trim();
       if (!credentialToken) {
-        throw new Error("SSH credential token is required to delete tmux-backed standalone SSH sessions");
+        throw new Error("SSH credential token is required to delete persistent standalone SSH sessions");
       }
       const password = sshCredentialManager.consumeToken(server.id, credentialToken);
       const executor = this.buildExecutor(server, password);
-      const result = await executor.exec("tmux", ["kill-session", "-t", session.config.remoteSessionName], {
+      const result = await executor.exec("bash", ["-lc", buildPersistentSessionDeleteCommand(session)], {
         cwd: "/",
       });
       if (!result.success) {
-        const stderr = result.stderr.trim();
-        if (!stderr.includes("can't find session")) {
-          throw new Error(stderr || result.stdout || "Failed to kill remote tmux session");
-        }
+        throw new Error(result.stderr.trim() || result.stdout.trim() || "Failed to stop remote persistent SSH session");
       }
     }
     return await deleteSshServerSession(id);
@@ -218,17 +219,17 @@ export class SshServerManager {
     return updatedSession;
   }
 
-  private async ensureTmuxAvailable(server: SshServerConfig, password: string): Promise<void> {
+  private async ensurePersistentSessionBackendAvailable(server: SshServerConfig, password: string): Promise<void> {
     const executor = this.buildExecutor(server, password);
-    const result = await executor.exec("tmux", ["-V"], { cwd: "/" });
+    const result = await executor.exec("bash", ["-lc", buildPersistentSessionBackendProbeCommand()], { cwd: "/" });
     if (!result.success) {
       const detail = result.stderr.trim() || result.stdout.trim();
-      throw new Error(detail ? `tmux is not available on the remote host: ${detail}` : "tmux is not available");
+      throw new Error(detail ? `dtach is not available on the remote host: ${detail}` : "dtach is not available");
     }
-    log.debug("Validated standalone SSH tmux availability", {
+    log.debug("Validated standalone persistent SSH backend availability", {
       serverId: server.id,
       address: server.address,
-      version: result.stdout.trim(),
+      detail: result.stdout.trim(),
     });
   }
 

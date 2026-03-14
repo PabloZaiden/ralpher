@@ -27,6 +27,10 @@ import { createLogger } from "./logger";
 import { sshSessionEventEmitter } from "./event-emitter";
 import { buildDefaultSshSessionName, buildLoopSshSessionName } from "../utils";
 import { portForwardManager } from "./port-forward-manager";
+import {
+  buildPersistentSessionBackendProbeCommand,
+  buildPersistentSessionDeleteCommand,
+} from "./ssh-persistent-session";
 
 const log = createLogger("core:ssh-session-manager");
 
@@ -64,8 +68,8 @@ export class SshSessionManager {
   async createSession(request: CreateSshSessionRequest): Promise<SshSession> {
     const workspace = await requireSshWorkspace(request.workspaceId);
     const connectionMode = request.connectionMode ?? DEFAULT_SSH_CONNECTION_MODE;
-    if (connectionMode === "tmux") {
-      await this.ensureTmuxAvailable(workspace);
+    if (connectionMode !== "direct") {
+      await this.ensurePersistentSessionBackendAvailable(workspace);
     }
     await touchWorkspace(workspace.id);
 
@@ -104,17 +108,14 @@ export class SshSessionManager {
   async deleteSession(id: string): Promise<boolean> {
     const session = await this.requireSession(id);
     await portForwardManager.deleteForwardsBySshSessionId(id);
-    if (session.config.connectionMode === "tmux") {
+    if (session.config.connectionMode !== "direct") {
       const workspace = await requireSshWorkspace(session.config.workspaceId);
       const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
-      const killResult = await executor.exec("tmux", ["kill-session", "-t", session.config.remoteSessionName], {
+      const killResult = await executor.exec("bash", ["-lc", buildPersistentSessionDeleteCommand(session)], {
         cwd: workspace.directory,
       });
       if (!killResult.success) {
-        const stderr = killResult.stderr.trim();
-        if (!stderr.includes("can't find session")) {
-          throw new Error(stderr || killResult.stdout || "Failed to kill remote tmux session");
-        }
+        throw new Error(killResult.stderr.trim() || killResult.stdout.trim() || "Failed to stop remote persistent SSH session");
       }
     }
 
@@ -142,7 +143,7 @@ export class SshSessionManager {
     }
 
     const workspace = await requireSshWorkspace(loop.config.workspaceId);
-    await this.ensureTmuxAvailable(workspace);
+    await this.ensurePersistentSessionBackendAvailable(workspace);
     await touchWorkspace(workspace.id);
 
     const directory = loop.config.useWorktree
@@ -196,20 +197,22 @@ export class SshSessionManager {
     return updatedSession;
   }
 
-  async ensureTmuxAvailable(workspace: Workspace): Promise<void> {
+  async ensurePersistentSessionBackendAvailable(workspace: Workspace): Promise<void> {
     const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
-    const result = await executor.exec("tmux", ["-V"], { cwd: workspace.directory });
+    const result = await executor.exec("bash", ["-lc", buildPersistentSessionBackendProbeCommand()], {
+      cwd: workspace.directory,
+    });
     if (!result.success) {
       const detail = result.stderr.trim() || result.stdout.trim();
       const message = detail
-        ? `tmux is not available on the remote host: ${detail}`
-        : "tmux is not available on the remote host";
+        ? `dtach is not available on the remote host: ${detail}`
+        : "dtach is not available on the remote host";
       throw new Error(message);
     }
-    log.debug("Validated tmux availability", {
+    log.debug("Validated persistent SSH backend availability", {
       workspaceId: workspace.id,
       directory: workspace.directory,
-      version: result.stdout.trim(),
+      detail: result.stdout.trim(),
     });
   }
 

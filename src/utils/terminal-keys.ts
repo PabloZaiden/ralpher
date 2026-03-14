@@ -8,12 +8,6 @@ export interface TerminalModifierState {
   shift: boolean;
 }
 
-export type TmuxShortcut =
-  | "split-pane"
-  | "next-pane"
-  | "resize-pane-up"
-  | "resize-pane-down";
-
 export type TerminalSpecialKey =
   | "ArrowUp"
   | "ArrowDown"
@@ -27,7 +21,6 @@ export type TerminalSpecialKey =
 
 const ESC = "\u001b";
 const CSI = `${ESC}[`;
-const TMUX_PREFIX = "\u0002";
 
 export const defaultTerminalModifiers: TerminalModifierState = {
   ctrl: false,
@@ -182,30 +175,5 @@ export function encodeTerminalDataInput(
         return null;
       }
       return encodeTerminalInput(data, modifiers);
-  }
-}
-
-export function encodeTmuxShortcut(shortcut: TmuxShortcut): string | null {
-  switch (shortcut) {
-    case "split-pane":
-      return `${TMUX_PREFIX}"`;
-    case "next-pane":
-      return `${TMUX_PREFIX}o`;
-    case "resize-pane-up": {
-      const resizeUp = encodeTerminalInput("ArrowUp", {
-        ctrl: true,
-        alt: false,
-        shift: false,
-      });
-      return resizeUp ? `${TMUX_PREFIX}${resizeUp}` : null;
-    }
-    case "resize-pane-down": {
-      const resizeDown = encodeTerminalInput("ArrowDown", {
-        ctrl: true,
-        alt: false,
-        shift: false,
-      });
-      return resizeDown ? `${TMUX_PREFIX}${resizeDown}` : null;
-    }
   }
 }

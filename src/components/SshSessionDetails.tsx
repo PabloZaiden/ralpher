@@ -10,13 +10,11 @@ import {
   defaultTerminalModifiers,
   encodeTerminalDataInput,
   encodeTerminalInput,
-  encodeTmuxShortcut,
   hasActiveTerminalModifiers,
   type TerminalModifierState,
   type TerminalSpecialKey,
-  type TmuxShortcut,
 } from "../utils/terminal-keys";
-import { writeTextToClipboard } from "../utils";
+import { getSshConnectionModeLabel, writeTextToClipboard } from "../utils";
 import { appWebSocketUrl } from "../lib/public-path";
 import { getStoredSshCredentialToken, storeSshServerPassword } from "../lib/ssh-browser-credentials";
 import type { SshServer } from "../types";
@@ -41,10 +39,6 @@ function getStatusVariant(status: string) {
     default:
       return "default";
   }
-}
-
-function getConnectionModeLabel(mode: "tmux" | "direct"): string {
-  return mode === "direct" ? "Direct SSH" : "tmux";
 }
 
 export interface SshSessionDetailsProps {
@@ -560,7 +554,7 @@ export function SshSessionDetails({
     return (
       <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden text-xs text-gray-500 dark:text-gray-400">
         <Badge variant={session.config.connectionMode === "direct" ? "info" : "default"} className="shrink-0">
-          {getConnectionModeLabel(session.config.connectionMode)}
+          {getSshConnectionModeLabel(session.config.connectionMode)}
         </Badge>
         {session.config.connectionMode !== "direct" ? (
           <span className="min-w-0 truncate font-mono">{session.config.remoteSessionName}</span>
@@ -588,7 +582,7 @@ export function SshSessionDetails({
           </Badge>
         )}
         <span className="hidden min-w-0 truncate text-xs text-gray-500 dark:text-gray-400 sm:block">
-          {session?.config.connectionMode !== "direct" ? "Touch keys and tmux shortcuts" : "Touch keys"}
+          Touch keys
         </span>
       </div>
     );
@@ -715,19 +709,6 @@ export function SshSessionDetails({
       resetTerminalModifiers();
     }
   }, [resetTerminalModifiers, sendTerminalInput, terminalModifiers, showErrorToast]);
-
-  const sendTmuxShortcut = useCallback((shortcut: TmuxShortcut) => {
-    const encoded = encodeTmuxShortcut(shortcut);
-    if (!encoded) {
-      showErrorToast("That tmux shortcut is not supported.");
-      return;
-    }
-
-    const didSend = sendTerminalInput(encoded);
-    if (didSend) {
-      resetTerminalModifiers();
-    }
-  }, [resetTerminalModifiers, sendTerminalInput, showErrorToast]);
 
   const sendCtrlC = useCallback(() => {
     const encoded = encodeTerminalInput("c", {
@@ -1223,7 +1204,7 @@ export function SshSessionDetails({
               {session.config.name}
             </h1>
             <Badge variant={session.config.connectionMode === "direct" ? "info" : "default"}>
-              {getConnectionModeLabel(session.config.connectionMode)}
+              {getSshConnectionModeLabel(session.config.connectionMode)}
             </Badge>
             <Badge variant={getStatusVariant(session.state.status)}>
               {session.state.status}
@@ -1251,7 +1232,7 @@ export function SshSessionDetails({
             <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">Mode</dt>
               <dd className="text-gray-900 dark:text-gray-100">
-                {getConnectionModeLabel(session.config.connectionMode)}
+                {getSshConnectionModeLabel(session.config.connectionMode)}
               </dd>
             </div>
             <div className="min-w-0">
@@ -1272,7 +1253,7 @@ export function SshSessionDetails({
             </div>
             {session.config.connectionMode !== "direct" ? (
               <div className="min-w-0">
-                <dt className="text-gray-500 dark:text-gray-400">tmux session</dt>
+                <dt className="text-gray-500 dark:text-gray-400">Persistent session ID</dt>
                 <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.remoteSessionName}</dd>
               </div>
             ) : (
@@ -1422,43 +1403,6 @@ export function SshSessionDetails({
                 >
                   →
                 </Button>
-                {session.config.connectionMode !== "direct" && (
-                  <>
-                    <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
-                    <Button
-                      variant="secondary"
-                      size="xs"
-                      className={touchButtonClassName}
-                      onClick={() => sendTmuxShortcut("split-pane")}
-                    >
-                      Split
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="xs"
-                      className={touchButtonClassName}
-                      onClick={() => sendTmuxShortcut("next-pane")}
-                    >
-                      Next
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="xs"
-                      className={touchButtonClassName}
-                      onClick={() => sendTmuxShortcut("resize-pane-up")}
-                    >
-                      Pane ↑
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="xs"
-                      className={touchButtonClassName}
-                      onClick={() => sendTmuxShortcut("resize-pane-down")}
-                    >
-                      Pane ↓
-                    </Button>
-                  </>
-                )}
                 <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
                 <Button
                   variant="secondary"
@@ -1571,8 +1515,8 @@ export function SshSessionDetails({
         onConfirm={() => void handleDelete()}
         title="Delete SSH session?"
         message={session.config.connectionMode !== "direct"
-          ? "This removes the Ralpher session metadata and attempts to kill the remote tmux session."
-          : "This removes the saved Ralpher session metadata. Direct SSH mode does not keep a remote tmux session."}
+          ? "This removes the Ralpher session metadata and attempts to stop the remote persistent session."
+          : "This removes the saved Ralpher session metadata. Direct SSH mode does not keep a remote persistent session."}
         confirmLabel="Delete"
         loading={false}
       />
@@ -1584,7 +1528,7 @@ export function SshSessionDetails({
         }}
         title="SSH password required"
         description={session.config.connectionMode !== "direct"
-          ? "Standalone tmux sessions need the password from this browser before they can connect or be deleted."
+          ? "Standalone persistent SSH sessions need the password from this browser before they can connect or be deleted."
           : "Standalone direct SSH sessions need the password from this browser before they can connect."}
         size="sm"
         footer={(
@@ -1607,7 +1551,7 @@ export function SshSessionDetails({
         <div className="space-y-3">
           <p className="text-sm text-gray-600 dark:text-gray-300">
             {pendingStandaloneAction === "delete"
-              ? "Enter the SSH password to delete the remote tmux session and local metadata."
+              ? "Enter the SSH password to delete the remote persistent session and local metadata."
               : "Enter the SSH password to open the standalone terminal session."}
           </p>
           <div>
