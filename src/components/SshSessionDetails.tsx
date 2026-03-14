@@ -115,6 +115,12 @@ export function SshSessionDetails({
   const [standalonePassword, setStandalonePassword] = useState("");
   const [standaloneCredentialToken, setStandaloneCredentialToken] = useState<string | null>(null);
   const [pendingStandaloneAction, setPendingStandaloneAction] = useState<"terminal" | "delete" | null>(null);
+  const standaloneServerId = useMemo(() => {
+    if (!session || !isStandaloneSession(session)) {
+      return null;
+    }
+    return session.config.sshServerId;
+  }, [session]);
 
   const terminalUrl = useMemo(
     () => {
@@ -513,12 +519,16 @@ export function SshSessionDetails({
     let cancelled = false;
 
     async function ensureStandaloneCredentialToken() {
-      if (!session || !isStandaloneSession(session)) {
+      if (!standaloneServerId) {
         setStandaloneCredentialToken(null);
         return;
       }
 
-      const token = await getStoredSshCredentialToken(session.config.sshServerId);
+      if (standaloneCredentialToken) {
+        return;
+      }
+
+      const token = await getStoredSshCredentialToken(standaloneServerId);
       if (cancelled) {
         return;
       }
@@ -552,7 +562,7 @@ export function SshSessionDetails({
     return () => {
       cancelled = true;
     };
-  }, [session, sessionKind, showErrorToast]);
+  }, [sessionKind, showErrorToast, standaloneCredentialToken, standaloneServerId]);
 
   async function handleDelete() {
     const success = await deleteSession();

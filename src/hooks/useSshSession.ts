@@ -32,8 +32,28 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const initialLoadDoneRef = useRef(false);
+  const sessionKindRef = useRef<SshSessionKind | null>(null);
+
+  const fetchSessionByKind = useCallback(async (kind: SshSessionKind): Promise<AnySshSession> => {
+    const endpoint = kind === "standalone"
+      ? `/api/ssh-server-sessions/${sessionId}`
+      : `/api/ssh-sessions/${sessionId}`;
+    const response = await appFetch(endpoint);
+    if (!response.ok) {
+      const data = await response.json() as { message?: string };
+      throw new Error(data.message || "Failed to fetch SSH session");
+    }
+    return await response.json() as AnySshSession;
+  }, [sessionId]);
 
   const fetchSession = useCallback(async (): Promise<{ session: AnySshSession; kind: SshSessionKind }> => {
+    if (sessionKindRef.current) {
+      return {
+        session: await fetchSessionByKind(sessionKindRef.current),
+        kind: sessionKindRef.current,
+      };
+    }
+
     const workspaceResponse = await appFetch(`/api/ssh-sessions/${sessionId}`);
     if (workspaceResponse.ok) {
       return {
@@ -55,7 +75,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
       session: await standaloneResponse.json() as SshServerSession,
       kind: "standalone",
     };
-  }, [sessionId]);
+  }, [fetchSessionByKind, sessionId]);
 
   const refreshInternal = useCallback(async (showLoading: boolean) => {
     try {
@@ -65,6 +85,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
       setError(null);
       const next = await fetchSession();
       setSession(next.session);
+      sessionKindRef.current = next.kind;
       setSessionKind(next.kind);
       initialLoadDoneRef.current = true;
     } catch (err) {
@@ -156,6 +177,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
 
   useEffect(() => {
     initialLoadDoneRef.current = false;
+    sessionKindRef.current = null;
     setSession(null);
     setSessionKind(null);
     setLoading(true);

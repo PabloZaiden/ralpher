@@ -670,6 +670,83 @@ describe("SshSessionDetails", () => {
     expect(terminalConnection.queryParams["credentialToken"]).toBe("token-123");
   });
 
+  test("does not re-probe the workspace endpoint or remint standalone terminal credentials on session refresh", async () => {
+    let standaloneStatus = "ready";
+
+    globalThis.localStorage?.setItem("ralpher.sshServerCredential.server-1", JSON.stringify({
+      encryptedCredential: {
+        algorithm: "RSA-OAEP-256",
+        fingerprint: "fp-1",
+        version: 1,
+        ciphertext: "ciphertext",
+      },
+      storedAt: new Date().toISOString(),
+    }));
+
+    api.get("/api/ssh-sessions/:id", () => ({
+      error: "not_found",
+      message: "SSH session not found",
+    }), 404);
+    api.get("/api/ssh-server-sessions/:id", (req) => ({
+      config: {
+        id: req.params["id"]!,
+        sshServerId: "server-1",
+        name: "Refresh Stable Session",
+        remoteSessionName: "ralpher-standalone-refresh",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      state: { status: standaloneStatus },
+    }));
+    api.get("/api/ssh-servers/:id/public-key", () => ({
+      algorithm: "RSA-OAEP-256",
+      publicKey: TEST_PUBLIC_KEY,
+      fingerprint: "fp-1",
+      version: 1,
+      createdAt: new Date().toISOString(),
+    }));
+    api.post("/api/ssh-servers/:id/credentials", () => ({
+      credentialToken: "token-123",
+      expiresAt: new Date().toISOString(),
+    }));
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="standalone-ssh-refresh" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("Refresh Stable Session")).toBeTruthy();
+      expect(api.calls("/api/ssh-sessions/:id", "GET")).toHaveLength(1);
+      expect(api.calls("/api/ssh-server-sessions/:id", "GET")).toHaveLength(1);
+      expect(api.calls("/api/ssh-servers/:id/public-key", "GET")).toHaveLength(1);
+      expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(1);
+      expect(ws.getConnections("/api/ws")).toHaveLength(1);
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+    });
+
+    standaloneStatus = "connected";
+    const sessionConnection = ws.getConnections("/api/ws")[0]!;
+
+    await act(async () => {
+      ws.sendEventTo(sessionConnection, {
+        type: "ssh_session.status",
+        sshSessionId: "standalone-ssh-refresh",
+        status: "connected",
+      });
+    });
+
+    await waitFor(() => {
+      expect(api.calls("/api/ssh-server-sessions/:id", "GET")).toHaveLength(2);
+    });
+
+    expect(api.calls("/api/ssh-sessions/:id", "GET")).toHaveLength(1);
+    expect(api.calls("/api/ssh-servers/:id/public-key", "GET")).toHaveLength(1);
+    expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(1);
+    expect(ws.getConnections("/api/ws")).toHaveLength(1);
+    expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+    expect(ws.getConnections("/api/ssh-terminal")[0]?.queryParams["credentialToken"]).toBe("token-123");
+  });
+
   test("prompts for a standalone SSH password when no browser credential is stored", async () => {
     api.get("/api/ssh-server-sessions/:id", (req) => ({
       config: {
