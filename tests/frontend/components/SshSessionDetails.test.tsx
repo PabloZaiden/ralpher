@@ -11,6 +11,7 @@ class MockTerminal {
   cols = 80;
   rows = 24;
   dataHandler: ((data: string) => void) | null = null;
+  resizeHandler: ((size: { cols: number; rows: number }) => void) | null = null;
   writes: string[] = [];
   focusCalls = 0;
 
@@ -19,7 +20,9 @@ class MockTerminal {
     lastTerminalOptions = options ?? null;
   }
 
-  loadAddon() {}
+  loadAddon(addon: { activate?: (terminal: MockTerminal) => void }) {
+    addon.activate?.(this);
+  }
   open() {}
   focus() {
     this.focusCalls += 1;
@@ -40,26 +43,34 @@ class MockTerminal {
     };
   }
 
+  onResize(handler: (size: { cols: number; rows: number }) => void) {
+    this.resizeHandler = handler;
+    return {
+      dispose: () => {
+        this.resizeHandler = null;
+      },
+    };
+  }
+
   dispose() {
     this.dataHandler = null;
+    this.resizeHandler = null;
   }
 }
 
 class MockFitAddon {
+  activate() {}
   fit() {}
+  observeResize() {}
 }
 
 let lastTerminal: MockTerminal | null = null;
 
-mock.module("@xterm/xterm", () => ({
+mock.module("ghostty-web", () => ({
+  init: async () => {},
   Terminal: MockTerminal,
-}));
-
-mock.module("@xterm/addon-fit", () => ({
   FitAddon: MockFitAddon,
 }));
-
-mock.module("@xterm/xterm/css/xterm.css", () => ({}));
 
 const { SshSessionDetails } = await import("@/components/SshSessionDetails");
 
@@ -128,7 +139,7 @@ describe("SshSessionDetails", () => {
     });
   });
 
-  test("initializes the terminal with modern rendering options for box drawing and glyph sizing", async () => {
+  test("initializes the terminal with the configured ghostty-web font size and without xterm-specific rendering tweaks", async () => {
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Terminal Rendering" } }),
     );
@@ -141,21 +152,24 @@ describe("SshSessionDetails", () => {
       expect(getByText("SSH Terminal Rendering")).toBeTruthy();
       expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
       expect(lastTerminal).not.toBeNull();
-      expect(lastTerminalOptions).not.toBeNull();
     });
 
-    expect(lastTerminalOptions).toEqual(expect.objectContaining({
-      cursorBlink: true,
-      convertEol: true,
-      fontSize: 13,
-      fontFamily: "\"SFMono-Regular\", \"SF Mono\", Menlo, Consolas, \"Liberation Mono\", \"DejaVu Sans Mono\", \"Noto Sans Mono\", monospace",
-      lineHeight: 1.15,
-      customGlyphs: true,
-      rescaleOverlappingGlyphs: true,
+    expect(lastTerminalOptions).toEqual({
+      fontSize: 12,
+      fontFamily: "\"Ralpher Terminal Nerd Font\", \"Liga SFMono Nerd Font\", \"MesloLGS NF\", \"MonaspiceNe Nerd Font Mono\", \"MonaspiceXe Nerd Font Mono\", \"Iosevka Nerd Font\", \"RecMonoLinear Nerd Font Mono\", \"Terminess Nerd Font Mono\", \"FiraCode Nerd Font Mono\", \"CaskaydiaMono Nerd Font Mono\", \"CaskaydiaCove Nerd Font Mono\", \"JetBrainsMono Nerd Font Mono\", \"JetBrainsMono Nerd Font\", \"Hack Nerd Font Mono\", \"SauceCodePro Nerd Font Mono\", \"Symbols Nerd Font Mono\", \"Symbols Nerd Font\", \"SF Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", monospace",
       theme: {
         background: "#111827",
+        foreground: "#d1d5db",
+        cursor: "#f9fafb",
+        cursorAccent: "#111827",
+        selectionBackground: "#374151",
+        selectionForeground: "#f9fafb",
+        black: "#111827",
+        white: "#d1d5db",
+        brightBlack: "#4b5563",
+        brightWhite: "#f9fafb",
       },
-    }));
+    });
   });
 
   test("applies active modifiers to the next typed terminal key and touch key", async () => {
@@ -812,6 +826,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Standalone Session",
+        connectionMode: "tmux",
         remoteSessionName: "ralpher-standalone-1",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -886,6 +901,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Standalone Focus Recovery",
+        connectionMode: "tmux",
         remoteSessionName: "ralpher-standalone-focus",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1006,6 +1022,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Standalone Focus Refresh Failure",
+        connectionMode: "tmux",
         remoteSessionName: "ralpher-standalone-refresh-failure",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1131,6 +1148,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Refresh Stable Session",
+        connectionMode: "tmux",
         remoteSessionName: "ralpher-standalone-refresh",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1214,6 +1232,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Password Prompt Session",
+        connectionMode: "tmux",
         remoteSessionName: "ralpher-standalone-2",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -1278,6 +1297,7 @@ describe("SshSessionDetails", () => {
         id: req.params["id"]!,
         sshServerId: "server-1",
         name: "Password Failure Session",
+        connectionMode: "tmux",
         remoteSessionName: "ralpher-standalone-failure",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),

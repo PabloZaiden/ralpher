@@ -403,6 +403,25 @@ export const migrations: Migration[] = [
       `);
     },
   },
+  {
+    version: 9,
+    name: "add_ssh_connection_mode",
+    up: (db) => {
+      if (tableExists(db, "ssh_sessions")) {
+        const sshSessionColumns = getTableColumns(db, "ssh_sessions");
+        if (!sshSessionColumns.includes("connection_mode")) {
+          db.run("ALTER TABLE ssh_sessions ADD COLUMN connection_mode TEXT NOT NULL DEFAULT 'tmux'");
+        }
+      }
+
+      if (tableExists(db, "ssh_server_sessions")) {
+        const sshServerSessionColumns = getTableColumns(db, "ssh_server_sessions");
+        if (!sshServerSessionColumns.includes("connection_mode")) {
+          db.run("ALTER TABLE ssh_server_sessions ADD COLUMN connection_mode TEXT NOT NULL DEFAULT 'tmux'");
+        }
+      }
+    },
+  },
 ];
 
 /**

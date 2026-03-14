@@ -25,7 +25,10 @@ export interface UseSshServersResult {
   createServer: (request: CreateSshServerRequest, password?: string) => Promise<SshServer | null>;
   updateServer: (id: string, request: UpdateSshServerRequest, password?: string) => Promise<SshServer | null>;
   deleteServer: (id: string) => Promise<boolean>;
-  createSession: (serverId: string, options?: { name?: string; password?: string }) => Promise<SshServerSession | null>;
+  createSession: (
+    serverId: string,
+    options?: { name?: string; password?: string; connectionMode?: "tmux" | "direct" },
+  ) => Promise<SshServerSession | null>;
   hasStoredCredential: (serverId: string) => boolean;
 }
 
@@ -106,7 +109,7 @@ export function useSshServers(): UseSshServersResult {
 
   const createSession = useCallback(async (
     serverId: string,
-    options: { name?: string; password?: string } = {},
+    options: { name?: string; password?: string; connectionMode?: "tmux" | "direct" } = {},
   ): Promise<SshServerSession | null> => {
     try {
       setError(null);
@@ -114,6 +117,7 @@ export function useSshServers(): UseSshServersResult {
         serverId,
         name: options.name,
         password: options.password,
+        connectionMode: options.connectionMode,
       });
       setSessionsByServerId((prev) => ({
         ...prev,

@@ -1,10 +1,10 @@
 /**
- * Interactive SSH/tmux bridge used by terminal websocket connections.
+ * Interactive SSH terminal bridge used by terminal websocket connections.
  */
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import type { CommandExecutor } from "./command-executor";
-import type { SshServerSession, SshSession, Workspace } from "../types";
+import type { SshConnectionMode, SshServerSession, SshSession, Workspace } from "../types";
 import { getWorkspace } from "../persistence/workspaces";
 import { buildSshRemoteShellCommand } from "./remote-command-executor";
 import { sshSessionManager } from "./ssh-session-manager";
@@ -63,9 +63,42 @@ export function buildAttachCommand(session: { config: { remoteSessionName: strin
     createSessionCommand,
     "fi;",
     "tmux set-option -s set-clipboard on;",
+    `tmux set-option -t ${sessionName} mouse on;`,
     `tmux set-option -t ${sessionName} status off;`,
     `exec tmux attach-session -t ${sessionName}`,
   ].join(" ");
+}
+
+function buildDirectTtyFilePath(sessionId: string): string {
+  return `/tmp/ralpher-terminal-${sessionId}.tty`;
+}
+
+function buildDirectShellCommand(session: { config: { id: string; directory?: string } }): string {
+  const ttyFile = quoteShell(buildDirectTtyFilePath(session.config.id));
+  const changeDirectoryCommand = session.config.directory
+    ? `cd ${quoteShell(session.config.directory)} || exit 1;`
+    : "";
+  return [
+    `tty_file=${ttyFile}`,
+    "tty_path=$(tty);",
+    "if [ -z \"$tty_path\" ] || [ \"$tty_path\" = \"not a tty\" ]; then",
+    "echo 'Failed to determine remote SSH tty.' >&2;",
+    "exit 1;",
+    "fi;",
+    "printf '%s\\n' \"$tty_path\" > \"$tty_file\";",
+    "trap 'rm -f \"$tty_file\"' EXIT HUP INT TERM;",
+    changeDirectoryCommand,
+    "shell=\"${SHELL:-/bin/sh}\";",
+    "\"$shell\" -i",
+  ].filter((part) => part.length > 0).join(" ");
+}
+
+function buildSessionStartupCommand(
+  session: { config: { id: string; remoteSessionName: string; directory?: string; connectionMode: SshConnectionMode } },
+): string {
+  return session.config.connectionMode === "direct"
+    ? buildDirectShellCommand(session)
+    : buildAttachCommand(session);
 }
 
 function buildSpawnEnv(extraEnv?: Record<string, string>): NodeJS.ProcessEnv {
@@ -83,7 +116,7 @@ function buildSshSpawnConfig(workspace: Workspace, session: SshSession): {
   env: NodeJS.ProcessEnv;
 } {
   const target = getSshConnectionTargetFromWorkspace(workspace);
-  const remoteCommand = buildSshRemoteShellCommand(buildAttachCommand(session));
+  const remoteCommand = buildSshRemoteShellCommand(buildSessionStartupCommand(session));
   return buildSshProcessConfig({
     target,
     remoteCommand,
@@ -98,7 +131,7 @@ function buildStandaloneSshSpawnConfig(target: SshConnectionTarget, session: Ssh
   args: string[];
   env: NodeJS.ProcessEnv;
 } {
-  const remoteCommand = buildSshRemoteShellCommand(buildAttachCommand(session));
+  const remoteCommand = buildSshRemoteShellCommand(buildSessionStartupCommand(session));
   return buildSshProcessConfig({
     target,
     remoteCommand,
@@ -108,29 +141,44 @@ function buildStandaloneSshSpawnConfig(target: SshConnectionTarget, session: Ssh
   });
 }
 
-function buildResizeCommand(sessionName: string, cols: number, rows: number): string {
+function buildTmuxResizeCommand(sessionName: string, cols: number, rows: number): string {
   const quotedSessionName = quoteShell(sessionName);
   return [
     `session_name=${quotedSessionName}`,
     `cols=${String(cols)}`,
     `rows=${String(rows)}`,
-    "resized=0",
-    "client_ttys=$(tmux list-clients -F '#{session_name} #{client_tty}' 2>/dev/null | while IFS=' ' read -r listed_session client_tty; do",
-    "  if [ \"$listed_session\" = \"$session_name\" ]; then",
-    "    printf '%s\\n' \"$client_tty\"",
-    "  fi",
-    "done)",
-    "if [ -n \"$client_ttys\" ]; then",
-    "  for client_tty in $client_ttys; do",
-    "    if stty cols \"$cols\" rows \"$rows\" < \"$client_tty\"; then",
-    "      resized=1",
-    "    fi",
-    "  done",
-    "fi",
-    "if [ \"$resized\" -eq 1 ]; then",
-    "  exit 0",
-    "fi",
     "exec tmux resize-window -t \"$session_name\" -x \"$cols\" -y \"$rows\"",
+  ].join("\n");
+}
+
+function buildDirectReadyCommand(sessionId: string): string {
+  const ttyFile = quoteShell(buildDirectTtyFilePath(sessionId));
+  return [
+    `tty_file=${ttyFile}`,
+    "if [ ! -r \"$tty_file\" ]; then",
+    "exit 1;",
+    "fi;",
+    "tty_path=$(cat \"$tty_file\" 2>/dev/null || true);",
+    "[ -n \"$tty_path\" ]",
+  ].join("\n");
+}
+
+function buildDirectResizeCommand(sessionId: string, cols: number, rows: number): string {
+  const ttyFile = quoteShell(buildDirectTtyFilePath(sessionId));
+  return [
+    `tty_file=${ttyFile}`,
+    `cols=${String(cols)}`,
+    `rows=${String(rows)}`,
+    "if [ ! -r \"$tty_file\" ]; then",
+    "echo 'Direct SSH tty is not ready' >&2;",
+    "exit 1;",
+    "fi;",
+    "tty_path=$(cat \"$tty_file\" 2>/dev/null || true);",
+    "if [ -z \"$tty_path\" ]; then",
+    "echo 'Direct SSH tty is not ready' >&2;",
+    "exit 1;",
+    "fi;",
+    "exec stty cols \"$cols\" rows \"$rows\" < \"$tty_path\"",
   ].join("\n");
 }
 
@@ -296,7 +344,9 @@ export class SshTerminalBridge {
       this.standaloneExecutor = null;
       this.commandCwd = this.workspace.directory;
 
-      await sshSessionManager.ensureTmuxAvailable(this.workspace);
+      if (this.session.config.connectionMode === "tmux") {
+        await sshSessionManager.ensureTmuxAvailable(this.workspace);
+      }
       await sshSessionManager.markStatus(this.sessionId, "connecting");
 
       spawnConfig = buildSshSpawnConfig(this.workspace, this.session);
@@ -396,15 +446,18 @@ export class SshTerminalBridge {
     const normalizedCols = Math.max(2, Math.floor(cols));
     const normalizedRows = Math.max(1, Math.floor(rows));
     const executor = await this.getCommandExecutor();
+    const resizeCommand = this.getConnectionMode() === "direct"
+      ? buildDirectResizeCommand(this.getTrackedSessionId(), normalizedCols, normalizedRows)
+      : buildTmuxResizeCommand(this.getRemoteSessionName(), normalizedCols, normalizedRows);
     const result = await executor.exec("bash", [
       "-lc",
-      buildResizeCommand(this.getRemoteSessionName(), normalizedCols, normalizedRows),
+      resizeCommand,
     ], {
       cwd: this.commandCwd,
       timeout: 5_000,
     });
     if (!result.success) {
-      throw new Error(result.stderr.trim() || result.stdout.trim() || "Failed to resize tmux window");
+      throw new Error(result.stderr.trim() || result.stdout.trim() || "Failed to resize SSH terminal");
     }
   }
 
@@ -465,6 +518,32 @@ export class SshTerminalBridge {
 
     const executor = await this.getCommandExecutor();
     const deadline = Date.now() + (this.options.readyTimeoutMs ?? DEFAULT_TMUX_READY_TIMEOUT_MS);
+    if (this.getConnectionMode() === "direct") {
+      while (Date.now() < deadline) {
+        if (!this.proc) {
+          throw new Error("SSH terminal is not connected");
+        }
+        if (this.proc.exitCode !== null || this.proc.signalCode !== null) {
+          throw new Error(this.startupError ?? "SSH terminal exited before the direct session was ready");
+        }
+
+        const result = await executor.exec("bash", [
+          "-lc",
+          buildDirectReadyCommand(this.getTrackedSessionId()),
+        ], {
+          cwd: this.commandCwd,
+          timeout: 1_000,
+        });
+        if (result.success) {
+          return;
+        }
+
+        await Bun.sleep(TMUX_READY_POLL_INTERVAL_MS);
+      }
+
+      throw new Error("Timed out waiting for the direct SSH shell to become ready");
+    }
+
     while (Date.now() < deadline) {
       if (!this.proc) {
         throw new Error("SSH terminal is not connected");
@@ -541,6 +620,32 @@ export class SshTerminalBridge {
       throw new Error("SSH terminal is not connected");
     }
     return await backendManager.getCommandExecutorAsync(this.workspace.id, this.workspace.directory);
+  }
+
+  private getConnectionMode(): SshConnectionMode {
+    if (this.connectOptions.sessionKind === "standalone") {
+      if (!this.standaloneSession) {
+        throw new Error("SSH terminal is not connected");
+      }
+      return this.standaloneSession.config.connectionMode;
+    }
+    if (!this.session) {
+      throw new Error("SSH terminal is not connected");
+    }
+    return this.session.config.connectionMode;
+  }
+
+  private getTrackedSessionId(): string {
+    if (this.connectOptions.sessionKind === "standalone") {
+      if (!this.standaloneSession) {
+        throw new Error("SSH terminal is not connected");
+      }
+      return this.standaloneSession.config.id;
+    }
+    if (!this.session) {
+      throw new Error("SSH terminal is not connected");
+    }
+    return this.session.config.id;
   }
 
   private getRemoteSessionName(): string {

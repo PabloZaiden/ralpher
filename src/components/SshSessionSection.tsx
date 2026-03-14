@@ -27,6 +27,10 @@ function getBadgeVariant(status: SshSession["state"]["status"]) {
   }
 }
 
+function getConnectionModeLabel(mode: SshSession["config"]["connectionMode"]): string {
+  return mode === "direct" ? "Direct SSH" : "tmux";
+}
+
 export function SshSessionSection({
   sessions,
   loading,
@@ -41,7 +45,7 @@ export function SshSessionSection({
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : sessions.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          No SSH sessions yet. Create one to start a persistent remote terminal.
+          No SSH sessions yet. Create one to start a saved remote terminal.
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -69,8 +73,13 @@ export function SshSessionSection({
                 Last connected: {session.state.lastConnectedAt ?? "Never"}
               </p>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
-                tmux: {session.config.remoteSessionName}
+                Mode: {getConnectionModeLabel(session.config.connectionMode)}
               </p>
+              {session.config.connectionMode !== "direct" && (
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
+                  tmux: {session.config.remoteSessionName}
+                </p>
+              )}
             </button>
           ))}
         </div>

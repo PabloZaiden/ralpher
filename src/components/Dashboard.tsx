@@ -158,7 +158,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
                   <div className="px-1">
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Workspace SSH Sessions</h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Persistent tmux-backed terminal sessions for SSH-configured workspaces.
+                      Saved terminal sessions for SSH-configured workspaces. Use tmux for persistence or direct SSH to bypass tmux.
                     </p>
                   </div>
                   <SshSessionSection

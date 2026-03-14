@@ -2,7 +2,7 @@
  * Persistence layer for standalone SSH servers and server-owned SSH sessions.
  */
 
-import type { SshServer, SshServerConfig, SshServerSession } from "../types";
+import { DEFAULT_SSH_CONNECTION_MODE, type SshServer, type SshServerConfig, type SshServerSession } from "../types";
 import { createLogger } from "../core/logger";
 import { getDatabase } from "./database";
 import {
@@ -25,6 +25,7 @@ const ALLOWED_SSH_SERVER_SESSION_COLUMNS = new Set([
   "id",
   "ssh_server_id",
   "name",
+  "connection_mode",
   "remote_session_name",
   "created_at",
   "updated_at",
@@ -68,6 +69,7 @@ function sshServerSessionToRow(session: SshServerSession): Record<string, unknow
     id: session.config.id,
     ssh_server_id: session.config.sshServerId,
     name: session.config.name,
+    connection_mode: session.config.connectionMode,
     remote_session_name: session.config.remoteSessionName,
     created_at: session.config.createdAt,
     updated_at: session.config.updatedAt,
@@ -79,13 +81,15 @@ function sshServerSessionToRow(session: SshServerSession): Record<string, unknow
 
 function rowToSshServerSession(row: Record<string, unknown>): SshServerSession {
   return {
-    config: {
-      id: row["id"] as string,
-      sshServerId: row["ssh_server_id"] as string,
-      name: row["name"] as string,
-      remoteSessionName: row["remote_session_name"] as string,
-      createdAt: row["created_at"] as string,
-      updatedAt: row["updated_at"] as string,
+      config: {
+        id: row["id"] as string,
+        sshServerId: row["ssh_server_id"] as string,
+        name: row["name"] as string,
+        connectionMode: (row["connection_mode"] as SshServerSession["config"]["connectionMode"] | null)
+          ?? DEFAULT_SSH_CONNECTION_MODE,
+        remoteSessionName: row["remote_session_name"] as string,
+        createdAt: row["created_at"] as string,
+        updatedAt: row["updated_at"] as string,
     },
     state: {
       status: row["status"] as SshServerSession["state"]["status"],

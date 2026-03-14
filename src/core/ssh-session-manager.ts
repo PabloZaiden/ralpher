@@ -1,8 +1,16 @@
 /**
- * Core manager for persistent SSH tmux sessions.
+ * Core manager for saved SSH sessions on workspace hosts.
  */
 
-import type { CreateSshSessionRequest, SshSession, SshSessionStatus, UpdateSshSessionRequest, Workspace } from "../types";
+import {
+  DEFAULT_SSH_CONNECTION_MODE,
+  type CreateSshSessionRequest,
+  type SshConnectionMode,
+  type SshSession,
+  type SshSessionStatus,
+  type UpdateSshSessionRequest,
+  type Workspace,
+} from "../types";
 import { getWorkspace, touchWorkspace } from "../persistence/workspaces";
 import {
   countSshSessionsByWorkspace,
@@ -55,7 +63,10 @@ export class SshSessionManager {
 
   async createSession(request: CreateSshSessionRequest): Promise<SshSession> {
     const workspace = await requireSshWorkspace(request.workspaceId);
-    await this.ensureTmuxAvailable(workspace);
+    const connectionMode = request.connectionMode ?? DEFAULT_SSH_CONNECTION_MODE;
+    if (connectionMode === "tmux") {
+      await this.ensureTmuxAvailable(workspace);
+    }
     await touchWorkspace(workspace.id);
 
     const requestedName = request.name?.trim();
@@ -66,6 +77,7 @@ export class SshSessionManager {
       workspace,
       name: sessionName,
       directory: workspace.directory,
+      connectionMode,
     });
   }
 
@@ -92,15 +104,17 @@ export class SshSessionManager {
   async deleteSession(id: string): Promise<boolean> {
     const session = await this.requireSession(id);
     await portForwardManager.deleteForwardsBySshSessionId(id);
-    const workspace = await requireSshWorkspace(session.config.workspaceId);
-    const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
-    const killResult = await executor.exec("tmux", ["kill-session", "-t", session.config.remoteSessionName], {
-      cwd: workspace.directory,
-    });
-    if (!killResult.success) {
-      const stderr = killResult.stderr.trim();
-      if (!stderr.includes("can't find session")) {
-        throw new Error(stderr || killResult.stdout || "Failed to kill remote tmux session");
+    if (session.config.connectionMode === "tmux") {
+      const workspace = await requireSshWorkspace(session.config.workspaceId);
+      const executor = await backendManager.getCommandExecutorAsync(workspace.id, workspace.directory);
+      const killResult = await executor.exec("tmux", ["kill-session", "-t", session.config.remoteSessionName], {
+        cwd: workspace.directory,
+      });
+      if (!killResult.success) {
+        const stderr = killResult.stderr.trim();
+        if (!stderr.includes("can't find session")) {
+          throw new Error(stderr || killResult.stdout || "Failed to kill remote tmux session");
+        }
       }
     }
 
@@ -143,6 +157,7 @@ export class SshSessionManager {
       name: buildLoopSshSessionName(loop.config.name),
       directory,
       loopId,
+      connectionMode: DEFAULT_SSH_CONNECTION_MODE,
     });
   }
 
@@ -208,6 +223,7 @@ export class SshSessionManager {
     name: string;
     directory: string;
     loopId?: string;
+    connectionMode: SshConnectionMode;
   }): Promise<SshSession> {
     const now = new Date().toISOString();
     const sessionId = crypto.randomUUID();
@@ -218,6 +234,7 @@ export class SshSessionManager {
         workspaceId: options.workspace.id,
         loopId: options.loopId,
         directory: options.directory,
+        connectionMode: options.connectionMode,
         remoteSessionName: buildRemoteSessionName(sessionId),
         createdAt: now,
         updatedAt: now,

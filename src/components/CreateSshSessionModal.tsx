@@ -3,7 +3,13 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import type { CreateSshSessionRequest, SshSession, Workspace } from "../types";
+import {
+  DEFAULT_SSH_CONNECTION_MODE,
+  type CreateSshSessionRequest,
+  type SshConnectionMode,
+  type SshSession,
+  type Workspace,
+} from "../types";
 import { Modal, Button } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
 import { useToast } from "../hooks";
@@ -39,6 +45,7 @@ export function CreateSshSessionModal({
   const [nameTouched, setNameTouched] = useState(false);
   const [workspaceId, setWorkspaceId] = useState<string | undefined>(sshWorkspaces[0]?.id);
   const [directory, setDirectory] = useState(sshWorkspaces[0]?.directory ?? "");
+  const [connectionMode, setConnectionMode] = useState<SshConnectionMode>(DEFAULT_SSH_CONNECTION_MODE);
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const selectedWorkspace = useMemo(
@@ -63,6 +70,7 @@ export function CreateSshSessionModal({
     setWorkspaceId(initialWorkspace?.id);
     setDirectory(initialWorkspace?.directory ?? "");
     setNameTouched(false);
+    setConnectionMode(DEFAULT_SSH_CONNECTION_MODE);
   }, [isOpen, sshWorkspaces]);
 
   useEffect(() => {
@@ -83,6 +91,7 @@ export function CreateSshSessionModal({
       const trimmedName = name.trim();
       const session = await onCreate({
         workspaceId,
+        connectionMode,
         ...(nameTouched && trimmedName.length > 0 ? { name: trimmedName } : {}),
       });
       if (!session) {
@@ -102,7 +111,7 @@ export function CreateSshSessionModal({
       isOpen={isOpen}
       onClose={onClose}
       title="New SSH Session"
-      description="Create a persistent tmux-backed terminal session for an SSH workspace."
+      description="Create a saved SSH terminal for an SSH workspace, using tmux or a direct shell."
       size="md"
       footer={(
         <>
@@ -149,6 +158,28 @@ export function CreateSshSessionModal({
             }}
             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 text-sm"
           />
+        </div>
+        <div>
+          <label
+            htmlFor="ssh-session-connection-mode"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
+            Connection mode
+          </label>
+          <select
+            id="ssh-session-connection-mode"
+            value={connectionMode}
+            onChange={(e) => setConnectionMode(e.target.value as SshConnectionMode)}
+            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+          >
+            <option value="tmux">tmux (persistent across reconnects)</option>
+            <option value="direct">Direct SSH (fresh shell, bypass tmux)</option>
+          </select>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {connectionMode === "tmux"
+              ? "tmux keeps the remote shell alive and is the current default."
+              : "Direct SSH skips tmux so you can compare terminal behavior without it."}
+          </p>
         </div>
         {directory && (
           <p className="text-xs font-mono text-gray-500 dark:text-gray-400 break-all">

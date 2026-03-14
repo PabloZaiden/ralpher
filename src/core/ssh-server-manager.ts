@@ -2,16 +2,18 @@
  * Core manager for standalone SSH servers and server-owned SSH sessions.
  */
 
-import type {
-  CreateSshServerRequest,
-  CreateSshServerSessionRequest,
-  DeleteSshServerSessionRequest,
-  SshServer,
-  SshServerConfig,
-  SshSessionStatus,
-  SshServerSession,
-  UpdateSshServerRequest,
-  UpdateSshSessionRequest,
+import {
+  DEFAULT_SSH_CONNECTION_MODE,
+  type CreateSshServerRequest,
+  type CreateSshServerSessionRequest,
+  type DeleteSshServerSessionRequest,
+  type SshConnectionMode,
+  type SshServer,
+  type SshServerConfig,
+  type SshSessionStatus,
+  type SshServerSession,
+  type UpdateSshServerRequest,
+  type UpdateSshSessionRequest,
 } from "../types";
 import type { CommandExecutor } from "./command-executor";
 import {
@@ -105,8 +107,11 @@ export class SshServerManager {
 
   async createSession(serverId: string, request: CreateSshServerSessionRequest): Promise<SshServerSession> {
     const server = await this.requireServerConfig(serverId);
+    const connectionMode = this.getConnectionMode(request);
     const password = sshCredentialManager.consumeToken(serverId, request.credentialToken);
-    await this.ensureTmuxAvailable(server, password);
+    if (connectionMode === "tmux") {
+      await this.ensureTmuxAvailable(server, password);
+    }
 
     const now = new Date().toISOString();
     const sessionCount = await countSshServerSessionsByServerId(serverId);
@@ -116,6 +121,7 @@ export class SshServerManager {
         id: sessionId,
         sshServerId: serverId,
         name: request.name?.trim() || buildDefaultSshSessionName(server.name, sessionCount),
+        connectionMode,
         remoteSessionName: buildRemoteSessionName(sessionId),
         createdAt: now,
         updatedAt: now,
@@ -144,16 +150,22 @@ export class SshServerManager {
 
   async deleteSession(id: string, request: DeleteSshServerSessionRequest): Promise<boolean> {
     const session = await this.requireSession(id);
-    const server = await this.requireServerConfig(session.config.sshServerId);
-    const password = sshCredentialManager.consumeToken(server.id, request.credentialToken);
-    const executor = this.buildExecutor(server, password);
-    const result = await executor.exec("tmux", ["kill-session", "-t", session.config.remoteSessionName], {
-      cwd: "/",
-    });
-    if (!result.success) {
-      const stderr = result.stderr.trim();
-      if (!stderr.includes("can't find session")) {
-        throw new Error(stderr || result.stdout || "Failed to kill remote tmux session");
+    if (session.config.connectionMode === "tmux") {
+      const server = await this.requireServerConfig(session.config.sshServerId);
+      const credentialToken = request.credentialToken?.trim();
+      if (!credentialToken) {
+        throw new Error("SSH credential token is required to delete tmux-backed standalone SSH sessions");
+      }
+      const password = sshCredentialManager.consumeToken(server.id, credentialToken);
+      const executor = this.buildExecutor(server, password);
+      const result = await executor.exec("tmux", ["kill-session", "-t", session.config.remoteSessionName], {
+        cwd: "/",
+      });
+      if (!result.success) {
+        const stderr = result.stderr.trim();
+        if (!stderr.includes("can't find session")) {
+          throw new Error(stderr || result.stdout || "Failed to kill remote tmux session");
+        }
       }
     }
     return await deleteSshServerSession(id);
@@ -222,6 +234,10 @@ export class SshServerManager {
 
   setExecutorFactoryForTesting(factory: SshServerExecutorFactory | null): void {
     this.testExecutorFactory = factory;
+  }
+
+  private getConnectionMode(request: { connectionMode?: SshConnectionMode }): SshConnectionMode {
+    return request.connectionMode ?? DEFAULT_SSH_CONNECTION_MODE;
   }
 
   private buildExecutor(server: SshServerConfig, password: string): CommandExecutor {

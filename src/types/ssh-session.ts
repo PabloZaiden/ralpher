@@ -1,9 +1,14 @@
 /**
  * SSH session domain types.
  *
- * SSH sessions represent persistent remote terminal sessions backed by `tmux`
- * on an SSH-configured workspace host.
+ * SSH sessions represent saved remote terminal connections on an
+ * SSH-configured workspace host. Sessions can either attach to a persistent
+ * `tmux` session or open a direct SSH shell for debugging.
  */
+
+export type SshConnectionMode = "tmux" | "direct";
+
+export const DEFAULT_SSH_CONNECTION_MODE: SshConnectionMode = "tmux";
 
 /**
  * Runtime status for an SSH session.
@@ -33,7 +38,9 @@ export interface SshSessionBaseConfig {
   id: string;
   /** Human-readable display name */
   name: string;
-  /** Remote tmux session name */
+  /** How this saved session connects to the remote host */
+  connectionMode: SshConnectionMode;
+  /** Remote identifier used for tmux sessions and direct-shell tty tracking */
   remoteSessionName: string;
   /** ISO 8601 timestamp of when the session was created */
   createdAt: string;
@@ -53,9 +60,11 @@ export interface SshSessionConfig {
   workspaceId: string;
   /** Optional loop associated with this session */
   loopId?: string;
-  /** Working directory used when creating the tmux session */
+  /** Working directory used when creating the tmux session or direct shell */
   directory: string;
-  /** Remote tmux session name */
+  /** How this saved session connects to the remote host */
+  connectionMode: SshSessionBaseConfig["connectionMode"];
+  /** Remote identifier used for tmux sessions and direct-shell tty tracking */
   remoteSessionName: SshSessionBaseConfig["remoteSessionName"];
   /** ISO 8601 timestamp of when the session was created */
   createdAt: SshSessionBaseConfig["createdAt"];

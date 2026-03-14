@@ -3,9 +3,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Terminal, type ITerminalOptions } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import "@xterm/xterm/css/xterm.css";
+import { FitAddon, init, Terminal } from "ghostty-web";
 import { Badge, Button, Card, ConfirmModal, Modal } from "./common";
 import { getSshServerApi, useSshSession, useToast } from "../hooks";
 import {
@@ -43,6 +41,10 @@ function getStatusVariant(status: string) {
     default:
       return "default";
   }
+}
+
+function getConnectionModeLabel(mode: "tmux" | "direct"): string {
+  return mode === "direct" ? "Direct SSH" : "tmux";
 }
 
 export interface SshSessionDetailsProps {
@@ -90,31 +92,127 @@ function CompactBar({
 }
 
 const touchButtonClassName = "min-h-[28px] shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[11px]";
-
-const sshTerminalFontFamily = [
-  "\"SFMono-Regular\"",
-  "\"SF Mono\"",
+const TERMINAL_FONT_SIZE_PX = 12;
+const TERMINAL_NERD_FONT_FAMILIES = [
+  "Ralpher Terminal Nerd Font",
+  "Liga SFMono Nerd Font",
+  "MesloLGS NF",
+  "MonaspiceNe Nerd Font Mono",
+  "MonaspiceXe Nerd Font Mono",
+  "Iosevka Nerd Font",
+  "RecMonoLinear Nerd Font Mono",
+  "Terminess Nerd Font Mono",
+  "FiraCode Nerd Font Mono",
+  "CaskaydiaMono Nerd Font Mono",
+  "CaskaydiaCove Nerd Font Mono",
+  "JetBrainsMono Nerd Font Mono",
+  "JetBrainsMono Nerd Font",
+  "Hack Nerd Font Mono",
+  "SauceCodePro Nerd Font Mono",
+  "Symbols Nerd Font Mono",
+  "Symbols Nerd Font",
+] as const;
+const TERMINAL_TEXT_FONT_FAMILIES = [
+  "SF Mono",
   "Menlo",
+  "Monaco",
   "Consolas",
-  "\"Liberation Mono\"",
-  "\"DejaVu Sans Mono\"",
-  "\"Noto Sans Mono\"",
+  "Liberation Mono",
   "monospace",
-].join(", ");
+] as const;
+const TERMINAL_GLYPH_SAMPLE = "\ue62b\uf07b\uf15b\uf002";
 
-function createSshTerminalOptions(): ITerminalOptions {
-  return {
-    cursorBlink: true,
-    convertEol: true,
-    fontSize: 13,
-    fontFamily: sshTerminalFontFamily,
-    lineHeight: 1.15,
-    customGlyphs: true,
-    rescaleOverlappingGlyphs: true,
-    theme: {
-      background: "#111827",
-    },
-  };
+function formatTerminalFontFamily(fontFamily: string) {
+  return fontFamily === "monospace" || !fontFamily.includes(" ") ? fontFamily : `"${fontFamily}"`;
+}
+
+function buildTerminalFontFamily(fontFamilies: readonly string[]) {
+  return fontFamilies.map((fontFamily) => formatTerminalFontFamily(fontFamily)).join(", ");
+}
+
+// Safari canvas rendering does not reliably fall back for Nerd Font private-use glyphs,
+// so prefer patched monospace families before the plain text-only system fonts.
+const TERMINAL_FONT_FAMILY = buildTerminalFontFamily([
+  ...TERMINAL_NERD_FONT_FAMILIES,
+  ...TERMINAL_TEXT_FONT_FAMILIES,
+]);
+const TERMINAL_PADDING_X_PX = 2;
+const TERMINAL_PADDING_BOTTOM_PX = 2;
+const TERMINAL_PADDING_TOP_PX = 4;
+const TERMINAL_THEME = {
+  background: "#111827",
+  foreground: "#d1d5db",
+  cursor: "#f9fafb",
+  cursorAccent: "#111827",
+  selectionBackground: "#374151",
+  selectionForeground: "#f9fafb",
+  black: "#111827",
+  white: "#d1d5db",
+  brightBlack: "#4b5563",
+  brightWhite: "#f9fafb",
+} as const;
+
+let ghosttyInitPromise: Promise<void> | null = null;
+
+function initializeGhosttyWeb(): Promise<void> {
+  if (!ghosttyInitPromise) {
+    ghosttyInitPromise = init().catch((error) => {
+      ghosttyInitPromise = null;
+      throw error;
+    });
+  }
+
+  return ghosttyInitPromise;
+}
+
+async function resolveTerminalFontFamily() {
+  if (typeof document === "undefined" || !("fonts" in document)) {
+    return TERMINAL_FONT_FAMILY;
+  }
+
+  await Promise.allSettled(
+    TERMINAL_NERD_FONT_FAMILIES.map((fontFamily) =>
+      document.fonts.load(
+        `${TERMINAL_FONT_SIZE_PX}px ${buildTerminalFontFamily([fontFamily])}`,
+        TERMINAL_GLYPH_SAMPLE,
+      ),
+    ),
+  );
+  await document.fonts.ready;
+
+  for (const fontFamily of TERMINAL_NERD_FONT_FAMILIES) {
+    if (
+      document.fonts.check(
+        `${TERMINAL_FONT_SIZE_PX}px ${buildTerminalFontFamily([fontFamily])}`,
+        TERMINAL_GLYPH_SAMPLE,
+      )
+    ) {
+      return buildTerminalFontFamily([fontFamily, ...TERMINAL_TEXT_FONT_FAMILIES]);
+    }
+  }
+
+  return TERMINAL_FONT_FAMILY;
+}
+
+async function remeasureTerminalFont(terminal: Terminal, fitAddon: FitAddon | null) {
+  if (typeof document === "undefined" || !("fonts" in document) || !terminal.renderer || !terminal.wasmTerm) {
+    return;
+  }
+
+  await document.fonts.ready;
+  terminal.renderer.remeasureFont();
+
+  const nextDimensions = fitAddon?.proposeDimensions();
+  if (
+    nextDimensions &&
+    (nextDimensions.cols !== terminal.cols || nextDimensions.rows !== terminal.rows)
+  ) {
+    terminal.resize(nextDimensions.cols, nextDimensions.rows);
+    return;
+  }
+
+  terminal.renderer.resize(terminal.cols, terminal.rows);
+  terminal.renderer.render(terminal.wasmTerm, true, terminal.getViewportY());
 }
 
 function isStandaloneCredentialTokenError(message: string): boolean {
@@ -137,7 +235,6 @@ export function SshSessionDetails({
   const standaloneCredentialTokenRef = useRef<string | null>(null);
   const pendingStandaloneActionRef = useRef<"terminal" | "delete" | null>(null);
   const pendingOutputRef = useRef<string[]>([]);
-  const resizeAnimationFrameRef = useRef<number | null>(null);
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const terminalConnectInFlightRef = useRef(false);
   const standaloneTokenRecoveryAttemptedRef = useRef(false);
@@ -198,7 +295,14 @@ export function SshSessionDetails({
     }
     return (
       <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden text-xs text-gray-500 dark:text-gray-400">
-        <span className="min-w-0 truncate font-mono">{session.config.remoteSessionName}</span>
+        <Badge variant={session.config.connectionMode === "direct" ? "info" : "default"} className="shrink-0">
+          {getConnectionModeLabel(session.config.connectionMode)}
+        </Badge>
+        {session.config.connectionMode !== "direct" ? (
+          <span className="min-w-0 truncate font-mono">{session.config.remoteSessionName}</span>
+        ) : (
+          <span className="min-w-0 truncate">fresh shell on reconnect</span>
+        )}
         {session.state.error && (
           <Badge variant="error" className="shrink-0">
             error
@@ -220,11 +324,11 @@ export function SshSessionDetails({
           </Badge>
         )}
         <span className="hidden min-w-0 truncate text-xs text-gray-500 dark:text-gray-400 sm:block">
-          Touch keys and tmux shortcuts
+          {session?.config.connectionMode !== "direct" ? "Touch keys and tmux shortcuts" : "Touch keys"}
         </span>
       </div>
     );
-  }, [activeModifierLabel, terminalModifiers]);
+  }, [activeModifierLabel, session?.config.connectionMode, terminalModifiers]);
 
   useEffect(() => {
     terminalModifiersRef.current = terminalModifiers;
@@ -267,54 +371,38 @@ export function SshSessionDetails({
     }, options);
   }, [sendTerminalPayload]);
 
-  const performResize = useCallback(() => {
-    const terminal = terminalRef.current;
-    const fitAddon = fitAddonRef.current;
-    const container = terminalContainerRef.current;
-    if (!terminal || !fitAddon || !container) {
+  const sendTerminalResize = useCallback((cols: number, rows: number) => {
+    if (cols <= 0 || rows <= 0) {
       return;
     }
 
-    fitAddon.fit();
-    if (terminal.cols <= 0 || terminal.rows <= 0) {
-      return;
-    }
-
-    const nextSize = {
-      cols: terminal.cols,
-      rows: terminal.rows,
-    };
     const previousSize = lastSentResizeRef.current;
-    if (
-      previousSize &&
-      previousSize.cols === nextSize.cols &&
-      previousSize.rows === nextSize.rows
-    ) {
+    if (previousSize && previousSize.cols === cols && previousSize.rows === rows) {
       return;
     }
 
     const didSend = sendTerminalPayload({
       type: "terminal.resize",
-      ...nextSize,
+      cols,
+      rows,
     }, { focusTerminal: false, notifyOnFailure: false });
     if (didSend) {
-      lastSentResizeRef.current = nextSize;
+      lastSentResizeRef.current = { cols, rows };
     }
   }, [sendTerminalPayload]);
 
-  const scheduleResize = useCallback(() => {
-    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
-      performResize();
+  const syncTerminalSize = useCallback((options?: { fit?: boolean }) => {
+    const terminal = terminalRef.current;
+    if (!terminal) {
       return;
     }
-    if (resizeAnimationFrameRef.current !== null) {
-      return;
+
+    if (options?.fit) {
+      fitAddonRef.current?.fit();
     }
-    resizeAnimationFrameRef.current = window.requestAnimationFrame(() => {
-      resizeAnimationFrameRef.current = null;
-      performResize();
-    });
-  }, [performResize]);
+
+    sendTerminalResize(terminal.cols, terminal.rows);
+  }, [sendTerminalResize]);
 
   const flushPendingOutput = useCallback(() => {
     if (!terminalRef.current || pendingOutputRef.current.length === 0) {
@@ -334,10 +422,10 @@ export function SshSessionDetails({
     standaloneTokenRecoveryAttemptedRef.current = false;
     lastSentResizeRef.current = null;
     setSocketStatus("open");
-    scheduleResize();
+    syncTerminalSize({ fit: true });
     flushPendingOutput();
     void refresh();
-  }, [flushPendingOutput, refresh, scheduleResize]);
+  }, [flushPendingOutput, refresh, syncTerminalSize]);
 
   const resetTerminalModifiers = useCallback(() => {
     setTerminalModifiers(defaultTerminalModifiers);
@@ -509,10 +597,6 @@ export function SshSessionDetails({
       terminalReadyRef.current = false;
       pendingOutputRef.current = [];
       lastSentResizeRef.current = null;
-      if (resizeAnimationFrameRef.current !== null && typeof window !== "undefined") {
-        window.cancelAnimationFrame(resizeAnimationFrameRef.current);
-        resizeAnimationFrameRef.current = null;
-      }
       setSocketStatus("connecting");
 
       const ws = new WebSocket(appWebSocketUrl(terminalUrl));
@@ -628,83 +712,87 @@ export function SshSessionDetails({
   }, [connectTerminal, sessionKind, terminalUrl]);
 
   useEffect(() => {
-    if (!terminalContainerRef.current || terminalRef.current) {
-      return;
+    let disposed = false;
+    let terminal: Terminal | null = null;
+    let fitAddon: FitAddon | null = null;
+    let dataDisposable: { dispose(): void } | null = null;
+    let resizeDisposable: { dispose(): void } | null = null;
+
+    async function setupTerminal() {
+      if (!terminalContainerRef.current || terminalRef.current) {
+        return;
+      }
+
+      try {
+        await initializeGhosttyWeb();
+        if (disposed || !terminalContainerRef.current || terminalRef.current) {
+          return;
+        }
+        const terminalFontFamily = await resolveTerminalFontFamily();
+        if (disposed || !terminalContainerRef.current || terminalRef.current) {
+          return;
+        }
+
+        terminal = new Terminal({
+          fontSize: TERMINAL_FONT_SIZE_PX,
+          fontFamily: terminalFontFamily,
+          theme: TERMINAL_THEME,
+        });
+        fitAddon = new FitAddon();
+        terminal.loadAddon(fitAddon);
+        terminal.open(terminalContainerRef.current);
+        fitAddon.observeResize();
+        terminal.focus();
+        terminalRef.current = terminal;
+        fitAddonRef.current = fitAddon;
+        flushPendingOutput();
+
+        dataDisposable = terminal.onData((data: string) => {
+          void sendTerminalKeystroke(data);
+        });
+        resizeDisposable = terminal.onResize(({ cols, rows }) => {
+          sendTerminalResize(cols, rows);
+        });
+
+        syncTerminalSize({ fit: true });
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() => {
+            window.requestAnimationFrame(() => {
+              if (!disposed && terminalRef.current === terminal) {
+                syncTerminalSize({ fit: true });
+              }
+            });
+          });
+        }
+        if (terminalReadyRef.current) {
+          syncTerminalSize();
+        }
+        void remeasureTerminalFont(terminal, fitAddon);
+      } catch (error) {
+        if (!disposed) {
+          showErrorToast(`Failed to initialize the terminal renderer: ${String(error)}`);
+        }
+      }
     }
 
-    const terminal = new Terminal(createSshTerminalOptions());
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(terminalContainerRef.current);
-    const terminalElement = terminal.element;
-    if (terminalElement) {
-      terminalElement.style.width = "100%";
-      terminalElement.style.height = "100%";
-      terminalElement.style.fontFamily = sshTerminalFontFamily;
-      terminalElement.style.fontVariantLigatures = "none";
-      terminalElement.style.fontFeatureSettings = "\"liga\" 0, \"calt\" 0";
-
-      const viewport = terminalElement.querySelector<HTMLElement>(".xterm-viewport");
-      if (viewport) {
-        viewport.style.width = "100%";
-        viewport.style.height = "100%";
-      }
-
-      const screen = terminalElement.querySelector<HTMLElement>(".xterm-screen");
-      if (screen) {
-        screen.style.width = "100%";
-        screen.style.height = "100%";
-      }
-
-      const accessibilityTree = terminalElement.querySelector<HTMLElement>(".xterm-accessibility-tree");
-      if (accessibilityTree) {
-        accessibilityTree.style.fontFamily = sshTerminalFontFamily;
-        accessibilityTree.style.fontVariantLigatures = "none";
-        accessibilityTree.style.fontFeatureSettings = "\"liga\" 0, \"calt\" 0";
-      }
-
-      const helperTextarea = terminalElement.querySelector<HTMLElement>(".xterm-helper-textarea");
-      if (helperTextarea) {
-        helperTextarea.style.fontFamily = sshTerminalFontFamily;
-      }
-    }
-    terminal.focus();
-    terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-    flushPendingOutput();
-
-    const disposable = terminal.onData((data: string) => {
-      void sendTerminalKeystroke(data);
-    });
-
-    scheduleResize();
-
-    const onWindowResize = () => {
-      scheduleResize();
-    };
-    window.addEventListener("resize", onWindowResize);
-
-    let resizeObserver: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== "undefined") {
-      resizeObserver = new ResizeObserver(() => {
-        scheduleResize();
-      });
-      resizeObserver.observe(terminalContainerRef.current);
-    }
+    void setupTerminal();
 
     return () => {
-      disposable.dispose();
-      resizeObserver?.disconnect();
-      window.removeEventListener("resize", onWindowResize);
-      if (resizeAnimationFrameRef.current !== null) {
-        window.cancelAnimationFrame(resizeAnimationFrameRef.current);
-        resizeAnimationFrameRef.current = null;
-      }
-      terminal.dispose();
+      disposed = true;
+      dataDisposable?.dispose();
+      resizeDisposable?.dispose();
+      terminal?.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [flushPendingOutput, scheduleResize, sendTerminalKeystroke, session?.config.id]);
+  }, [
+      flushPendingOutput,
+      sendTerminalKeystroke,
+      sendTerminalResize,
+      session?.config.id,
+      showErrorToast,
+      syncTerminalSize,
+    ]);
 
   useEffect(() => {
     if (!terminalUrl) {
@@ -780,7 +868,7 @@ export function SshSessionDetails({
   async function handleDelete() {
     const success = await deleteSession();
     if (!success) {
-      if (session && isStandaloneSession(session)) {
+      if (session && isStandaloneSession(session) && session.config.connectionMode !== "direct") {
         setPendingStandaloneAction("delete");
         setShowPasswordPrompt(true);
       }
@@ -854,6 +942,9 @@ export function SshSessionDetails({
             <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
               {session.config.name}
             </h1>
+            <Badge variant={session.config.connectionMode === "direct" ? "info" : "default"}>
+              {getConnectionModeLabel(session.config.connectionMode)}
+            </Badge>
             <Badge variant={getStatusVariant(session.state.status)}>
               {session.state.status}
             </Badge>
@@ -878,6 +969,12 @@ export function SshSessionDetails({
         >
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div className="min-w-0">
+              <dt className="text-gray-500 dark:text-gray-400">Mode</dt>
+              <dd className="text-gray-900 dark:text-gray-100">
+                {getConnectionModeLabel(session.config.connectionMode)}
+              </dd>
+            </div>
+            <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">
                 {isStandaloneSession(session) ? "Server" : "Workspace ID"}
               </dt>
@@ -893,10 +990,17 @@ export function SshSessionDetails({
                 {isStandaloneSession(session) ? standaloneServerTarget : session.config.directory}
               </dd>
             </div>
-            <div className="min-w-0">
-              <dt className="text-gray-500 dark:text-gray-400">tmux session</dt>
-              <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.remoteSessionName}</dd>
-            </div>
+            {session.config.connectionMode !== "direct" ? (
+              <div className="min-w-0">
+                <dt className="text-gray-500 dark:text-gray-400">tmux session</dt>
+                <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.remoteSessionName}</dd>
+              </div>
+            ) : (
+              <div className="min-w-0">
+                <dt className="text-gray-500 dark:text-gray-400">Reconnect behavior</dt>
+                <dd className="text-gray-900 dark:text-gray-100">Opens a fresh shell each time</dd>
+              </div>
+            )}
             <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">Last connected</dt>
               <dd className="text-gray-900 dark:text-gray-100">{session.state.lastConnectedAt ?? "Never"}</dd>
@@ -1038,39 +1142,43 @@ export function SshSessionDetails({
                 >
                   →
                 </Button>
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  className={touchButtonClassName}
-                  onClick={() => sendTmuxShortcut("split-pane")}
-                >
-                  Split
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  className={touchButtonClassName}
-                  onClick={() => sendTmuxShortcut("next-pane")}
-                >
-                  Next
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  className={touchButtonClassName}
-                  onClick={() => sendTmuxShortcut("resize-pane-up")}
-                >
-                  Pane ↑
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  className={touchButtonClassName}
-                  onClick={() => sendTmuxShortcut("resize-pane-down")}
-                >
-                  Pane ↓
-                </Button>
+                {session.config.connectionMode !== "direct" && (
+                  <>
+                    <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      className={touchButtonClassName}
+                      onClick={() => sendTmuxShortcut("split-pane")}
+                    >
+                      Split
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      className={touchButtonClassName}
+                      onClick={() => sendTmuxShortcut("next-pane")}
+                    >
+                      Next
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      className={touchButtonClassName}
+                      onClick={() => sendTmuxShortcut("resize-pane-up")}
+                    >
+                      Pane ↑
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      className={touchButtonClassName}
+                      onClick={() => sendTmuxShortcut("resize-pane-down")}
+                    >
+                      Pane ↓
+                    </Button>
+                  </>
+                )}
                 <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
                 <Button
                   variant="secondary"
@@ -1164,12 +1272,15 @@ export function SshSessionDetails({
 
         <Card
           padding={false}
-          className="min-h-0 flex flex-1 flex-col overflow-hidden"
-          bodyClassName="min-h-0 flex flex-1 flex-col"
+          className="min-h-0 flex flex-1 flex-col overflow-visible rounded-sm bg-gray-900 dark:bg-gray-900"
+          bodyClassName="min-h-0 flex flex-1 flex-col bg-gray-900"
         >
           <div
             ref={terminalContainerRef}
-            className="min-h-0 flex-1 overflow-hidden rounded-lg bg-gray-900 w-full [&>.xterm]:h-full [&>.xterm]:w-full [&_.xterm-screen]:h-full [&_.xterm-screen]:w-full [&_.xterm-viewport]:h-full [&_.xterm-viewport]:w-full"
+            className="relative box-border min-h-0 h-full flex-1 bg-gray-900 w-full"
+            style={{
+              padding: `${TERMINAL_PADDING_TOP_PX}px ${TERMINAL_PADDING_X_PX}px ${TERMINAL_PADDING_BOTTOM_PX}px`,
+            }}
           />
         </Card>
       </div>
@@ -1179,7 +1290,9 @@ export function SshSessionDetails({
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={() => void handleDelete()}
         title="Delete SSH session?"
-        message="This removes the Ralpher session metadata and attempts to kill the remote tmux session."
+        message={session.config.connectionMode !== "direct"
+          ? "This removes the Ralpher session metadata and attempts to kill the remote tmux session."
+          : "This removes the saved Ralpher session metadata. Direct SSH mode does not keep a remote tmux session."}
         confirmLabel="Delete"
         loading={false}
       />
@@ -1190,7 +1303,9 @@ export function SshSessionDetails({
           setPendingStandaloneAction(null);
         }}
         title="SSH password required"
-        description="Standalone SSH sessions need the password from this browser before they can connect or be deleted."
+        description={session.config.connectionMode !== "direct"
+          ? "Standalone tmux sessions need the password from this browser before they can connect or be deleted."
+          : "Standalone direct SSH sessions need the password from this browser before they can connect."}
         size="sm"
         footer={(
           <>

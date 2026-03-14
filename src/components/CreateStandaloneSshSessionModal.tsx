@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { SshServer, SshServerSession } from "../types";
+import {
+  DEFAULT_SSH_CONNECTION_MODE,
+  type SshConnectionMode,
+  type SshServer,
+  type SshServerSession,
+} from "../types";
 import { Button, Modal } from "./common";
 import { useToast } from "../hooks";
 
@@ -8,7 +13,10 @@ export interface CreateStandaloneSshSessionModalProps {
   server: SshServer | null;
   hasStoredCredential: boolean;
   onClose: () => void;
-  onCreate: (serverId: string, options?: { name?: string; password?: string }) => Promise<SshServerSession | null>;
+  onCreate: (
+    serverId: string,
+    options?: { name?: string; password?: string; connectionMode?: SshConnectionMode },
+  ) => Promise<SshServerSession | null>;
   onCreated: (sessionId: string) => void;
 }
 
@@ -24,6 +32,7 @@ export function CreateStandaloneSshSessionModal({
   const formRef = useRef<HTMLFormElement>(null);
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [connectionMode, setConnectionMode] = useState<SshConnectionMode>(DEFAULT_SSH_CONNECTION_MODE);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -32,6 +41,7 @@ export function CreateStandaloneSshSessionModal({
     }
     setName("");
     setPassword("");
+    setConnectionMode(DEFAULT_SSH_CONNECTION_MODE);
   }, [isOpen, server?.config.id]);
 
   async function handleSubmit(event: FormEvent) {
@@ -49,6 +59,7 @@ export function CreateStandaloneSshSessionModal({
       const session = await onCreate(server.config.id, {
         name: name.trim() || undefined,
         password: password.trim() || undefined,
+        connectionMode,
       });
       if (!session) {
         return;
@@ -68,8 +79,8 @@ export function CreateStandaloneSshSessionModal({
       onClose={onClose}
       title="New Standalone SSH Session"
       description={server
-        ? `Create a tmux-backed session on ${server.config.username}@${server.config.address}.`
-        : "Create a tmux-backed standalone SSH session."}
+        ? `Create a saved session on ${server.config.username}@${server.config.address} using tmux or direct SSH.`
+        : "Create a saved standalone SSH session."}
       size="md"
       footer={(
         <>
@@ -94,6 +105,28 @@ export function CreateStandaloneSshSessionModal({
             onChange={(event) => setName(event.target.value)}
             className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
           />
+        </div>
+        <div>
+          <label
+            htmlFor="standalone-ssh-session-connection-mode"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
+            Connection mode
+          </label>
+          <select
+            id="standalone-ssh-session-connection-mode"
+            value={connectionMode}
+            onChange={(event) => setConnectionMode(event.target.value as SshConnectionMode)}
+            className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+          >
+            <option value="tmux">tmux (persistent across reconnects)</option>
+            <option value="direct">Direct SSH (fresh shell, bypass tmux)</option>
+          </select>
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {connectionMode === "tmux"
+              ? "tmux keeps the remote shell alive and is the current default."
+              : "Direct SSH skips tmux so you can compare the terminal behavior without it."}
+          </p>
         </div>
         <div>
           <label htmlFor="standalone-ssh-session-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">

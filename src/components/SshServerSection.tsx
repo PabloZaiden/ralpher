@@ -16,6 +16,10 @@ function getBadgeVariant(status: SshServerSession["state"]["status"]) {
   }
 }
 
+function getConnectionModeLabel(mode: SshServerSession["config"]["connectionMode"]): string {
+  return mode === "direct" ? "Direct SSH" : "tmux";
+}
+
 export interface SshServerSectionProps {
   servers: SshServer[];
   sessionsByServerId: Record<string, SshServerSession[]>;
@@ -60,7 +64,7 @@ export function SshServerSection({
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : servers.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          No standalone SSH servers yet. Add one to create persistent remote sessions outside a workspace.
+          No standalone SSH servers yet. Add one to create saved remote sessions outside a workspace.
         </p>
       ) : (
         <div className="space-y-4">
@@ -116,9 +120,14 @@ export function SshServerSection({
                               <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
                                 {session.config.name}
                               </p>
-                              <p className="mt-1 truncate text-xs font-mono text-gray-500 dark:text-gray-400">
-                                tmux: {session.config.remoteSessionName}
+                              <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                                Mode: {getConnectionModeLabel(session.config.connectionMode)}
                               </p>
+                              {session.config.connectionMode !== "direct" && (
+                                <p className="mt-1 truncate text-xs font-mono text-gray-500 dark:text-gray-400">
+                                  tmux: {session.config.remoteSessionName}
+                                </p>
+                              )}
                             </div>
                             <Badge variant={getBadgeVariant(session.state.status)}>
                               {session.state.status}

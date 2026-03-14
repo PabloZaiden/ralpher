@@ -156,6 +156,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
           sessionId,
           serverId: session.config.sshServerId,
           password: options?.password,
+          requireCredential: session.config.connectionMode !== "direct",
         });
         setSession(null);
         return true;
