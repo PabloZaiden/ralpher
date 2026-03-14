@@ -97,7 +97,7 @@ export function SshSessionDetails({
   copyTextToClipboard = writeTextToClipboard,
 }: SshSessionDetailsProps) {
   const { error: showErrorToast } = useToast();
-  const { session, sessionKind, loading, error, deleteSession } = useSshSession(sshSessionId);
+  const { session, sessionKind, loading, error, deleteSession, refresh } = useSshSession(sshSessionId);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -294,7 +294,8 @@ export function SshSessionDetails({
     setSocketStatus("open");
     scheduleResize();
     flushPendingOutput();
-  }, [flushPendingOutput, scheduleResize]);
+    void refresh();
+  }, [flushPendingOutput, refresh, scheduleResize]);
 
   const resetTerminalModifiers = useCallback(() => {
     setTerminalModifiers(defaultTerminalModifiers);
@@ -412,6 +413,9 @@ export function SshSessionDetails({
       }
     };
     ws.onmessage = (event) => {
+      if (terminalSocketRef.current !== ws) {
+        return;
+      }
       const data = JSON.parse(event.data) as {
         type: string;
         data?: string;
@@ -445,11 +449,18 @@ export function SshSessionDetails({
       }
     };
     ws.onclose = () => {
+      if (terminalSocketRef.current !== ws) {
+        return;
+      }
+      terminalSocketRef.current = null;
       terminalReadyRef.current = false;
       lastSentResizeRef.current = null;
       setSocketStatus("closed");
     };
     ws.onerror = () => {
+      if (terminalSocketRef.current !== ws) {
+        return;
+      }
       terminalReadyRef.current = false;
       lastSentResizeRef.current = null;
       setSocketStatus("closed");
@@ -463,6 +474,20 @@ export function SshSessionDetails({
     terminalUrl,
     showErrorToast,
   ]);
+
+  const recoverTerminalOnForeground = useCallback(() => {
+    if (!terminalUrl) {
+      return;
+    }
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      return;
+    }
+    const readyState = terminalSocketRef.current?.readyState;
+    if (readyState === WebSocket.OPEN || readyState === WebSocket.CONNECTING) {
+      return;
+    }
+    connectTerminal();
+  }, [connectTerminal, terminalUrl]);
 
   useEffect(() => {
     if (!terminalContainerRef.current || terminalRef.current) {
@@ -546,6 +571,28 @@ export function SshSessionDetails({
       terminalSocketRef.current = null;
     };
   }, [connectTerminal, terminalUrl]);
+
+  useEffect(() => {
+    if (!terminalUrl || typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const handleWindowFocus = () => {
+      recoverTerminalOnForeground();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        recoverTerminalOnForeground();
+      }
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [recoverTerminalOnForeground, terminalUrl]);
 
   useEffect(() => {
     let cancelled = false;
