@@ -14,6 +14,19 @@ class MockTerminal {
   resizeHandler: ((size: { cols: number; rows: number }) => void) | null = null;
   writes: string[] = [];
   focusCalls = 0;
+  element: HTMLDivElement | null = null;
+  canvas: HTMLCanvasElement | null = null;
+  wheelHandler: ((event: WheelEvent) => boolean) | undefined;
+  mouseTracking = false;
+  modes: Record<number, boolean> = {};
+  wasmTerm = {};
+  renderer: {
+    getCanvas: () => HTMLCanvasElement;
+    getMetrics: () => { width: number; height: number; baseline: number };
+    remeasureFont: () => void;
+    resize: () => void;
+    render: () => void;
+  } | null = null;
 
   constructor(options?: Record<string, unknown>) {
     lastTerminal = this;
@@ -23,7 +36,40 @@ class MockTerminal {
   loadAddon(addon: { activate?: (terminal: MockTerminal) => void }) {
     addon.activate?.(this);
   }
-  open() {}
+  open(parent?: HTMLElement) {
+    if (!(parent instanceof HTMLDivElement)) {
+      return;
+    }
+
+    this.element = parent;
+    const canvas = document.createElement("canvas");
+    Object.defineProperty(canvas, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        left: 0,
+        top: 0,
+        right: 800,
+        bottom: 480,
+        width: 800,
+        height: 480,
+        x: 0,
+        y: 0,
+        toJSON: () => null,
+      }),
+    });
+    parent.appendChild(canvas);
+    this.canvas = canvas;
+    canvas.addEventListener("wheel", (event) => {
+      this.wheelHandler?.(event as WheelEvent);
+    });
+    this.renderer = {
+      getCanvas: () => canvas,
+      getMetrics: () => ({ width: 10, height: 20, baseline: 16 }),
+      remeasureFont: () => {},
+      resize: () => {},
+      render: () => {},
+    };
+  }
   focus() {
     this.focusCalls += 1;
   }
@@ -52,9 +98,26 @@ class MockTerminal {
     };
   }
 
+  attachCustomWheelEventHandler(handler?: (event: WheelEvent) => boolean) {
+    this.wheelHandler = handler;
+  }
+
+  getMode(mode: number) {
+    return this.modes[mode] ?? false;
+  }
+
+  hasMouseTracking() {
+    return this.mouseTracking;
+  }
+
   dispose() {
     this.dataHandler = null;
     this.resizeHandler = null;
+    this.canvas?.remove();
+    this.canvas = null;
+    this.element = null;
+    this.renderer = null;
+    this.wheelHandler = undefined;
   }
 }
 
@@ -170,6 +233,112 @@ describe("SshSessionDetails", () => {
         brightWhite: "#f9fafb",
       },
     });
+  });
+
+  test("forwards wheel events as SGR mouse input when terminal mouse tracking is enabled", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Mouse Wheel" } }),
+    );
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-mouse-wheel-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Mouse Wheel")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal?.canvas).not.toBeNull();
+    });
+
+    lastTerminal!.mouseTracking = true;
+    lastTerminal!.modes[1000] = true;
+    lastTerminal!.modes[1006] = true;
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.connected",
+        sshSessionId: "ssh-mouse-wheel-1",
+      });
+    });
+
+    await act(async () => {
+      lastTerminal!.canvas!.dispatchEvent(new WheelEvent("wheel", {
+        deltaY: 120,
+        clientX: 100,
+        clientY: 40,
+        bubbles: true,
+        cancelable: true,
+      }));
+    });
+
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b[<65;11;3M",
+    }));
+  });
+
+  test("forwards click press and release as SGR mouse input when terminal mouse tracking is enabled", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Mouse Click" } }),
+    );
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-mouse-click-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Mouse Click")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal?.canvas).not.toBeNull();
+    });
+
+    lastTerminal!.mouseTracking = true;
+    lastTerminal!.modes[1000] = true;
+    lastTerminal!.modes[1006] = true;
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.connected",
+        sshSessionId: "ssh-mouse-click-1",
+      });
+    });
+
+    await act(async () => {
+      lastTerminal!.canvas!.dispatchEvent(new MouseEvent("mousedown", {
+        button: 0,
+        buttons: 1,
+        clientX: 30,
+        clientY: 20,
+        bubbles: true,
+        cancelable: true,
+      }));
+      lastTerminal!.canvas!.dispatchEvent(new MouseEvent("mouseup", {
+        button: 0,
+        buttons: 0,
+        clientX: 30,
+        clientY: 20,
+        bubbles: true,
+        cancelable: true,
+      }));
+      lastTerminal!.canvas!.dispatchEvent(new MouseEvent("click", {
+        button: 0,
+        clientX: 30,
+        clientY: 20,
+        bubbles: true,
+        cancelable: true,
+      }));
+    });
+
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b[<0;4;2M",
+    }));
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b[<0;4;2m",
+    }));
   });
 
   test("applies active modifiers to the next typed terminal key and touch key", async () => {
