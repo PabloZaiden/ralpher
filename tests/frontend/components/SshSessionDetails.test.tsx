@@ -871,6 +871,126 @@ describe("SshSessionDetails", () => {
     });
   });
 
+  test("refreshes the standalone SSH credential token when focus recovery reconnects the terminal", async () => {
+    globalThis.localStorage?.setItem("ralpher.sshServerCredential.server-1", JSON.stringify({
+      encryptedCredential: {
+        algorithm: "RSA-OAEP-256",
+        fingerprint: "fp-1",
+        version: 1,
+        ciphertext: "ciphertext",
+      },
+      storedAt: new Date().toISOString(),
+    }));
+    api.get("/api/ssh-server-sessions/:id", (req) => ({
+      config: {
+        id: req.params["id"]!,
+        sshServerId: "server-1",
+        name: "Standalone Focus Recovery",
+        remoteSessionName: "ralpher-standalone-focus",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      state: { status: "ready" },
+    }));
+    api.get("/api/ssh-servers/:id", (req) => ({
+      config: {
+        id: req.params["id"]!,
+        name: "Recovery Shell",
+        address: "focus.example.com",
+        username: "deploy",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      publicKey: {
+        algorithm: "RSA-OAEP-256",
+        publicKey: TEST_PUBLIC_KEY,
+        fingerprint: "fp-1",
+        version: 1,
+        createdAt: new Date().toISOString(),
+      },
+    }));
+    api.get("/api/ssh-servers/:id/public-key", () => ({
+      algorithm: "RSA-OAEP-256",
+      publicKey: TEST_PUBLIC_KEY,
+      fingerprint: "fp-1",
+      version: 1,
+      createdAt: new Date().toISOString(),
+    }));
+
+    let credentialExchangeCount = 0;
+    api.post("/api/ssh-servers/:id/credentials", () => {
+      credentialExchangeCount += 1;
+      return {
+        credentialToken: `token-${credentialExchangeCount}`,
+        expiresAt: new Date().toISOString(),
+      };
+    });
+
+    let visibilityState = "visible";
+    const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibilityState,
+    });
+
+    try {
+      const { getByText } = renderWithUser(
+        <SshSessionDetails sshSessionId="standalone-ssh-focus" onBack={() => {}} />,
+      );
+
+      await waitFor(() => {
+        expect(getByText("Standalone Focus Recovery")).toBeTruthy();
+        expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(1);
+        expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      });
+
+      const initialConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+      expect(initialConnection.sentMessages).toContain(
+        JSON.stringify({ type: "terminal.auth", credentialToken: "token-1" }),
+      );
+
+      await act(async () => {
+        initialConnection.instance.close(1006, "network lost");
+      });
+
+      await waitFor(() => {
+        expect(getByText("closed")).toBeTruthy();
+      });
+
+      visibilityState = "hidden";
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      visibilityState = "visible";
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("focus"));
+      });
+
+      await waitFor(() => {
+        expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(2);
+        expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(2);
+      });
+
+      const recoveredConnections = ws.getConnections("/api/ssh-terminal");
+      const recoveredConnection = recoveredConnections[recoveredConnections.length - 1]!;
+      expect(recoveredConnection).not.toBe(initialConnection);
+      expect(recoveredConnection.sentMessages).toContain(
+        JSON.stringify({ type: "terminal.auth", credentialToken: "token-2" }),
+      );
+    } finally {
+      if (originalVisibilityState) {
+        Object.defineProperty(document, "visibilityState", originalVisibilityState);
+      } else {
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          get: () => "visible",
+        });
+      }
+    }
+  });
+
   test("does not re-probe the workspace endpoint or remint standalone terminal credentials on session refresh", async () => {
     let standaloneStatus = "ready";
 
