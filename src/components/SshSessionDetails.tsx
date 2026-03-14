@@ -6,8 +6,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { Badge, Button, Card, ConfirmModal } from "./common";
-import { useSshSession, useToast } from "../hooks";
+import { Badge, Button, Card, ConfirmModal, Modal } from "./common";
+import { getSshServerApi, useSshSession, useToast } from "../hooks";
 import {
   defaultTerminalModifiers,
   encodeTerminalDataInput,
@@ -20,6 +20,15 @@ import {
 } from "../utils/terminal-keys";
 import { writeTextToClipboard } from "../utils";
 import { appWebSocketUrl } from "../lib/public-path";
+import { getStoredSshCredentialToken, storeSshServerPassword } from "../lib/ssh-browser-credentials";
+import type { SshServer } from "../types";
+
+function isStandaloneSession(session: NonNullable<ReturnType<typeof useSshSession>["session"]>): session is Extract<
+  NonNullable<ReturnType<typeof useSshSession>["session"]>,
+  { config: { sshServerId: string } }
+> {
+  return "sshServerId" in session.config;
+}
 
 function getStatusVariant(status: string) {
   switch (status) {
@@ -88,7 +97,7 @@ export function SshSessionDetails({
   copyTextToClipboard = writeTextToClipboard,
 }: SshSessionDetailsProps) {
   const { error: showErrorToast } = useToast();
-  const { session, loading, error, deleteSession } = useSshSession(sshSessionId);
+  const { session, sessionKind, loading, error, deleteSession } = useSshSession(sshSessionId);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -100,13 +109,48 @@ export function SshSessionDetails({
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const [socketStatus, setSocketStatus] = useState<"connecting" | "open" | "closed">("connecting");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [sessionInfoExpanded, setSessionInfoExpanded] = useState(false);
   const [touchControlsExpanded, setTouchControlsExpanded] = useState(false);
   const [terminalModifiers, setTerminalModifiers] = useState<TerminalModifierState>(defaultTerminalModifiers);
+  const [standalonePassword, setStandalonePassword] = useState("");
+  const [standaloneCredentialToken, setStandaloneCredentialToken] = useState<string | null>(null);
+  const [pendingStandaloneAction, setPendingStandaloneAction] = useState<"terminal" | "delete" | null>(null);
+  const [standaloneServer, setStandaloneServer] = useState<SshServer | null>(null);
+  const standaloneServerId = useMemo(() => {
+    if (!session || !isStandaloneSession(session)) {
+      return null;
+    }
+    return session.config.sshServerId;
+  }, [session]);
+  const standaloneServerName = useMemo(() => {
+    if (!standaloneServerId) {
+      return null;
+    }
+    return standaloneServer?.config.name ?? standaloneServerId;
+  }, [standaloneServer, standaloneServerId]);
+  const standaloneServerTarget = useMemo(() => {
+    if (!standaloneServerId) {
+      return null;
+    }
+    return standaloneServer
+      ? `${standaloneServer.config.username}@${standaloneServer.config.address}`
+      : standaloneServerId;
+  }, [standaloneServer, standaloneServerId]);
 
   const terminalUrl = useMemo(
-    () => `/api/ssh-terminal?sshSessionId=${encodeURIComponent(sshSessionId)}`,
-    [sshSessionId],
+    () => {
+      if (!session) {
+        return null;
+      }
+      if (isStandaloneSession(session)) {
+        return standaloneCredentialToken
+          ? `/api/ssh-terminal?sshServerSessionId=${encodeURIComponent(sshSessionId)}`
+          : null;
+      }
+      return `/api/ssh-terminal?sshSessionId=${encodeURIComponent(sshSessionId)}`;
+    },
+    [session, sshSessionId, standaloneCredentialToken],
   );
   const activeModifierLabel = useMemo(() => {
     return [
@@ -333,6 +377,9 @@ export function SshSessionDetails({
   }, [resetTerminalModifiers, sendTerminalInput, showErrorToast]);
 
   const connectTerminal = useCallback(() => {
+    if (!terminalUrl) {
+      return;
+    }
     terminalSocketRef.current?.close();
     terminalReadyRef.current = false;
     pendingOutputRef.current = [];
@@ -345,8 +392,16 @@ export function SshSessionDetails({
 
     const ws = new WebSocket(appWebSocketUrl(terminalUrl));
     terminalSocketRef.current = ws;
+    const standaloneAuthToken = sessionKind === "standalone" ? standaloneCredentialToken : null;
 
-    ws.onopen = () => {};
+    ws.onopen = () => {
+      if (standaloneAuthToken) {
+        ws.send(JSON.stringify({
+          type: "terminal.auth",
+          credentialToken: standaloneAuthToken,
+        }));
+      }
+    };
     const copyTerminalClipboardText = async (text: string) => {
       try {
         await copyTextToClipboard(text);
@@ -399,7 +454,15 @@ export function SshSessionDetails({
       lastSentResizeRef.current = null;
       setSocketStatus("closed");
     };
-  }, [copyTextToClipboard, focusTerminal, markTerminalReady, terminalUrl, showErrorToast]);
+  }, [
+    copyTextToClipboard,
+    focusTerminal,
+    markTerminalReady,
+    sessionKind,
+    standaloneCredentialToken,
+    terminalUrl,
+    showErrorToast,
+  ]);
 
   useEffect(() => {
     if (!terminalContainerRef.current || terminalRef.current) {
@@ -473,21 +536,147 @@ export function SshSessionDetails({
   }, [flushPendingOutput, scheduleResize, sendTerminalKeystroke, session?.config.id]);
 
   useEffect(() => {
+    if (!terminalUrl) {
+      return;
+    }
     connectTerminal();
     return () => {
       terminalReadyRef.current = false;
       terminalSocketRef.current?.close();
       terminalSocketRef.current = null;
     };
-  }, [connectTerminal]);
+  }, [connectTerminal, terminalUrl]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadStandaloneServer() {
+      if (!standaloneServerId) {
+        setStandaloneServer(null);
+        return;
+      }
+
+      try {
+        const server = await getSshServerApi(standaloneServerId);
+        if (!cancelled) {
+          setStandaloneServer(server);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setStandaloneServer(null);
+          showErrorToast(`Failed to load SSH server details: ${String(error)}`);
+        }
+      }
+    }
+
+    void loadStandaloneServer();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showErrorToast, standaloneServerId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function ensureStandaloneCredentialToken() {
+      if (!standaloneServerId) {
+        setStandaloneCredentialToken(null);
+        return;
+      }
+
+      if (standaloneCredentialToken) {
+        return;
+      }
+
+      const token = await getStoredSshCredentialToken(standaloneServerId);
+      if (cancelled) {
+        return;
+      }
+
+      if (token) {
+        setStandaloneCredentialToken(token);
+        setShowPasswordPrompt(false);
+        setPendingStandaloneAction(null);
+        return;
+      }
+
+      setStandaloneCredentialToken(null);
+      setPendingStandaloneAction("terminal");
+      setShowPasswordPrompt(true);
+    }
+
+    if (sessionKind === "standalone") {
+      void ensureStandaloneCredentialToken().catch((error) => {
+        if (!cancelled) {
+          showErrorToast(String(error));
+          setPendingStandaloneAction("terminal");
+          setShowPasswordPrompt(true);
+        }
+      });
+    } else {
+      setStandaloneCredentialToken(null);
+      setShowPasswordPrompt(false);
+      setPendingStandaloneAction(null);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionKind, showErrorToast, standaloneCredentialToken, standaloneServerId]);
 
   async function handleDelete() {
     const success = await deleteSession();
     if (!success) {
+      if (session && isStandaloneSession(session)) {
+        setPendingStandaloneAction("delete");
+        setShowPasswordPrompt(true);
+      }
       return;
     }
     setShowDeleteConfirm(false);
     onBack();
+  }
+
+  async function handleStandalonePasswordSubmit() {
+    if (!session || !isStandaloneSession(session)) {
+      return;
+    }
+
+    const trimmedPassword = standalonePassword.trim();
+    if (!trimmedPassword) {
+      showErrorToast("Enter the SSH password for this server.");
+      return;
+    }
+
+    try {
+      await storeSshServerPassword(session.config.sshServerId, trimmedPassword);
+
+      if (pendingStandaloneAction === "delete") {
+        const success = await deleteSession({ password: trimmedPassword });
+        if (success) {
+          setStandalonePassword("");
+          setShowPasswordPrompt(false);
+          setPendingStandaloneAction(null);
+          setShowDeleteConfirm(false);
+          onBack();
+        }
+        return;
+      }
+
+      const token = await getStoredSshCredentialToken(session.config.sshServerId);
+      if (!token) {
+        showErrorToast("Failed to retrieve a valid SSH credential token.");
+        return;
+      }
+
+      setStandalonePassword("");
+      setStandaloneCredentialToken(token);
+      setShowPasswordPrompt(false);
+      setPendingStandaloneAction(null);
+    } catch (error) {
+      showErrorToast(String(error));
+    }
   }
 
   if (loading && !session) {
@@ -536,12 +725,20 @@ export function SshSessionDetails({
         >
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div className="min-w-0">
-              <dt className="text-gray-500 dark:text-gray-400">Workspace ID</dt>
-              <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.workspaceId}</dd>
+              <dt className="text-gray-500 dark:text-gray-400">
+                {isStandaloneSession(session) ? "Server" : "Workspace ID"}
+              </dt>
+              <dd className={isStandaloneSession(session) ? "break-words text-gray-900 dark:text-gray-100" : "break-all font-mono text-gray-900 dark:text-gray-100"}>
+                {isStandaloneSession(session) ? standaloneServerName : session.config.workspaceId}
+              </dd>
             </div>
             <div className="min-w-0">
-              <dt className="text-gray-500 dark:text-gray-400">Directory</dt>
-              <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.directory}</dd>
+              <dt className="text-gray-500 dark:text-gray-400">
+                {isStandaloneSession(session) ? "Address" : "Directory"}
+              </dt>
+              <dd className="break-all font-mono text-gray-900 dark:text-gray-100">
+                {isStandaloneSession(session) ? standaloneServerTarget : session.config.directory}
+              </dd>
             </div>
             <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">tmux session</dt>
@@ -798,6 +995,55 @@ export function SshSessionDetails({
         confirmLabel="Delete"
         loading={false}
       />
+      <Modal
+        isOpen={showPasswordPrompt}
+        onClose={() => {
+          setShowPasswordPrompt(false);
+          setPendingStandaloneAction(null);
+        }}
+        title="SSH password required"
+        description="Standalone SSH sessions need the password from this browser before they can connect or be deleted."
+        size="sm"
+        footer={(
+          <>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setShowPasswordPrompt(false);
+                setPendingStandaloneAction(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void handleStandalonePasswordSubmit()}>
+              Continue
+            </Button>
+          </>
+        )}
+      >
+        <div className="space-y-3">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            {pendingStandaloneAction === "delete"
+              ? "Enter the SSH password to delete the remote tmux session and local metadata."
+              : "Enter the SSH password to open the standalone terminal session."}
+          </p>
+          <div>
+            <label
+              htmlFor="standalone-session-password"
+              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              SSH password
+            </label>
+            <input
+              id="standalone-session-password"
+              type="password"
+              value={standalonePassword}
+              onChange={(event) => setStandalonePassword(event.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            />
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

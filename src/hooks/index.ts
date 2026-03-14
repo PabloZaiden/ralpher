@@ -7,6 +7,7 @@ export { useLoops, type UseLoopsResult, type CreateLoopResult } from "./useLoops
 export { useLoop, type UseLoopResult } from "./useLoop";
 export { useSshSessions, type UseSshSessionsResult } from "./useSshSessions";
 export { useSshSession, type UseSshSessionResult } from "./useSshSession";
+export { useSshServers, type UseSshServersResult } from "./useSshServers";
 export { useLoopPortForwards, type UseLoopPortForwardsResult } from "./useLoopPortForwards";
 export { useWorkspaceServerSettings, type UseWorkspaceServerSettingsResult } from "./useWorkspaceServerSettings";
 export { useMarkdownPreference, type UseMarkdownPreferenceResult } from "./useMarkdownPreference";
@@ -49,3 +50,12 @@ export {
   type AddressCommentsResult,
   type SetPendingResult,
 } from "./loopActions";
+export {
+  getSshServerApi,
+  createSshServerApi,
+  updateSshServerApi,
+  deleteSshServerApi,
+  createStandaloneSshSessionApi,
+  deleteStandaloneSshSessionApi,
+  saveStandaloneSshServerPassword,
+} from "./sshServerActions";

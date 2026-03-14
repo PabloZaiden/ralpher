@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { constants, publicEncrypt } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
@@ -9,6 +10,9 @@ import type { CommandExecutor, CommandResult } from "../../src/core/command-exec
 import { initializeDatabase, closeDatabase } from "../../src/persistence/database";
 import { saveSshSession } from "../../src/persistence/ssh-sessions";
 import { createWorkspace } from "../../src/persistence/workspaces";
+import { sshCredentialManager } from "../../src/core/ssh-credential-manager";
+import { sshServerKeyManager } from "../../src/core/ssh-server-key-manager";
+import { sshServerManager } from "../../src/core/ssh-server-manager";
 import type { SshSession, Workspace } from "../../src/types";
 
 class MockStream extends EventEmitter {
@@ -125,6 +129,22 @@ function createTestSession(workspaceId: string, directory: string): SshSession {
   };
 }
 
+async function issueStandaloneCredentialToken(serverId: string, password = "secret"): Promise<string> {
+  const publicKey = await sshServerKeyManager.ensurePublicKey(serverId);
+  const ciphertext = publicEncrypt({
+    key: publicKey.publicKey,
+    padding: constants.RSA_PKCS1_OAEP_PADDING,
+    oaepHash: "sha256",
+  }, Buffer.from(password, "utf8")).toString("base64");
+  const exchange = await sshCredentialManager.issueToken(serverId, {
+    algorithm: publicKey.algorithm,
+    fingerprint: publicKey.fingerprint,
+    version: publicKey.version,
+    ciphertext,
+  });
+  return exchange.credentialToken;
+}
+
 describe("SshTerminalBridge", () => {
   let tempDir: string;
   let workspace: Workspace;
@@ -173,10 +193,12 @@ describe("SshTerminalBridge", () => {
       };
     };
     backendManager.setExecutorFactoryForTesting(() => new ExecutorStub(execImpl));
+    sshServerManager.setExecutorFactoryForTesting(() => new ExecutorStub(execImpl));
   });
 
   afterEach(async () => {
     backendManager.resetForTesting();
+    sshServerManager.setExecutorFactoryForTesting(null);
     closeDatabase();
     delete process.env["RALPHER_DATA_DIR"];
     await rm(tempDir, { recursive: true, force: true });
@@ -188,6 +210,17 @@ describe("SshTerminalBridge", () => {
     expect(command).toContain("tmux new-session -d -s 'ralpher-session-1' -c '/workspaces/example';");
     expect(command).toContain("tmux set-option -t 'ralpher-session-1' status off;");
     expect(command).toContain("exec tmux attach-session -t 'ralpher-session-1'");
+  });
+
+  test("buildAttachCommand omits the working directory for standalone sessions", () => {
+    const command = buildAttachCommand({
+      config: {
+        remoteSessionName: "ralpher-server-session-1",
+      },
+    });
+
+    expect(command).toContain("tmux new-session -d -s 'ralpher-server-session-1';");
+    expect(command).not.toContain(" -c ");
   });
 
   test("uses a fallback TERM when the server environment does not define one", async () => {
@@ -398,5 +431,35 @@ describe("SshTerminalBridge", () => {
 
     expect(outputChunks).toEqual([oversizedSequence, "after"]);
     expect(clipboardCopies).toEqual([]);
+  });
+
+  test("connects standalone SSH server sessions with a credential token", async () => {
+    const server = await sshServerManager.createServer({
+      name: "Shared host",
+      address: "ssh.example.com",
+      username: "deploy",
+    });
+    const createToken = await issueStandaloneCredentialToken(server.config.id);
+    const standaloneSession = await sshServerManager.createSession(server.config.id, {
+      credentialToken: createToken,
+      name: "Deploy shell",
+    });
+    const terminalToken = await issueStandaloneCredentialToken(server.config.id);
+
+    const bridge = new SshTerminalBridge(standaloneSession.config.id, {
+      onOutput: () => {},
+    }, {
+      sessionKind: "standalone",
+      credentialToken: terminalToken,
+    });
+
+    await bridge.connect();
+
+    expect(lastSpawnCommand?.[0]).toBe("sshpass");
+    expect(lastSpawnCommand?.join(" ")).toContain("deploy@ssh.example.com");
+    expect(lastSpawnCommand?.join(" ")).not.toContain(" -c ");
+    expect(lastSpawnEnv?.["SSHPASS"]).toBe("secret");
+
+    await bridge.dispose();
   });
 });

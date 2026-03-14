@@ -6,7 +6,7 @@
 
 import { Database } from "bun:sqlite";
 import { join } from "path";
-import { mkdir, unlink } from "fs/promises";
+import { mkdir, rm, unlink } from "fs/promises";
 import { runMigrations } from "./migrations";
 import { createLogger } from "../core/logger";
 
@@ -27,6 +27,10 @@ export function getDataDir(): string {
  */
 export function getDatabasePath(): string {
   return join(getDataDir(), "ralpher.db");
+}
+
+function getSshServerKeyStorePath(): string {
+  return join(getDataDir(), "ssh-server-keys");
 }
 
 /**
@@ -287,8 +291,12 @@ export function resetDatabase(): void {
   // review_comments references loops(id), loops references workspaces(id),
   // so we must drop in reverse dependency order to satisfy FK constraints.
   const dropAllTables = db.transaction(() => {
+    db!.run("DROP TABLE IF EXISTS forwarded_ports");
     db!.run("DROP TABLE IF EXISTS review_comments");
+    db!.run("DROP TABLE IF EXISTS ssh_server_sessions");
+    db!.run("DROP TABLE IF EXISTS ssh_sessions");
     db!.run("DROP TABLE IF EXISTS loops");
+    db!.run("DROP TABLE IF EXISTS ssh_servers");
     db!.run("DROP TABLE IF EXISTS workspaces");
     db!.run("DROP TABLE IF EXISTS sessions");
     db!.run("DROP TABLE IF EXISTS preferences");
@@ -338,7 +346,9 @@ export async function deleteAndReinitializeDatabase(): Promise<void> {
   } catch {
     // SHM file might not exist
   }
-  
+
+  await rm(getSshServerKeyStorePath(), { recursive: true, force: true });
+   
   // Reinitialize
   await initializeDatabase();
   log.info("Database deleted and reinitialized");
@@ -347,4 +357,3 @@ export async function deleteAndReinitializeDatabase(): Promise<void> {
 // Aliases for backward compatibility (previously in paths.ts)
 export { initializeDatabase as ensureDataDirectories };
 export { isDatabaseReady as isDataDirectoryReady };
-

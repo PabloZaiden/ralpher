@@ -47,9 +47,10 @@ try {
         const url = new URL(req.url);
         const loopId = url.searchParams.get("loopId") ?? undefined;
         const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
+        const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
 
         const upgraded = server.upgrade(req, {
-          data: { loopId, sshSessionId, terminalMode: false } as WebSocketData,
+          data: { loopId, sshSessionId, sshServerSessionId, terminalMode: false } as WebSocketData,
         });
 
         if (upgraded) {
@@ -64,13 +65,14 @@ try {
       "/api/ssh-terminal": (req: Request, server: Server<WebSocketData>) => {
         const url = new URL(req.url);
         const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
+        const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
 
-        if (!sshSessionId) {
-          return new Response("sshSessionId is required", { status: 400 });
+        if (!sshSessionId && !sshServerSessionId) {
+          return new Response("sshSessionId or sshServerSessionId is required", { status: 400 });
         }
 
         const upgraded = server.upgrade(req, {
-          data: { sshSessionId, terminalMode: true } as WebSocketData,
+          data: { sshSessionId, sshServerSessionId, terminalMode: true } as WebSocketData,
         });
 
         if (upgraded) {

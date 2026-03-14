@@ -4,6 +4,7 @@
 
 export * from "./loop";
 export * from "./ssh-session";
+export * from "./ssh-server";
 export * from "./ssh-session-events";
 export * from "./events";
 export * from "./api";

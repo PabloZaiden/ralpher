@@ -1,0 +1,76 @@
+/**
+ * Standalone SSH server and credential domain types.
+ */
+
+import type { SshSessionBaseConfig, SshSessionState } from "./ssh-session";
+
+export type SshKeyAlgorithm = "RSA-OAEP-256";
+
+/**
+ * Persisted standalone SSH server metadata.
+ *
+ * This is the only server-side metadata intended to be stored for the
+ * standalone SSH server registry.
+ */
+export interface SshServerConfig {
+  id: string;
+  name: string;
+  address: string;
+  username: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Public key metadata exposed to the browser for local password encryption.
+ */
+export interface SshServerPublicKey {
+  algorithm: SshKeyAlgorithm;
+  publicKey: string;
+  fingerprint: string;
+  version: number;
+  createdAt: string;
+}
+
+/**
+ * Combined standalone SSH server object returned by the API.
+ */
+export interface SshServer {
+  config: SshServerConfig;
+  publicKey: SshServerPublicKey;
+}
+
+/**
+ * Browser-stored encrypted SSH password payload.
+ */
+export interface SshServerEncryptedCredential {
+  algorithm: SshKeyAlgorithm;
+  fingerprint: string;
+  version: number;
+  ciphertext: string;
+}
+
+/**
+ * Short-lived credential exchange result used by session creation and terminal
+ * connection flows.
+ */
+export interface SshCredentialExchangeResponse {
+  credentialToken: string;
+  expiresAt: string;
+}
+
+/**
+ * Standalone SSH session configuration.
+ */
+export interface SshServerSessionConfig extends SshSessionBaseConfig {
+  sshServerId: string;
+}
+
+/**
+ * Standalone SSH session backed by a registered SSH server rather than a
+ * workspace.
+ */
+export interface SshServerSession {
+  config: SshServerSessionConfig;
+  state: SshSessionState;
+}

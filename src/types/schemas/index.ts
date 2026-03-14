@@ -66,3 +66,23 @@ export {
   UpdateSshSessionRequestSchema,
   CreatePortForwardRequestSchema,
 } from "./ssh-session";
+
+// Standalone SSH server schemas
+export {
+  SshKeyAlgorithmSchema,
+  CreateSshServerRequestSchema,
+  UpdateSshServerRequestSchema,
+  SshServerEncryptedCredentialSchema,
+  SshCredentialExchangeRequestSchema,
+  SshCredentialTokenSchema,
+  CreateSshServerSessionRequestSchema,
+  DeleteSshServerSessionRequestSchema,
+  type SshKeyAlgorithm,
+  type CreateSshServerRequest,
+  type UpdateSshServerRequest,
+  type SshServerEncryptedCredential,
+  type SshCredentialExchangeRequest,
+  type SshCredentialToken,
+  type CreateSshServerSessionRequest,
+  type DeleteSshServerSessionRequest,
+} from "./ssh-server";

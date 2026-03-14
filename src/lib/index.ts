@@ -13,3 +13,17 @@ export {
   DEFAULT_LOG_LEVEL,
   type LogLevelName,
 } from "./logger";
+export {
+  clearStoredSshServerCredential,
+  encryptSshServerPassword,
+  exchangeSshServerCredential,
+  fetchSshServerPublicKey,
+  getStoredSshCredentialToken,
+  getStoredSshServerCredential,
+  isStoredCredentialCompatible,
+  saveStoredSshServerCredential,
+  storeSshServerPassword,
+  type BrowserCredentialStorageLike,
+  type StoredSshServerCredential,
+  type SshBrowserCredentialDependencies,
+} from "./ssh-browser-credentials";

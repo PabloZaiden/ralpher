@@ -3,7 +3,7 @@
  * Orchestrates data fetching, modal state, and loop grouping via extracted hooks and components.
  */
 
-import { useLoops, useSshSessions, useWorkspaces, useViewModePreference } from "../hooks";
+import { useLoops, useSshServers, useSshSessions, useWorkspaces, useViewModePreference } from "../hooks";
 import { useWorkspaceServerSettings } from "../hooks";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useDashboardModals } from "../hooks/useDashboardModals";
@@ -14,7 +14,11 @@ import { LoopGrid } from "./LoopGrid";
 import { DashboardModals } from "./DashboardModals";
 import { CreateSshSessionModal } from "./CreateSshSessionModal";
 import { SshSessionSection } from "./SshSessionSection";
+import { CreateSshServerModal } from "./CreateSshServerModal";
+import { CreateStandaloneSshSessionModal } from "./CreateStandaloneSshSessionModal";
+import { SshServerSection } from "./SshServerSection";
 import { useState } from "react";
+import type { SshServer } from "../types";
 
 export interface DashboardProps {
   /** Callback when a loop is selected */
@@ -43,6 +47,20 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
     createSession,
   } = useSshSessions();
   const [showCreateSshSessionModal, setShowCreateSshSessionModal] = useState(false);
+  const [showCreateSshServerModal, setShowCreateSshServerModal] = useState(false);
+  const [editingSshServer, setEditingSshServer] = useState<SshServer | null>(null);
+  const [selectedStandaloneServer, setSelectedStandaloneServer] = useState<SshServer | null>(null);
+  const {
+    servers: sshServers,
+    sessionsByServerId,
+    loading: sshServersLoading,
+    error: sshServersError,
+    createServer,
+    updateServer,
+    deleteServer,
+    createSession: createStandaloneSession,
+    hasStoredCredential,
+  } = useSshServers();
 
   const {
     workspaces,
@@ -105,6 +123,37 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
 
       <main className="flex-1 min-h-0 overflow-auto dark-scrollbar">
         <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 safe-area-bottom space-y-8">
+          <section className="border-b border-gray-200 pb-6 dark:border-gray-800">
+            <CollapsibleSection
+              title="Standalone SSH Servers"
+              count={sshServers.length}
+              idPrefix="standalone-ssh-servers"
+            >
+              <SshServerSection
+                servers={sshServers}
+                sessionsByServerId={sessionsByServerId}
+                loading={sshServersLoading}
+                error={sshServersError}
+                hasStoredCredential={hasStoredCredential}
+                onOpenCreateServer={() => {
+                  setEditingSshServer(null);
+                  setShowCreateSshServerModal(true);
+                }}
+                onOpenEditServer={(server) => {
+                  setEditingSshServer(server);
+                  setShowCreateSshServerModal(true);
+                }}
+                onDeleteServer={async (serverId) => {
+                  await deleteServer(serverId);
+                }}
+                onOpenCreateSession={(server) => {
+                  setSelectedStandaloneServer(server);
+                }}
+                onSelectSession={(sessionId) => onSelectSshSession?.(sessionId)}
+              />
+            </CollapsibleSection>
+          </section>
+
           <section className="border-b border-gray-200 pb-6 dark:border-gray-800">
             <CollapsibleSection
               title="SSH Sessions"
@@ -209,6 +258,30 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         workspaces={workspaces}
         workspacesLoading={workspacesLoading}
         workspaceError={workspaceError}
+        onCreated={(sessionId) => onSelectSshSession?.(sessionId)}
+      />
+
+      <CreateSshServerModal
+        isOpen={showCreateSshServerModal}
+        onClose={() => {
+          setShowCreateSshServerModal(false);
+          setEditingSshServer(null);
+        }}
+        initialServer={editingSshServer}
+        onSubmit={(request, password) => {
+          if (editingSshServer) {
+            return updateServer(editingSshServer.config.id, request, password);
+          }
+          return createServer(request, password);
+        }}
+      />
+
+      <CreateStandaloneSshSessionModal
+        isOpen={selectedStandaloneServer !== null}
+        server={selectedStandaloneServer}
+        hasStoredCredential={selectedStandaloneServer ? hasStoredCredential(selectedStandaloneServer.config.id) : false}
+        onClose={() => setSelectedStandaloneServer(null)}
+        onCreate={createStandaloneSession}
         onCreated={(sessionId) => onSelectSshSession?.(sessionId)}
       />
     </div>

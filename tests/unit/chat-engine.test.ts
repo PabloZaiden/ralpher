@@ -179,17 +179,17 @@ describe("LoopEngine - Chat Mode", () => {
     backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
     backendManager.enableTestMode();
 
-    await Bun.$`git init`.cwd(testDir).quiet();
-    await Bun.$`git config user.email "test@test.com"`.cwd(testDir).quiet();
-    await Bun.$`git config user.name "Test User"`.cwd(testDir).quiet();
+    await Bun.$`git -C ${testDir} init`.quiet();
+    await Bun.$`git -C ${testDir} config user.email "test@test.com"`.quiet();
+    await Bun.$`git -C ${testDir} config user.name "Test User"`.quiet();
     await writeFile(join(testDir, ".gitkeep"), "");
-    await Bun.$`git add .`.cwd(testDir).quiet();
-    await Bun.$`git commit -m "Initial commit"`.cwd(testDir).quiet();
+    await Bun.$`git -C ${testDir} add .`.quiet();
+    await Bun.$`git -C ${testDir} commit -m "Initial commit"`.quiet();
   });
 
   afterEach(async () => {
     backendManager.resetForTesting();
-    await rm(testDir, { recursive: true });
+    await rm(testDir, { recursive: true, force: true });
   });
 
   test("isChatMode returns true for chat mode loops", () => {

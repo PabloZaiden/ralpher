@@ -20,6 +20,7 @@ function setupDefaultApi() {
   api.get("/api/loops", () => []);
   api.get("/api/workspaces", () => []);
   api.get("/api/ssh-sessions", () => []);
+  api.get("/api/ssh-servers", () => []);
   api.get("/api/config", () => ({ remoteOnly: false }));
   api.get("/api/health", () => ({ status: "ok", version: "1.0.0" }));
   api.get("/api/preferences/last-model", () => null);
@@ -38,6 +39,7 @@ beforeEach(() => {
   api.install();
   ws.reset();
   ws.install();
+  globalThis.localStorage?.clear();
   setupDefaultApi();
 });
 
@@ -168,6 +170,120 @@ describe("ssh sessions section", () => {
     });
 
     expect(getByText("Loop Still Visible")).toBeTruthy();
+  });
+});
+
+describe("standalone ssh servers section", () => {
+  test("renders standalone servers and their sessions in the dashboard", async () => {
+    api.get("/api/ssh-servers", () => [{
+      config: {
+        id: "server-1",
+        name: "Shared host",
+        address: "ssh.example.com",
+        username: "deploy",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      publicKey: {
+        algorithm: "RSA-OAEP-256",
+        publicKey: "-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----",
+        fingerprint: "fp-1",
+        version: 1,
+        createdAt: new Date().toISOString(),
+      },
+    }]);
+    api.get("/api/ssh-servers/:id/sessions", () => [{
+      config: {
+        id: "server-session-1",
+        sshServerId: "server-1",
+        name: "Deploy shell",
+        remoteSessionName: "ralpher-serversession1",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      state: { status: "ready" },
+    }]);
+
+    const { getByText } = renderWithUser(<Dashboard />);
+
+    await waitFor(() => {
+      expect(getByText("Shared host")).toBeTruthy();
+      expect(getByText("Deploy shell")).toBeTruthy();
+      expect(getByText("deploy@ssh.example.com")).toBeTruthy();
+    });
+  });
+
+  test("creates a standalone session using a browser-stored encrypted credential", async () => {
+    globalThis.localStorage?.setItem("ralpher.sshServerCredential.server-1", JSON.stringify({
+      encryptedCredential: {
+        algorithm: "RSA-OAEP-256",
+        fingerprint: "fp-1",
+        version: 1,
+        ciphertext: "ciphertext",
+      },
+      storedAt: new Date().toISOString(),
+    }));
+
+    api.get("/api/ssh-servers", () => [{
+      config: {
+        id: "server-1",
+        name: "Shared host",
+        address: "ssh.example.com",
+        username: "deploy",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      publicKey: {
+        algorithm: "RSA-OAEP-256",
+        publicKey: "-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----",
+        fingerprint: "fp-1",
+        version: 1,
+        createdAt: new Date().toISOString(),
+      },
+    }]);
+    api.get("/api/ssh-servers/:id/sessions", () => []);
+    api.get("/api/ssh-servers/:id/public-key", () => ({
+      algorithm: "RSA-OAEP-256",
+      publicKey: "-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----",
+      fingerprint: "fp-1",
+      version: 1,
+      createdAt: new Date().toISOString(),
+    }));
+    api.post("/api/ssh-servers/:id/credentials", () => ({
+      credentialToken: "token-123",
+      expiresAt: new Date().toISOString(),
+    }));
+    api.post("/api/ssh-servers/:id/sessions", (req) => ({
+      config: {
+        id: "server-session-1",
+        sshServerId: req.params["id"]!,
+        name: (req.body as { name?: string }).name ?? "Deploy shell",
+        remoteSessionName: "ralpher-serversession1",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      state: { status: "ready" },
+    }));
+
+    const onSelectSshSession: string[] = [];
+    const { getByRole, getByLabelText, user } = renderWithUser(
+      <Dashboard onSelectSshSession={(sessionId) => onSelectSshSession.push(sessionId)} />,
+    );
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "New Session" })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: "New Session" }));
+    await user.type(getByLabelText("Session name (optional)"), "Deploy shell");
+    await user.click(getByRole("button", { name: "Create Session" }));
+
+    await waitFor(() => {
+      expect(onSelectSshSession).toEqual(["server-session-1"]);
+    });
+
+    expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(1);
+    expect(api.calls("/api/ssh-servers/:id/sessions", "POST")).toHaveLength(1);
   });
 });
 

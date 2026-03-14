@@ -12,6 +12,7 @@
  */
 
 import type { ReviewComment } from "./loop";
+import type { SshServer } from "./ssh-server";
 import type { SshSession } from "./ssh-session";
 import {
   CreateLoopRequestSchema,
@@ -23,6 +24,11 @@ import {
   CreateSshSessionRequestSchema,
   UpdateSshSessionRequestSchema,
   PlanAcceptRequestSchema,
+  CreateSshServerRequestSchema,
+  UpdateSshServerRequestSchema,
+  CreateSshServerSessionRequestSchema,
+  SshCredentialExchangeRequestSchema,
+  DeleteSshServerSessionRequestSchema,
 } from "./schemas";
 import type { z } from "zod";
 
@@ -121,6 +127,36 @@ export type UpdateLoopRequest = z.infer<typeof UpdateLoopRequestSchema>;
  * Request body for PATCH /api/ssh-sessions/:id.
  */
 export type UpdateSshSessionRequest = z.infer<typeof UpdateSshSessionRequestSchema>;
+
+/**
+ * Request body for POST /api/ssh-servers.
+ */
+export type CreateSshServerRequest = z.infer<typeof CreateSshServerRequestSchema>;
+
+/**
+ * Request body for PATCH /api/ssh-servers/:id.
+ */
+export type UpdateSshServerRequest = z.infer<typeof UpdateSshServerRequestSchema>;
+
+/**
+ * Request body for POST /api/ssh-servers/:id/sessions.
+ */
+export type CreateSshServerSessionRequest = z.infer<typeof CreateSshServerSessionRequestSchema>;
+
+/**
+ * Request body for POST /api/ssh-servers/:id/credentials.
+ */
+export type SshCredentialExchangeRequest = z.infer<typeof SshCredentialExchangeRequestSchema>;
+
+/**
+ * Request body for DELETE /api/ssh-server-sessions/:id.
+ */
+export type DeleteSshServerSessionRequest = z.infer<typeof DeleteSshServerSessionRequestSchema>;
+
+/**
+ * Response from GET /api/ssh-servers.
+ */
+export type ListSshServersResponse = SshServer[];
 
 /**
  * Request body for POST /api/loops/:id/address-comments endpoint.
