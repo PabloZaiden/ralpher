@@ -15,6 +15,7 @@ import { LoopGrid } from "./LoopGrid";
 import { DashboardModals } from "./DashboardModals";
 import { SshSessionSection } from "./SshSessionSection";
 import { CreateSshServerModal } from "./CreateSshServerModal";
+import { CreateSshSessionModal } from "./CreateSshSessionModal";
 import { SshServerSection } from "./SshServerSection";
 import { useMemo, useState } from "react";
 import type { SshServer } from "../types";
@@ -45,6 +46,9 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
     error: sshSessionsError,
     createSession,
   } = useSshSessions();
+  const [showCreateSshSessionModal, setShowCreateSshSessionModal] = useState(false);
+  const [creatingWorkspaceSshSession, setCreatingWorkspaceSshSession] = useState(false);
+  const [createWorkspaceSshSessionError, setCreateWorkspaceSshSessionError] = useState<string | null>(null);
   const [showCreateSshServerModal, setShowCreateSshServerModal] = useState(false);
   const [editingSshServer, setEditingSshServer] = useState<SshServer | null>(null);
   const {
@@ -97,6 +101,42 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
   // View mode preference hook
   const { viewMode, toggle: toggleViewMode } = useViewModePreference();
 
+  async function createWorkspaceSshSessionFor(workspaceId: string, options?: { fromModal?: boolean }) {
+    const workspace = sshWorkspaces.find((item) => item.id === workspaceId);
+    const reportError = (message: string) => {
+      if (options?.fromModal) {
+        setCreateWorkspaceSshSessionError(message);
+        return;
+      }
+      toast.error(message);
+    };
+
+    if (!workspace) {
+      reportError("The selected SSH workspace is no longer available.");
+      return;
+    }
+
+    try {
+      setCreatingWorkspaceSshSession(true);
+      setCreateWorkspaceSshSessionError(null);
+      const session = await createSession({ workspaceId: workspace.id });
+      setShowCreateSshSessionModal(false);
+      onSelectSshSession?.(session.config.id);
+    } catch (error) {
+      reportError(String(error));
+    } finally {
+      setCreatingWorkspaceSshSession(false);
+    }
+  }
+
+  function handleCloseCreateSshSessionModal() {
+    if (creatingWorkspaceSshSession) {
+      return;
+    }
+    setCreateWorkspaceSshSessionError(null);
+    setShowCreateSshSessionModal(false);
+  }
+
   async function handleCreateWorkspaceSshSession() {
     if (workspacesLoading) {
       toast.info("Loading SSH workspaces...");
@@ -107,21 +147,18 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
       return;
     }
 
-    const workspace = sshWorkspaces[0];
-    if (!workspace) {
+    if (sshWorkspaces.length === 0) {
       toast.error("Create or configure a workspace with SSH transport before starting an SSH session.");
       return;
     }
 
-    try {
-      const session = await createSession({ workspaceId: workspace.id });
-      if (sshWorkspaces.length > 1) {
-        toast.info(`Created SSH session for ${workspace.name}.`);
-      }
-      onSelectSshSession?.(session.config.id);
-    } catch (error) {
-      toast.error(String(error));
+    if (sshWorkspaces.length === 1) {
+      await createWorkspaceSshSessionFor(sshWorkspaces[0]!.id);
+      return;
     }
+
+    setCreateWorkspaceSshSessionError(null);
+    setShowCreateSshSessionModal(true);
   }
 
   async function handleCreateStandaloneSshSession(server: SshServer) {
@@ -303,6 +340,17 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
           }
           return createServer(request, password);
         }}
+      />
+
+      <CreateSshSessionModal
+        isOpen={showCreateSshSessionModal}
+        onClose={handleCloseCreateSshSessionModal}
+        workspaces={sshWorkspaces}
+        onCreate={async (workspaceId) => {
+          await createWorkspaceSshSessionFor(workspaceId, { fromModal: true });
+        }}
+        loading={creatingWorkspaceSshSession}
+        error={createWorkspaceSshSessionError}
       />
     </div>
   );

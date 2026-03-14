@@ -9,7 +9,7 @@ import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor } from "../helpers/render";
-import { createLoopWithStatus, createSshSession, createWorkspace } from "../helpers/factories";
+import { createLoopWithStatus, createServerSettings, createSshSession, createWorkspace } from "../helpers/factories";
 import { Dashboard } from "@/components/Dashboard";
 
 const api = createMockApi();
@@ -112,6 +112,59 @@ describe("empty state", () => {
 });
 
 describe("ssh section", () => {
+  test("lets the user choose the SSH workspace from the header when multiple SSH workspaces exist", async () => {
+    const sshWorkspaceOne = createWorkspace({
+      id: "ws-1",
+      name: "Alpha SSH",
+      directory: "/workspaces/alpha",
+      serverSettings: createServerSettings({ mode: "connect", hostname: "alpha.example.com" }),
+    });
+    const sshWorkspaceTwo = createWorkspace({
+      id: "ws-2",
+      name: "Beta SSH",
+      directory: "/workspaces/beta",
+      serverSettings: createServerSettings({ mode: "connect", hostname: "beta.example.com" }),
+    });
+
+    api.get("/api/workspaces", () => [sshWorkspaceOne, sshWorkspaceTwo]);
+    api.post("/api/ssh-sessions", (req) => {
+      const body = req.body as { workspaceId: string };
+      return createSshSession({
+        config: {
+          id: "ssh-picked-1",
+          workspaceId: body.workspaceId,
+          directory: body.workspaceId === "ws-2" ? sshWorkspaceTwo.directory : sshWorkspaceOne.directory,
+        },
+      });
+    });
+
+    const onSelectSshSession: string[] = [];
+    const { getByLabelText, getByRole, user } = renderWithUser(
+      <Dashboard onSelectSshSession={(sessionId) => onSelectSshSession.push(sessionId)} />,
+    );
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "New SSH Session" })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: "New SSH Session" }));
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Create SSH Session" })).toBeTruthy();
+    });
+
+    await user.selectOptions(getByLabelText(/Workspace/) as HTMLSelectElement, "ws-2");
+    await user.click(getByRole("button", { name: "Create SSH Session" }));
+
+    await waitFor(() => {
+      expect(onSelectSshSession).toEqual(["ssh-picked-1"]);
+    });
+
+    const sessionCreates = api.calls("/api/ssh-sessions", "POST");
+    expect(sessionCreates).toHaveLength(1);
+    expect(sessionCreates[0]?.body).toEqual({ workspaceId: "ws-2" });
+  });
+
   test("renders a single collapsed SSH section that can reveal workspace sessions", async () => {
     const workspace = createWorkspace({ id: "ws-1", name: "Project" });
     const loop = createLoopWithStatus("running", {
