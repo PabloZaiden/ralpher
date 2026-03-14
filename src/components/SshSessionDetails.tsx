@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Terminal } from "@xterm/xterm";
+import { Terminal, type ITerminalOptions } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { Badge, Button, Card, ConfirmModal, Modal } from "./common";
@@ -90,6 +90,32 @@ function CompactBar({
 }
 
 const touchButtonClassName = "min-h-[28px] shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[11px]";
+
+const sshTerminalFontFamily = [
+  "\"SFMono-Regular\"",
+  "\"SF Mono\"",
+  "Menlo",
+  "Consolas",
+  "\"Liberation Mono\"",
+  "\"DejaVu Sans Mono\"",
+  "\"Noto Sans Mono\"",
+  "monospace",
+].join(", ");
+
+function createSshTerminalOptions(): ITerminalOptions {
+  return {
+    cursorBlink: true,
+    convertEol: true,
+    fontSize: 13,
+    fontFamily: sshTerminalFontFamily,
+    lineHeight: 1.15,
+    customGlyphs: true,
+    rescaleOverlappingGlyphs: true,
+    theme: {
+      background: "#111827",
+    },
+  };
+}
 
 export function SshSessionDetails({
   sshSessionId,
@@ -494,14 +520,7 @@ export function SshSessionDetails({
       return;
     }
 
-    const terminal = new Terminal({
-      cursorBlink: true,
-      convertEol: true,
-      fontSize: 14,
-      theme: {
-        background: "#111827",
-      },
-    });
+    const terminal = new Terminal(createSshTerminalOptions());
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
     terminal.open(terminalContainerRef.current);
@@ -509,6 +528,9 @@ export function SshSessionDetails({
     if (terminalElement) {
       terminalElement.style.width = "100%";
       terminalElement.style.height = "100%";
+      terminalElement.style.fontFamily = sshTerminalFontFamily;
+      terminalElement.style.fontVariantLigatures = "none";
+      terminalElement.style.fontFeatureSettings = "\"liga\" 0, \"calt\" 0";
 
       const viewport = terminalElement.querySelector<HTMLElement>(".xterm-viewport");
       if (viewport) {
@@ -520,6 +542,18 @@ export function SshSessionDetails({
       if (screen) {
         screen.style.width = "100%";
         screen.style.height = "100%";
+      }
+
+      const accessibilityTree = terminalElement.querySelector<HTMLElement>(".xterm-accessibility-tree");
+      if (accessibilityTree) {
+        accessibilityTree.style.fontFamily = sshTerminalFontFamily;
+        accessibilityTree.style.fontVariantLigatures = "none";
+        accessibilityTree.style.fontFeatureSettings = "\"liga\" 0, \"calt\" 0";
+      }
+
+      const helperTextarea = terminalElement.querySelector<HTMLElement>(".xterm-helper-textarea");
+      if (helperTextarea) {
+        helperTextarea.style.fontFamily = sshTerminalFontFamily;
       }
     }
     terminal.focus();
