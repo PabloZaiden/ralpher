@@ -47,6 +47,10 @@ export async function listSshServersApi(): Promise<SshServer[]> {
   return await apiCall<SshServer[]>("/api/ssh-servers", { method: "GET" }, "List SSH servers");
 }
 
+export async function getSshServerApi(serverId: string): Promise<SshServer> {
+  return await apiCall<SshServer>(`/api/ssh-servers/${serverId}`, { method: "GET" }, "Get SSH server");
+}
+
 export async function listSshServerSessionsApi(serverId: string): Promise<SshServerSession[]> {
   return await apiCall<SshServerSession[]>(
     `/api/ssh-servers/${serverId}/sessions`,

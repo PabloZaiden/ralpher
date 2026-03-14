@@ -7,7 +7,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { Badge, Button, Card, ConfirmModal, Modal } from "./common";
-import { useSshSession, useToast } from "../hooks";
+import { getSshServerApi, useSshSession, useToast } from "../hooks";
 import {
   defaultTerminalModifiers,
   encodeTerminalDataInput,
@@ -21,6 +21,7 @@ import {
 import { writeTextToClipboard } from "../utils";
 import { appWebSocketUrl } from "../lib/public-path";
 import { getStoredSshCredentialToken, storeSshServerPassword } from "../lib/ssh-browser-credentials";
+import type { SshServer } from "../types";
 
 function isStandaloneSession(session: NonNullable<ReturnType<typeof useSshSession>["session"]>): session is Extract<
   NonNullable<ReturnType<typeof useSshSession>["session"]>,
@@ -115,12 +116,27 @@ export function SshSessionDetails({
   const [standalonePassword, setStandalonePassword] = useState("");
   const [standaloneCredentialToken, setStandaloneCredentialToken] = useState<string | null>(null);
   const [pendingStandaloneAction, setPendingStandaloneAction] = useState<"terminal" | "delete" | null>(null);
+  const [standaloneServer, setStandaloneServer] = useState<SshServer | null>(null);
   const standaloneServerId = useMemo(() => {
     if (!session || !isStandaloneSession(session)) {
       return null;
     }
     return session.config.sshServerId;
   }, [session]);
+  const standaloneServerName = useMemo(() => {
+    if (!standaloneServerId) {
+      return null;
+    }
+    return standaloneServer?.config.name ?? standaloneServerId;
+  }, [standaloneServer, standaloneServerId]);
+  const standaloneServerTarget = useMemo(() => {
+    if (!standaloneServerId) {
+      return null;
+    }
+    return standaloneServer
+      ? `${standaloneServer.config.username}@${standaloneServer.config.address}`
+      : standaloneServerId;
+  }, [standaloneServer, standaloneServerId]);
 
   const terminalUrl = useMemo(
     () => {
@@ -518,6 +534,35 @@ export function SshSessionDetails({
   useEffect(() => {
     let cancelled = false;
 
+    async function loadStandaloneServer() {
+      if (!standaloneServerId) {
+        setStandaloneServer(null);
+        return;
+      }
+
+      try {
+        const server = await getSshServerApi(standaloneServerId);
+        if (!cancelled) {
+          setStandaloneServer(server);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setStandaloneServer(null);
+          showErrorToast(`Failed to load SSH server details: ${String(error)}`);
+        }
+      }
+    }
+
+    void loadStandaloneServer();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showErrorToast, standaloneServerId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function ensureStandaloneCredentialToken() {
       if (!standaloneServerId) {
         setStandaloneCredentialToken(null);
@@ -660,18 +705,18 @@ export function SshSessionDetails({
           <dl className="grid gap-3 text-sm sm:grid-cols-2">
             <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">
-                {isStandaloneSession(session) ? "Server ID" : "Workspace ID"}
+                {isStandaloneSession(session) ? "Server" : "Workspace ID"}
               </dt>
-              <dd className="break-all font-mono text-gray-900 dark:text-gray-100">
-                {isStandaloneSession(session) ? session.config.sshServerId : session.config.workspaceId}
+              <dd className={isStandaloneSession(session) ? "break-words text-gray-900 dark:text-gray-100" : "break-all font-mono text-gray-900 dark:text-gray-100"}>
+                {isStandaloneSession(session) ? standaloneServerName : session.config.workspaceId}
               </dd>
             </div>
             <div className="min-w-0">
               <dt className="text-gray-500 dark:text-gray-400">
-                {isStandaloneSession(session) ? "Connection target" : "Directory"}
+                {isStandaloneSession(session) ? "Address" : "Directory"}
               </dt>
               <dd className="break-all font-mono text-gray-900 dark:text-gray-100">
-                {isStandaloneSession(session) ? session.config.sshServerId : session.config.directory}
+                {isStandaloneSession(session) ? standaloneServerTarget : session.config.directory}
               </dd>
             </div>
             <div className="min-w-0">

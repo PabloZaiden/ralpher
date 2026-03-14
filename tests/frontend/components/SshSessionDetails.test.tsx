@@ -644,6 +644,23 @@ describe("SshSessionDetails", () => {
       },
       state: { status: "ready" },
     }));
+    api.get("/api/ssh-servers/:id", (req) => ({
+      config: {
+        id: req.params["id"]!,
+        name: "Production Shell",
+        address: "ssh.example.com",
+        username: "deploy",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      publicKey: {
+        algorithm: "RSA-OAEP-256",
+        publicKey: TEST_PUBLIC_KEY,
+        fingerprint: "fp-1",
+        version: 1,
+        createdAt: new Date().toISOString(),
+      },
+    }));
     api.get("/api/ssh-servers/:id/public-key", () => ({
       algorithm: "RSA-OAEP-256",
       publicKey: TEST_PUBLIC_KEY,
@@ -656,7 +673,7 @@ describe("SshSessionDetails", () => {
       expiresAt: new Date().toISOString(),
     }));
 
-    const { getByText } = renderWithUser(
+    const { getByText, user } = renderWithUser(
       <SshSessionDetails sshSessionId="standalone-ssh-1" onBack={() => {}} />,
     );
 
@@ -668,6 +685,13 @@ describe("SshSessionDetails", () => {
     const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
     expect(terminalConnection.queryParams["sshServerSessionId"]).toBe("standalone-ssh-1");
     expect(terminalConnection.queryParams["credentialToken"]).toBe("token-123");
+
+    await user.click(getByText("Session Info"));
+    await waitFor(() => {
+      expect(getByText("Server")).toBeTruthy();
+      expect(getByText("Production Shell")).toBeTruthy();
+      expect(getByText("deploy@ssh.example.com")).toBeTruthy();
+    });
   });
 
   test("does not re-probe the workspace endpoint or remint standalone terminal credentials on session refresh", async () => {
@@ -698,6 +722,23 @@ describe("SshSessionDetails", () => {
       },
       state: { status: standaloneStatus },
     }));
+    api.get("/api/ssh-servers/:id", (req) => ({
+      config: {
+        id: req.params["id"]!,
+        name: "Refresh Host",
+        address: "refresh.example.com",
+        username: "ops",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      publicKey: {
+        algorithm: "RSA-OAEP-256",
+        publicKey: TEST_PUBLIC_KEY,
+        fingerprint: "fp-1",
+        version: 1,
+        createdAt: new Date().toISOString(),
+      },
+    }));
     api.get("/api/ssh-servers/:id/public-key", () => ({
       algorithm: "RSA-OAEP-256",
       publicKey: TEST_PUBLIC_KEY,
@@ -718,6 +759,7 @@ describe("SshSessionDetails", () => {
       expect(getByText("Refresh Stable Session")).toBeTruthy();
       expect(api.calls("/api/ssh-sessions/:id", "GET")).toHaveLength(1);
       expect(api.calls("/api/ssh-server-sessions/:id", "GET")).toHaveLength(1);
+      expect(api.calls("/api/ssh-servers/:id", "GET")).toHaveLength(1);
       expect(api.calls("/api/ssh-servers/:id/public-key", "GET")).toHaveLength(1);
       expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(1);
       expect(ws.getConnections("/api/ws")).toHaveLength(1);
@@ -741,6 +783,7 @@ describe("SshSessionDetails", () => {
 
     expect(api.calls("/api/ssh-sessions/:id", "GET")).toHaveLength(1);
     expect(api.calls("/api/ssh-servers/:id/public-key", "GET")).toHaveLength(1);
+    expect(api.calls("/api/ssh-servers/:id", "GET")).toHaveLength(1);
     expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(1);
     expect(ws.getConnections("/api/ws")).toHaveLength(1);
     expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
@@ -758,6 +801,23 @@ describe("SshSessionDetails", () => {
         updatedAt: new Date().toISOString(),
       },
       state: { status: "ready" },
+    }));
+    api.get("/api/ssh-servers/:id", (req) => ({
+      config: {
+        id: req.params["id"]!,
+        name: "Password Prompt Host",
+        address: "password.example.com",
+        username: "admin",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      publicKey: {
+        algorithm: "RSA-OAEP-256",
+        publicKey: TEST_PUBLIC_KEY,
+        fingerprint: "fp-1",
+        version: 1,
+        createdAt: new Date().toISOString(),
+      },
     }));
     api.get("/api/ssh-servers/:id/public-key", () => ({
       algorithm: "RSA-OAEP-256",

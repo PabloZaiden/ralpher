@@ -51,6 +51,7 @@ export {
   type SetPendingResult,
 } from "./loopActions";
 export {
+  getSshServerApi,
   createSshServerApi,
   updateSshServerApi,
   deleteSshServerApi,
