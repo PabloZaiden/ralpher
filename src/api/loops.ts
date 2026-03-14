@@ -5,6 +5,9 @@
  * - CRUD: Create, read, update, and delete loops
  * - Control: Accept, push, discard, and purge completed loops
  * - Plan Mode: Create, review, and accept plans before execution
+ * - Chat: Interactive single-turn conversations on the same loop infrastructure
+ * - SSH: Loop-linked SSH session management
+ * - Port Forwards: Loop-scoped remote service exposure
  * - Review: Address reviewer comments on pushed/merged loops
  * - Data: Access loop diffs, plans, and status files
  * 
@@ -233,12 +236,15 @@ export const loopsCrudRoutes = {
      * Creates a new Ralph Loop with the specified configuration. The loop is
      * automatically started unless `draft: true` is specified.
      * 
-      * The loop name is required and supplied by the client.
+     * The loop name is supplied by the client. The dashboard may generate a
+     * suggested name up front, but this endpoint receives the final value.
      * 
      * Request Body Fields:
-     * - directory (required): Absolute path to working directory
+     * - name (required): Human-readable loop name
+     * - workspaceId (required): Workspace to create the loop in
      * - prompt (required): Task prompt/PRD
      * - model: { providerID, modelID } for AI model selection
+     * - useWorktree (required): Whether to use a dedicated git worktree
      * - maxIterations: Maximum iterations (unlimited if not set)
      * - maxConsecutiveErrors: Max identical errors before failsafe (default: 10)
      * - activityTimeoutSeconds: Seconds without events before error (default: 900, min: 60)
@@ -247,6 +253,7 @@ export const loopsCrudRoutes = {
      * - baseBranch: Base branch to create loop from
      * - clearPlanningFolder: Clear .planning folder before starting
      * - planMode: Start in plan creation mode
+     * - planModeAutoReply: Whether planning-mode ACP questions auto-answer
      * - draft: Save as draft without starting
      * 
       * Errors:
@@ -904,9 +911,9 @@ export const loopsControlRoutes = {
      * POST /api/loops/:id/mark-merged - Mark an externally merged loop as deleted.
      * 
      * Transitions the loop to `deleted` status, clears reviewMode.addressable,
-     * and disconnects the backend. With worktrees, no branch switching, pulling,
-     * or branch deletion is needed — the worktree isolates everything.
-     * Branch and worktree cleanup happens in purgeLoop().
+     * and disconnects the backend. Because loops may run in dedicated worktrees,
+     * cleanup is deferred to the normal purge/discard flow instead of assuming
+     * immediate branch teardown here.
      * 
      * This is useful when a loop's branch was merged externally (e.g., via GitHub PR)
      * and the user wants to clean up the loop.
@@ -935,7 +942,7 @@ export const loopsControlRoutes = {
      * 
      * Sets a custom prompt that will be used for the next iteration only.
      * The prompt replaces the default config.prompt for one iteration.
-     * Only works for running loops.
+     * Only works while the loop is active.
      * 
      * Request Body:
      * - prompt (required): The prompt text for the next iteration
@@ -969,7 +976,7 @@ export const loopsControlRoutes = {
      * DELETE /api/loops/:id/pending-prompt - Clear the pending prompt.
      * 
      * Removes the pending prompt so the next iteration uses the default
-     * config.prompt instead. Only works for running loops.
+     * config.prompt instead. Only works while the loop is active.
      * 
      * @returns Success response
      */

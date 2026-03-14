@@ -81,6 +81,12 @@ The `version` field is read from `package.json` at startup and will reflect the 
 
 List all loops.
 
+**Query Parameters**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `mode` | No | Filter results to `"loop"` or `"chat"` |
+
 **Response**
 
 ```json
@@ -113,19 +119,20 @@ List all loops.
 
 Create a new loop.
 
-Loop names are **automatically generated** from the prompt using AI. The `name` field is not accepted in the request body.
-
 **Request Body**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
+| `name` | string | Yes | Loop name shown in the UI. The dashboard can generate a suggested name with `POST /api/loops/title`, but the final value is submitted by the client. |
 | `workspaceId` | string | Yes | ID of the workspace to create the loop in |
 | `prompt` | string | Yes | Task prompt/PRD (non-empty) |
 | `model` | object | Yes | Model selection |
 | `model.providerID` | string | Yes | Provider ID (e.g., "anthropic") |
 | `model.modelID` | string | Yes | Model ID (e.g., "claude-sonnet-4-20250514") |
 | `model.variant` | string | No | Model variant (e.g., "thinking") |
+| `useWorktree` | boolean | Yes | Whether to run the loop in a dedicated git worktree |
 | `planMode` | boolean | Yes | Start in plan creation mode |
+| `planModeAutoReply` | boolean | No | Whether planning-mode ACP questions should be auto-answered instead of waiting for a manual reply (default: `true`) |
 | `maxIterations` | number | No | Maximum iterations (unlimited if not set) |
 | `maxConsecutiveErrors` | number | No | Max errors before failsafe (default: 10) |
 | `activityTimeoutSeconds` | number | No | Seconds without events before treating as error (default: 900, min: 60) |
@@ -141,23 +148,25 @@ Loop names are **automatically generated** from the prompt using AI. The `name` 
 
 ```json
 {
+  "name": "implement-dark-mode-toggle",
   "workspaceId": "ws-abc123",
   "prompt": "Implement a dark mode toggle in the settings page. Use CSS variables for theming.",
   "model": {
     "providerID": "anthropic",
     "modelID": "claude-sonnet-4-20250514"
   },
+  "useWorktree": true,
   "planMode": false,
   "maxIterations": 10,
   "activityTimeoutSeconds": 300
 }
 ```
 
-**Note:** The loop name will be automatically generated from the prompt (e.g., "implement-dark-mode-toggle"). Names are sanitized to kebab-case format, max 50 characters. If generation fails, a timestamp-based fallback name is used (e.g., "loop-2026-01-27-143022").
+Use `POST /api/loops/title` if you want Ralpher to suggest a name from the prompt before calling this endpoint.
 
 **Response**
 
-Returns the created loop object with status `201 Created`. The response includes the auto-generated loop name in `config.name`.
+Returns the created loop object with status `201 Created`.
 
 - If `draft: true`, the loop is saved with status `draft` and no git branch is created
 - If `planMode: true`, the loop starts in `planning` status
@@ -176,6 +185,35 @@ Returns the created loop object with status `201 Created`. The response includes
 | 500 | `start_failed` | Loop created but failed to start (normal mode) |
 | 500 | `start_plan_failed` | Loop created but failed to start plan mode |
 | 500 | `create_failed` | Loop creation failed |
+
+#### POST /api/loops/title
+
+Generate a suggested loop title from a prompt and workspace context.
+
+**Request Body**
+
+```json
+{
+  "workspaceId": "ws-abc123",
+  "prompt": "Implement JWT-based authentication with login and signup endpoints"
+}
+```
+
+**Response**
+
+```json
+{
+  "title": "implement-jwt-authentication"
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `workspace_not_found` | Workspace not found |
+| 400 | `validation_error` | Missing or invalid request fields |
+| 500 | `title_generation_failed` | Failed to generate a title |
 
 #### GET /api/loops/:id
 
@@ -199,7 +237,7 @@ Update a loop's configuration. Cannot be used on running or starting loops — s
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `name` | string | Manually update name (optional, names are auto-generated on creation) |
+| `name` | string | Update the loop name |
 | `directory` | string | Update working directory |
 | `prompt` | string | Update prompt |
 | `model` | object | Update model |
@@ -208,8 +246,10 @@ Update a loop's configuration. Cannot be used on running or starting loops — s
 | `activityTimeoutSeconds` | number | Update activity timeout |
 | `stopPattern` | string | Update stop pattern |
 | `baseBranch` | string | Update base branch |
+| `useWorktree` | boolean | Update worktree usage before the loop has started |
 | `clearPlanningFolder` | boolean | Update clear planning folder flag |
 | `planMode` | boolean | Update plan mode flag |
+| `planModeAutoReply` | boolean | Update whether planning-mode ACP questions auto-answer |
 | `git` | object | Update git config (partial) |
 
 **Response**
@@ -224,6 +264,7 @@ Returns the updated loop object.
 | 400 | `invalid_json` | Request body is not valid JSON |
 | 404 | `not_found` | Loop not found |
 | 409 | `base_branch_immutable` | Cannot change base branch after loop has started |
+| 409 | `use_worktree_immutable` | Cannot change worktree usage after loop has started |
 | 500 | `update_failed` | Update operation failed |
 
 #### PUT /api/loops/:id
@@ -247,6 +288,7 @@ Returns the updated loop object.
 | 400 | `invalid_json` | Request body is not valid JSON |
 | 404 | `not_found` | Loop not found |
 | 409 | `base_branch_immutable` | Cannot change base branch after loop has started |
+| 409 | `use_worktree_immutable` | Cannot change worktree usage after loop has started |
 | 500 | `update_failed` | Update operation failed |
 
 #### DELETE /api/loops/:id
@@ -362,6 +404,23 @@ Note: When `syncStatus` is `"conflicts_being_resolved"`, the `remoteBranch` fiel
 | 404 | `not_found` | Loop not found |
 | 400 | `push_failed` | Cannot push (e.g., loop still running or no remote) |
 
+#### POST /api/loops/:id/update-branch
+
+Update a pushed loop's branch by syncing it with the latest base branch and re-pushing if possible.
+
+If the sync is clean, the loop remains in `pushed` status and the updated branch is pushed immediately. If conflicts are detected, Ralpher starts the conflict-resolution flow and auto-pushes when that flow completes.
+
+**Response**
+
+Uses the same response shape as `POST /api/loops/:id/push`.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 400 | `update_branch_failed` | Cannot update the pushed branch |
+
 #### POST /api/loops/:id/discard
 
 Discard a loop and delete its git branch.
@@ -400,11 +459,102 @@ Permanently delete a merged or deleted loop from storage.
 | 404 | `not_found` | Loop not found |
 | 400 | `purge_failed` | Cannot purge (loop not in final state) |
 
+#### GET /api/loops/:id/ssh-session
+
+Get the persistent SSH session linked to a loop.
+
+**Response**
+
+Returns the SSH session object.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop or linked SSH session not found |
+| 400 | `invalid_session_configuration` | Loop cannot open an SSH session with its current transport/setup |
+| 500 | `ssh_session_error` | Failed to read SSH session data |
+
+#### POST /api/loops/:id/ssh-session
+
+Create or reuse the persistent SSH session linked to a loop.
+
+**Response**
+
+Returns the SSH session object.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 400 | `invalid_session_configuration` | Loop cannot open an SSH session with its current transport/setup |
+| 500 | `ssh_session_error` | Failed to create the SSH session |
+
+#### GET /api/loops/:id/port-forwards
+
+List all port forwards associated with a loop.
+
+**Response**
+
+Returns an array of port-forward objects.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 500 | `port_forward_error` | Failed to list port forwards |
+
+#### POST /api/loops/:id/port-forwards
+
+Create a new port forward for a loop's SSH-backed workspace.
+
+**Request Body**
+
+```json
+{
+  "remotePort": 3000
+}
+```
+
+**Response**
+
+Returns the created port-forward object with status `201 Created`.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 409 | `duplicate_port_forward` | The same remote port is already being forwarded for this workspace |
+| 400 | `invalid_port_forward_configuration` | The loop cannot create a port forward with its current transport/setup |
+| 500 | `port_forward_error` | Failed to create the port forward |
+
+#### DELETE /api/loops/:id/port-forwards/:forwardId
+
+Delete a loop port forward.
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Port forward not found |
+| 500 | `port_forward_error` | Failed to delete the port forward |
+
 #### POST /api/loops/:id/mark-merged
 
-Mark a loop as externally merged and sync the local environment. Switches the repository back to the original branch, pulls latest changes from the remote, deletes the working branch, and transitions the loop to `deleted` status.
+Mark a loop as externally merged and transition it to `deleted`.
 
-This is useful when a loop's branch was merged externally (e.g., via GitHub PR) and the user wants to sync their local environment with the merged changes.
+This is useful when a loop branch was merged outside Ralpher (for example through a hosted pull-request flow) and you want to clean up the loop state without performing an in-app merge. In worktree-backed flows, branch/worktree cleanup remains part of the normal discard/purge lifecycle.
 
 Only works for loops in final states (pushed, merged, completed, max_iterations, deleted).
 
@@ -677,7 +827,75 @@ Send feedback to refine the plan during planning phase.
 
 #### POST /api/loops/:id/plan/accept
 
-Accept the plan and start loop execution.
+Accept the plan and either start autonomous execution or hand the work off to SSH.
+
+The request body is optional. When omitted, Ralpher uses the default acceptance behavior.
+
+**Request Body**
+
+```json
+{
+  "mode": "start_loop"
+}
+```
+
+**Response**
+
+```json
+{
+  "success": true,
+  "mode": "start_loop"
+}
+```
+
+When the accepted plan is handed off directly to SSH:
+
+```json
+{
+  "success": true,
+  "mode": "open_ssh",
+  "sshSession": {
+    "config": {
+      "id": "ssh-uuid",
+      "name": "Loop Shell",
+      "workspaceId": "ws-abc123",
+      "loopId": "abc-123",
+      "directory": "/path/to/project",
+      "remoteSessionName": "ralpher-abc-123",
+      "createdAt": "2026-01-20T10:00:00.000Z",
+      "updatedAt": "2026-01-20T10:00:00.000Z"
+    },
+    "state": {
+      "status": "ready"
+    }
+  }
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 409 | `not_running` | Loop is not running |
+| 400 | `not_planning` | Loop is not in planning status |
+| 400 | `plan_not_ready` | Plan is not ready yet (still generating) |
+
+#### POST /api/loops/:id/plan/question/answer
+
+Answer a pending planning-mode question that requires manual input.
+
+**Request Body**
+
+```json
+{
+  "answers": [
+    ["Use Bun's built-in HTTP server"],
+    ["Add unit tests"]
+  ]
+}
+```
+
+Each outer array item corresponds to a question. Each inner array contains the selected answer values for that question.
 
 **Response**
 
@@ -691,9 +909,10 @@ Accept the plan and start loop execution.
 
 | Status | Error | Description |
 |--------|-------|-------------|
-| 409 | `not_running` | Loop is not running |
+| 409 | `no_pending_plan_question` | There is no question waiting for an answer |
 | 400 | `not_planning` | Loop is not in planning status |
-| 400 | `plan_not_ready` | Plan is not ready yet (still generating) |
+| 400 | `invalid_question_answer` | Answers do not match the question shape/options |
+| 500 | `answer_plan_question_failed` | Failed to submit the answer |
 
 #### POST /api/loops/:id/plan/discard
 
@@ -773,6 +992,84 @@ Get the review history for a loop, including past review cycles.
 | Status | Error | Description |
 |--------|-------|-------------|
 | 404 | `not_found` | Loop not found |
+
+---
+
+### Chat
+
+Chats are loops with `mode: "chat"`. They reuse the same workspace, git, persistence, and review infrastructure, but they run one user-driven turn at a time instead of autonomous multi-iteration execution.
+
+#### POST /api/loops/chat
+
+Create a new interactive chat and start it immediately.
+
+**Request Body**
+
+```json
+{
+  "workspaceId": "ws-abc123",
+  "prompt": "Let's debug the failing auth tests together.",
+  "model": {
+    "providerID": "anthropic",
+    "modelID": "claude-sonnet-4-20250514"
+  },
+  "useWorktree": true
+}
+```
+
+Optional fields: `baseBranch`, `git.branchPrefix`, `git.commitScope`.
+
+**Response**
+
+Returns the created loop object with `config.mode = "chat"` and status `201 Created`.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `workspace_not_found` | Workspace not found |
+| 400 | `validation_error` | Missing or invalid request fields |
+| 400 | `model_not_enabled` | The selected model is not available |
+| 500 | `create_chat_failed` | Chat creation failed |
+
+#### POST /api/loops/:id/chat
+
+Send a user message to an existing chat.
+
+If the AI is already responding, the current turn is aborted and replaced immediately. If the chat is idle, this starts a new single-turn iteration.
+
+**Request Body**
+
+```json
+{
+  "message": "Now show me the minimal fix.",
+  "model": {
+    "providerID": "anthropic",
+    "modelID": "claude-sonnet-4-20250514"
+  }
+}
+```
+
+The `model` override is optional and applies to that turn.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "loopId": "abc-123"
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+| 400 | `not_chat` | The target loop is not a chat |
+| 400 | `invalid_state` | The chat cannot currently accept a message |
+| 400 | `validation_error` | Message is empty or invalid |
+| 500 | `send_chat_message_failed` | Failed to send the chat message |
 
 ---
 
@@ -1044,13 +1341,15 @@ Get application configuration based on environment.
 
 ```json
 {
-  "remoteOnly": false
+  "remoteOnly": false,
+  "publicBasePath": "/ralpher"
 }
 ```
 
 | Field | Description |
 |-------|-------------|
 | `remoteOnly` | If true, local `stdio` transport is disabled and only `ssh` transport is allowed (set via RALPHER_REMOTE_ONLY env var) |
+| `publicBasePath` | Optional base path inferred from reverse-proxy `X-Forwarded-Prefix` headers |
 
 ---
 
@@ -1065,6 +1364,7 @@ Check if a directory has a `.planning` folder with files.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `directory` | Yes | Directory path to check |
+| `workspaceId` | No | Workspace ID used to disambiguate identical directory paths across different server targets |
 
 **Response** (directory exists with files)
 
@@ -1093,6 +1393,7 @@ Check if a directory has a `.planning` folder with files.
 |--------|-------|-------------|
 | 400 | `invalid_request` | Missing `directory` query parameter |
 | 404 | `workspace_not_found` | No workspace found for the given directory |
+| 409 | `ambiguous_workspace` | Multiple workspaces use this directory and `workspaceId` was not provided |
 | 500 | `check_failed` | Failed to check the planning directory |
 
 ---
@@ -1216,6 +1517,7 @@ Look up a workspace by its directory path.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `directory` | Yes | Directory path to look up |
+| `workspaceId` | No | Workspace ID used to disambiguate identical directory paths across different server targets |
 
 **Response**
 
@@ -1227,6 +1529,7 @@ Returns the workspace object.
 |--------|-------|-------------|
 | 400 | `missing_parameter` | directory query parameter is required |
 | 404 | `workspace_not_found` | No workspace found for this directory |
+| 409 | `ambiguous_workspace` | Multiple workspaces use this directory and `workspaceId` was not provided |
 
 #### GET /api/workspaces/export
 
@@ -1237,6 +1540,7 @@ Export all workspace configurations as JSON for backup or migration.
 ```json
 {
   "version": 1,
+  "exportedAt": "2026-01-20T10:00:00.000Z",
   "workspaces": [
     {
       "name": "My Project",
@@ -1424,7 +1728,8 @@ Settings use a single contract:
     "hostname": "required for ssh",
     "port": 22,
     "username": "optional",
-    "password": "optional"
+    "password": "optional",
+    "identityFile": "optional"
   }
 }
 ```
@@ -1472,6 +1777,7 @@ Update server settings for a workspace.
 | `agent.port` | number | No | SSH port (default `22`) |
 | `agent.username` | string | No | SSH username |
 | `agent.password` | string | No | SSH password |
+| `agent.identityFile` | string | No | Path to an SSH private key file to use instead of password auth |
 
 **Response**
 
@@ -1535,6 +1841,7 @@ Test connection with provided settings for a workspace.
 | `agent.port` | number | No | SSH port (default `22`) |
 | `agent.username` | string | No | SSH username |
 | `agent.password` | string | No | SSH password |
+| `agent.identityFile` | string | No | Path to an SSH private key file to use instead of password auth |
 
 If no body (or `{}`) is provided, the workspace's current settings are used.
 
@@ -1588,6 +1895,7 @@ Test a server connection without requiring a workspace. Useful for validating co
 | `settings.agent.port` | number | No | SSH port (default `22`) |
 | `settings.agent.username` | string | No | SSH username |
 | `settings.agent.password` | string | No | SSH password |
+| `settings.agent.identityFile` | string | No | Path to an SSH private key file to use instead of password auth |
 | `directory` | string | Yes | Directory path to test against |
 
 **Response**
@@ -1640,6 +1948,227 @@ The server sends a success response before scheduling the exit to ensure the cli
 
 ---
 
+### SSH Sessions
+
+Workspace-backed SSH sessions are persistent tmux sessions created against SSH-configured workspaces.
+
+#### GET /api/ssh-sessions
+
+List SSH sessions. Optionally filter to one workspace.
+
+**Query Parameters**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `workspaceId` | No | Restrict results to one workspace |
+
+**Response**
+
+Returns an array of SSH session objects.
+
+#### POST /api/ssh-sessions
+
+Create a persistent SSH session for a workspace.
+
+**Request Body**
+
+```json
+{
+  "workspaceId": "ws-abc123",
+  "name": "Debug Shell"
+}
+```
+
+**Response**
+
+Returns the created SSH session object with status `201 Created`.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `invalid_session_configuration` | The workspace cannot open an SSH/tmux session with its current setup |
+| 400 | `validation_error` | Missing or invalid request fields |
+| 404 | `not_found` | Workspace not found |
+| 500 | `ssh_session_error` | Failed to create the session |
+
+#### GET /api/ssh-sessions/:id
+
+Get one SSH session.
+
+#### PATCH /api/ssh-sessions/:id
+
+Rename an SSH session.
+
+**Request Body**
+
+```json
+{
+  "name": "Renamed Shell"
+}
+```
+
+#### DELETE /api/ssh-sessions/:id
+
+Delete an SSH session.
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+---
+
+### Standalone SSH Servers
+
+Standalone SSH servers let the browser register reusable SSH targets, exchange encrypted credentials, and create terminal sessions that are not tied to a workspace.
+
+#### GET /api/ssh-servers
+
+List registered standalone SSH servers.
+
+#### POST /api/ssh-servers
+
+Create a standalone SSH server entry.
+
+**Request Body**
+
+```json
+{
+  "name": "Build Box",
+  "address": "build.example.com",
+  "username": "vscode"
+}
+```
+
+**Response**
+
+Returns the created SSH server object with status `201 Created`.
+
+#### GET /api/ssh-servers/:id
+
+Get one standalone SSH server.
+
+#### PATCH /api/ssh-servers/:id
+
+Update a standalone SSH server.
+
+**Request Body**
+
+Provide one or more of: `name`, `address`, `username`.
+
+#### DELETE /api/ssh-servers/:id
+
+Delete a standalone SSH server.
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+#### GET /api/ssh-servers/:id/public-key
+
+Fetch the server public key metadata used by the browser to encrypt credentials locally before upload.
+
+**Response**
+
+```json
+{
+  "algorithm": "RSA-OAEP-256",
+  "publicKey": "-----BEGIN PUBLIC KEY-----...",
+  "fingerprint": "sha256:...",
+  "version": 1,
+  "createdAt": "2026-01-20T10:00:00.000Z"
+}
+```
+
+#### POST /api/ssh-servers/:id/credentials
+
+Exchange an encrypted credential payload for a short-lived credential token.
+
+**Request Body**
+
+```json
+{
+  "encryptedCredential": {
+    "algorithm": "RSA-OAEP-256",
+    "fingerprint": "sha256:...",
+    "version": 1,
+    "ciphertext": "base64-encoded-ciphertext"
+  }
+}
+```
+
+**Response**
+
+```json
+{
+  "credentialToken": "token-uuid",
+  "expiresAt": "2026-01-20T10:05:00.000Z"
+}
+```
+
+#### GET /api/ssh-servers/:id/sessions
+
+List standalone SSH server sessions.
+
+#### POST /api/ssh-servers/:id/sessions
+
+Create a standalone SSH server session.
+
+**Request Body**
+
+```json
+{
+  "name": "Emergency Shell",
+  "credentialToken": "token-uuid"
+}
+```
+
+#### GET /api/ssh-server-sessions/:id
+
+Get one standalone SSH server session.
+
+#### PATCH /api/ssh-server-sessions/:id
+
+Rename a standalone SSH server session.
+
+**Request Body**
+
+```json
+{
+  "name": "Renamed Emergency Shell"
+}
+```
+
+#### DELETE /api/ssh-server-sessions/:id
+
+Delete a standalone SSH server session.
+
+**Request Body**
+
+```json
+{
+  "credentialToken": "token-uuid"
+}
+```
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+---
+
 ### Git
 
 #### GET /api/git/branches
@@ -1651,6 +2180,7 @@ Get all local branches for a directory.
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `directory` | Yes | Directory path to check |
+| `workspaceId` | No | Workspace ID used to disambiguate identical directory paths across different server targets |
 
 **Response**
 
@@ -1671,6 +2201,7 @@ Get all local branches for a directory.
 |--------|-------|-------------|
 | 400 | `missing_parameter` | directory query parameter is required |
 | 400 | `not_git_repo` | Directory is not a git repository |
+| 409 | `ambiguous_workspace` | Multiple workspaces use this directory and `workspaceId` was not provided |
 
 #### GET /api/git/default-branch
 
@@ -1681,6 +2212,7 @@ Get the default branch for a git repository (e.g., "main" or "master").
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `directory` | Yes | Directory path to check |
+| `workspaceId` | No | Workspace ID used to disambiguate identical directory paths across different server targets |
 
 **Response**
 
@@ -1696,6 +2228,7 @@ Get the default branch for a git repository (e.g., "main" or "master").
 |--------|-------|-------------|
 | 400 | `missing_parameter` | directory query parameter is required |
 | 400 | `not_git_repo` | Directory is not a git repository |
+| 409 | `ambiguous_workspace` | Multiple workspaces use this directory and `workspaceId` was not provided |
 | 500 | `git_error` | Failed to retrieve default branch |
 
 ---
@@ -1704,19 +2237,22 @@ Get the default branch for a git repository (e.g., "main" or "master").
 
 #### WS /api/ws
 
-WebSocket endpoint for real-time event streaming. Supports optional loop filtering.
+WebSocket endpoint for real-time event streaming. Supports optional loop and SSH-session filtering.
 
 **Query Parameters**
 
 | Parameter | Required | Description |
 |-----------|----------|-------------|
 | `loopId` | No | Filter events to a specific loop |
+| `sshSessionId` | No | Filter SSH session events to a specific workspace-backed SSH session |
+| `sshServerSessionId` | No | Filter SSH session events to a specific standalone SSH server session |
 
 **Connection URL Examples**
 
 ```
 ws://localhost:3000/api/ws              # All events
 ws://localhost:3000/api/ws?loopId=abc   # Events for loop "abc" only
+ws://localhost:3000/api/ws?sshSessionId=ssh-123
 wss://example.com/api/ws                # Secure WebSocket
 ```
 
@@ -1750,6 +2286,7 @@ Each event is a JSON object with a `type` field:
 | `loop.log` | Application log entry |
 | `loop.git.commit` | Git commit made |
 | `loop.completed` | Loop finished successfully |
+| `loop.ssh_handoff` | Plan was accepted by opening an SSH session instead of starting autonomous execution |
 | `loop.stopped` | Loop was stopped manually |
 | `loop.session_aborted` | AI session was aborted |
 | `loop.error` | Error occurred |
@@ -1766,6 +2303,14 @@ Each event is a JSON object with a `type` field:
 | `loop.plan.discarded` | Plan was discarded, loop deleted |
 | `loop.todo.updated` | TODO list was updated |
 | `loop.pending.updated` | Pending message/model was updated |
+| `ssh_session.created` | SSH session was created |
+| `ssh_session.updated` | SSH session metadata was updated |
+| `ssh_session.deleted` | SSH session was deleted |
+| `ssh_session.status` | SSH session connection state changed |
+| `ssh_session.port_forward.created` | Port forward was created |
+| `ssh_session.port_forward.updated` | Port forward metadata was updated |
+| `ssh_session.port_forward.deleted` | Port forward was deleted |
+| `ssh_session.port_forward.status` | Port forward lifecycle state changed |
 
 **Keep-Alive**
 
@@ -1816,6 +2361,38 @@ ws.onclose = () => {
   // Implement reconnection logic as needed
 };
 ```
+
+#### WS /api/ssh-terminal
+
+Dedicated WebSocket endpoint for interactive SSH terminal sessions.
+
+**Query Parameters**
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `sshSessionId` | One of `sshSessionId` or `sshServerSessionId` is required | Connect to a workspace-backed SSH session |
+| `sshServerSessionId` | One of `sshSessionId` or `sshServerSessionId` is required | Connect to a standalone SSH server session |
+
+Standalone SSH server sessions require an initial auth message after the socket opens:
+
+```json
+{
+  "type": "terminal.auth",
+  "credentialToken": "token-uuid"
+}
+```
+
+The terminal socket emits events such as `terminal.connected`, `terminal.output`, `terminal.clipboard`, `terminal.error`, and `terminal.closed`.
+
+#### Forwarded Port Proxy Routes
+
+Active loop port forwards are exposed through browser-facing proxy routes:
+
+- `GET /loop/:loopId/port/:forwardId`
+- `GET /loop/:loopId/port/:forwardId/*`
+- WebSocket upgrades on the same paths
+
+These routes proxy HTTP and WebSocket traffic to the loop's forwarded remote service and rewrite absolute paths/redirects so browser apps can run under the loop-scoped prefix.
 
 ---
 
@@ -1914,13 +2491,15 @@ Examples:
 Loops are automatically started upon creation (unless `draft: true`).
 
 ```bash
-# Create a loop (starts automatically, name is auto-generated)
+# Create a loop (starts automatically)
 curl -X POST http://localhost:3000/api/loops \
   -H "Content-Type: application/json" \
   -d '{
+    "name": "implement-jwt-authentication",
     "workspaceId": "ws-abc123",
     "prompt": "Implement JWT-based authentication with login and signup endpoints",
     "model": { "providerID": "anthropic", "modelID": "claude-sonnet-4-20250514" },
+    "useWorktree": true,
     "planMode": false
   }'
 
@@ -1935,13 +2514,15 @@ wscat -c ws://localhost:3000/api/ws?loopId=abc-123
 Draft loops are saved without starting. You can edit them before starting.
 
 ```bash
-# Create a draft loop (name is auto-generated)
+# Create a draft loop
 curl -X POST http://localhost:3000/api/loops \
   -H "Content-Type: application/json" \
   -d '{
+    "name": "implement-jwt-authentication",
     "workspaceId": "ws-abc123",
     "prompt": "Implement JWT-based authentication",
     "model": { "providerID": "anthropic", "modelID": "claude-sonnet-4-20250514" },
+    "useWorktree": true,
     "planMode": false,
     "draft": true
   }'
@@ -1966,13 +2547,15 @@ curl -X POST http://localhost:3000/api/loops/abc-123/draft/start \
 Plan mode lets you review and refine the plan before execution.
 
 ```bash
-# Create a loop in plan mode (name is auto-generated)
+# Create a loop in plan mode
 curl -X POST http://localhost:3000/api/loops \
   -H "Content-Type: application/json" \
   -d '{
+    "name": "refactor-auth-module",
     "workspaceId": "ws-abc123",
     "prompt": "Refactor the authentication module to use async/await",
     "model": { "providerID": "anthropic", "modelID": "claude-sonnet-4-20250514" },
+    "useWorktree": true,
     "planMode": true
   }'
 
@@ -1985,6 +2568,24 @@ curl -X POST http://localhost:3000/api/loops/abc-123/plan/feedback \
 
 # Accept the plan and start execution
 curl -X POST http://localhost:3000/api/loops/abc-123/plan/accept
+```
+
+### Create a Chat
+
+```bash
+curl -X POST http://localhost:3000/api/loops/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "workspaceId": "ws-abc123",
+    "prompt": "Help me diagnose the failing auth tests",
+    "model": { "providerID": "anthropic", "modelID": "claude-sonnet-4-20250514" },
+    "useWorktree": true
+  }'
+
+# Send another turn to the chat
+curl -X POST http://localhost:3000/api/loops/abc-123/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Now suggest the smallest safe fix."}'
 ```
 
 ### Modify Next Iteration Prompt

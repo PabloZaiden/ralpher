@@ -1,12 +1,14 @@
 /**
- * WebSocket handler for Ralph Loops Management System.
+ * WebSocket handlers for Ralph Loops Management System.
  * 
- * Provides real-time event streaming via WebSocket connection at WS /api/ws.
- * Clients can subscribe to all loop events or filter to a specific loop.
+ * Supports three websocket surfaces:
+ * - WS /api/ws for loop events and SSH session lifecycle events
+ * - WS /api/ssh-terminal for interactive SSH terminal streams
+ * - forwarded-port proxy websocket upgrades under /loop/:loopId/port/:forwardId
  * 
  * Features:
- * - Real-time loop event streaming
- * - Optional loop ID filtering via query parameter
+ * - Real-time loop and SSH session event streaming
+ * - Optional loop or SSH session filtering via query parameters
  * - Ping/pong keep-alive support
  * - Automatic cleanup on disconnect
  * 
@@ -16,7 +18,10 @@
  * - loop.message, loop.tool_call, loop.progress, loop.log
  * - loop.git.commit, loop.deleted, loop.accepted, loop.pushed, loop.discarded
  * - loop.plan.ready, loop.plan.feedback, loop.plan.accepted, loop.plan.discarded
- * - loop.todo.updated
+ * - loop.todo.updated, loop.pending.updated
+ * - ssh_session.created, ssh_session.updated, ssh_session.deleted, ssh_session.status
+ * - ssh_session.port_forward.created, ssh_session.port_forward.updated,
+ *   ssh_session.port_forward.deleted, ssh_session.port_forward.status
  * 
  * @module api/websocket
  */
