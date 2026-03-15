@@ -376,6 +376,8 @@ Ralpher uses provider + transport settings per workspace:
 | **stdio** | Ralpher starts the configured ACP CLI locally (`opencode acp` or `copilot --acp`) |
 | **ssh** | Ralpher starts the configured ACP CLI on a remote host via SSH |
 
+> **Tip:** If you want headless isolated environments for Ralpher, [Devbox](https://github.com/pablozaiden/devbox) is a great fit. You can run repositories and ACP tooling inside a Devbox environment and connect to it from Ralpher over `ssh`, keeping loop execution cleanly separated from your main machine.
+
 ### Per-Workspace Server Configuration
 
 Each workspace has its own server configuration, allowing you to:
