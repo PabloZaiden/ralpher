@@ -343,7 +343,8 @@ export function useLoops(): UseLoopsResult {
   const purgeArchivedWorkspaceLoops = useCallback(async (workspaceId: string): Promise<PurgeArchivedLoopsResult> => {
     try {
       const result = await purgeArchivedWorkspaceLoopsApi(workspaceId);
-      setLoops((prev) => prev.filter((loop) => !result.purgedLoopIds.includes(loop.config.id)));
+      const purgedLoopIds = new Set(result.purgedLoopIds);
+      setLoops((prev) => prev.filter((loop) => !purgedLoopIds.has(loop.config.id)));
       return result;
     } catch (err) {
       const message = String(err);

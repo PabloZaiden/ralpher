@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import type { Loop, UncommittedChangesError, ModelInfo, BranchInfo, Workspace, CreateLoopRequest, CreateChatRequest } from "../types";
 import type { WorkspaceExportData, WorkspaceImportResult, CreateWorkspaceRequest } from "../types/workspace";
 import type { CreateLoopFormActionState } from "./CreateLoopForm";
+import type { PurgeArchivedLoopsResult } from "../hooks";
 import type { CreateLoopResult, CreateChatResult } from "../hooks/useLoops";
 import type { UseWorkspaceServerSettingsResult } from "../hooks/useWorkspaceServerSettings";
 import { Modal, Button } from "./common";
@@ -89,7 +90,7 @@ export interface DashboardModalsProps {
   resetWorkspaceConnection: UseWorkspaceServerSettingsResult["resetConnection"];
   updateWorkspaceSettings: UseWorkspaceServerSettingsResult["updateWorkspace"];
   archivedLoopCount: number;
-  purgeArchivedWorkspaceLoops: (workspaceId: string) => Promise<import("../hooks").PurgeArchivedLoopsResult>;
+  purgeArchivedWorkspaceLoops: (workspaceId: string) => Promise<PurgeArchivedLoopsResult>;
   refreshWorkspaces: () => Promise<void>;
   remoteOnly: boolean;
 

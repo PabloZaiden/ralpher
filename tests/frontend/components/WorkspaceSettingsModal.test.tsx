@@ -397,6 +397,65 @@ describe("WorkspaceSettingsModal archived loop purge", () => {
     });
   });
 
+  test("closes the confirmation modal and shows an error when purge returns failure", async () => {
+    api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
+    const onPurgeArchivedLoops = mock(() => Promise.resolve({
+      success: false,
+      workspaceId: "ws-test-1",
+      totalArchived: 2,
+      purgedCount: 0,
+      purgedLoopIds: [],
+      failures: [],
+    }));
+
+    const { getByText, queryByText, user } = renderWithUser(
+      <WorkspaceSettingsModal
+        {...defaultProps()}
+        archivedLoopCount={2}
+        onPurgeArchivedLoops={onPurgeArchivedLoops}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByText("Purge Archived Loops")).toBeInTheDocument();
+    });
+
+    await user.click(getByText("Purge Archived Loops"));
+    await user.click(getByText("Purge All"));
+
+    await waitFor(() => {
+      expect(onPurgeArchivedLoops).toHaveBeenCalled();
+      expect(queryByText('Are you sure you want to permanently delete all 2 archived loops for "Test Workspace"? This cannot be undone.')).not.toBeInTheDocument();
+      expect(getByText("Failed to purge archived loops.")).toBeInTheDocument();
+    });
+  });
+
+  test("closes the confirmation modal and shows thrown purge errors", async () => {
+    api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
+    const onPurgeArchivedLoops = mock(() => Promise.reject(new Error("Remote cleanup failed")));
+
+    const { getByText, queryByText, user } = renderWithUser(
+      <WorkspaceSettingsModal
+        {...defaultProps()}
+        archivedLoopCount={2}
+        onPurgeArchivedLoops={onPurgeArchivedLoops}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByText("Purge Archived Loops")).toBeInTheDocument();
+    });
+
+    await user.click(getByText("Purge Archived Loops"));
+    await user.click(getByText("Purge All"));
+
+    await waitFor(() => {
+      expect(onPurgeArchivedLoops).toHaveBeenCalled();
+      expect(queryByText('Are you sure you want to permanently delete all 2 archived loops for "Test Workspace"? This cannot be undone.')).not.toBeInTheDocument();
+      expect(getByText("Failed to purge archived loops: Error: Remote cleanup failed")).toBeInTheDocument();
+    });
+  });
+
   test("disables purge button when there are no archived loops", async () => {
     api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
 

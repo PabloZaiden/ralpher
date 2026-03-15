@@ -161,15 +161,20 @@ export function WorkspaceSettingsModal({
 
     setPurgeArchivedResult(null);
     setPurgeArchivedError(null);
+    try {
+      const result = await onPurgeArchivedLoops();
+      if (!result.success) {
+        setShowPurgeArchivedConfirm(false);
+        setPurgeArchivedError("Failed to purge archived loops.");
+        return;
+      }
 
-    const result = await onPurgeArchivedLoops();
-    if (!result.success) {
-      setPurgeArchivedError("Failed to purge archived loops.");
-      return;
+      setPurgeArchivedResult(result);
+      setShowPurgeArchivedConfirm(false);
+    } catch (error) {
+      setShowPurgeArchivedConfirm(false);
+      setPurgeArchivedError(`Failed to purge archived loops: ${String(error)}`);
     }
-
-    setPurgeArchivedResult(result);
-    setShowPurgeArchivedConfirm(false);
   }
 
   // Validation

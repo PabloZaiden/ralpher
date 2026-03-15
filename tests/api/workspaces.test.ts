@@ -1243,6 +1243,70 @@ describe("Workspace API Integration", () => {
       }
     });
 
+    test("uses bounded concurrency and preserves purge result ordering", async () => {
+      const createWorkspaceResponse = await fetch(`${baseUrl}/api/workspaces`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Concurrent Purge Workspace",
+          directory: testWorkDir,
+        }),
+      });
+      expect(createWorkspaceResponse.ok).toBe(true);
+      const workspace = await createWorkspaceResponse.json();
+
+      const originalGetAllLoops = loopManager.getAllLoops;
+      const originalPurgeLoop = loopManager.purgeLoop;
+
+      let activePurges = 0;
+      let maxConcurrentPurges = 0;
+      const archivedLoopIds = ["loop-1", "loop-2", "loop-3", "loop-4", "loop-5", "loop-6"];
+
+      loopManager.getAllLoops = async () => archivedLoopIds.map((loopId) => ({
+        config: { id: loopId, workspaceId: workspace.id },
+        state: { status: "deleted" },
+      })) as any;
+
+      loopManager.purgeLoop = async (loopId: string) => {
+        activePurges++;
+        maxConcurrentPurges = Math.max(maxConcurrentPurges, activePurges);
+        await new Promise((resolve) => setTimeout(resolve, loopId === "loop-1" ? 10 : 1));
+        activePurges--;
+
+        if (loopId === "loop-3") {
+          return { success: false, error: "permission denied" };
+        }
+
+        if (loopId === "loop-5") {
+          throw new Error("remote executor disconnected");
+        }
+
+        return { success: true };
+      };
+
+      try {
+        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/archived-loops/purge`, {
+          method: "POST",
+        });
+        expect(response.ok).toBe(true);
+        const body = await response.json();
+
+        expect(body.success).toBe(true);
+        expect(body.workspaceId).toBe(workspace.id);
+        expect(body.totalArchived).toBe(6);
+        expect(body.purgedCount).toBe(4);
+        expect(body.purgedLoopIds).toEqual(["loop-1", "loop-2", "loop-4", "loop-6"]);
+        expect(body.failures).toEqual([
+          { loopId: "loop-3", error: "permission denied" },
+          { loopId: "loop-5", error: "Error: remote executor disconnected" },
+        ]);
+        expect(maxConcurrentPurges).toBeLessThanOrEqual(4);
+      } finally {
+        loopManager.getAllLoops = originalGetAllLoops;
+        loopManager.purgeLoop = originalPurgeLoop;
+      }
+    });
+
     test("returns 404 for a missing workspace", async () => {
       const response = await fetch(`${baseUrl}/api/workspaces/non-existent-id/archived-loops/purge`, {
         method: "POST",

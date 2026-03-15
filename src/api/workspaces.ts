@@ -22,8 +22,6 @@ import {
 import { backendManager } from "../core/backend-manager";
 import { loopManager } from "../core/loop-manager";
 import { createLogger } from "../core/logger";
-
-const log = createLogger("api:workspaces");
 import { getDefaultServerSettings } from "../types/settings";
 import type { Workspace, WorkspaceImportResult } from "../types/workspace";
 import type { WorkspaceExportData } from "../types/schemas";
@@ -43,6 +41,52 @@ import {
   TestConnectionRequestSchema,
   WorkspaceImportRequestSchema,
 } from "../types/schemas";
+
+const log = createLogger("api:workspaces");
+const ARCHIVED_LOOP_PURGE_CONCURRENCY = 4;
+
+type ArchivedLoopPurgeResult =
+  | { success: true; loopId: string }
+  | { success: false; loopId: string; error: string };
+
+async function purgeArchivedLoopsWithConcurrency(
+  archivedLoops: Awaited<ReturnType<typeof loopManager.getAllLoops>>,
+): Promise<ArchivedLoopPurgeResult[]> {
+  const results: ArchivedLoopPurgeResult[] = new Array(archivedLoops.length);
+  let nextIndex = 0;
+
+  const workerCount = Math.min(ARCHIVED_LOOP_PURGE_CONCURRENCY, archivedLoops.length);
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (nextIndex < archivedLoops.length) {
+      const currentIndex = nextIndex;
+      nextIndex++;
+      const loop = archivedLoops[currentIndex]!;
+
+      try {
+        const result = await loopManager.purgeLoop(loop.config.id);
+        if (result.success) {
+          results[currentIndex] = { success: true, loopId: loop.config.id };
+          continue;
+        }
+
+        results[currentIndex] = {
+          success: false,
+          loopId: loop.config.id,
+          error: result.error ?? "Unknown error",
+        };
+      } catch (error) {
+        results[currentIndex] = {
+          success: false,
+          loopId: loop.config.id,
+          error: String(error),
+        };
+      }
+    }
+  });
+
+  await Promise.allSettled(workers);
+  return results;
+}
 
 /**
  * Import workspaces with directory validation.
@@ -407,21 +451,13 @@ export const workspacesRoutes = {
             isArchivedLoop(loop.state.status, loop.state.reviewMode?.addressable),
         );
 
-        const purgedLoopIds: string[] = [];
-        const failures: Array<{ loopId: string; error: string }> = [];
-
-        for (const loop of archivedLoops) {
-          const result = await loopManager.purgeLoop(loop.config.id);
-          if (result.success) {
-            purgedLoopIds.push(loop.config.id);
-            continue;
-          }
-
-          failures.push({
-            loopId: loop.config.id,
-            error: result.error ?? "Unknown error",
-          });
-        }
+        const purgeResults = await purgeArchivedLoopsWithConcurrency(archivedLoops);
+        const purgedLoopIds = purgeResults
+          .filter((result): result is Extract<ArchivedLoopPurgeResult, { success: true }> => result.success)
+          .map((result) => result.loopId);
+        const failures = purgeResults
+          .filter((result): result is Extract<ArchivedLoopPurgeResult, { success: false }> => !result.success)
+          .map(({ loopId, error }) => ({ loopId, error }));
 
         log.info("POST /api/workspaces/:id/archived-loops/purge - Completed", {
           workspaceId: id,
