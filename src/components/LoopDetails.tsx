@@ -537,7 +537,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
         setPullRequestDestination(destination);
       }
 
-      if (destination.enabled) {
+      if (destination.enabled && requestId === pullRequestDestinationRequestId.current) {
         window.open(destination.url, "_blank", "noopener,noreferrer");
       }
     } finally {

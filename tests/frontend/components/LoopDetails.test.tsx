@@ -23,6 +23,25 @@ const LOOP_ID = "loop-1";
 let openCalls: Array<{ url: string; target: string; features: string }> = [];
 let originalWindowOpen: typeof window.open;
 
+function createDeferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: unknown) => void;
+} {
+  let resolveFn!: (value: T) => void;
+  let rejectFn!: (error: unknown) => void;
+  const promise = new Promise<T>((resolve, reject) => {
+    resolveFn = resolve;
+    rejectFn = reject;
+  });
+
+  return {
+    promise,
+    resolve: resolveFn,
+    reject: rejectFn,
+  };
+}
+
 /** Set up default API routes for LoopDetails. */
 function setupDefaultApi(loopOverrides?: Parameters<typeof createLoopWithStatus>[1]) {
   const loop = createLoopWithStatus("running", {
@@ -941,6 +960,87 @@ describe("actions tab content", () => {
     });
     expect(openCalls[0]?.url).toBe("https://github.com/example/repo/pull/99");
     expect(pullRequestCalls).toBe(2);
+  });
+
+  test("pushed loop ignores stale in-flight PR lookups when a newer click resolves later", async () => {
+    const loop = createLoopWithStatus("pushed", {
+      config: { id: LOOP_ID, name: "Pushed Loop" },
+    });
+    const firstClickRequest = createDeferred<{
+      enabled: true;
+      destinationType: "create_pr";
+      url: string;
+    }>();
+    const secondClickRequest = createDeferred<{
+      enabled: true;
+      destinationType: "existing_pr";
+      url: string;
+    }>();
+    let pullRequestCalls = 0;
+
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/pull-request", () => {
+      pullRequestCalls += 1;
+      if (pullRequestCalls === 1) {
+        return {
+          enabled: true,
+          destinationType: "create_pr",
+          url: "https://github.com/example/repo/compare/main...feature%2Floop?expand=1",
+        };
+      }
+      if (pullRequestCalls === 2) {
+        return firstClickRequest.promise;
+      }
+      return secondClickRequest.promise;
+    });
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByRole, getByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Pushed Loop")).toBeTruthy();
+    });
+
+    await user.click(getByText("Actions"));
+
+    const button = await waitFor(() => getByRole("button", { name: /Go to PR/i }) as HTMLButtonElement);
+    await waitFor(() => {
+      expect(button.disabled).toBe(false);
+    });
+
+    button.click();
+    button.click();
+
+    await waitFor(() => {
+      expect(pullRequestCalls).toBe(3);
+    });
+
+    secondClickRequest.resolve({
+      enabled: true,
+      destinationType: "existing_pr",
+      url: "https://github.com/example/repo/pull/100",
+    });
+
+    await waitFor(() => {
+      expect(openCalls).toHaveLength(1);
+    });
+    expect(openCalls[0]?.url).toBe("https://github.com/example/repo/pull/100");
+
+    firstClickRequest.resolve({
+      enabled: true,
+      destinationType: "create_pr",
+      url: "https://github.com/example/repo/compare/main...feature%2Floop?expand=1",
+    });
+
+    await waitFor(() => {
+      expect(openCalls).toHaveLength(1);
+    });
   });
 });
 
