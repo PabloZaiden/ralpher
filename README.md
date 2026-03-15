@@ -315,7 +315,7 @@ Ralpher separates agent interaction from deterministic repository operations:
 
 | Channel | Purpose | Runtime |
 |---------|---------|---------|
-| **Agent Channel** | AI sessions, prompts, streaming, tool events, permissions | ACP JSON-RPC via provider CLI (`opencode acp` or `copilot --acp`) |
+| **Agent Channel** | AI sessions, prompts, streaming, tool events, permissions | ACP JSON-RPC via provider CLI (`opencode acp` or `copilot --yolo --acp`) |
 | **Execution Channel** | Git/file/command operations used by loop orchestration and APIs | `CommandExecutor` (local for `stdio`, remote over SSH for `ssh`) |
 
 This decoupling allows Ralpher to support multiple ACP providers while keeping repository operations deterministic and transport-aware.
@@ -373,7 +373,7 @@ Ralpher uses provider + transport settings per workspace:
 
 | Transport | Description |
 |-----------|-------------|
-| **stdio** | Ralpher starts the configured ACP CLI locally (`opencode acp` or `copilot --acp`) |
+| **stdio** | Ralpher starts the configured ACP CLI locally (`opencode acp` or `copilot --yolo --acp`) |
 | **ssh** | Ralpher starts the configured ACP CLI on a remote host via SSH |
 
 > **Tip:** If you want headless isolated environments for Ralpher, [Devbox](https://github.com/pablozaiden/devbox) is a great fit. You can run repositories and ACP tooling inside a Devbox environment and connect to it from Ralpher over `ssh`, keeping loop execution cleanly separated from your main machine.

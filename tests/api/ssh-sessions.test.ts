@@ -176,6 +176,68 @@ describe("SSH sessions API integration", () => {
     expect(await listAfterDelete.json()).toEqual([]);
   });
 
+  test("renames an existing SSH session", async () => {
+    const workspace = await createWorkspace({ transport: "ssh" });
+
+    const createResponse = await fetch(`${baseUrl}/api/ssh-sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: workspace.id,
+        name: "Original SSH Session",
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { config: { id: string; name: string } };
+
+    const renameResponse = await fetch(`${baseUrl}/api/ssh-sessions/${created.config.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Renamed SSH Session",
+      }),
+    });
+
+    expect(renameResponse.ok).toBe(true);
+    const renamed = await renameResponse.json() as { config: { id: string; name: string } };
+    expect(renamed.config.id).toBe(created.config.id);
+    expect(renamed.config.name).toBe("Renamed SSH Session");
+
+    const getResponse = await fetch(`${baseUrl}/api/ssh-sessions/${created.config.id}`);
+    expect(getResponse.ok).toBe(true);
+    const fetched = await getResponse.json() as { config: { name: string } };
+    expect(fetched.config.name).toBe("Renamed SSH Session");
+  });
+
+  test("rejects SSH session rename when the name is empty", async () => {
+    const workspace = await createWorkspace({ transport: "ssh" });
+
+    const createResponse = await fetch(`${baseUrl}/api/ssh-sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workspaceId: workspace.id,
+        name: "Original SSH Session",
+      }),
+    });
+
+    expect(createResponse.status).toBe(201);
+    const created = await createResponse.json() as { config: { id: string } };
+
+    const renameResponse = await fetch(`${baseUrl}/api/ssh-sessions/${created.config.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "   ",
+      }),
+    });
+
+    expect(renameResponse.status).toBe(400);
+    const data = await renameResponse.json() as { message: string };
+    expect(data.message).toContain("name is required");
+  });
+
   test("generates default SSH session names from the workspace name and workspace session count", async () => {
     const workspace = await createWorkspace({ transport: "ssh" });
     const otherWorkspaceDir = await mkdtemp(join(tmpdir(), "ralpher-ssh-sessions-work-"));

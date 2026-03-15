@@ -76,7 +76,7 @@ describe("sanitizeSpawnArgsForLogging", () => {
       "5001",
       "host",
       "--",
-      "bash -lc 'copilot --acp'",
+      "bash -lc 'copilot --yolo --acp'",
     ];
 
     const sanitized = sanitizeSpawnArgsForLogging("sshpass", args);
@@ -91,7 +91,7 @@ describe("sanitizeSpawnArgsForLogging", () => {
       "5001",
       "host",
       "--",
-      "bash -lc 'copilot --acp'",
+      "bash -lc 'copilot --yolo --acp'",
     ]);
     expect(args[1]).toBe("super-secret-password");
   });
@@ -299,7 +299,7 @@ describe("AcpBackend spawn cwd selection", () => {
           provider: "copilot",
           transport: "ssh",
           command: "sshpass",
-          args: ["-p", "secret", "ssh", "user@host", "--", "copilot", "--acp"],
+          args: ["-p", "secret", "ssh", "user@host", "--", "copilot", "--yolo", "--acp"],
           directory: "/workspaces/remote-only-path",
         }),
       ).rejects.toThrow("Failed to spawn ACP process");
@@ -328,7 +328,7 @@ describe("AcpBackend spawn cwd selection", () => {
           provider: "copilot",
           transport: "stdio",
           command: "copilot",
-          args: ["--acp"],
+          args: ["--yolo", "--acp"],
           directory: "/tmp/stdio-workdir",
         }),
       ).rejects.toThrow("Failed to spawn ACP process");
@@ -381,7 +381,7 @@ describe("AcpBackend process exit handling", () => {
           provider: "copilot",
           transport: "ssh",
           command: "sshpass",
-          args: ["-p", "secret", "ssh", "user@host", "--", "copilot", "--acp"],
+          args: ["-p", "secret", "ssh", "user@host", "--", "copilot", "--yolo", "--acp"],
           directory: "/workspaces/remote-path",
         }),
       ).rejects.toThrow("ACP process exited with code 255");
@@ -428,7 +428,7 @@ describe("AcpBackend process exit handling", () => {
           provider: "copilot",
           transport: "ssh",
           command: "sshpass",
-          args: ["-p", "secret", "ssh", "user@host", "--", "copilot", "--acp"],
+          args: ["-p", "secret", "ssh", "user@host", "--", "copilot", "--yolo", "--acp"],
           directory: "/workspaces/remote-path",
         }),
       ).rejects.toThrow("sshpass reported authentication failure");

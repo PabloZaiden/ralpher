@@ -76,7 +76,7 @@ describe("buildSshProcessConfig", () => {
         username: "alice",
         password: "secret",
       },
-      remoteCommand: "bash -lc 'copilot --acp'",
+      remoteCommand: "bash -lc 'copilot --yolo --acp'",
       passwordHandling: "argument",
       baseEnv: {},
     });

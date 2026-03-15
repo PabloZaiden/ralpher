@@ -4,8 +4,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FitAddon, init, Terminal } from "ghostty-web";
-import { Badge, Button, Card, ConfirmModal, Modal, PASSWORD_INPUT_PROPS } from "./common";
+import { Badge, Button, Card, ConfirmModal, EditIcon, Modal, PASSWORD_INPUT_PROPS } from "./common";
 import { getSshServerApi, useSshSession, useToast } from "../hooks";
+import { RenameSshSessionModal } from "./RenameSshSessionModal";
 import {
   defaultTerminalModifiers,
   encodeTerminalDataInput,
@@ -489,7 +490,7 @@ export function SshSessionDetails({
 }: SshSessionDetailsProps) {
   const toast = useToast();
   const { error: showErrorToast, warning: showWarningToast } = toast;
-  const { session, sessionKind, loading, error, deleteSession, refresh } = useSshSession(sshSessionId);
+  const { session, sessionKind, loading, error, deleteSession, refresh, updateSession } = useSshSession(sshSessionId);
   const terminalContainerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
@@ -505,6 +506,7 @@ export function SshSessionDetails({
   const lastShownNoticeRef = useRef<string | null>(null);
   const [socketStatus, setSocketStatus] = useState<"connecting" | "open" | "closed">("connecting");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showRenameModal, setShowRenameModal] = useState(false);
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [sessionInfoExpanded, setSessionInfoExpanded] = useState(false);
   const [touchControlsExpanded, setTouchControlsExpanded] = useState(false);
@@ -561,6 +563,7 @@ export function SshSessionDetails({
   const hasPersistentSession = useMemo(() => {
     return session ? isPersistentSshSession(session) : false;
   }, [session]);
+  const canRenameSession = sessionKind === "workspace";
   const sessionInfoSummary = useMemo(() => {
     if (!session) {
       return null;
@@ -1249,6 +1252,11 @@ export function SshSessionDetails({
     }
   }
 
+  async function handleRename(newName: string) {
+    await updateSession({ name: newName });
+    toast.success("SSH session renamed");
+  }
+
   if (loading && !session) {
     return <div className="p-6 text-gray-500 dark:text-gray-400">Loading SSH session...</div>;
   }
@@ -1287,6 +1295,20 @@ export function SshSessionDetails({
             </Badge>
           </div>
           <div className="flex items-center gap-1.5">
+            {canRenameSession && (
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={() => setShowRenameModal(true)}
+                aria-label="Rename SSH session"
+                title="Rename SSH session"
+              >
+                <span className="flex items-center gap-1">
+                  <EditIcon size="h-3.5 w-3.5" />
+                  Rename
+                </span>
+              </Button>
+            )}
             <Button variant="danger" size="xs" onClick={() => setShowDeleteConfirm(true)}>
               Delete Session
             </Button>
@@ -1608,6 +1630,12 @@ export function SshSessionDetails({
           : "This removes the saved Ralpher session metadata. Direct SSH mode does not keep a remote persistent session."}
         confirmLabel="Delete"
         loading={false}
+      />
+      <RenameSshSessionModal
+        isOpen={showRenameModal}
+        onClose={() => setShowRenameModal(false)}
+        currentName={sessionKind === "workspace" ? session.config.name : ""}
+        onRename={handleRename}
       />
       <Modal
         isOpen={showPasswordPrompt}

@@ -3,7 +3,16 @@
  */
 
 import { useEffect, useState } from "react";
-import type { Loop, UncommittedChangesError, ModelInfo, BranchInfo, Workspace, CreateLoopRequest, CreateChatRequest } from "../types";
+import type {
+  Loop,
+  UncommittedChangesError,
+  ModelInfo,
+  BranchInfo,
+  Workspace,
+  CreateLoopRequest,
+  CreateChatRequest,
+  SshSession,
+} from "../types";
 import type { WorkspaceExportData, WorkspaceImportResult, CreateWorkspaceRequest } from "../types/workspace";
 import type { CreateLoopFormActionState } from "./CreateLoopForm";
 import type { PurgeArchivedLoopsResult } from "../hooks";
@@ -17,6 +26,7 @@ import {
   RenameLoopModal,
 } from "./LoopModals";
 import { AppSettingsModal } from "./AppSettingsModal";
+import { RenameSshSessionModal } from "./RenameSshSessionModal";
 import { WorkspaceSettingsModal } from "./WorkspaceSettingsModal";
 import { CreateWorkspaceModal } from "./CreateWorkspaceModal";
 import { createLogger } from "../lib/logger";
@@ -28,6 +38,7 @@ const log = createLogger("DashboardModals");
 
 export interface DashboardModalsProps {
   loops: Loop[];
+  sshSessions: SshSession[];
   workspaces: Workspace[];
   workspacesLoading: boolean;
   workspaceError: string | null;
@@ -65,6 +76,9 @@ export interface DashboardModalsProps {
   renameModal: { open: boolean; loopId: string | null };
   onCloseRenameModal: () => void;
   onRename: (loopId: string, newName: string) => Promise<void>;
+  sshSessionRenameModal: { open: boolean; sessionId: string | null };
+  onCloseSshSessionRenameModal: () => void;
+  onRenameSshSession: (sessionId: string, newName: string) => Promise<void>;
 
   // App settings modal
   showServerSettingsModal: boolean;
@@ -352,6 +366,17 @@ export function DashboardModals(props: DashboardModalsProps) {
         onRename={async (newName) => {
           if (props.renameModal.loopId) {
             await props.onRename(props.renameModal.loopId, newName);
+          }
+        }}
+      />
+
+      <RenameSshSessionModal
+        isOpen={props.sshSessionRenameModal.open}
+        onClose={props.onCloseSshSessionRenameModal}
+        currentName={props.sshSessions.find((session) => session.config.id === props.sshSessionRenameModal.sessionId)?.config.name ?? ""}
+        onRename={async (newName) => {
+          if (props.sshSessionRenameModal.sessionId) {
+            await props.onRenameSshSession(props.sshSessionRenameModal.sessionId, newName);
           }
         }}
       />

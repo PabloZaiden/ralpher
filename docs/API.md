@@ -30,7 +30,7 @@ All responses are JSON. Successful responses return the requested data directly.
 Ralpher runs agent interactions through ACP JSON-RPC and supports two providers:
 
 - `opencode` (CLI command: `opencode acp`)
-- `copilot` (CLI command: `copilot --acp`)
+- `copilot` (CLI command: `copilot --yolo --acp`)
 
 Agent transport is configured per workspace:
 
@@ -1740,7 +1740,7 @@ Execution behavior is derived automatically from `agent.transport`:
 
 Provider runtime command is derived from `agent.provider`:
 - `opencode` → `opencode acp`
-- `copilot` → `copilot --acp`
+- `copilot` → `copilot --yolo --acp`
 
 #### GET /api/workspaces/:id/server-settings
 
