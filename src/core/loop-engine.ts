@@ -2735,10 +2735,10 @@ ${userMessageSection}${errorContext}
   }
 
   /**
- * Generate a meaningful commit message based on the changes.
- * Uses the configured agent backend to summarize what was done, then normalizes the output
- * into a valid conventional commit message with an optional meaningful scope.
- */
+   * Generate a meaningful commit message based on the changes.
+   * Uses the configured agent backend to summarize what was done, then normalizes the output
+   * into a valid conventional commit message with an optional meaningful scope.
+   */
   private async generateCommitMessage(iteration: number, responseContent: string): Promise<string> {
     const scope = this.config.git.commitScope;
 
