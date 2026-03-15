@@ -102,7 +102,7 @@ List all loops.
       "stopPattern": "<promise>COMPLETE</promise>$",
       "git": {
         "branchPrefix": "",
-        "commitScope": "ralph"
+        "commitScope": ""
       }
     },
     "state": {
@@ -139,7 +139,7 @@ Create a new loop.
 | `stopPattern` | string | No | Completion regex (default: `<promise>COMPLETE</promise>$`) |
 | `git` | object | No | Git configuration |
 | `git.branchPrefix` | string | No | Optional prefix prepended before the generated `title-hash` branch name (default: empty string). Non-empty values are normalized to git-safe path segments and stored with a trailing `/`. |
-| `git.commitScope` | string | No | Conventional commit scope (default: "ralph"). Used in commit messages as `type(scope): description`. The deprecated `git.commitPrefix` is still accepted and automatically converted (e.g., `"[Ralph]"` becomes `"ralph"`). |
+| `git.commitScope` | string | No | Optional Conventional Commit scope override (default: empty string). When provided, use a meaningful module, section, or topic such as `"auth"` or `"api"`. Leave it empty to generate scope-less commits. Generic placeholder values such as `"ralph"` are treated as empty. The deprecated `git.commitPrefix` is still accepted and converted the same way. |
 | `baseBranch` | string | No | Base branch to create the loop from (default: auto-detected default branch) |
 | `clearPlanningFolder` | boolean | No | Clear .planning folder before starting (default: false) |
 | `draft` | boolean | No | Save as draft without starting (default: false) |
@@ -2463,15 +2463,16 @@ Log levels used in `loop.log` events:
 Ralpher generates commit messages following the [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/) specification:
 
 ```
+type: description
 type(scope): description
 ```
 
-The `scope` is configured via `git.commitScope` (default: `"ralph"`). Valid types: `feat`, `fix`, `refactor`, `docs`, `style`, `test`, `build`, `ci`, `chore`, `perf`, `revert`.
+Ralpher defaults to scope-less commit messages. When `git.commitScope` is set, it should name a meaningful module, section, or topic touched by the change. Generic placeholder values such as `"ralph"` are omitted. Valid types: `feat`, `fix`, `refactor`, `docs`, `style`, `test`, `build`, `ci`, `chore`, `perf`, `revert`.
 
 Examples:
-- `feat(ralph): add JWT authentication endpoint`
-- `fix(ralph): handle token expiration edge case`
-- `chore(ralph): iteration 3 - auth.ts, tests.ts`
+- `feat: add JWT authentication endpoint`
+- `fix(auth): handle token expiration edge case`
+- `chore(api): update loop creation request docs`
 
 ### TODO Item
 

@@ -10,6 +10,7 @@
 
 import type { Loop, LoopConfig, LoopState, ConsecutiveErrorTracker } from "../types";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
+import { normalizeCommitScope } from "../utils/commit-scope";
 import { getDatabase } from "./database";
 import { createLogger } from "../core/logger";
 
@@ -202,7 +203,9 @@ function rowToLoop(row: Record<string, unknown>): Loop {
     stopPattern: row["stop_pattern"] as string,
     git: {
       branchPrefix: row["git_branch_prefix"] as string,
-      commitScope: (row["git_commit_scope"] as string | null) ?? DEFAULT_LOOP_CONFIG.git.commitScope,
+      commitScope: normalizeCommitScope(
+        (row["git_commit_scope"] as string | null) ?? DEFAULT_LOOP_CONFIG.git.commitScope,
+      ) ?? "",
     },
     model,
     // Mandatory fields with defaults for backward compatibility with old data

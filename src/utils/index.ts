@@ -19,6 +19,7 @@ export {
 } from "./loop-status";
 
 export { sanitizeBranchName } from "./sanitize-branch-name";
+export { normalizeCommitScope } from "./commit-scope";
 
 export { formatRelativeTime } from "./format";
 
