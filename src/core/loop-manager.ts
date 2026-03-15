@@ -32,6 +32,7 @@ import { LoopEngine } from "./loop-engine";
 import { loopEventEmitter, SimpleEventEmitter } from "./event-emitter";
 import { log } from "./logger";
 import { generateLoopName, sanitizeLoopName } from "../utils/name-generator";
+import { normalizeCommitScope } from "../utils/commit-scope";
 import { assertValidTransition } from "./loop-state-machine";
 import { sshSessionManager } from "./ssh-session-manager";
 import { portForwardManager } from "./port-forward-manager";
@@ -67,7 +68,7 @@ export interface CreateLoopOptions {
   stopPattern?: string;
   /** Git branch prefix (default: empty string) */
   gitBranchPrefix?: string;
-  /** Git commit scope for conventional commits (default: "ralph") */
+  /** Git commit scope for conventional commits (default: empty string) */
   gitCommitScope?: string;
   /** Base branch to create the loop from (default: current branch) */
   baseBranch?: string;
@@ -195,7 +196,7 @@ export class LoopManager {
       stopPattern: options.stopPattern ?? DEFAULT_LOOP_CONFIG.stopPattern,
       git: {
         branchPrefix: normalizeBranchPrefix(options.gitBranchPrefix ?? DEFAULT_LOOP_CONFIG.git.branchPrefix),
-        commitScope: options.gitCommitScope ?? DEFAULT_LOOP_CONFIG.git.commitScope,
+        commitScope: normalizeCommitScope(options.gitCommitScope ?? DEFAULT_LOOP_CONFIG.git.commitScope) ?? "",
       },
       baseBranch: options.baseBranch,
       useWorktree: options.useWorktree ?? DEFAULT_LOOP_CONFIG.useWorktree,

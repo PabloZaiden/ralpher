@@ -8,6 +8,7 @@
  */
 
 import { z } from "zod";
+import { normalizeCommitScope } from "../../utils/commit-scope";
 import { ModelConfigSchema } from "./model";
 
 /**
@@ -23,9 +24,17 @@ export const GitConfigSchema = z.object({
   /** @deprecated Use `commitScope` instead. */
   commitPrefix: z.string().optional(),
 }).transform((val) => {
+  const toConfiguredCommitScope = (scope: string | undefined): string | undefined => {
+    if (scope === undefined) {
+      return undefined;
+    }
+
+    return normalizeCommitScope(scope) ?? "";
+  };
+
   // Map deprecated commitPrefix to commitScope if commitScope is not set
   if (val.commitPrefix !== undefined && val.commitScope === undefined) {
-    // Strip brackets and lowercase: "[Ralph]" -> "ralph"
+    // Strip brackets and lowercase: "[Auth]" -> "auth"
     const cleaned = val.commitPrefix
       .replace(/^\[/, "")
       .replace(/\]$/, "")
@@ -33,15 +42,16 @@ export const GitConfigSchema = z.object({
       .toLowerCase();
     return {
       branchPrefix: val.branchPrefix,
-      commitScope: cleaned || undefined,
+      commitScope: toConfiguredCommitScope(cleaned),
     };
   }
-  // Drop the deprecated field from the output
-  // Trim commitScope and map empty/whitespace-only to undefined
-  const trimmedScope = val.commitScope?.trim();
+
+  // Drop the deprecated field from the output.
+  // Preserve omitted commitScope as undefined, but normalize explicit generic
+  // or empty values to an empty string so callers can intentionally clear scope.
   return {
     branchPrefix: val.branchPrefix,
-    commitScope: trimmedScope || undefined,
+    commitScope: toConfiguredCommitScope(val.commitScope),
   };
 });
 

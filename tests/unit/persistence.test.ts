@@ -58,7 +58,7 @@ function createTestLoop(overrides: {
       workspaceId: "test-workspace-id",
       model: { providerID: "test-provider", modelID: "test-model" },
       stopPattern: "<promise>COMPLETE</promise>$",
-      git: { branchPrefix: "", commitScope: "ralph" },
+      git: { branchPrefix: "", commitScope: "" },
       maxIterations: Infinity,
       maxConsecutiveErrors: 10,
       activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,
@@ -137,6 +137,24 @@ describe("Persistence", () => {
 
       expect(loaded).not.toBeNull();
       expect(loaded!.state.status).toBe("idle");
+    });
+
+    test("loadLoop normalizes legacy generic ralph commit scope", async () => {
+      const { saveLoop, loadLoop } = await import("../../src/persistence/loops");
+
+      await setupPersistence();
+
+      const testLoop = createTestLoop({
+        id: "legacy-scope-loop",
+        name: "legacy-scope-loop",
+      });
+      testLoop.config.git.commitScope = "ralph";
+
+      await saveLoop(testLoop);
+      const loaded = await loadLoop("legacy-scope-loop");
+
+      expect(loaded).not.toBeNull();
+      expect(loaded!.config.git.commitScope).toBe("");
     });
 
     test("persists plan-mode auto-reply and pending questions", async () => {
