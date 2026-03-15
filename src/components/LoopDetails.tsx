@@ -523,12 +523,28 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
     }
   }
 
-  function handleOpenPullRequest() {
-    if (!pullRequestDestination?.enabled) {
+  async function handleOpenPullRequest() {
+    if (!pullRequestDestination?.enabled || loadingPullRequestDestination) {
       return;
     }
 
-    window.open(pullRequestDestination.url, "_blank", "noopener,noreferrer");
+    const requestId = ++pullRequestDestinationRequestId.current;
+    setLoadingPullRequestDestination(true);
+
+    try {
+      const destination = await getPullRequestDestination();
+      if (requestId === pullRequestDestinationRequestId.current) {
+        setPullRequestDestination(destination);
+      }
+
+      if (destination.enabled && requestId === pullRequestDestinationRequestId.current) {
+        window.open(destination.url, "_blank", "noopener,noreferrer");
+      }
+    } finally {
+      if (requestId === pullRequestDestinationRequestId.current) {
+        setLoadingPullRequestDestination(false);
+      }
+    }
   }
 
   function navigateToSshSession(sshSessionId: string) {
