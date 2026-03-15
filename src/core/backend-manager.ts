@@ -28,6 +28,7 @@ import {
   getSshConnectionTargetFromSettings,
   type SshConnectionTarget,
 } from "./ssh-connection-target";
+import { getProviderAcpCommand } from "./agent-runtime-command";
 
 /**
  * Agent transports that require an explicit remote endpoint.
@@ -49,13 +50,6 @@ export type CommandExecutorFactory = (directory: string) => CommandExecutor;
 interface DerivedExecutionSettings {
   provider: "local" | "ssh";
   sshTarget?: SshConnectionTarget;
-}
-
-function getProviderAcpCommand(provider: "opencode" | "copilot"): { command: string; args: string[] } {
-  if (provider === "copilot") {
-    return { command: "copilot", args: ["--acp"] };
-  }
-  return { command: "opencode", args: ["acp"] };
 }
 
 function deriveExecutionSettings(settings: ServerSettings): DerivedExecutionSettings {

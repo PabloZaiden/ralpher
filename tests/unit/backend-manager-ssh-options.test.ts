@@ -29,6 +29,7 @@ describe("buildConnectionConfig SSH command options", () => {
     expect(args).toContain("alice@remote.example.com");
     expect(args[args.length - 1]).toContain("bash -lc");
     expect(args[args.length - 1]).toContain("copilot");
+    expect(args[args.length - 1]).toContain("--yolo");
     expect(args[args.length - 1]).toContain("--acp");
   });
 
@@ -54,6 +55,7 @@ describe("buildConnectionConfig SSH command options", () => {
     expect(args).toContain("UserKnownHostsFile=/dev/null");
     expect(args[args.length - 1]).toContain("bash -lc");
     expect(args[args.length - 1]).toContain("copilot");
+    expect(args[args.length - 1]).toContain("--yolo");
     expect(args[args.length - 1]).toContain("--acp");
     expect(args[args.length - 1]).toContain("source ~/.profile");
   });
@@ -96,6 +98,7 @@ describe("buildConnectionConfig does not embed model in CLI args", () => {
     );
     const args = config.args ?? [];
     expect(config.command).toBe("copilot");
+    expect(args).toContain("--yolo");
     expect(args).toContain("--acp");
     expect(args).not.toContain("--model");
   });
@@ -115,7 +118,7 @@ describe("buildConnectionConfig does not embed model in CLI args", () => {
     );
     const args = config.args ?? [];
     const remoteCommand = args[args.length - 1] ?? "";
-    expect(remoteCommand).toContain("copilot --acp");
+    expect(remoteCommand).toContain("copilot --yolo --acp");
     expect(remoteCommand).not.toContain("--model");
   });
 
