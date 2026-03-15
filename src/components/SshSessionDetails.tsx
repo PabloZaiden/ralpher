@@ -509,7 +509,7 @@ export function SshSessionDetails({
   const [sessionInfoExpanded, setSessionInfoExpanded] = useState(false);
   const [touchControlsExpanded, setTouchControlsExpanded] = useState(false);
   const [terminalModifiers, setTerminalModifiers] = useState<TerminalModifierState>(defaultTerminalModifiers);
-  const [selectedTerminalText, setSelectedTerminalText] = useState("");
+  const [hasSelectedTerminalText, setHasSelectedTerminalText] = useState(false);
   const [pendingTerminalClipboardText, setPendingTerminalClipboardText] = useState<string | null>(null);
   const [standalonePassword, setStandalonePassword] = useState("");
   const [standaloneCredentialToken, setStandaloneCredentialToken] = useState<string | null>(null);
@@ -636,20 +636,16 @@ export function SshSessionDetails({
     terminalRef.current?.focus();
   }, []);
 
-  const syncSelectedTerminalText = useCallback(() => {
+  const syncTerminalSelectionState = useCallback(() => {
     const terminal = terminalRef.current;
-    if (!terminal || !terminal.hasSelection()) {
-      setSelectedTerminalText("");
-      return;
-    }
-    setSelectedTerminalText(terminal.getSelection());
+    setHasSelectedTerminalText(Boolean(terminal?.hasSelection()));
   }, []);
 
   const clearSelectedTerminalText = useCallback((options?: { clearTerminalSelection?: boolean }) => {
     if (options?.clearTerminalSelection ?? true) {
       terminalRef.current?.clearSelection();
     }
-    setSelectedTerminalText("");
+    setHasSelectedTerminalText(false);
   }, []);
 
   const sendTerminalPayload = useCallback((
@@ -826,13 +822,13 @@ export function SshSessionDetails({
 
   const copySelectedTerminalText = useCallback(() => {
     const terminal = terminalRef.current;
-    const nextSelectedText = terminal?.hasSelection() ? terminal.getSelection() : selectedTerminalText;
+    const nextSelectedText = terminal?.getSelection() ?? "";
     if (!nextSelectedText) {
       focusTerminal();
       return;
     }
     void copyTerminalClipboardText(nextSelectedText, { userInitiated: true });
-  }, [copyTerminalClipboardText, focusTerminal, selectedTerminalText]);
+  }, [copyTerminalClipboardText, focusTerminal]);
 
   const loadStandaloneCredentialToken = useCallback(async (
     options?: { forceRefresh?: boolean; promptOnFailure?: boolean },
@@ -1055,7 +1051,7 @@ export function SshSessionDetails({
         terminal.focus();
         terminalRef.current = terminal;
         fitAddonRef.current = fitAddon;
-        syncSelectedTerminalText();
+        syncTerminalSelectionState();
         flushPendingOutput();
 
         dataDisposable = terminal.onData((data: string) => {
@@ -1065,7 +1061,7 @@ export function SshSessionDetails({
           sendTerminalResize(cols, rows);
         });
         selectionDisposable = terminal.onSelectionChange(() => {
-          syncSelectedTerminalText();
+          syncTerminalSelectionState();
         });
         terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
           if (event.key !== "Tab" || !event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
@@ -1110,7 +1106,7 @@ export function SshSessionDetails({
       dataDisposable?.dispose();
       resizeDisposable?.dispose();
       selectionDisposable?.dispose();
-      setSelectedTerminalText("");
+      setHasSelectedTerminalText(false);
       terminal?.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
@@ -1121,7 +1117,7 @@ export function SshSessionDetails({
       sendTerminalKeystroke,
       sendTerminalResize,
       session?.config.id,
-      syncSelectedTerminalText,
+      syncTerminalSelectionState,
       showErrorToast,
       syncTerminalSize,
     ]);
@@ -1491,7 +1487,7 @@ export function SshSessionDetails({
                   variant="secondary"
                   size="xs"
                   className={touchButtonClassName}
-                  disabled={!selectedTerminalText}
+                  disabled={!hasSelectedTerminalText}
                   onClick={copySelectedTerminalText}
                 >
                   Copy selection

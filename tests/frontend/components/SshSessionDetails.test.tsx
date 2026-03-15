@@ -921,6 +921,89 @@ describe("SshSessionDetails", () => {
     }
   });
 
+  test("clears the touch copy selection state across terminal disconnect and reconnect", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Selection Recovery" } }),
+    );
+
+    let visibilityState = "visible";
+    const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibilityState,
+    });
+
+    try {
+      const { getByRole, getByText, user } = renderWithUser(
+        <SshSessionDetails
+          sshSessionId="ssh-selection-recovery"
+          onBack={() => {}}
+          copyTextToClipboard={async (text) => {
+            clipboardWrites.push(text);
+          }}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(getByText("SSH Selection Recovery")).toBeTruthy();
+        expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+        expect(lastTerminal).not.toBeNull();
+      });
+
+      await user.click(getByText("Touch controls"));
+
+      const copySelectionButton = getByRole("button", { name: "Copy selection" });
+      expect(copySelectionButton).toBeDisabled();
+
+      await act(async () => {
+        lastTerminal?.setSelection("stale selection");
+      });
+
+      await waitFor(() => {
+        expect(copySelectionButton).not.toBeDisabled();
+      });
+
+      const initialConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+      await act(async () => {
+        initialConnection.instance.close(1006, "network lost");
+      });
+
+      await waitFor(() => {
+        expect(copySelectionButton).toBeDisabled();
+      });
+
+      await user.click(copySelectionButton);
+      expect(clipboardWrites).toEqual([]);
+      expect(lastTerminal?.getSelection()).toBe("");
+
+      visibilityState = "hidden";
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      visibilityState = "visible";
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("focus"));
+      });
+
+      await waitFor(() => {
+        expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(2);
+        expect(copySelectionButton).toBeDisabled();
+        expect(lastTerminal?.getSelection()).toBe("");
+      });
+    } finally {
+      if (originalVisibilityState) {
+        Object.defineProperty(document, "visibilityState", originalVisibilityState);
+      } else {
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          get: () => "visible",
+        });
+      }
+    }
+  });
+
   test("copies terminal clipboard messages to the browser clipboard", async () => {
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Clipboard" } }),
