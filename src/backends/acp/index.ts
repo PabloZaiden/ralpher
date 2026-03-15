@@ -21,6 +21,7 @@ import type {
   ConfigOption,
 } from "../types";
 import { createEventStream, type EventStream } from "../../utils/event-stream";
+import { getProviderAcpCommand } from "../../core/agent-runtime-command";
 
 // Re-export ConnectionInfo for backward compatibility
 export type { ConnectionInfo } from "../types";
@@ -426,8 +427,9 @@ export class AcpBackend implements Backend {
    * Spawn an ACP stdio process and initialize JSON-RPC.
    */
   private async connectSpawn(config: BackendConnectionConfig): Promise<void> {
-    const command = config.command ?? (config.provider === "copilot" ? "copilot" : "opencode");
-    const args = config.args ?? (config.provider === "copilot" ? ["--acp"] : ["acp"]);
+    const providerCommand = getProviderAcpCommand(config.provider ?? "opencode");
+    const command = config.command ?? providerCommand.command;
+    const args = config.args ?? providerCommand.args;
     const logArgs = sanitizeSpawnArgsForLogging(command, args);
     const spawnCwd = config.transport === "ssh" ? "/" : config.directory;
     this.recentProcessLines = [];
