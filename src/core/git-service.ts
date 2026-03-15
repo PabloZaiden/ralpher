@@ -8,6 +8,8 @@ import type { CommandExecutor } from "./command-executor";
 import { dirname, relative, resolve } from "node:path";
 import { log } from "./logger";
 
+const AUTO_ACCEPT_HOST_KEY_SSH_COMMAND = "ssh -o StrictHostKeyChecking=accept-new";
+
 /**
  * Error thrown when the current branch doesn't match the expected branch.
  * Used for branch safety verification before git operations.
@@ -1624,11 +1626,20 @@ export class GitService {
     const { allowFailure = false } = options;
     const cmdStr = `git ${args.join(" ")}`;
     log.trace(`[GitService] Running: ${cmdStr} in ${directory}`);
-    
-    // Use git with -C flag to run in the specified directory
-    const result = await this.executor.exec("git", ["-C", directory, ...args], {
+    const gitArgs = ["-C", directory, ...args];
+    let result = await this.executor.exec("git", gitArgs, {
       cwd: directory,
     });
+
+    if (!result.success && this.shouldRetryWithAcceptedHostKey(result.stderr)) {
+      log.info(`[GitService] Retrying with auto-accepted SSH host key: ${cmdStr}`);
+      result = await this.executor.exec("git", gitArgs, {
+        cwd: directory,
+        env: {
+          GIT_SSH_COMMAND: AUTO_ACCEPT_HOST_KEY_SSH_COMMAND,
+        },
+      });
+    }
     
     if (!result.success) {
       // Log at trace level if failure is expected (e.g., probing for existence)
@@ -1673,6 +1684,10 @@ export class GitService {
       result.exitCode,
       result.stderr,
     );
+  }
+
+  private shouldRetryWithAcceptedHostKey(stderr: string): boolean {
+    return stderr.includes("Host key verification failed");
   }
 }
 

@@ -22,6 +22,8 @@ export interface CommandOptions {
   cwd?: string;
   /** Timeout in milliseconds */
   timeout?: number;
+  /** Environment variable overrides for the command */
+  env?: Record<string, string>;
 }
 
 /**
