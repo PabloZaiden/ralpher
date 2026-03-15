@@ -34,6 +34,11 @@ function setupDefaultApi(loopOverrides?: Parameters<typeof createLoopWithStatus>
   api.get("/api/loops/:id/diff", () => []);
   api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
   api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+  api.get("/api/loops/:id/pull-request", () => ({
+    enabled: false,
+    destinationType: "disabled",
+    disabledReason: "GitHub CLI is not available in the loop environment.",
+  }));
   // Comments
   api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
   // Models
@@ -669,7 +674,7 @@ describe("actions tab content", () => {
     });
   });
 
-  test("pushed loop shows address comments, mark merged, and purge actions", async () => {
+  test("pushed loop shows go to PR alongside review actions", async () => {
     const loop = createLoopWithStatus("pushed", {
       config: { id: LOOP_ID, name: "Pushed Loop" },
       state: {
@@ -685,6 +690,11 @@ describe("actions tab content", () => {
     api.get("/api/loops/:id/diff", () => []);
     api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
     api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/pull-request", () => ({
+      enabled: true,
+      destinationType: "existing_pr",
+      url: "https://github.com/example/repo/pull/1",
+    }));
     api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
     api.get("/api/models", () => []);
     api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
@@ -699,10 +709,45 @@ describe("actions tab content", () => {
     await user.click(getByText("Actions"));
 
     await waitFor(() => {
+      expect(getByText("Go to PR")).toBeTruthy();
       expect(getByText("Address Comments")).toBeTruthy();
       expect(getByText("Mark as Merged")).toBeTruthy();
       expect(getByText("Purge Loop")).toBeTruthy();
     });
+  });
+
+  test("pushed loop disables go to PR when backend reports gh is unavailable", async () => {
+    const loop = createLoopWithStatus("pushed", {
+      config: { id: LOOP_ID, name: "Pushed Loop" },
+    });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/pull-request", () => ({
+      enabled: false,
+      destinationType: "disabled",
+      disabledReason: "GitHub CLI is not available in the loop environment.",
+    }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByRole, getByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Pushed Loop")).toBeTruthy();
+    });
+
+    await user.click(getByText("Actions"));
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: /Go to PR/i })).toBeTruthy();
+    });
+    const button = getByRole("button", { name: /Go to PR/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(getByText("GitHub CLI is not available in the loop environment.")).toBeTruthy();
   });
 });
 

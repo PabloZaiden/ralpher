@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { FileDiff, FileContentResponse, ModelInfo } from "../types";
+import type { FileDiff, FileContentResponse, ModelInfo, PullRequestDestinationResponse } from "../types";
 import type { ReviewComment, ModelConfig } from "../types/loop";
 import { useLoop, useLoopPortForwards, useMarkdownPreference, useToast } from "../hooks";
 import { Badge, Button, ConfirmModal, getStatusBadgeVariant, EditIcon } from "./common";
@@ -130,6 +130,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
     getDiff,
     getPlan,
     getStatusFile,
+    getPullRequestDestination,
     sendPlanFeedback,
     answerPlanQuestion,
     acceptPlan,
@@ -158,6 +159,8 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [reviewComments, setReviewComments] = useState<ReviewComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
+  const [pullRequestDestination, setPullRequestDestination] = useState<PullRequestDestinationResponse | null>(null);
+  const [loadingPullRequestDestination, setLoadingPullRequestDestination] = useState(false);
   const [showSystemInfo, setShowSystemInfo] = useState(false);
   const [showReasoning, setShowReasoning] = useState(true);
   const [showTools, setShowTools] = useState(false);
@@ -377,6 +380,33 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
     }
   }, [loop?.state.reviewMode?.reviewCycles, loop?.state.status, activeTab, fetchReviewComments]);
 
+  useEffect(() => {
+    async function loadPullRequestDestination() {
+      if (loop?.state.status !== "pushed" || loop.state.reviewMode?.addressable !== true) {
+        setPullRequestDestination(null);
+        setLoadingPullRequestDestination(false);
+        return;
+      }
+
+      setLoadingPullRequestDestination(true);
+      try {
+        const destination = await getPullRequestDestination();
+        setPullRequestDestination(destination);
+      } finally {
+        setLoadingPullRequestDestination(false);
+      }
+    }
+
+    loadPullRequestDestination();
+  }, [
+    loop?.state.status,
+    loop?.state.reviewMode?.addressable,
+    loop?.state.reviewMode?.reviewCycles,
+    loop?.state.git?.workingBranch,
+    loop?.config.baseBranch,
+    getPullRequestDestination,
+  ]);
+
   // Reset initialTabSet when loopId changes so a new planning loop can auto-switch to Plan tab
   useEffect(() => {
     initialTabSet.current = false;
@@ -477,6 +507,14 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
       log.error("Failed to address comments:", error);
       throw error; // Re-throw so modal knows it failed
     }
+  }
+
+  function handleOpenPullRequest() {
+    if (!pullRequestDestination?.enabled) {
+      return;
+    }
+
+    window.open(pullRequestDestination.url, "_blank", "noopener,noreferrer");
   }
 
   function navigateToSshSession(sshSessionId: string) {
@@ -1601,6 +1639,30 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                           </>
                         ) : isFinalState(state.status) ? (
                           <>
+                            {state.status === "pushed" && state.reviewMode?.addressable && (
+                              <button
+                                onClick={handleOpenPullRequest}
+                                disabled={loadingPullRequestDestination || !pullRequestDestination?.enabled}
+                                className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                                  <span className="text-indigo-600 dark:text-indigo-400 text-sm">↗</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Go to PR</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                                    {loadingPullRequestDestination
+                                      ? "Checking for an existing pull request..."
+                                      : pullRequestDestination?.enabled
+                                      ? pullRequestDestination.destinationType === "existing_pr"
+                                        ? "Open the existing pull request for this branch"
+                                        : "Open GitHub to create a pull request from this branch"
+                                      : pullRequestDestination?.disabledReason ?? "Pull request navigation is unavailable."}
+                                  </div>
+                                </div>
+                                <span className="text-gray-400 dark:text-gray-500">→</span>
+                              </button>
+                            )}
                             {state.reviewMode?.addressable && state.status !== "deleted" && (
                               <button
                                 onClick={() => setAddressCommentsModal(true)}

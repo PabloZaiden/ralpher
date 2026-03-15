@@ -36,6 +36,8 @@ import { assertValidTransition } from "./loop-state-machine";
 import { sshSessionManager } from "./ssh-session-manager";
 import { portForwardManager } from "./port-forward-manager";
 import { buildReviewBranchName, normalizeBranchPrefix } from "./branch-name";
+import { resolvePullRequestDestination } from "./pull-request-navigation";
+import type { PullRequestDestinationResponse } from "../types/api";
 
 /**
  * Options for creating a new loop.
@@ -666,6 +668,45 @@ Follow the standard loop execution flow:
 
     // Load from persistence
     return loadLoop(loopId);
+  }
+
+  /**
+   * Resolve the best pull request destination for a pushed loop.
+   */
+  async getPullRequestDestination(loopId: string): Promise<PullRequestDestinationResponse | null> {
+    const loop = await this.getLoop(loopId);
+    if (!loop) {
+      return null;
+    }
+
+    if (loop.state.status !== "pushed" || loop.state.reviewMode?.addressable !== true) {
+      return {
+        enabled: false,
+        destinationType: "disabled",
+        disabledReason: "Pull request navigation is only available for pushed loops awaiting feedback.",
+      };
+    }
+
+    const workingDirectory = getLoopWorkingDirectory(loop);
+    if (!workingDirectory) {
+      return {
+        enabled: false,
+        destinationType: "disabled",
+        disabledReason: "Loop is configured to use a worktree, but no worktree path is available.",
+      };
+    }
+
+    try {
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, workingDirectory);
+      const git = GitService.withExecutor(executor);
+      return await resolvePullRequestDestination(loop, workingDirectory, executor, git);
+    } catch (error) {
+      return {
+        enabled: false,
+        destinationType: "disabled",
+        disabledReason: `Failed to resolve pull request destination: ${String(error)}`,
+      };
+    }
   }
 
   /**
