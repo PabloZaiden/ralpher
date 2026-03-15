@@ -12,6 +12,7 @@ class MockTerminal {
   rows = 24;
   dataHandler: ((data: string) => void) | null = null;
   resizeHandler: ((size: { cols: number; rows: number }) => void) | null = null;
+  selectionChangeHandler: (() => void) | null = null;
   writes: string[] = [];
   focusCalls = 0;
   element: HTMLDivElement | null = null;
@@ -20,6 +21,7 @@ class MockTerminal {
   keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
   mouseTracking = false;
   modes: Record<number, boolean> = {};
+  selectionText = "";
   wasmTerm = {};
   renderer: {
     getCanvas: () => HTMLCanvasElement;
@@ -99,6 +101,15 @@ class MockTerminal {
     };
   }
 
+  onSelectionChange(handler: () => void) {
+    this.selectionChangeHandler = handler;
+    return {
+      dispose: () => {
+        this.selectionChangeHandler = null;
+      },
+    };
+  }
+
   attachCustomWheelEventHandler(handler?: (event: WheelEvent) => boolean) {
     this.wheelHandler = handler;
   }
@@ -115,9 +126,28 @@ class MockTerminal {
     return this.mouseTracking;
   }
 
+  getSelection() {
+    return this.selectionText;
+  }
+
+  hasSelection() {
+    return this.selectionText.length > 0;
+  }
+
+  clearSelection() {
+    this.selectionText = "";
+    this.selectionChangeHandler?.();
+  }
+
+  setSelection(text: string) {
+    this.selectionText = text;
+    this.selectionChangeHandler?.();
+  }
+
   dispose() {
     this.dataHandler = null;
     this.resizeHandler = null;
+    this.selectionChangeHandler = null;
     this.canvas?.remove();
     this.canvas = null;
     this.element = null;
@@ -686,7 +716,7 @@ describe("SshSessionDetails", () => {
       "Install fresh",
       "Fresh",
     ]);
-    expect(separators).toHaveLength(3);
+    expect(separators).toHaveLength(4);
   });
 
   test("waits for terminal readiness before sending the initial resize", async () => {
@@ -891,6 +921,89 @@ describe("SshSessionDetails", () => {
     }
   });
 
+  test("clears the touch copy selection state across terminal disconnect and reconnect", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Selection Recovery" } }),
+    );
+
+    let visibilityState = "visible";
+    const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibilityState,
+    });
+
+    try {
+      const { getByRole, getByText, user } = renderWithUser(
+        <SshSessionDetails
+          sshSessionId="ssh-selection-recovery"
+          onBack={() => {}}
+          copyTextToClipboard={async (text) => {
+            clipboardWrites.push(text);
+          }}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(getByText("SSH Selection Recovery")).toBeTruthy();
+        expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+        expect(lastTerminal).not.toBeNull();
+      });
+
+      await user.click(getByText("Touch controls"));
+
+      const copySelectionButton = getByRole("button", { name: "Copy selection" });
+      expect(copySelectionButton).toBeDisabled();
+
+      await act(async () => {
+        lastTerminal?.setSelection("stale selection");
+      });
+
+      await waitFor(() => {
+        expect(copySelectionButton).not.toBeDisabled();
+      });
+
+      const initialConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+      await act(async () => {
+        initialConnection.instance.close(1006, "network lost");
+      });
+
+      await waitFor(() => {
+        expect(copySelectionButton).toBeDisabled();
+      });
+
+      await user.click(copySelectionButton);
+      expect(clipboardWrites).toEqual([]);
+      expect(lastTerminal?.getSelection()).toBe("");
+
+      visibilityState = "hidden";
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+
+      visibilityState = "visible";
+      await act(async () => {
+        document.dispatchEvent(new Event("visibilitychange"));
+        window.dispatchEvent(new Event("focus"));
+      });
+
+      await waitFor(() => {
+        expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(2);
+        expect(copySelectionButton).toBeDisabled();
+        expect(lastTerminal?.getSelection()).toBe("");
+      });
+    } finally {
+      if (originalVisibilityState) {
+        Object.defineProperty(document, "visibilityState", originalVisibilityState);
+      } else {
+        Object.defineProperty(document, "visibilityState", {
+          configurable: true,
+          get: () => "visible",
+        });
+      }
+    }
+  });
+
   test("copies terminal clipboard messages to the browser clipboard", async () => {
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Clipboard" } }),
@@ -981,6 +1094,105 @@ describe("SshSessionDetails", () => {
     });
 
     expect(copyAttempts).toEqual(["copied from remote", "copied from remote"]);
+  });
+
+  test("enables the touch copy button only when terminal text is selected and copies that selection", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Selected Copy" } }),
+    );
+
+    const { getByRole, getByText, user } = renderWithUser(
+      <SshSessionDetails
+        sshSessionId="ssh-copy-selection-1"
+        onBack={() => {}}
+        copyTextToClipboard={async (text) => {
+          clipboardWrites.push(text);
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Selected Copy")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    await user.click(getByText("Touch controls"));
+
+    const copySelectionButton = getByRole("button", { name: "Copy selection" });
+    expect(copySelectionButton).toBeDisabled();
+
+    await act(async () => {
+      lastTerminal?.setSelection("selected terminal text");
+    });
+
+    await waitFor(() => {
+      expect(copySelectionButton).not.toBeDisabled();
+    });
+
+    await user.click(copySelectionButton);
+
+    await waitFor(() => {
+      expect(clipboardWrites).toEqual(["selected terminal text"]);
+    });
+  });
+
+  test("reuses the clipboard fallback when touch-copying selected terminal text is blocked", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Selected Copy Fallback" } }),
+    );
+
+    const copyAttempts: string[] = [];
+    const { getByLabelText, getByRole, getByText, queryByTestId, user } = renderWithUser(
+      <SshSessionDetails
+        sshSessionId="ssh-copy-selection-fallback-1"
+        onBack={() => {}}
+        copyTextToClipboard={async (text) => {
+          copyAttempts.push(text);
+          if (copyAttempts.length === 1) {
+            throw new Error("NotAllowedError: blocked");
+          }
+          clipboardWrites.push(text);
+        }}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Selected Copy Fallback")).toBeTruthy();
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    await user.click(getByText("Touch controls"));
+
+    await act(async () => {
+      lastTerminal?.setSelection("selected terminal fallback text");
+    });
+
+    const copySelectionButton = getByRole("button", { name: "Copy selection" });
+    await waitFor(() => {
+      expect(copySelectionButton).not.toBeDisabled();
+    });
+
+    await user.click(copySelectionButton);
+
+    await waitFor(() => {
+      expect(getByLabelText("Pending terminal clipboard text")).toBeTruthy();
+      expect(queryByTestId("ssh-terminal-clipboard-fallback")).toBeTruthy();
+    });
+
+    await user.click(getByText((content, element) =>
+      content === "Copy now" && element?.tagName.toLowerCase() === "button"
+    ));
+
+    await waitFor(() => {
+      expect(clipboardWrites).toEqual(["selected terminal fallback text"]);
+      expect(queryByTestId("ssh-terminal-clipboard-fallback")).toBeNull();
+    });
+
+    expect(copyAttempts).toEqual([
+      "selected terminal fallback text",
+      "selected terminal fallback text",
+    ]);
   });
 
   test("connects a standalone SSH session terminal with a stored browser credential", async () => {

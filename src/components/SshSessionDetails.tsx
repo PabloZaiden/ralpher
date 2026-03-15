@@ -509,6 +509,7 @@ export function SshSessionDetails({
   const [sessionInfoExpanded, setSessionInfoExpanded] = useState(false);
   const [touchControlsExpanded, setTouchControlsExpanded] = useState(false);
   const [terminalModifiers, setTerminalModifiers] = useState<TerminalModifierState>(defaultTerminalModifiers);
+  const [hasSelectedTerminalText, setHasSelectedTerminalText] = useState(false);
   const [pendingTerminalClipboardText, setPendingTerminalClipboardText] = useState<string | null>(null);
   const [standalonePassword, setStandalonePassword] = useState("");
   const [standaloneCredentialToken, setStandaloneCredentialToken] = useState<string | null>(null);
@@ -633,6 +634,18 @@ export function SshSessionDetails({
 
   const focusTerminal = useCallback(() => {
     terminalRef.current?.focus();
+  }, []);
+
+  const syncTerminalSelectionState = useCallback(() => {
+    const terminal = terminalRef.current;
+    setHasSelectedTerminalText(Boolean(terminal?.hasSelection()));
+  }, []);
+
+  const clearSelectedTerminalText = useCallback((options?: { clearTerminalSelection?: boolean }) => {
+    if (options?.clearTerminalSelection ?? true) {
+      terminalRef.current?.clearSelection();
+    }
+    setHasSelectedTerminalText(false);
   }, []);
 
   const sendTerminalPayload = useCallback((
@@ -807,6 +820,16 @@ export function SshSessionDetails({
     void copyTerminalClipboardText(pendingTerminalClipboardText, { userInitiated: true });
   }, [copyTerminalClipboardText, pendingTerminalClipboardText]);
 
+  const copySelectedTerminalText = useCallback(() => {
+    const terminal = terminalRef.current;
+    const nextSelectedText = terminal?.getSelection() ?? "";
+    if (!nextSelectedText) {
+      focusTerminal();
+      return;
+    }
+    void copyTerminalClipboardText(nextSelectedText, { userInitiated: true });
+  }, [copyTerminalClipboardText, focusTerminal]);
+
   const loadStandaloneCredentialToken = useCallback(async (
     options?: { forceRefresh?: boolean; promptOnFailure?: boolean },
   ): Promise<string | null> => {
@@ -873,6 +896,7 @@ export function SshSessionDetails({
       terminalReadyRef.current = false;
       pendingOutputRef.current = [];
       lastSentResizeRef.current = null;
+      clearSelectedTerminalText();
       setSocketStatus("connecting");
 
       const ws = new WebSocket(appWebSocketUrl(terminalUrl));
@@ -941,6 +965,7 @@ export function SshSessionDetails({
         if (data.type === "terminal.closed") {
           terminalReadyRef.current = false;
           lastSentResizeRef.current = null;
+          clearSelectedTerminalText();
           setSocketStatus("closed");
         }
       };
@@ -951,6 +976,7 @@ export function SshSessionDetails({
         terminalSocketRef.current = null;
         terminalReadyRef.current = false;
         lastSentResizeRef.current = null;
+        clearSelectedTerminalText();
         setSocketStatus("closed");
       };
       ws.onerror = () => {
@@ -959,6 +985,7 @@ export function SshSessionDetails({
         }
         terminalReadyRef.current = false;
         lastSentResizeRef.current = null;
+        clearSelectedTerminalText();
         setSocketStatus("closed");
       };
     } finally {
@@ -970,6 +997,7 @@ export function SshSessionDetails({
       markTerminalReady,
       sessionKind,
       terminalUrl,
+      clearSelectedTerminalText,
       showErrorToast,
     ]);
 
@@ -993,6 +1021,7 @@ export function SshSessionDetails({
     let fitAddon: FitAddon | null = null;
     let dataDisposable: { dispose(): void } | null = null;
     let resizeDisposable: { dispose(): void } | null = null;
+    let selectionDisposable: { dispose(): void } | null = null;
     let removeMouseHandlers: (() => void) | null = null;
 
     async function setupTerminal() {
@@ -1022,6 +1051,7 @@ export function SshSessionDetails({
         terminal.focus();
         terminalRef.current = terminal;
         fitAddonRef.current = fitAddon;
+        syncTerminalSelectionState();
         flushPendingOutput();
 
         dataDisposable = terminal.onData((data: string) => {
@@ -1029,6 +1059,9 @@ export function SshSessionDetails({
         });
         resizeDisposable = terminal.onResize(({ cols, rows }) => {
           sendTerminalResize(cols, rows);
+        });
+        selectionDisposable = terminal.onSelectionChange(() => {
+          syncTerminalSelectionState();
         });
         terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
           if (event.key !== "Tab" || !event.shiftKey || event.ctrlKey || event.altKey || event.metaKey) {
@@ -1072,6 +1105,8 @@ export function SshSessionDetails({
       removeMouseHandlers?.();
       dataDisposable?.dispose();
       resizeDisposable?.dispose();
+      selectionDisposable?.dispose();
+      setHasSelectedTerminalText(false);
       terminal?.dispose();
       terminalRef.current = null;
       fitAddonRef.current = null;
@@ -1082,6 +1117,7 @@ export function SshSessionDetails({
       sendTerminalKeystroke,
       sendTerminalResize,
       session?.config.id,
+      syncTerminalSelectionState,
       showErrorToast,
       syncTerminalSize,
     ]);
@@ -1095,8 +1131,9 @@ export function SshSessionDetails({
       terminalReadyRef.current = false;
       terminalSocketRef.current?.close();
       terminalSocketRef.current = null;
+      clearSelectedTerminalText();
     };
-  }, [connectTerminal, terminalUrl]);
+  }, [clearSelectedTerminalText, connectTerminal, terminalUrl]);
 
   useEffect(() => {
     if (!terminalUrl || typeof window === "undefined" || typeof document === "undefined") {
@@ -1444,6 +1481,16 @@ export function SshSessionDetails({
                   onClick={() => sendEncodedTerminalKey("ArrowRight")}
                 >
                   →
+                </Button>
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <Button
+                  variant="secondary"
+                  size="xs"
+                  className={touchButtonClassName}
+                  disabled={!hasSelectedTerminalText}
+                  onClick={copySelectedTerminalText}
+                >
+                  Copy selection
                 </Button>
                 <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
                 <Button
