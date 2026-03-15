@@ -12,6 +12,7 @@ import { createMockWebSocket } from "../helpers/mock-websocket";
 import { createLoop, createLoopWithStatus } from "../helpers/factories";
 import { useLoops } from "@/hooks/useLoops";
 import type { Loop } from "@/types/loop";
+import type { PurgeArchivedLoopsResult } from "@/hooks";
 
 const api = createMockApi();
 const ws = createMockWebSocket();
@@ -529,6 +530,84 @@ describe("purgeLoop", () => {
 
     expect(purged).toBe(false);
     expect(result.current.error).toBeTruthy();
+  });
+});
+
+describe("purgeArchivedWorkspaceLoops", () => {
+  test("removes all purged archived loops from state", async () => {
+    const archivedLoop1 = createLoopWithStatus("deleted", {
+      config: { id: "loop-1", workspaceId: "ws-1" },
+      state: { id: "loop-1" },
+    });
+    const archivedLoop2 = createLoopWithStatus("merged", {
+      config: { id: "loop-2", workspaceId: "ws-1" },
+      state: { id: "loop-2" },
+    });
+    const remainingLoop = createLoopWithStatus("running", {
+      config: { id: "loop-3", workspaceId: "ws-1" },
+      state: { id: "loop-3" },
+    });
+    setupLoopsList([archivedLoop1, archivedLoop2, remainingLoop]);
+
+    api.post("/api/workspaces/:id/archived-loops/purge", () => ({
+      success: true,
+      workspaceId: "ws-1",
+      totalArchived: 2,
+      purgedCount: 2,
+      purgedLoopIds: ["loop-1", "loop-2"],
+      failures: [],
+    }));
+
+    const { result } = renderHook(() => useLoops());
+
+    await waitFor(() => {
+      expect(result.current.loops).toHaveLength(3);
+    });
+
+    let purgeResult: PurgeArchivedLoopsResult = {
+      success: false,
+      workspaceId: "",
+      totalArchived: 0,
+      purgedCount: 0,
+      purgedLoopIds: [],
+      failures: [],
+    };
+    await act(async () => {
+      purgeResult = await result.current.purgeArchivedWorkspaceLoops("ws-1");
+    });
+
+    expect(purgeResult.success).toBe(true);
+    expect(purgeResult.purgedLoopIds).toEqual(["loop-1", "loop-2"]);
+    expect(result.current.loops.map((loop) => loop.config.id)).toEqual(["loop-3"]);
+  });
+
+  test("sets error and returns failure result when bulk purge fails", async () => {
+    setupLoopsList([]);
+    api.post("/api/workspaces/:id/archived-loops/purge", () => {
+      throw new MockApiError(500, { message: "Bulk purge failed" });
+    });
+
+    const { result } = renderHook(() => useLoops());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    let purgeResult: PurgeArchivedLoopsResult = {
+      success: true,
+      workspaceId: "ws-1",
+      totalArchived: 1,
+      purgedCount: 1,
+      purgedLoopIds: ["loop-1"],
+      failures: [],
+    };
+    await act(async () => {
+      purgeResult = await result.current.purgeArchivedWorkspaceLoops("ws-1");
+    });
+
+    expect(purgeResult.success).toBe(false);
+    expect(purgeResult.workspaceId).toBe("ws-1");
+    expect(result.current.error).toContain("Bulk purge failed");
   });
 });
 

@@ -10,6 +10,7 @@ export {
   isLoopRunning,
   canJumpstart,
   isAwaitingFeedback,
+  isArchivedLoop,
   getPlanningStatusLabel,
   isLoopPlanReady,
   getEntityLabel,

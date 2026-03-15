@@ -116,6 +116,19 @@ export function isAwaitingFeedback(status: LoopStatus, reviewModeAddressable: bo
 }
 
 /**
+ * Check if a loop belongs in the archived bucket.
+ * Archived loops are purgeable final-state loops that are no longer
+ * awaiting reviewer feedback.
+ */
+export function isArchivedLoop(status: LoopStatus, reviewModeAddressable: boolean | undefined): boolean {
+  const result =
+    status === "deleted" ||
+    ((status === "merged" || status === "pushed") && !isAwaitingFeedback(status, reviewModeAddressable));
+  log.trace("isArchivedLoop check", { status, reviewModeAddressable, result });
+  return result;
+}
+
+/**
  * Get the appropriate status label for a planning loop based on plan readiness.
  * Returns "Plan Ready" when the plan is ready for human review,
  * or "Planning" when the AI is still generating/revising the plan.

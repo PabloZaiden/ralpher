@@ -39,6 +39,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
     createChat,
     deleteLoop,
     updateLoop,
+    purgeArchivedWorkspaceLoops,
   } = useLoops();
   const {
     sessions,
@@ -84,9 +85,18 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
 
   // Loop grouping hook (memoized)
   const { workspaceGroups, unassignedLoops, unassignedStatusGroups } = useLoopGrouping(loops, workspaces);
+  const [workspaceArchivedLoopsPurging, setWorkspaceArchivedLoopsPurging] = useState(false);
   const sshWorkspaces = useMemo(() => {
     return workspaces.filter((workspace) => workspace.serverSettings.agent.transport === "ssh");
   }, [workspaces]);
+  const selectedWorkspaceArchivedLoopCount = useMemo(() => {
+    if (!modals.workspaceSettingsModal.workspaceId) {
+      return 0;
+    }
+    return workspaceGroups.find(
+      (group) => group.workspace.id === modals.workspaceSettingsModal.workspaceId
+    )?.statusGroups.archived.length ?? 0;
+  }, [modals.workspaceSettingsModal.workspaceId, workspaceGroups]);
 
   // Mode-aware selection handler: routes chats to #/chat/:id, loops to #/loop/:id
   const handleSelectItem = (loopId: string) => {
@@ -167,6 +177,30 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
       onSelectSshSession?.(session.config.id);
     } catch (error) {
       toast.error(String(error));
+    }
+  }
+
+  async function handlePurgeArchivedWorkspaceLoops(workspaceId: string) {
+    try {
+      setWorkspaceArchivedLoopsPurging(true);
+      const result = await purgeArchivedWorkspaceLoops(workspaceId);
+
+      if (!result.success) {
+        toast.error("Failed to purge archived loops");
+        return result;
+      }
+
+      if (result.totalArchived === 0) {
+        toast.info("No archived loops found for this workspace");
+      } else if (result.failures.length > 0) {
+        toast.error(`Purged ${result.purgedCount} of ${result.totalArchived} archived loops`);
+      } else {
+        toast.success(`Purged ${result.purgedCount} archived loops`);
+      }
+
+      return result;
+    } finally {
+      setWorkspaceArchivedLoopsPurging(false);
     }
   }
 
@@ -316,9 +350,12 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         workspaceSettingsSaving={workspaceSettingsSaving}
         workspaceSettingsTesting={workspaceSettingsTesting}
         workspaceSettingsResetting={workspaceSettingsResetting}
+        workspaceArchivedLoopsPurging={workspaceArchivedLoopsPurging}
         testWorkspaceConnection={testWorkspaceConnection}
         resetWorkspaceConnection={resetWorkspaceConnection}
         updateWorkspaceSettings={updateWorkspaceSettings}
+        archivedLoopCount={selectedWorkspaceArchivedLoopCount}
+        purgeArchivedWorkspaceLoops={handlePurgeArchivedWorkspaceLoops}
         refreshWorkspaces={refreshWorkspaces}
         remoteOnly={dashboardData.remoteOnly}
         // Create workspace modal

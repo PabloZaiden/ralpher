@@ -12,6 +12,7 @@ import {
   isLoopRunning,
   canJumpstart,
   isAwaitingFeedback,
+  isArchivedLoop,
   getPlanningStatusLabel,
   isLoopPlanReady,
 } from "../../src/utils/loop-status";
@@ -303,6 +304,42 @@ describe("isAwaitingFeedback", () => {
     ];
     for (const status of nonFeedback) {
       expect(isAwaitingFeedback(status, true)).toBe(false);
+    }
+  });
+});
+
+// ============================================================================
+// isArchivedLoop
+// ============================================================================
+
+describe("isArchivedLoop", () => {
+  test("returns true for deleted loops", () => {
+    expect(isArchivedLoop("deleted", undefined)).toBe(true);
+  });
+
+  test("returns true for merged loops that are not awaiting feedback", () => {
+    expect(isArchivedLoop("merged", false)).toBe(true);
+  });
+
+  test("returns true for pushed loops that are not awaiting feedback", () => {
+    expect(isArchivedLoop("pushed", false)).toBe(true);
+  });
+
+  test("returns false for merged loops still awaiting feedback", () => {
+    expect(isArchivedLoop("merged", true)).toBe(false);
+  });
+
+  test("returns false for pushed loops still awaiting feedback", () => {
+    expect(isArchivedLoop("pushed", true)).toBe(false);
+  });
+
+  test("returns false for non-archived statuses", () => {
+    const nonArchived: LoopStatus[] = [
+      "idle", "draft", "planning", "starting", "running", "waiting",
+      "completed", "stopped", "failed", "max_iterations", "resolving_conflicts",
+    ];
+    for (const status of nonArchived) {
+      expect(isArchivedLoop(status, false)).toBe(false);
     }
   });
 });

@@ -32,6 +32,7 @@ export {
   discardLoopApi,
   deleteLoopApi,
   purgeLoopApi,
+  purgeArchivedWorkspaceLoopsApi,
   getLoopSshSessionApi,
   getOrCreateLoopSshSessionApi,
   setPendingPromptApi,
@@ -49,6 +50,7 @@ export {
   type PushLoopResult,
   type AddressCommentsResult,
   type SetPendingResult,
+  type PurgeArchivedLoopsResult,
 } from "./loopActions";
 export {
   getSshServerApi,

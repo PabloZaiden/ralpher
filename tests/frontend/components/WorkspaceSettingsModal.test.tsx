@@ -333,3 +333,150 @@ describe("WorkspaceSettingsModal AGENTS.md optimization", () => {
     });
   });
 });
+
+describe("WorkspaceSettingsModal archived loop purge", () => {
+  test("shows archived loop count and opens confirmation modal", async () => {
+    api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
+
+    const { getByText, user } = renderWithUser(
+      <WorkspaceSettingsModal
+        {...defaultProps()}
+        archivedLoopCount={3}
+        onPurgeArchivedLoops={mock(() => Promise.resolve({
+          success: true,
+          workspaceId: "ws-test-1",
+          totalArchived: 3,
+          purgedCount: 3,
+          purgedLoopIds: ["loop-1", "loop-2", "loop-3"],
+          failures: [],
+        }))}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByText("Archived Loops")).toBeInTheDocument();
+      expect(getByText("3 archived")).toBeInTheDocument();
+    });
+
+    await user.click(getByText("Purge Archived Loops"));
+
+    await waitFor(() => {
+      expect(getByText('Are you sure you want to permanently delete all 3 archived loops for "Test Workspace"? This cannot be undone.')).toBeInTheDocument();
+    });
+  });
+
+  test("runs purge action and shows success summary", async () => {
+    api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
+    const onPurgeArchivedLoops = mock(() => Promise.resolve({
+      success: true,
+      workspaceId: "ws-test-1",
+      totalArchived: 2,
+      purgedCount: 2,
+      purgedLoopIds: ["loop-1", "loop-2"],
+      failures: [],
+    }));
+
+    const { getByText, user } = renderWithUser(
+      <WorkspaceSettingsModal
+        {...defaultProps()}
+        archivedLoopCount={2}
+        onPurgeArchivedLoops={onPurgeArchivedLoops}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByText("Purge Archived Loops")).toBeInTheDocument();
+    });
+
+    await user.click(getByText("Purge Archived Loops"));
+    await user.click(getByText("Purge All"));
+
+    await waitFor(() => {
+      expect(onPurgeArchivedLoops).toHaveBeenCalled();
+      expect(getByText("Purged 2 archived loops.")).toBeInTheDocument();
+    });
+  });
+
+  test("closes the confirmation modal and shows an error when purge returns failure", async () => {
+    api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
+    const onPurgeArchivedLoops = mock(() => Promise.resolve({
+      success: false,
+      workspaceId: "ws-test-1",
+      totalArchived: 2,
+      purgedCount: 0,
+      purgedLoopIds: [],
+      failures: [],
+    }));
+
+    const { getByText, queryByText, user } = renderWithUser(
+      <WorkspaceSettingsModal
+        {...defaultProps()}
+        archivedLoopCount={2}
+        onPurgeArchivedLoops={onPurgeArchivedLoops}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByText("Purge Archived Loops")).toBeInTheDocument();
+    });
+
+    await user.click(getByText("Purge Archived Loops"));
+    await user.click(getByText("Purge All"));
+
+    await waitFor(() => {
+      expect(onPurgeArchivedLoops).toHaveBeenCalled();
+      expect(queryByText('Are you sure you want to permanently delete all 2 archived loops for "Test Workspace"? This cannot be undone.')).not.toBeInTheDocument();
+      expect(getByText("Failed to purge archived loops.")).toBeInTheDocument();
+    });
+  });
+
+  test("closes the confirmation modal and shows thrown purge errors", async () => {
+    api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
+    const onPurgeArchivedLoops = mock(() => Promise.reject(new Error("Remote cleanup failed")));
+
+    const { getByText, queryByText, user } = renderWithUser(
+      <WorkspaceSettingsModal
+        {...defaultProps()}
+        archivedLoopCount={2}
+        onPurgeArchivedLoops={onPurgeArchivedLoops}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByText("Purge Archived Loops")).toBeInTheDocument();
+    });
+
+    await user.click(getByText("Purge Archived Loops"));
+    await user.click(getByText("Purge All"));
+
+    await waitFor(() => {
+      expect(onPurgeArchivedLoops).toHaveBeenCalled();
+      expect(queryByText('Are you sure you want to permanently delete all 2 archived loops for "Test Workspace"? This cannot be undone.')).not.toBeInTheDocument();
+      expect(getByText("Failed to purge archived loops: Error: Remote cleanup failed")).toBeInTheDocument();
+    });
+  });
+
+  test("disables purge button when there are no archived loops", async () => {
+    api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
+
+    const { getByText } = renderWithUser(
+      <WorkspaceSettingsModal
+        {...defaultProps()}
+        archivedLoopCount={0}
+        onPurgeArchivedLoops={mock(() => Promise.resolve({
+          success: true,
+          workspaceId: "ws-test-1",
+          totalArchived: 0,
+          purgedCount: 0,
+          purgedLoopIds: [],
+          failures: [],
+        }))}
+      />
+    );
+
+    await waitFor(() => {
+      const purgeButton = getByText("Purge Archived Loops").closest("button");
+      expect(purgeButton).toBeDisabled();
+    });
+  });
+});
