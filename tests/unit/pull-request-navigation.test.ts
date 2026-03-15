@@ -4,6 +4,7 @@ import {
   buildGitHubCompareUrl,
   normalizeGitHubRepositoryUrl,
   resolvePullRequestDestination,
+  validateExistingPullRequestUrl,
   type PullRequestNavigationGitService,
 } from "../../src/core/pull-request-navigation";
 import { createLoopWithStatus } from "../frontend/helpers/factories";
@@ -78,6 +79,15 @@ describe("pull request navigation", () => {
     );
   });
 
+  test("validates existing GitHub pull request URLs", () => {
+    expect(validateExistingPullRequestUrl("https://github.com/owner/repo/pull/42")).toBe(
+      "https://github.com/owner/repo/pull/42",
+    );
+    expect(validateExistingPullRequestUrl("javascript:alert(1)")).toBeNull();
+    expect(validateExistingPullRequestUrl("https://example.com/owner/repo/pull/42")).toBeNull();
+    expect(validateExistingPullRequestUrl("https://github.com/owner/repo/issues/42")).toBeNull();
+  });
+
   test("returns an existing PR URL when gh pr view succeeds", async () => {
     const loop = createLoopWithStatus("pushed");
     const executor = new StubExecutor();
@@ -141,6 +151,42 @@ describe("pull request navigation", () => {
       url: "https://github.com/owner/repo/compare/main...feature%2Ftest-pr?expand=1",
     });
     expect(git.defaultBranchCalls).toBe(0);
+  });
+
+  test("falls back to PR creation when gh returns an invalid URL", async () => {
+    const loop = createLoopWithStatus("pushed", {
+      config: { baseBranch: "main" },
+      state: {
+        git: {
+          originalBranch: "main",
+          workingBranch: "feature/test-pr",
+          commits: [],
+        },
+      },
+    });
+    const executor = new StubExecutor();
+    const git = new StubGitService();
+
+    executor.addResponse("gh", ["--version"], {
+      success: true,
+      stdout: "gh version 2.0.0",
+      stderr: "",
+      exitCode: 0,
+    });
+    executor.addResponse("gh", ["pr", "view", "--json", "url", "-q", ".url"], {
+      success: true,
+      stdout: "not-a-valid-url\n",
+      stderr: "",
+      exitCode: 0,
+    });
+
+    const destination = await resolvePullRequestDestination(loop, "/tmp/repo", executor, git);
+
+    expect(destination).toEqual({
+      enabled: true,
+      destinationType: "create_pr",
+      url: "https://github.com/owner/repo/compare/main...feature%2Ftest-pr?expand=1",
+    });
   });
 
   test("disables PR navigation when gh is unavailable", async () => {

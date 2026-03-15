@@ -178,6 +178,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
   const prevToolCallsCount = useRef(0);
   const prevLogsCount = useRef(0);
   const prevPlanContent = useRef<string | null>(null);
+  const pullRequestDestinationRequestId = useRef(0);
   const prevStatusContent = useRef<string | null>(null);
   const prevActionsState = useRef<string | null>(null);
   const initialTabSet = useRef(false);
@@ -381,23 +382,36 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
   }, [loop?.state.reviewMode?.reviewCycles, loop?.state.status, activeTab, fetchReviewComments]);
 
   useEffect(() => {
+    const requestId = ++pullRequestDestinationRequestId.current;
+    let isCancelled = false;
+
     async function loadPullRequestDestination() {
       if (loop?.state.status !== "pushed" || loop.state.reviewMode?.addressable !== true) {
-        setPullRequestDestination(null);
-        setLoadingPullRequestDestination(false);
+        if (!isCancelled && requestId === pullRequestDestinationRequestId.current) {
+          setPullRequestDestination(null);
+          setLoadingPullRequestDestination(false);
+        }
         return;
       }
 
       setLoadingPullRequestDestination(true);
       try {
         const destination = await getPullRequestDestination();
-        setPullRequestDestination(destination);
+        if (!isCancelled && requestId === pullRequestDestinationRequestId.current) {
+          setPullRequestDestination(destination);
+        }
       } finally {
-        setLoadingPullRequestDestination(false);
+        if (!isCancelled && requestId === pullRequestDestinationRequestId.current) {
+          setLoadingPullRequestDestination(false);
+        }
       }
     }
 
     loadPullRequestDestination();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [
     loop?.state.status,
     loop?.state.reviewMode?.addressable,

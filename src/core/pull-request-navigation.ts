@@ -3,6 +3,7 @@
  */
 
 import type { CommandExecutor } from "./command-executor";
+import { createLogger } from "./logger";
 import type { Loop } from "../types/loop";
 import type { PullRequestDestinationResponse } from "../types/api";
 
@@ -13,6 +14,7 @@ export interface PullRequestNavigationGitService {
 
 const GH_UNAVAILABLE_REASON = "GitHub CLI is not available in the loop environment.";
 const NO_GITHUB_REMOTE_REASON = "Could not determine a GitHub origin remote for this loop.";
+const log = createLogger("core:pull-request-navigation");
 
 function disabled(disabledReason: string): PullRequestDestinationResponse {
   return {
@@ -65,6 +67,28 @@ export function buildGitHubCompareUrl(
   return `${repositoryUrl}/compare/${encodeURIComponent(baseBranch)}...${encodeURIComponent(headBranch)}?expand=1`;
 }
 
+export function validateExistingPullRequestUrl(url: string): string | null {
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.hostname !== "github.com") {
+      return null;
+    }
+
+    if (!/\/pull\/\d+$/u.test(parsed.pathname)) {
+      return null;
+    }
+
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 function getBaseBranch(loop: Loop): string | null {
   const configuredBaseBranch = loop.config.baseBranch?.trim();
   if (configuredBaseBranch) {
@@ -102,11 +126,19 @@ export async function resolvePullRequestDestination(
   );
   const existingPrUrl = prViewResult.stdout.trim();
   if (prViewResult.success && existingPrUrl.length > 0) {
-    return {
-      enabled: true,
-      destinationType: "existing_pr",
-      url: existingPrUrl,
-    };
+    const validatedExistingPrUrl = validateExistingPullRequestUrl(existingPrUrl);
+    if (validatedExistingPrUrl) {
+      return {
+        enabled: true,
+        destinationType: "existing_pr",
+        url: validatedExistingPrUrl,
+      };
+    }
+
+    log.warn("Ignoring invalid gh pr view URL output", {
+      directory,
+      existingPrUrl,
+    });
   }
 
   const remoteUrl = await git.getRemoteUrl(directory, "origin");
@@ -122,4 +154,3 @@ export async function resolvePullRequestDestination(
     url: buildGitHubCompareUrl(repositoryUrl, baseBranch, workingBranch),
   };
 }
-

@@ -749,6 +749,40 @@ describe("actions tab content", () => {
     expect(button.disabled).toBe(true);
     expect(getByText("GitHub CLI is not available in the loop environment.")).toBeTruthy();
   });
+
+  test("pushed loop keeps PR destination failures non-blocking", async () => {
+    const loop = createLoopWithStatus("pushed", {
+      config: { id: LOOP_ID, name: "Pushed Loop" },
+    });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/pull-request", () => {
+      throw new MockApiError(500, { error: "internal_error" });
+    });
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByRole, getByText, queryByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Pushed Loop")).toBeTruthy();
+    });
+
+    await user.click(getByText("Actions"));
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: /Go to PR/i })).toBeTruthy();
+    });
+
+    const button = getByRole("button", { name: /Go to PR/i }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(getByText("Failed to load pull request information.")).toBeTruthy();
+    expect(queryByText("Failed to get pull request destination: Internal Server Error")).toBeNull();
+  });
 });
 
 // ─── Modals ──────────────────────────────────────────────────────────────────

@@ -701,10 +701,14 @@ Follow the standard loop execution flow:
       const git = GitService.withExecutor(executor);
       return await resolvePullRequestDestination(loop, workingDirectory, executor, git);
     } catch (error) {
+      log.error("Failed to resolve pull request destination", {
+        loopId,
+        error: String(error),
+      });
       return {
         enabled: false,
         destinationType: "disabled",
-        disabledReason: `Failed to resolve pull request destination: ${String(error)}`,
+        disabledReason: "Pull request navigation is temporarily unavailable.",
       };
     }
   }

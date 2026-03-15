@@ -593,7 +593,6 @@ export function useLoop(loopId: string): UseLoopResult {
       return (await response.json()) as PullRequestDestinationResponse;
     } catch (err) {
       log.error("Failed to get pull request destination", { loopId, error: String(err) });
-      setError(String(err));
       return {
         enabled: false,
         destinationType: "disabled",
