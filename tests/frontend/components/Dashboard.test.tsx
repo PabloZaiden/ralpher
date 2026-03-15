@@ -299,6 +299,58 @@ describe("ssh section", () => {
       expect(queryByText("Workspace shell")).toBeTruthy();
     });
   });
+
+  test("renames a workspace SSH session from the dashboard section", async () => {
+    const session = createSshSession({
+      config: { id: "ssh-rename-1", name: "Original Shell" },
+      state: { status: "connected" },
+    });
+
+    api.get("/api/ssh-sessions", () => [session]);
+    api.patch("/api/ssh-sessions/:id", (req) => {
+      const body = req.body as { name: string };
+      return createSshSession({
+        config: {
+          ...session.config,
+          id: req.params["id"]!,
+          name: body.name,
+        },
+        state: session.state,
+      });
+    });
+
+    const { getByRole, getAllByLabelText, getByLabelText, getByText, user } = renderWithUser(<Dashboard />);
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: /SSH \(1\)/ })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: /SSH \(1\)/ }));
+
+    await waitFor(() => {
+      expect(getByText("Original Shell")).toBeTruthy();
+    });
+
+    await user.click(getAllByLabelText("Rename SSH session")[0]!);
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Rename SSH Session" })).toBeTruthy();
+    });
+
+    const input = getByLabelText("SSH Session Name") as HTMLInputElement;
+    await user.clear(input);
+    await user.type(input, "Renamed Shell");
+    await user.click(getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(getByText("Renamed Shell")).toBeTruthy();
+    });
+
+    const renameCalls = api.calls("/api/ssh-sessions/:id", "PATCH");
+    expect(renameCalls).toHaveLength(1);
+    expect(renameCalls[0]?.params["id"]).toBe("ssh-rename-1");
+    expect(renameCalls[0]?.body).toEqual({ name: "Renamed Shell" });
+  });
 });
 
 describe("standalone ssh servers section", () => {

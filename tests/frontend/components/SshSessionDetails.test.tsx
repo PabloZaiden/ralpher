@@ -271,6 +271,46 @@ describe("SshSessionDetails", () => {
     });
   });
 
+  test("renames a workspace SSH session from the details view", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Before Rename" } }),
+    );
+    api.patch("/api/ssh-sessions/:id", (req) => {
+      const body = req.body as { name: string };
+      return createSshSession({
+        config: { id: req.params["id"]!, name: body.name },
+      });
+    });
+
+    const { getByRole, getByLabelText, getByText, user } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-rename-details-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Before Rename")).toBeTruthy();
+      expect(getByRole("button", { name: "Rename SSH session" })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: "Rename SSH session" }));
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Rename SSH Session" })).toBeTruthy();
+    });
+
+    const input = getByLabelText("SSH Session Name") as HTMLInputElement;
+    await user.clear(input);
+    await user.type(input, "SSH After Rename");
+    await user.click(getByRole("button", { name: "Save" }));
+
+    await waitFor(() => {
+      expect(getByText("SSH After Rename")).toBeTruthy();
+    });
+
+    const renameCalls = api.calls("/api/ssh-sessions/:id", "PATCH");
+    expect(renameCalls).toHaveLength(1);
+    expect(renameCalls[0]?.body).toEqual({ name: "SSH After Rename" });
+  });
+
   test("forwards wheel events as SGR mouse input when terminal mouse tracking is enabled", async () => {
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Mouse Wheel" } }),

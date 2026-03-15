@@ -46,6 +46,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
     loading: sshSessionsLoading,
     error: sshSessionsError,
     createSession,
+    updateSession,
   } = useSshSessions();
   const [showCreateSshSessionModal, setShowCreateSshSessionModal] = useState(false);
   const [creatingWorkspaceSshSession, setCreatingWorkspaceSshSession] = useState(false);
@@ -274,6 +275,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
                     loading={sshSessionsLoading}
                     error={sshSessionsError}
                     onSelect={(sessionId) => onSelectSshSession?.(sessionId)}
+                    onRename={(sessionId) => modals.setSshSessionRenameModal({ open: true, sessionId })}
                   />
                 </div>
               </div>
@@ -299,6 +301,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
 
       <DashboardModals
         loops={loops}
+        sshSessions={sessions}
         workspaces={workspaces}
         workspacesLoading={workspacesLoading}
         workspaceError={workspaceError}
@@ -332,6 +335,12 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         renameModal={modals.renameModal}
         onCloseRenameModal={() => modals.setRenameModal({ open: false, loopId: null })}
         onRename={async (loopId, newName) => { await updateLoop(loopId, { name: newName }); }}
+        sshSessionRenameModal={modals.sshSessionRenameModal}
+        onCloseSshSessionRenameModal={() => modals.setSshSessionRenameModal({ open: false, sessionId: null })}
+        onRenameSshSession={async (sessionId, newName) => {
+          await updateSession(sessionId, { name: newName });
+          toast.success("SSH session renamed");
+        }}
         // App settings modal
         showServerSettingsModal={modals.showServerSettingsModal}
         onCloseServerSettingsModal={() => modals.setShowServerSettingsModal(false)}

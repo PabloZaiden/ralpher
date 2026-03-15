@@ -4,13 +4,14 @@
 
 import type { SshSession } from "../types";
 import { getEffectiveSshConnectionMode, getSshConnectionModeLabel, isPersistentSshSession } from "../utils";
-import { Badge, Card } from "./common";
+import { Badge, Card, EditIcon } from "./common";
 
 export interface SshSessionSectionProps {
   sessions: SshSession[];
   loading: boolean;
   error: string | null;
   onSelect: (sessionId: string) => void;
+  onRename: (sessionId: string) => void;
 }
 
 function getBadgeVariant(status: SshSession["state"]["status"]) {
@@ -33,6 +34,7 @@ export function SshSessionSection({
   loading,
   error,
   onSelect,
+  onRename,
 }: SshSessionSectionProps) {
   return (
     <Card>
@@ -49,37 +51,55 @@ export function SshSessionSection({
           {sessions.map((session) => {
             const effectiveConnectionMode = getEffectiveSshConnectionMode(session);
             return (
-              <button
+              <div
                 key={session.config.id}
-                type="button"
-                onClick={() => onSelect(session.config.id)}
-                className="rounded-lg border border-gray-200 bg-white p-4 text-left transition-colors hover:border-gray-300 hover:shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600"
+                className="relative rounded-lg border border-gray-200 bg-white transition-colors hover:border-gray-300 hover:shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                      {session.config.name}
-                    </h3>
-                    <p className="mt-1 text-xs font-mono text-gray-500 dark:text-gray-400 truncate">
-                      {session.config.directory}
-                    </p>
+                <button
+                  type="button"
+                  onClick={() => onSelect(session.config.id)}
+                  className="absolute inset-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                  aria-label={`Open SSH session ${session.config.name}`}
+                />
+                <div className="pointer-events-none relative z-10 p-4">
+                  <div className="flex items-start justify-between gap-3 pr-8">
+                    <div className="min-w-0">
+                      <h3 className="truncate font-medium text-gray-900 dark:text-gray-100">
+                        {session.config.name}
+                      </h3>
+                      <p className="mt-1 truncate text-xs font-mono text-gray-500 dark:text-gray-400">
+                        {session.config.directory}
+                      </p>
+                    </div>
+                    <Badge variant={getBadgeVariant(session.state.status)}>
+                      {session.state.status}
+                    </Badge>
                   </div>
-                  <Badge variant={getBadgeVariant(session.state.status)}>
-                    {session.state.status}
-                  </Badge>
-                </div>
-                <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                  Last connected: {session.state.lastConnectedAt ?? "Never"}
-                </p>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
-                  Mode: {getSshConnectionModeLabel(effectiveConnectionMode)}
-                </p>
-                {isPersistentSshSession(session) && (
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 truncate">
-                    Persistent ID: {session.config.remoteSessionName}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRename(session.config.id);
+                    }}
+                    className="pointer-events-auto absolute right-4 top-4 rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                    aria-label="Rename SSH session"
+                    title="Rename SSH session"
+                  >
+                    <EditIcon size="h-3.5 w-3.5" />
+                  </button>
+                  <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                    Last connected: {session.state.lastConnectedAt ?? "Never"}
                   </p>
-                )}
-              </button>
+                  <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                    Mode: {getSshConnectionModeLabel(effectiveConnectionMode)}
+                  </p>
+                  {isPersistentSshSession(session) && (
+                    <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                      Persistent ID: {session.config.remoteSessionName}
+                    </p>
+                  )}
+                </div>
+              </div>
             );
           })}
         </div>
