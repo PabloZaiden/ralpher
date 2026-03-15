@@ -23,6 +23,7 @@ export class TestCommandExecutor implements CommandExecutor {
         cwd,
         stdout: "pipe",
         stderr: "pipe",
+        ...(options?.env ? { env: { ...process.env, ...options.env } } : {}),
       });
       
       // Wait for process to complete

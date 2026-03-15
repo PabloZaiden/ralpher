@@ -8,6 +8,15 @@ import type { CommandExecutor } from "./command-executor";
 import { dirname, relative, resolve } from "node:path";
 import { log } from "./logger";
 
+const DEFAULT_GIT_SSH_COMMAND = "ssh";
+const ACCEPT_NEW_HOST_KEY_OPTION = "-o StrictHostKeyChecking=accept-new";
+const KNOWN_HOSTS_OPTION_NAME = "UserKnownHostsFile";
+const RALPHER_KNOWN_HOSTS_FILENAME = "ralpher-known-hosts";
+
+function quoteShellArg(value: string): string {
+  return `'${value.replace(/'/g, `'\"'\"'`)}'`;
+}
+
 /**
  * Error thrown when the current branch doesn't match the expected branch.
  * Used for branch safety verification before git operations.
@@ -1624,11 +1633,19 @@ export class GitService {
     const { allowFailure = false } = options;
     const cmdStr = `git ${args.join(" ")}`;
     log.trace(`[GitService] Running: ${cmdStr} in ${directory}`);
-    
-    // Use git with -C flag to run in the specified directory
-    const result = await this.executor.exec("git", ["-C", directory, ...args], {
+    const gitArgs = ["-C", directory, ...args];
+    let result = await this.executor.exec("git", gitArgs, {
       cwd: directory,
     });
+
+    if (!result.success && this.shouldRetryWithAcceptedHostKey(result.stderr)) {
+      log.info(`[GitService] Retrying with auto-accepted SSH host key: ${cmdStr}`);
+      const retryEnv = await this.buildAcceptedHostKeyRetryEnv(directory);
+      result = await this.executor.exec("git", gitArgs, {
+        cwd: directory,
+        ...(retryEnv ? { env: retryEnv } : {}),
+      });
+    }
     
     if (!result.success) {
       // Log at trace level if failure is expected (e.g., probing for existence)
@@ -1673,6 +1690,63 @@ export class GitService {
       result.exitCode,
       result.stderr,
     );
+  }
+
+  private shouldRetryWithAcceptedHostKey(stderr: string): boolean {
+    return stderr.includes("Host key verification failed");
+  }
+
+  private async buildAcceptedHostKeyRetryEnv(directory: string): Promise<Record<string, string>> {
+    const baseSshCommand = await this.getConfiguredGitSshCommand(directory);
+    const knownHostsPath = await this.getGitKnownHostsPath(directory);
+    const sshCommand = knownHostsPath
+      ? `${baseSshCommand} ${ACCEPT_NEW_HOST_KEY_OPTION} -o ${KNOWN_HOSTS_OPTION_NAME}=${quoteShellArg(knownHostsPath)}`
+      : `${baseSshCommand} ${ACCEPT_NEW_HOST_KEY_OPTION}`;
+
+    return {
+      GIT_SSH_COMMAND: sshCommand,
+    };
+  }
+
+  private async getConfiguredGitSshCommand(directory: string): Promise<string> {
+    const envResult = await this.executor.exec("bash", ["-lc", "printf %s \"${GIT_SSH_COMMAND:-}\""], {
+      cwd: directory,
+    });
+    if (envResult.success) {
+      const envCommand = envResult.stdout.trim();
+      if (envCommand) {
+        return envCommand;
+      }
+    }
+
+    const configResult = await this.executor.exec("git", ["-C", directory, "config", "--get", "core.sshCommand"], {
+      cwd: directory,
+    });
+    if (configResult.success) {
+      const configCommand = configResult.stdout.trim();
+      if (configCommand) {
+        return configCommand;
+      }
+    }
+
+    return DEFAULT_GIT_SSH_COMMAND;
+  }
+
+  private async getGitKnownHostsPath(directory: string): Promise<string | null> {
+    const result = await this.executor.exec("git", ["-C", directory, "rev-parse", "--git-path", RALPHER_KNOWN_HOSTS_FILENAME], {
+      cwd: directory,
+    });
+    if (!result.success) {
+      log.warn(`[GitService] Failed to resolve git known-hosts path for ${directory}: ${result.stderr || result.stdout || "unknown error"}`);
+      return null;
+    }
+
+    const gitPath = result.stdout.trim();
+    if (!gitPath) {
+      return null;
+    }
+
+    return gitPath.startsWith("/") ? gitPath : resolve(directory, gitPath);
   }
 }
 

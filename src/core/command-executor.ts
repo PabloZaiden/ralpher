@@ -22,6 +22,8 @@ export interface CommandOptions {
   cwd?: string;
   /** Timeout in milliseconds */
   timeout?: number;
+  /** Environment variable overrides for the command */
+  env?: Record<string, string>;
 }
 
 /**
@@ -34,7 +36,7 @@ export interface CommandExecutor {
    * Execute a shell command.
    * @param command - The command to execute (e.g., "git status")
    * @param args - Arguments to pass to the command
-   * @param options - Execution options (cwd, timeout)
+   * @param options - Execution options (cwd, timeout, env overrides)
    * @returns The command result with stdout, stderr, and exit code
    */
   exec(command: string, args: string[], options?: CommandOptions): Promise<CommandResult>;

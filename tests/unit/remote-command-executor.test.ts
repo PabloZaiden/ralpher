@@ -77,6 +77,45 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
     }
   });
 
+  test("injects per-command environment variables into the remote shell command", async () => {
+    const originalSpawn = Bun.spawn;
+    let capturedCommand: string[] | undefined;
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = ((...args: unknown[]) => {
+      const command = (args.length === 1
+        ? (args[0] as { cmd?: string[] } | undefined)?.cmd
+        : args[0]) as string[] | undefined;
+      capturedCommand = command;
+      throw new Error("mock spawn failure");
+    }) as unknown as typeof Bun.spawn;
+
+    try {
+      const executor = new CommandExecutorImpl({
+        provider: "ssh",
+        directory: "/workspaces/remote-only-path",
+        host: "127.0.0.1",
+      });
+
+      const result = await executor.exec("git", ["fetch", "origin", "main"], {
+        cwd: "/workspaces/myrepo",
+        env: {
+          GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=accept-new",
+        },
+      });
+      expect(result.success).toBe(false);
+
+      const commandTokens = capturedCommand ?? [];
+      const scriptArg = commandTokens[commandTokens.indexOf("--") + 1] ?? "";
+      expect(scriptArg).toContain("GIT_SSH_COMMAND=");
+      expect(scriptArg).toContain("StrictHostKeyChecking=accept-new");
+      expect(scriptArg).toContain("fetch");
+      expect(scriptArg).toContain("origin");
+      expect(scriptArg).toContain("main");
+    } finally {
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+    }
+  });
+
   test("uses sshpass environment mode for password auth", async () => {
     const originalSpawn = Bun.spawn;
     let capturedCommand: string[] | undefined;

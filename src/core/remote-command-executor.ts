@@ -40,6 +40,22 @@ function quoteShell(value: string): string {
   return `'${value.replace(/'/g, `'\"'\"'`)}'`;
 }
 
+function buildEnvAssignments(env?: Record<string, string>): string[] {
+  if (!env) {
+    return [];
+  }
+
+  const entries = Object.entries(env);
+  const assignments: string[] = [];
+  for (const [key, value] of entries) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      throw new Error(`Invalid environment variable name: ${key}`);
+    }
+    assignments.push(`${key}=${quoteShell(value)}`);
+  }
+  return assignments;
+}
+
 export function buildSshRemoteShellCommand(remoteCommand: string): string {
   const wrappedRemoteCommand = `if [ -f ~/.profile ]; then source ~/.profile >/dev/null 2>&1; fi; ${remoteCommand}`;
   return `bash -lc ${quoteShell(wrappedRemoteCommand)}`;
@@ -148,9 +164,10 @@ export class CommandExecutorImpl implements CommandExecutor {
       const executeCommand = async (): Promise<CommandResult> => {
         const cwd = options?.cwd ?? this.directory;
         const timeout = options?.timeout ?? this.defaultTimeoutMs;
+        const env = options?.env;
         const result = this.provider === "ssh"
-          ? await this.execSsh(command, args, cwd, timeout)
-          : await this.execLocal(command, args, cwd, timeout);
+          ? await this.execSsh(command, args, cwd, timeout, env)
+          : await this.execLocal(command, args, cwd, timeout, env);
 
         if (!result.success) {
           log.error(`${LOG_PREFIX} Command failed: ${cmdStr}`);
@@ -252,6 +269,7 @@ export class CommandExecutorImpl implements CommandExecutor {
     args: string[],
     cwd: string,
     timeoutMs: number,
+    env?: Record<string, string>,
   ): Promise<CommandResult> {
     if (!this.host) {
       return {
@@ -262,9 +280,22 @@ export class CommandExecutorImpl implements CommandExecutor {
       };
     }
 
+    let envAssignments: string[];
+    try {
+      envAssignments = buildEnvAssignments(env);
+    } catch (error) {
+      return {
+        success: false,
+        stdout: "",
+        stderr: String(error),
+        exitCode: 1,
+      };
+    }
+
     const remoteCommand = [
       `cd ${quoteShell(cwd)}`,
       "&&",
+      ...envAssignments,
       quoteShell(command),
       ...args.map((arg) => quoteShell(arg)),
     ].join(" ");

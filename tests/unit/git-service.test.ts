@@ -6,10 +6,50 @@ import { test, expect, describe } from "bun:test";
 import { mkdtemp, rm, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { GitService, BranchMismatchError } from "../../src/core/git-service";
+import type { CommandExecutor, CommandOptions, CommandResult } from "../../src/core/command-executor";
+import { GitService, BranchMismatchError, GitCommandError } from "../../src/core/git-service";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 
 describe("GitService", () => {
+  class ScriptedCommandExecutor implements CommandExecutor {
+    readonly calls: Array<{
+      command: string;
+      args: string[];
+      options?: CommandOptions;
+    }> = [];
+
+    constructor(private readonly responses: CommandResult[]) {}
+
+    async exec(command: string, args: string[], options?: CommandOptions): Promise<CommandResult> {
+      this.calls.push({ command, args, options });
+      const response = this.responses.shift();
+      if (!response) {
+        throw new Error(`No scripted response left for ${command} ${args.join(" ")}`);
+      }
+      return response;
+    }
+
+    async fileExists(_path: string): Promise<boolean> {
+      return false;
+    }
+
+    async directoryExists(_path: string): Promise<boolean> {
+      return false;
+    }
+
+    async readFile(_path: string): Promise<string | null> {
+      return null;
+    }
+
+    async listDirectory(_path: string): Promise<string[]> {
+      return [];
+    }
+
+    async writeFile(_path: string, _content: string): Promise<boolean> {
+      return false;
+    }
+  }
+
   interface GitServiceTestContext {
     testDir: string;
     git: GitService;
@@ -814,6 +854,122 @@ describe("GitService", () => {
 
       });
 
+    });
+  });
+
+  describe("SSH host key auto-accept", () => {
+    test("retries push by extending an existing GIT_SSH_COMMAND and persisting known hosts in git dir", async () => {
+      const executor = new ScriptedCommandExecutor([
+        {
+          success: false,
+          stdout: "",
+          stderr: "Host key verification failed.\nfatal: Could not read from remote repository.\n",
+          exitCode: 128,
+        },
+        {
+          success: true,
+          stdout: "ssh -i /tmp/custom-key",
+          stderr: "",
+          exitCode: 0,
+        },
+        {
+          success: true,
+          stdout: ".git/ralpher-known-hosts\n",
+          stderr: "",
+          exitCode: 0,
+        },
+        {
+          success: true,
+          stdout: "branch 'feature/test' set up to track 'origin/feature/test'.\n",
+          stderr: "",
+          exitCode: 0,
+        },
+      ]);
+      const git = new GitService(executor);
+
+      const remoteBranch = await git.pushBranch("/repo", "feature/test");
+
+      expect(remoteBranch).toBe("origin/feature/test");
+      expect(executor.calls).toHaveLength(4);
+      expect(executor.calls[0]?.command).toBe("git");
+      expect(executor.calls[0]?.args).toEqual(["-C", "/repo", "push", "-u", "origin", "feature/test"]);
+      expect(executor.calls[0]?.options?.env).toBeUndefined();
+      expect(executor.calls[1]?.command).toBe("bash");
+      expect(executor.calls[1]?.args).toEqual(["-lc", "printf %s \"${GIT_SSH_COMMAND:-}\""]);
+      expect(executor.calls[2]?.args).toEqual(["-C", "/repo", "rev-parse", "--git-path", "ralpher-known-hosts"]);
+      expect(executor.calls[3]?.options?.env).toEqual({
+        GIT_SSH_COMMAND: "ssh -i /tmp/custom-key -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile='/repo/.git/ralpher-known-hosts'",
+      });
+    });
+
+    test("retries fetch by extending core.sshCommand when no GIT_SSH_COMMAND override is set", async () => {
+      const executor = new ScriptedCommandExecutor([
+        {
+          success: true,
+          stdout: "git@github.com:owner/repo.git\n",
+          stderr: "",
+          exitCode: 0,
+        },
+        {
+          success: false,
+          stdout: "",
+          stderr: "Host key verification failed.\nfatal: Could not read from remote repository.\n",
+          exitCode: 128,
+        },
+        {
+          success: true,
+          stdout: "",
+          stderr: "",
+          exitCode: 0,
+        },
+        {
+          success: true,
+          stdout: "ssh -i ~/.ssh/review-key\n",
+          stderr: "",
+          exitCode: 0,
+        },
+        {
+          success: true,
+          stdout: ".git/ralpher-known-hosts\n",
+          stderr: "",
+          exitCode: 0,
+        },
+        {
+          success: true,
+          stdout: "",
+          stderr: "",
+          exitCode: 0,
+        },
+      ]);
+      const git = new GitService(executor);
+
+      const fetched = await git.fetchBranch("/repo", "main");
+
+      expect(fetched).toBe(true);
+      expect(executor.calls).toHaveLength(6);
+      expect(executor.calls[2]?.command).toBe("bash");
+      expect(executor.calls[3]?.args).toEqual(["-C", "/repo", "config", "--get", "core.sshCommand"]);
+      expect(executor.calls[4]?.args).toEqual(["-C", "/repo", "rev-parse", "--git-path", "ralpher-known-hosts"]);
+      expect(executor.calls[5]?.args).toEqual(["-C", "/repo", "fetch", "origin", "main"]);
+      expect(executor.calls[5]?.options?.env).toEqual({
+        GIT_SSH_COMMAND: "ssh -i ~/.ssh/review-key -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile='/repo/.git/ralpher-known-hosts'",
+      });
+    });
+
+    test("does not retry unrelated push failures", async () => {
+      const executor = new ScriptedCommandExecutor([
+        {
+          success: false,
+          stdout: "",
+          stderr: "fatal: repository 'origin' does not exist\n",
+          exitCode: 128,
+        },
+      ]);
+      const git = new GitService(executor);
+
+      await expect(git.pushBranch("/repo", "feature/test")).rejects.toBeInstanceOf(GitCommandError);
+      expect(executor.calls).toHaveLength(1);
+      expect(executor.calls[0]?.options?.env).toBeUndefined();
     });
   });
 
