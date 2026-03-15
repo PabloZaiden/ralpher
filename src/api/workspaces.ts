@@ -20,16 +20,19 @@ import {
   exportWorkspaces,
 } from "../persistence/workspaces";
 import { backendManager } from "../core/backend-manager";
+import { loopManager } from "../core/loop-manager";
 import { createLogger } from "../core/logger";
 
 const log = createLogger("api:workspaces");
 import { getDefaultServerSettings } from "../types/settings";
 import type { Workspace, WorkspaceImportResult } from "../types/workspace";
 import type { WorkspaceExportData } from "../types/schemas";
+import { isArchivedLoop } from "../utils";
 import { parseAndValidate } from "./validation";
 import {
   requireWorkspace,
   errorResponse,
+  successResponse,
   normalizeDirectoryPath,
   resolveWorkspaceForDirectory,
 } from "./helpers";
@@ -379,6 +382,71 @@ export const workspacesRoutes = {
       } catch (error) {
         log.error("Failed to delete workspace:", String(error));
         return errorResponse("delete_failed", `Failed to delete workspace: ${String(error)}`, 500);
+      }
+    },
+  },
+
+  /**
+   * POST /api/workspaces/:id/archived-loops/purge - Purge all archived loops for a workspace.
+   */
+  "/api/workspaces/:id/archived-loops/purge": {
+    async POST(req: Request & { params: { id: string } }) {
+      const { id } = req.params;
+      log.debug("POST /api/workspaces/:id/archived-loops/purge", { workspaceId: id });
+
+      try {
+        const workspace = await requireWorkspace(id);
+        if (workspace instanceof Response) {
+          return workspace;
+        }
+
+        const loops = await loopManager.getAllLoops();
+        const archivedLoops = loops.filter(
+          (loop) =>
+            loop.config.workspaceId === id &&
+            isArchivedLoop(loop.state.status, loop.state.reviewMode?.addressable),
+        );
+
+        const purgedLoopIds: string[] = [];
+        const failures: Array<{ loopId: string; error: string }> = [];
+
+        for (const loop of archivedLoops) {
+          const result = await loopManager.purgeLoop(loop.config.id);
+          if (result.success) {
+            purgedLoopIds.push(loop.config.id);
+            continue;
+          }
+
+          failures.push({
+            loopId: loop.config.id,
+            error: result.error ?? "Unknown error",
+          });
+        }
+
+        log.info("POST /api/workspaces/:id/archived-loops/purge - Completed", {
+          workspaceId: id,
+          totalArchived: archivedLoops.length,
+          purgedCount: purgedLoopIds.length,
+          failureCount: failures.length,
+        });
+
+        return successResponse({
+          workspaceId: id,
+          totalArchived: archivedLoops.length,
+          purgedCount: purgedLoopIds.length,
+          purgedLoopIds,
+          failures,
+        });
+      } catch (error) {
+        log.error("Failed to purge archived workspace loops:", {
+          workspaceId: id,
+          error: String(error),
+        });
+        return errorResponse(
+          "purge_archived_failed",
+          `Failed to purge archived workspace loops: ${String(error)}`,
+          500,
+        );
       }
     },
   },

@@ -5,7 +5,7 @@
 
 import { useMemo } from "react";
 import type { Loop, Workspace } from "../types";
-import { isAwaitingFeedback, isLoopPlanReady } from "../utils";
+import { isArchivedLoop, isAwaitingFeedback, isLoopPlanReady } from "../utils";
 
 export interface StatusGroups {
   draft: Loop[];
@@ -71,12 +71,7 @@ export function groupLoopsByStatus(loopsToGroup: Loop[]): StatusGroups {
     awaitingFeedback: loopsToGroup.filter((loop) =>
       isAwaitingFeedback(loop.state.status, loop.state.reviewMode?.addressable)
     ),
-    archived: loopsToGroup.filter(
-      (loop) =>
-        loop.state.status === "deleted" ||
-        ((loop.state.status === "merged" || loop.state.status === "pushed") &&
-          !isAwaitingFeedback(loop.state.status, loop.state.reviewMode?.addressable))
-    ),
+    archived: loopsToGroup.filter((loop) => isArchivedLoop(loop.state.status, loop.state.reviewMode?.addressable)),
     other: loopsToGroup.filter(
       (loop) =>
         !["draft", "running", "waiting", "starting", "completed", "merged", "pushed", "deleted", "planning"].includes(

@@ -123,6 +123,15 @@ export interface AddressCommentsResult {
   branch?: string;
 }
 
+export interface PurgeArchivedLoopsResult {
+  success: boolean;
+  workspaceId: string;
+  totalArchived: number;
+  purgedCount: number;
+  purgedLoopIds: string[];
+  failures: Array<{ loopId: string; error: string }>;
+}
+
 export interface CreatePortForwardRequest {
   remotePort: number;
 }
@@ -226,6 +235,31 @@ export async function deleteLoopApi(loopId: string): Promise<boolean> {
  */
 export async function purgeLoopApi(loopId: string): Promise<boolean> {
   return apiAction(`/api/loops/${loopId}/purge`, "POST", "Purge loop");
+}
+
+/**
+ * Purge all archived loops for a workspace via the API.
+ */
+export async function purgeArchivedWorkspaceLoopsApi(workspaceId: string): Promise<PurgeArchivedLoopsResult> {
+  const data = await apiCall<{
+    workspaceId: string;
+    totalArchived: number;
+    purgedCount: number;
+    purgedLoopIds: string[];
+    failures: Array<{ loopId: string; error: string }>;
+  }>(
+    `/api/workspaces/${workspaceId}/archived-loops/purge`,
+    { method: "POST" },
+    "Purge archived loops",
+  );
+  return {
+    success: true,
+    workspaceId: data.workspaceId,
+    totalArchived: data.totalArchived,
+    purgedCount: data.purgedCount,
+    purgedLoopIds: data.purgedLoopIds,
+    failures: data.failures,
+  };
 }
 
 /**

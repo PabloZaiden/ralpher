@@ -4,12 +4,13 @@
  */
 
 import { useState, useEffect, useCallback, type FormEvent } from "react";
-import { Modal, Button, Badge } from "./common";
+import { Modal, Button, Badge, ConfirmModal } from "./common";
 import { ServerSettingsForm } from "./ServerSettingsForm";
 import type { ServerSettings, ConnectionStatus } from "../types/settings";
 import type { Workspace } from "../types/workspace";
 import { createLogger } from "../lib/logger";
 import { useAgentsMdOptimizer } from "../hooks/useAgentsMdOptimizer";
+import type { PurgeArchivedLoopsResult } from "../hooks";
 
 const log = createLogger("WorkspaceSettingsModal");
 
@@ -28,12 +29,18 @@ export interface WorkspaceSettingsModalProps {
   onTest: (settings: ServerSettings) => Promise<{ success: boolean; error?: string }>;
   /** Callback to reset connection for this workspace */
   onResetConnection?: () => Promise<boolean>;
+  /** Callback to purge all archived loops for the workspace */
+  onPurgeArchivedLoops?: () => Promise<PurgeArchivedLoopsResult>;
+  /** Number of archived loops for the selected workspace */
+  archivedLoopCount?: number;
   /** Whether saving is in progress */
   saving?: boolean;
   /** Whether testing is in progress */
   testing?: boolean;
   /** Whether resetting connection is in progress */
   resettingConnection?: boolean;
+  /** Whether purging archived loops is in progress */
+  purgingArchivedLoops?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
   remoteOnly?: boolean;
 }
@@ -49,9 +56,12 @@ export function WorkspaceSettingsModal({
   onSave,
   onTest,
   onResetConnection,
+  onPurgeArchivedLoops,
+  archivedLoopCount = 0,
   saving = false,
   testing = false,
   resettingConnection = false,
+  purgingArchivedLoops = false,
   remoteOnly = false,
 }: WorkspaceSettingsModalProps) {
   // Workspace name state
@@ -101,6 +111,9 @@ export function WorkspaceSettingsModal({
   const optimizer = useAgentsMdOptimizer();
   const [optimizeSuccess, setOptimizeSuccess] = useState<boolean | null>(null);
   const [wasAlreadyOptimized, setWasAlreadyOptimized] = useState(false);
+  const [showPurgeArchivedConfirm, setShowPurgeArchivedConfirm] = useState(false);
+  const [purgeArchivedResult, setPurgeArchivedResult] = useState<PurgeArchivedLoopsResult | null>(null);
+  const [purgeArchivedError, setPurgeArchivedError] = useState<string | null>(null);
 
   // Fetch AGENTS.md status when modal opens with a workspace
   // The AGENTS.md API handles connection on-demand via getCommandExecutorAsync(),
@@ -123,6 +136,9 @@ export function WorkspaceSettingsModal({
       optimizer.reset();
       setOptimizeSuccess(null);
       setWasAlreadyOptimized(false);
+      setShowPurgeArchivedConfirm(false);
+      setPurgeArchivedResult(null);
+      setPurgeArchivedError(null);
     }
   }, [isOpen]);
 
@@ -136,6 +152,24 @@ export function WorkspaceSettingsModal({
       setOptimizeSuccess(true);
       setWasAlreadyOptimized(result.alreadyOptimized);
     }
+  }
+
+  async function handlePurgeArchivedLoops() {
+    if (!workspace || !onPurgeArchivedLoops) {
+      return;
+    }
+
+    setPurgeArchivedResult(null);
+    setPurgeArchivedError(null);
+
+    const result = await onPurgeArchivedLoops();
+    if (!result.success) {
+      setPurgeArchivedError("Failed to purge archived loops.");
+      return;
+    }
+
+    setPurgeArchivedResult(result);
+    setShowPurgeArchivedConfirm(false);
   }
 
   // Validation
@@ -347,7 +381,80 @@ export function WorkspaceSettingsModal({
             </div>
           </div>
         )}
+
+        {/* Archived loops purge */}
+        {workspace && onPurgeArchivedLoops && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+            <div className="p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
+                  Archived Loops
+                </h3>
+                <Badge variant={archivedLoopCount > 0 ? "warning" : "default"} size="sm">
+                  {archivedLoopCount} archived
+                </Badge>
+              </div>
+              <p className="text-sm text-red-700 dark:text-red-300 mb-4">
+                Permanently delete all archived loops for this workspace. This removes their loop data and cannot be undone.
+              </p>
+
+              {purgeArchivedError && (
+                <div className="mb-3 p-3 rounded-md bg-red-100 dark:bg-red-950/40 border border-red-200 dark:border-red-900">
+                  <p className="text-sm text-red-700 dark:text-red-300">{purgeArchivedError}</p>
+                </div>
+              )}
+
+              {purgeArchivedResult && (
+                <div className={`mb-3 p-3 rounded-md border ${
+                  purgeArchivedResult.failures.length > 0
+                    ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-900"
+                    : "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900"
+                }`}>
+                  <p className={`text-sm ${
+                    purgeArchivedResult.failures.length > 0
+                      ? "text-amber-700 dark:text-amber-300"
+                      : "text-green-700 dark:text-green-300"
+                  }`}>
+                    {purgeArchivedResult.totalArchived === 0
+                      ? "No archived loops were found for this workspace."
+                      : purgeArchivedResult.failures.length > 0
+                        ? `Purged ${purgeArchivedResult.purgedCount} of ${purgeArchivedResult.totalArchived} archived loops.`
+                        : `Purged ${purgeArchivedResult.purgedCount} archived loops.`}
+                  </p>
+                  {purgeArchivedResult.failures.length > 0 && (
+                    <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
+                      Failed loop IDs: {purgeArchivedResult.failures.map((failure) => failure.loopId).join(", ")}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                onClick={() => setShowPurgeArchivedConfirm(true)}
+                disabled={purgingArchivedLoops || archivedLoopCount === 0}
+                loading={purgingArchivedLoops}
+              >
+                <TrashIcon className="w-4 h-4 mr-2" />
+                Purge Archived Loops
+              </Button>
+            </div>
+          </div>
+        )}
       </form>
+
+      <ConfirmModal
+        isOpen={showPurgeArchivedConfirm}
+        onClose={() => setShowPurgeArchivedConfirm(false)}
+        onConfirm={handlePurgeArchivedLoops}
+        title="Purge Archived Loops"
+        message={`Are you sure you want to permanently delete all ${archivedLoopCount} archived loops for "${workspace?.name ?? "this workspace"}"? This cannot be undone.`}
+        confirmLabel="Purge All"
+        loading={purgingArchivedLoops}
+        variant="danger"
+      />
     </Modal>
   );
 }
@@ -437,6 +544,24 @@ function OptimizeIcon({ className }: { className?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+      />
+    </svg>
+  );
+}
+
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3M4 7h16"
       />
     </svg>
   );

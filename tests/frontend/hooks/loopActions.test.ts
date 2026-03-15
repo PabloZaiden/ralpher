@@ -13,6 +13,7 @@ import {
   discardLoopApi,
   deleteLoopApi,
   purgeLoopApi,
+  purgeArchivedWorkspaceLoopsApi,
   getLoopSshSessionApi,
   getOrCreateLoopSshSessionApi,
   markMergedApi,
@@ -189,6 +190,39 @@ describe("purgeLoopApi", () => {
     });
 
     await expect(purgeLoopApi(LOOP_ID)).rejects.toThrow("Failed to purge loop");
+  });
+});
+
+describe("purgeArchivedWorkspaceLoopsApi", () => {
+  test("calls POST /api/workspaces/:id/archived-loops/purge and returns summary", async () => {
+    api.post("/api/workspaces/ws-1/archived-loops/purge", () => ({
+      success: true,
+      workspaceId: "ws-1",
+      totalArchived: 2,
+      purgedCount: 2,
+      purgedLoopIds: ["loop-1", "loop-2"],
+      failures: [],
+    }));
+
+    const result = await purgeArchivedWorkspaceLoopsApi("ws-1");
+
+    expect(result).toEqual({
+      success: true,
+      workspaceId: "ws-1",
+      totalArchived: 2,
+      purgedCount: 2,
+      purgedLoopIds: ["loop-1", "loop-2"],
+      failures: [],
+    });
+    expect(api.calls("/api/workspaces/ws-1/archived-loops/purge", "POST")).toHaveLength(1);
+  });
+
+  test("throws error with message from error response", async () => {
+    api.post("/api/workspaces/ws-1/archived-loops/purge", () => {
+      throw new MockApiError(500, { message: "Bulk purge failed" });
+    });
+
+    await expect(purgeArchivedWorkspaceLoopsApi("ws-1")).rejects.toThrow("Bulk purge failed");
   });
 });
 

@@ -84,9 +84,12 @@ export interface DashboardModalsProps {
   workspaceSettingsSaving: boolean;
   workspaceSettingsTesting: boolean;
   workspaceSettingsResetting: boolean;
+  workspaceArchivedLoopsPurging: boolean;
   testWorkspaceConnection: UseWorkspaceServerSettingsResult["testConnection"];
   resetWorkspaceConnection: UseWorkspaceServerSettingsResult["resetConnection"];
   updateWorkspaceSettings: UseWorkspaceServerSettingsResult["updateWorkspace"];
+  archivedLoopCount: number;
+  purgeArchivedWorkspaceLoops: (workspaceId: string) => Promise<import("../hooks").PurgeArchivedLoopsResult>;
   refreshWorkspaces: () => Promise<void>;
   remoteOnly: boolean;
 
@@ -368,9 +371,24 @@ export function DashboardModals(props: DashboardModalsProps) {
         }}
         onTest={props.testWorkspaceConnection}
         onResetConnection={props.resetWorkspaceConnection}
+        onPurgeArchivedLoops={async () => {
+          if (!props.workspaceSettingsModal.workspaceId) {
+            return {
+              success: false,
+              workspaceId: "",
+              totalArchived: 0,
+              purgedCount: 0,
+              purgedLoopIds: [],
+              failures: [],
+            };
+          }
+          return await props.purgeArchivedWorkspaceLoops(props.workspaceSettingsModal.workspaceId);
+        }}
+        archivedLoopCount={props.archivedLoopCount}
         saving={props.workspaceSettingsSaving}
         testing={props.workspaceSettingsTesting}
         resettingConnection={props.workspaceSettingsResetting}
+        purgingArchivedLoops={props.workspaceArchivedLoopsPurging}
         remoteOnly={props.remoteOnly}
       />
 

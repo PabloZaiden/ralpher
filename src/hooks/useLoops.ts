@@ -14,11 +14,13 @@ import {
   discardLoopApi,
   deleteLoopApi,
   purgeLoopApi,
+  purgeArchivedWorkspaceLoopsApi,
   addressReviewCommentsApi,
   updateBranchApi,
   type AcceptLoopResult,
   type PushLoopResult,
   type AddressCommentsResult,
+  type PurgeArchivedLoopsResult,
 } from "./loopActions";
 
 export interface CreateLoopResult {
@@ -62,6 +64,8 @@ export interface UseLoopsResult {
   discardLoop: (id: string) => Promise<boolean>;
   /** Purge a loop (permanently delete - only for merged/pushed/deleted loops) */
   purgeLoop: (id: string) => Promise<boolean>;
+  /** Purge all archived loops for a workspace */
+  purgeArchivedWorkspaceLoops: (workspaceId: string) => Promise<PurgeArchivedLoopsResult>;
   /** Address reviewer comments (only for pushed/merged loops with reviewMode.addressable = true) */
   addressReviewComments: (id: string, comments: string) => Promise<AddressCommentsResult>;
   /** Get a loop by ID */
@@ -335,6 +339,26 @@ export function useLoops(): UseLoopsResult {
     }
   }, []);
 
+  // Purge all archived loops for a workspace
+  const purgeArchivedWorkspaceLoops = useCallback(async (workspaceId: string): Promise<PurgeArchivedLoopsResult> => {
+    try {
+      const result = await purgeArchivedWorkspaceLoopsApi(workspaceId);
+      setLoops((prev) => prev.filter((loop) => !result.purgedLoopIds.includes(loop.config.id)));
+      return result;
+    } catch (err) {
+      const message = String(err);
+      setError(message);
+      return {
+        success: false,
+        workspaceId,
+        totalArchived: 0,
+        purgedCount: 0,
+        purgedLoopIds: [],
+        failures: [],
+      };
+    }
+  }, []);
+
   // Address reviewer comments
   const addressReviewComments = useCallback(async (id: string, comments: string): Promise<AddressCommentsResult> => {
     try {
@@ -378,6 +402,7 @@ export function useLoops(): UseLoopsResult {
     updateBranch,
     discardLoop,
     purgeLoop,
+    purgeArchivedWorkspaceLoops,
     addressReviewComments,
     getLoop,
   };
