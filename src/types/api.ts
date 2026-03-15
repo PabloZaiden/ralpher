@@ -364,6 +364,25 @@ export interface FileContentResponse {
 }
 
 /**
+ * Response from GET /api/loops/:id/pull-request endpoint.
+ */
+export type PullRequestDestinationResponse =
+  | {
+      enabled: true;
+      /** Where the destination came from */
+      destinationType: "existing_pr" | "create_pr";
+      /** URL to open when the action is available */
+      url: string;
+    }
+  | {
+      enabled: false;
+      /** Disabled state for the Go to PR action */
+      destinationType: "disabled";
+      /** Human-readable reason shown in the UI */
+      disabledReason: string;
+    };
+
+/**
  * Request body for POST /api/loops/:id/chat endpoint.
  * Sends a message to an interactive chat.
  *
