@@ -10,6 +10,7 @@ import type {
   UpdateLoopRequest,
   FileDiff,
   FileContentResponse,
+  PullRequestDestinationResponse,
   MessageData,
   ToolCallData,
   TodoItem,
@@ -107,6 +108,8 @@ export interface UseLoopResult {
   getPlan: () => Promise<FileContentResponse>;
   /** Get the status.md content */
   getStatusFile: () => Promise<FileContentResponse>;
+  /** Get pull request navigation metadata for pushed loops */
+  getPullRequestDestination: () => Promise<PullRequestDestinationResponse>;
   /** Send feedback to refine the plan (only works when loop is in planning status) */
   sendPlanFeedback: (feedback: string) => Promise<boolean>;
   /** Answer a pending plan-mode question */
@@ -579,6 +582,25 @@ export function useLoop(loopId: string): UseLoopResult {
     }
   }, [loopId]);
 
+  // Get PR navigation metadata for pushed loops
+  const getPullRequestDestination = useCallback(async (): Promise<PullRequestDestinationResponse> => {
+    log.debug("Getting pull request destination", { loopId });
+    try {
+      const response = await appFetch(`/api/loops/${loopId}/pull-request`);
+      if (!response.ok) {
+        throw new Error(`Failed to get pull request destination: ${response.statusText}`);
+      }
+      return (await response.json()) as PullRequestDestinationResponse;
+    } catch (err) {
+      log.error("Failed to get pull request destination", { loopId, error: String(err) });
+      return {
+        enabled: false,
+        destinationType: "disabled",
+        disabledReason: "Failed to load pull request information.",
+      };
+    }
+  }, [loopId]);
+
   // Send feedback to refine the plan
   const sendPlanFeedback = useCallback(
     async (feedback: string): Promise<boolean> => {
@@ -802,6 +824,7 @@ export function useLoop(loopId: string): UseLoopResult {
     getDiff,
     getPlan,
     getStatusFile,
+    getPullRequestDestination,
     sendPlanFeedback,
     answerPlanQuestion,
     acceptPlan,

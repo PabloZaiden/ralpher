@@ -9,7 +9,7 @@
  * - SSH: Loop-linked SSH session management
  * - Port Forwards: Loop-scoped remote service exposure
  * - Review: Address reviewer comments on pushed/merged loops
- * - Data: Access loop diffs, plans, and status files
+ * - Data: Access loop diffs, plans, status files, and PR navigation metadata
  * 
  * Uses the CommandExecutor abstraction over the configured execution channel:
  * - local provider: commands run on the Ralpher host
@@ -32,6 +32,7 @@ import type {
   AcceptResponse,
   PushResponse,
   FileContentResponse,
+  PullRequestDestinationResponse,
   AddressCommentsResponse,
   ReviewHistoryResponse,
   GetCommentsResponse,
@@ -1268,6 +1269,7 @@ export const loopsControlRoutes = {
  * - GET /api/loops/:id/diff - Get git diff for loop changes
  * - GET /api/loops/:id/plan - Get .planning/plan.md content
  * - GET /api/loops/:id/status-file - Get .planning/status.md content
+ * - GET /api/loops/:id/pull-request - Get PR navigation metadata for pushed loops
  * - GET /api/check-planning-dir - Check if .planning directory exists
  */
 export const loopsDataRoutes = {
@@ -1381,6 +1383,24 @@ export const loopsDataRoutes = {
         response.exists = true;
       }
 
+      return Response.json(response);
+    },
+  },
+
+  "/api/loops/:id/pull-request": {
+    /**
+     * GET /api/loops/:id/pull-request - Get PR navigation metadata for a loop.
+     *
+     * Returns an existing PR URL, a PR creation URL, or a disabled state when
+     * the workspace host cannot resolve a safe destination.
+     */
+    async GET(req: Request & { params: { id: string } }): Promise<Response> {
+      const destination = await loopManager.getPullRequestDestination(req.params.id);
+      if (!destination) {
+        return errorResponse("not_found", "Loop not found", 404);
+      }
+
+      const response: PullRequestDestinationResponse = destination;
       return Response.json(response);
     },
   },

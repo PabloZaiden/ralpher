@@ -3,7 +3,7 @@
  * Tests use actual HTTP requests to a test server.
  */
 
-import { test, expect, describe, beforeAll, afterAll, beforeEach, afterEach } from "bun:test";
+import { test, expect, describe, beforeAll, afterAll, beforeEach, afterEach, spyOn } from "bun:test";
 import { mkdtemp, rm, mkdir, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -448,6 +448,44 @@ describe("Loops Control API Integration", () => {
       expect(body.error).toBe("no_worktree");
 
       await rm(emptyWorkDir, { recursive: true, force: true });
+    });
+  });
+
+  describe("GET /api/loops/:id/pull-request", () => {
+    test("returns PR navigation metadata from the loop manager", async () => {
+      const destinationSpy = spyOn(loopManager, "getPullRequestDestination").mockResolvedValue({
+        enabled: true,
+        destinationType: "existing_pr",
+        url: "https://github.com/example/repo/pull/12",
+      });
+
+      try {
+        const response = await fetch(`${baseUrl}/api/loops/test-loop-id/pull-request`);
+
+        expect(response.status).toBe(200);
+        const body = await response.json();
+        expect(body).toEqual({
+          enabled: true,
+          destinationType: "existing_pr",
+          url: "https://github.com/example/repo/pull/12",
+        });
+      } finally {
+        destinationSpy.mockRestore();
+      }
+    });
+
+    test("returns 404 when the loop manager cannot resolve the loop", async () => {
+      const destinationSpy = spyOn(loopManager, "getPullRequestDestination").mockResolvedValue(null);
+
+      try {
+        const response = await fetch(`${baseUrl}/api/loops/non-existent/pull-request`);
+
+        expect(response.status).toBe(404);
+        const body = await response.json();
+        expect(body.error).toBe("not_found");
+      } finally {
+        destinationSpy.mockRestore();
+      }
     });
   });
 

@@ -372,6 +372,18 @@ export class GitService {
   }
 
   /**
+   * Get the URL for a configured remote.
+   */
+  async getRemoteUrl(directory: string, remote = "origin"): Promise<string> {
+    const args = ["remote", "get-url", remote];
+    const result = await this.runGitCommand(directory, args);
+    if (!result.success) {
+      throw this.gitError(`Failed to get remote URL for ${remote}`, result, args);
+    }
+    return result.stdout.trim();
+  }
+
+  /**
    * Verify that the current branch matches the expected branch.
    * This is a read-only check that doesn't modify the repository.
    * 

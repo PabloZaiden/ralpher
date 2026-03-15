@@ -152,6 +152,51 @@ describe("LoopManager", () => {
     });
   });
 
+  describe("getPullRequestDestination", () => {
+    test("returns a sanitized disabled reason when PR resolution throws unexpectedly", async () => {
+      const loop = await manager.createLoop({
+        ...testModelFields,
+        directory: testWorkDir,
+        prompt: "Resolve PR",
+        name: "PR Loop",
+        workspaceId: testWorkspaceId,
+        planMode: false,
+        useWorktree: false,
+      });
+
+      await updateLoopState(loop.config.id, {
+        ...loop.state,
+        status: "pushed",
+        git: {
+          originalBranch: "main",
+          workingBranch: "feature/pr-link",
+          commits: [],
+        },
+        reviewMode: {
+          addressable: true,
+          completionAction: "push",
+          reviewCycles: 1,
+          reviewBranches: [],
+        },
+      });
+
+      backendManager.setExecutorFactoryForTesting(() => {
+        throw new Error("sensitive executor failure from /tmp/private-path");
+      });
+
+      const destination = await manager.getPullRequestDestination(loop.config.id);
+
+      expect(destination).toEqual({
+        enabled: false,
+        destinationType: "disabled",
+        disabledReason: "Pull request navigation is temporarily unavailable.",
+      });
+      if (destination?.enabled === false) {
+        expect(destination.disabledReason).not.toContain("/tmp/private-path");
+      }
+    });
+  });
+
   describe("generateLoopTitle", () => {
     test("connects the workspace backend before creating a temporary title session", async () => {
       const strictBackend = createMockBackend();
