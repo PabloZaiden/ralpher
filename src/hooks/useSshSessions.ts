@@ -13,7 +13,7 @@ export interface UseSshSessionsResult {
   error: string | null;
   refresh: () => Promise<void>;
   createSession: (request: CreateSshSessionRequest) => Promise<SshSession>;
-  updateSession: (id: string, request: UpdateSshSessionRequest) => Promise<SshSession | null>;
+  updateSession: (id: string, request: UpdateSshSessionRequest) => Promise<SshSession>;
   deleteSession: (id: string) => Promise<boolean>;
   getSession: (id: string) => SshSession | undefined;
 }
@@ -110,7 +110,7 @@ export function useSshSessions(): UseSshSessionsResult {
     }
   }, []);
 
-  const updateSession = useCallback(async (id: string, request: UpdateSshSessionRequest): Promise<SshSession | null> => {
+  const updateSession = useCallback(async (id: string, request: UpdateSshSessionRequest): Promise<SshSession> => {
     try {
       setError(null);
       const response = await appFetch(`/api/ssh-sessions/${id}`, {
@@ -126,8 +126,9 @@ export function useSshSessions(): UseSshSessionsResult {
       setSessions((prev) => prev.map((item) => item.config.id === id ? session : item));
       return session;
     } catch (err) {
-      setError(String(err));
-      return null;
+      const message = String(err);
+      setError(message);
+      throw err instanceof Error ? err : new Error(message);
     }
   }, []);
 

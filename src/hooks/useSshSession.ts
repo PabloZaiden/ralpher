@@ -23,7 +23,7 @@ export interface UseSshSessionResult {
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  updateSession: (request: UpdateSshSessionRequest) => Promise<AnySshSession | null>;
+  updateSession: (request: UpdateSshSessionRequest) => Promise<AnySshSession>;
   deleteSession: (options?: { password?: string }) => Promise<boolean>;
 }
 
@@ -122,7 +122,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
     onEvent: handleEvent,
   });
 
-  const updateSession = useCallback(async (request: UpdateSshSessionRequest): Promise<AnySshSession | null> => {
+  const updateSession = useCallback(async (request: UpdateSshSessionRequest): Promise<AnySshSession> => {
     try {
       setError(null);
       const endpoint = sessionKind === "standalone"
@@ -141,8 +141,9 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
       setSession(updated);
       return updated;
     } catch (err) {
-      setError(String(err));
-      return null;
+      const message = String(err);
+      setError(message);
+      throw err instanceof Error ? err : new Error(message);
     }
   }, [sessionId, sessionKind]);
 
