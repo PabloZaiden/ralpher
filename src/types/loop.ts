@@ -98,12 +98,13 @@ export interface GitConfig {
   /** Branch name prefix. Default: empty string; non-empty values are normalized to git-safe path segments (e.g., "team/" -> "team/add-auth"). */
   branchPrefix: string;
   /**
-   * Conventional commit scope. Default: "ralph".
+   * Conventional commit scope. Default: empty string.
    *
    * Inserted as the scope in conventional commit messages:
-   * `type(scope): description` (e.g., `feat(ralph): add auth endpoint`).
+   * `type(scope): description` (e.g., `feat(auth): add auth endpoint`).
    *
-   * Set to an empty string to omit the scope entirely.
+   * Leave empty to omit the scope entirely. Generic placeholder values such as
+   * `ralph` are treated as empty and omitted from generated commit messages.
    *
    * @deprecated The old `commitPrefix` field (e.g., "[Ralph]") is no longer used.
    */
@@ -413,7 +414,7 @@ export const DEFAULT_LOOP_CONFIG = {
   mode: "loop" as const,
   git: {
     branchPrefix: "",
-    commitScope: "ralph",
+    commitScope: "",
   },
 } as const;
 

@@ -7,6 +7,8 @@
  * @see https://www.conventionalcommits.org/en/v1.0.0/
  */
 
+import { normalizeCommitScope } from "../utils/commit-scope";
+
 /** Valid conventional commit types. */
 export const CONVENTIONAL_COMMIT_TYPES = [
   "feat",
@@ -49,7 +51,7 @@ const CONVENTIONAL_COMMIT_RE =
  * Format a conventional commit message from its parts.
  *
  * @param type - Commit type (feat, fix, chore, etc.)
- * @param scope - Optional scope (e.g., "ralph")
+ * @param scope - Optional scope (e.g., "auth")
  * @param description - Short description (will be trimmed)
  * @param body - Optional multi-line body
  * @returns A valid conventional commit message string
@@ -60,7 +62,8 @@ export function formatConventionalCommit(
   description: string,
   body?: string,
 ): string {
-  const scopePart = scope ? `(${scope})` : "";
+  const normalizedScope = normalizeCommitScope(scope);
+  const scopePart = normalizedScope ? `(${normalizedScope})` : "";
   const firstLine = `${type}${scopePart}: ${description.trim()}`;
 
   if (body && body.trim()) {
@@ -105,20 +108,22 @@ export function parseConventionalCommit(message: string): ParsedConventionalComm
 /**
  * Normalize raw AI-generated commit output into a valid conventional commit.
  *
- * The AI is prompted to produce `type: description` (without scope). This
- * function validates the type, injects the configured scope, and returns a
- * well-formed conventional commit string.
+ * The AI may produce either `type: description` or `type(scope): description`.
+ * This function validates the type, prefers a meaningful configured scope when
+ * one exists, otherwise preserves a meaningful AI-generated scope, and returns
+ * a well-formed conventional commit string.
  *
  * If the AI output cannot be parsed, falls back to `chore(scope): <raw>`.
  *
  * @param aiOutput - The raw string returned by the AI
- * @param scope - The scope to inject (e.g., "ralph")
+ * @param scope - Optional configured scope override (e.g., "auth")
  * @returns A valid conventional commit message string
  */
 export function normalizeAiCommitMessage(aiOutput: string, scope: string | undefined): string {
+  const configuredScope = normalizeCommitScope(scope);
   const trimmed = aiOutput.trim();
   if (!trimmed) {
-    return formatConventionalCommit("chore", scope, "update code");
+    return formatConventionalCommit("chore", configuredScope, "update code");
   }
 
   // Strip wrapping markdown code fences the AI sometimes adds
@@ -133,9 +138,9 @@ export function normalizeAiCommitMessage(aiOutput: string, scope: string | undef
   // Try to parse as conventional commit (AI may have included a scope or not)
   const parsed = parseConventionalCommit(cleaned);
   if (parsed) {
-    // Valid conventional commit — replace scope with the configured one
+    const effectiveScope = configuredScope ?? normalizeCommitScope(parsed.scope);
     const body = parsed.body;
-    return formatConventionalCommit(parsed.type, scope, parsed.description, body);
+    return formatConventionalCommit(parsed.type, effectiveScope, parsed.description, body);
   }
 
   // Try a looser match: "type: description" where type is valid
@@ -148,7 +153,7 @@ export function normalizeAiCommitMessage(aiOutput: string, scope: string | undef
         : undefined;
       return formatConventionalCommit(
         rawType.toLowerCase() as ConventionalCommitType,
-        scope,
+        configuredScope,
         description.trim(),
         body,
       );
@@ -157,10 +162,10 @@ export function normalizeAiCommitMessage(aiOutput: string, scope: string | undef
 
   // Fallback: wrap raw message as chore
   // Truncate to keep first line under 72 chars
-  const maxDescLen = 72 - "chore".length - (scope ? scope.length + 2 : 0) - 2; // 2 for ": "
+  const maxDescLen = 72 - "chore".length - (configuredScope ? configuredScope.length + 2 : 0) - 2; // 2 for ": "
   const truncated = firstLine.length > maxDescLen
     ? firstLine.slice(0, maxDescLen - 3) + "..."
     : firstLine;
 
-  return formatConventionalCommit("chore", scope, truncated.toLowerCase());
+  return formatConventionalCommit("chore", configuredScope, truncated.toLowerCase());
 }

@@ -2735,10 +2735,10 @@ ${userMessageSection}${errorContext}
   }
 
   /**
-   * Generate a meaningful commit message based on the changes.
-   * Uses the configured agent backend to summarize what was done, then normalizes the output
-   * into a valid conventional commit message with the configured scope.
-   */
+ * Generate a meaningful commit message based on the changes.
+ * Uses the configured agent backend to summarize what was done, then normalizes the output
+ * into a valid conventional commit message with an optional meaningful scope.
+ */
   private async generateCommitMessage(iteration: number, responseContent: string): Promise<string> {
     const scope = this.config.git.commitScope;
 
@@ -2756,7 +2756,7 @@ ${userMessageSection}${errorContext}
     const prompt: PromptInput = {
       parts: [{
         type: "text",
-        text: `Generate a concise git commit message following the Conventional Commits format for the following changes. Do not include any explanation, just output the commit message directly.
+      text: `Generate a concise git commit message following the Conventional Commits format for the following changes. Do not include any explanation, just output the commit message directly.
 
 Changed files:
 ${changedFiles.map(f => `- ${f}`).join("\n")}
@@ -2764,8 +2764,9 @@ ${changedFiles.map(f => `- ${f}`).join("\n")}
 Summary of work done this iteration:
 ${responseContent.slice(0, 500)}...
 
-The commit message MUST follow the Conventional Commits format:
+The commit message MUST follow one of these Conventional Commits formats:
   type: description
+  type(scope): description
 
 Valid types: feat, fix, refactor, docs, style, test, build, ci, chore, perf, revert
 - feat: a new feature
@@ -2775,10 +2776,12 @@ Valid types: feat, fix, refactor, docs, style, test, build, ci, chore, perf, rev
 - chore: maintenance tasks
 
 Rules:
-1. Use the format "type: description" (do NOT include a scope — it will be added automatically)
-2. First line max 72 characters
-3. Be specific about what changed
-4. Optionally include a blank line followed by more details
+1. Only include a scope when it names a specific module, section, topic, or area touched by the change
+2. Never use generic scopes like "ralph"
+3. If no meaningful scope stands out, omit the scope entirely and use "type: description"
+4. First line max 72 characters
+5. Be specific about what changed
+6. Optionally include a blank line followed by more details
 
 Output ONLY the commit message, nothing else.`
       }],

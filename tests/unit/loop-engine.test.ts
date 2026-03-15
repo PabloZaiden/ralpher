@@ -168,7 +168,7 @@ describe("StopPatternDetector", () => {
       model: { providerID: "test-provider", modelID: "test-model" },
       // Backend is now global, not per-loop config
       stopPattern: "<promise>COMPLETE</promise>$",
-      git: { branchPrefix: "", commitScope: "ralph" },
+      git: { branchPrefix: "", commitScope: "" },
       maxIterations: Infinity,
       maxConsecutiveErrors: 10,
       activityTimeoutSeconds: DEFAULT_LOOP_CONFIG.activityTimeoutSeconds,

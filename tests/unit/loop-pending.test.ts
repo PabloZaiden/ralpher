@@ -138,7 +138,7 @@ describe("LoopEngine Pending Model", () => {
       stopPattern: "<promise>COMPLETE</promise>$",
       git: {
         branchPrefix: "",
-        commitScope: "ralph",
+        commitScope: "",
       },
       model: {
         providerID: "anthropic",

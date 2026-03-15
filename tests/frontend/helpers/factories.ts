@@ -108,7 +108,7 @@ export function createServerSettings(
 export function createGitConfig(overrides?: Partial<GitConfig>): GitConfig {
   return {
     branchPrefix: "",
-    commitScope: "ralph",
+    commitScope: "",
     ...overrides,
   };
 }
@@ -117,7 +117,7 @@ export function createGitCommit(overrides?: Partial<GitCommit>): GitCommit {
   return {
     iteration: 1,
     sha: "abc123def456",
-    message: "feat(ralph): initial implementation",
+    message: "feat: initial implementation",
     timestamp: isoNow(),
     filesChanged: 3,
     ...overrides,
