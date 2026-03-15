@@ -858,13 +858,25 @@ describe("GitService", () => {
   });
 
   describe("SSH host key auto-accept", () => {
-    test("retries push with accept-new when SSH host verification fails", async () => {
+    test("retries push by extending an existing GIT_SSH_COMMAND and persisting known hosts in git dir", async () => {
       const executor = new ScriptedCommandExecutor([
         {
           success: false,
           stdout: "",
           stderr: "Host key verification failed.\nfatal: Could not read from remote repository.\n",
           exitCode: 128,
+        },
+        {
+          success: true,
+          stdout: "ssh -i /tmp/custom-key",
+          stderr: "",
+          exitCode: 0,
+        },
+        {
+          success: true,
+          stdout: ".git/ralpher-known-hosts\n",
+          stderr: "",
+          exitCode: 0,
         },
         {
           success: true,
@@ -878,16 +890,19 @@ describe("GitService", () => {
       const remoteBranch = await git.pushBranch("/repo", "feature/test");
 
       expect(remoteBranch).toBe("origin/feature/test");
-      expect(executor.calls).toHaveLength(2);
+      expect(executor.calls).toHaveLength(4);
       expect(executor.calls[0]?.command).toBe("git");
       expect(executor.calls[0]?.args).toEqual(["-C", "/repo", "push", "-u", "origin", "feature/test"]);
       expect(executor.calls[0]?.options?.env).toBeUndefined();
-      expect(executor.calls[1]?.options?.env).toEqual({
-        GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=accept-new",
+      expect(executor.calls[1]?.command).toBe("bash");
+      expect(executor.calls[1]?.args).toEqual(["-lc", "printf %s \"${GIT_SSH_COMMAND:-}\""]);
+      expect(executor.calls[2]?.args).toEqual(["-C", "/repo", "rev-parse", "--git-path", "ralpher-known-hosts"]);
+      expect(executor.calls[3]?.options?.env).toEqual({
+        GIT_SSH_COMMAND: "ssh -i /tmp/custom-key -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile='/repo/.git/ralpher-known-hosts'",
       });
     });
 
-    test("retries fetch with accept-new when SSH host verification fails", async () => {
+    test("retries fetch by extending core.sshCommand when no GIT_SSH_COMMAND override is set", async () => {
       const executor = new ScriptedCommandExecutor([
         {
           success: true,
@@ -907,16 +922,37 @@ describe("GitService", () => {
           stderr: "",
           exitCode: 0,
         },
+        {
+          success: true,
+          stdout: "ssh -i ~/.ssh/review-key\n",
+          stderr: "",
+          exitCode: 0,
+        },
+        {
+          success: true,
+          stdout: ".git/ralpher-known-hosts\n",
+          stderr: "",
+          exitCode: 0,
+        },
+        {
+          success: true,
+          stdout: "",
+          stderr: "",
+          exitCode: 0,
+        },
       ]);
       const git = new GitService(executor);
 
       const fetched = await git.fetchBranch("/repo", "main");
 
       expect(fetched).toBe(true);
-      expect(executor.calls).toHaveLength(3);
-      expect(executor.calls[2]?.args).toEqual(["-C", "/repo", "fetch", "origin", "main"]);
-      expect(executor.calls[2]?.options?.env).toEqual({
-        GIT_SSH_COMMAND: "ssh -o StrictHostKeyChecking=accept-new",
+      expect(executor.calls).toHaveLength(6);
+      expect(executor.calls[2]?.command).toBe("bash");
+      expect(executor.calls[3]?.args).toEqual(["-C", "/repo", "config", "--get", "core.sshCommand"]);
+      expect(executor.calls[4]?.args).toEqual(["-C", "/repo", "rev-parse", "--git-path", "ralpher-known-hosts"]);
+      expect(executor.calls[5]?.args).toEqual(["-C", "/repo", "fetch", "origin", "main"]);
+      expect(executor.calls[5]?.options?.env).toEqual({
+        GIT_SSH_COMMAND: "ssh -i ~/.ssh/review-key -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile='/repo/.git/ralpher-known-hosts'",
       });
     });
 
