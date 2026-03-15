@@ -20,6 +20,8 @@ const api = createMockApi();
 const ws = createMockWebSocket();
 
 const LOOP_ID = "loop-1";
+let openCalls: Array<{ url: string; target: string; features: string }> = [];
+let originalWindowOpen: typeof window.open;
 
 /** Set up default API routes for LoopDetails. */
 function setupDefaultApi(loopOverrides?: Parameters<typeof createLoopWithStatus>[1]) {
@@ -70,9 +72,20 @@ beforeEach(() => {
   api.get("/api/loops/:id/port-forwards", () => []);
   ws.reset();
   ws.install();
+  openCalls = [];
+  originalWindowOpen = window.open;
+  window.open = ((url?: string | URL, target?: string, features?: string) => {
+    openCalls.push({
+      url: String(url),
+      target: target ?? "",
+      features: features ?? "",
+    });
+    return null;
+  }) as typeof window.open;
 });
 
 afterEach(() => {
+  window.open = originalWindowOpen;
   api.uninstall();
   ws.uninstall();
 });
@@ -782,6 +795,152 @@ describe("actions tab content", () => {
     expect(button.disabled).toBe(true);
     expect(getByText("Failed to load pull request information.")).toBeTruthy();
     expect(queryByText("Failed to get pull request destination: Internal Server Error")).toBeNull();
+  });
+
+  test("pushed loop opens the create PR page when no PR exists", async () => {
+    const loop = createLoopWithStatus("pushed", {
+      config: { id: LOOP_ID, name: "Pushed Loop" },
+    });
+    let pullRequestCalls = 0;
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/pull-request", () => {
+      pullRequestCalls += 1;
+      return {
+        enabled: true,
+        destinationType: "create_pr",
+        url: "https://github.com/example/repo/compare/main...feature%2Floop?expand=1",
+      };
+    });
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByRole, getByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Pushed Loop")).toBeTruthy();
+    });
+
+    await user.click(getByText("Actions"));
+
+    const button = await waitFor(() => getByRole("button", { name: /Go to PR/i }) as HTMLButtonElement);
+    await waitFor(() => {
+      expect(button.disabled).toBe(false);
+    });
+
+    await user.click(button);
+
+    await waitFor(() => {
+      expect(openCalls).toHaveLength(1);
+    });
+    expect(openCalls[0]).toEqual({
+      url: "https://github.com/example/repo/compare/main...feature%2Floop?expand=1",
+      target: "_blank",
+      features: "noopener,noreferrer",
+    });
+    expect(pullRequestCalls).toBe(2);
+  });
+
+  test("pushed loop opens the existing PR when one already exists", async () => {
+    const loop = createLoopWithStatus("pushed", {
+      config: { id: LOOP_ID, name: "Pushed Loop" },
+    });
+    let pullRequestCalls = 0;
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/pull-request", () => {
+      pullRequestCalls += 1;
+      return {
+        enabled: true,
+        destinationType: "existing_pr",
+        url: "https://github.com/example/repo/pull/42",
+      };
+    });
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByRole, getByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Pushed Loop")).toBeTruthy();
+    });
+
+    await user.click(getByText("Actions"));
+
+    const button = await waitFor(() => getByRole("button", { name: /Go to PR/i }) as HTMLButtonElement);
+    await waitFor(() => {
+      expect(button.disabled).toBe(false);
+    });
+
+    await user.click(button);
+
+    await waitFor(() => {
+      expect(openCalls).toHaveLength(1);
+    });
+    expect(openCalls[0]?.url).toBe("https://github.com/example/repo/pull/42");
+    expect(pullRequestCalls).toBe(2);
+  });
+
+  test("pushed loop re-checks the destination on click and opens a new PR if it appeared later", async () => {
+    const loop = createLoopWithStatus("pushed", {
+      config: { id: LOOP_ID, name: "Pushed Loop" },
+    });
+    const destinations = [
+      {
+        enabled: true,
+        destinationType: "create_pr" as const,
+        url: "https://github.com/example/repo/compare/main...feature%2Floop?expand=1",
+      },
+      {
+        enabled: true,
+        destinationType: "existing_pr" as const,
+        url: "https://github.com/example/repo/pull/99",
+      },
+    ];
+    let pullRequestCalls = 0;
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/pull-request", () => {
+      const destination = destinations[Math.min(pullRequestCalls, destinations.length - 1)];
+      pullRequestCalls += 1;
+      return destination;
+    });
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByRole, getByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Pushed Loop")).toBeTruthy();
+    });
+
+    await user.click(getByText("Actions"));
+
+    const button = await waitFor(() => getByRole("button", { name: /Go to PR/i }) as HTMLButtonElement);
+    await waitFor(() => {
+      expect(getByText("Open GitHub to create a pull request from this branch")).toBeTruthy();
+      expect(button.disabled).toBe(false);
+    });
+
+    await user.click(button);
+
+    await waitFor(() => {
+      expect(openCalls).toHaveLength(1);
+    });
+    expect(openCalls[0]?.url).toBe("https://github.com/example/repo/pull/99");
+    expect(pullRequestCalls).toBe(2);
   });
 });
 
