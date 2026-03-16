@@ -32,6 +32,7 @@ function setupBaseApi() {
   api.get("/api/preferences/log-level", () => ({ level: "info" }));
   api.get("/api/preferences/last-directory", () => null);
   api.get("/api/models", () => [createModelInfo({ connected: true })]);
+  api.get("/api/ssh-servers", () => []);
   api.get("/api/workspaces/:id/server-settings/status", () => ({
     connected: false,
     provider: "opencode",
@@ -164,6 +165,97 @@ describe("workspace management scenario", () => {
           provider: "copilot",
           transport: "ssh",
           hostname: "localhost",
+          port: 22,
+        },
+      },
+    });
+  });
+
+  test("create workspace can use a registered SSH server selection", async () => {
+    setupBaseApi();
+    api.get("/api/loops", () => []);
+    api.get("/api/workspaces", () => []);
+    api.get("/api/ssh-servers", () => [{
+      config: {
+        id: "server-1",
+        name: "Build Box",
+        address: "10.0.0.5",
+        username: "vscode",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      publicKey: {
+        algorithm: "RSA-OAEP-256",
+        publicKey: "public-key",
+        fingerprint: "fingerprint",
+        version: 1,
+        createdAt: new Date().toISOString(),
+      },
+    }]);
+    api.get("/api/ssh-servers/:id/sessions", () => []);
+    api.post("/api/workspaces", () => ({
+      id: "ws-new",
+      name: "Build Workspace",
+      directory: "/workspaces/build",
+      serverSettings: {
+        agent: {
+          provider: "copilot",
+          transport: "ssh",
+          hostname: "10.0.0.5",
+          port: 22,
+        },
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }));
+
+    const { getByText, queryByLabelText, user } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByText("Ralpher")).toBeTruthy();
+    });
+
+    await user.click(getByText("New Workspace"));
+    await waitFor(() => {
+      expect(
+        document.querySelector("h2")?.textContent?.includes("Create Workspace"),
+      ).toBe(true);
+    });
+
+    const serverSelect = document.querySelector("#agent-registered-ssh-server") as HTMLSelectElement;
+    expect(serverSelect).toBeTruthy();
+    expect(serverSelect.value).toBe("__other__");
+
+    await user.selectOptions(serverSelect, "server-1");
+
+    expect(queryByLabelText("Hostname")).toBeNull();
+
+    const nameInput = document.querySelector("#workspace-name") as HTMLInputElement;
+    await user.type(nameInput, "Build Workspace");
+
+    const dirInput = document.querySelector("#workspace-directory") as HTMLInputElement;
+    await user.type(dirInput, "/workspaces/build");
+
+    const submitBtn = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Create Workspace" && button.type === "submit",
+    );
+    expect(submitBtn).toBeTruthy();
+    await user.click(submitBtn!);
+
+    await waitFor(() => {
+      const postCalls = api.calls("/api/workspaces", "POST");
+      expect(postCalls.length).toBeGreaterThan(0);
+    });
+
+    const postCalls = api.calls("/api/workspaces", "POST");
+    expect(postCalls[0]?.body).toEqual({
+      name: "Build Workspace",
+      directory: "/workspaces/build",
+      serverSettings: {
+        agent: {
+          provider: "copilot",
+          transport: "ssh",
+          hostname: "10.0.0.5",
           port: 22,
         },
       },
