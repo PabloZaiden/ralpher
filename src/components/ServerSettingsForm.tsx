@@ -6,6 +6,19 @@
 import { useEffect, useState } from "react";
 import { Button, PASSWORD_INPUT_PROPS } from "./common";
 import type { ServerSettings, AgentProvider, AgentTransport } from "../types/settings";
+import type { SshServer } from "../types";
+
+const OTHER_SSH_SERVER_OPTION = "__other__";
+
+function resolveRegisteredSshServerId(hostname: string, registeredSshServers: readonly SshServer[]): string {
+  const normalizedHostname = hostname.trim();
+  if (!normalizedHostname) {
+    return OTHER_SSH_SERVER_OPTION;
+  }
+
+  return registeredSshServers.find((server) => server.config.address.trim() === normalizedHostname)?.config.id
+    ?? OTHER_SSH_SERVER_OPTION;
+}
 
 export interface ServerSettingsFormProps {
   /** Initial server settings (for editing) */
@@ -18,6 +31,8 @@ export interface ServerSettingsFormProps {
   testing?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
   remoteOnly?: boolean;
+  /** Optional list of registered SSH servers for hostname selection */
+  registeredSshServers?: readonly SshServer[];
 }
 
 /**
@@ -29,6 +44,7 @@ export function ServerSettingsForm({
   onTest,
   testing = false,
   remoteOnly = false,
+  registeredSshServers = [],
 }: ServerSettingsFormProps) {
   const [agentProvider, setAgentProvider] = useState<AgentProvider>(
     initialSettings?.agent.provider ?? "opencode",
@@ -38,6 +54,11 @@ export function ServerSettingsForm({
   );
   const [agentHostname, setAgentHostname] = useState(
     initialSettings?.agent.transport === "ssh" ? initialSettings.agent.hostname : "localhost",
+  );
+  const [selectedRegisteredSshServerId, setSelectedRegisteredSshServerId] = useState(
+    initialSettings?.agent.transport === "ssh"
+      ? resolveRegisteredSshServerId(initialSettings.agent.hostname, registeredSshServers)
+      : OTHER_SSH_SERVER_OPTION,
   );
   const [agentPort, setAgentPort] = useState(
     String(initialSettings?.agent.transport === "ssh" ? (initialSettings.agent.port ?? 22) : 22),
@@ -56,6 +77,9 @@ export function ServerSettingsForm({
     const nextProvider = initialSettings?.agent.provider ?? "opencode";
     const nextTransport = remoteOnly ? "ssh" : (initialSettings?.agent.transport ?? "stdio");
     const nextHost = initialSettings?.agent.transport === "ssh" ? initialSettings.agent.hostname : "localhost";
+    const nextSelectedRegisteredSshServerId = nextTransport === "ssh"
+      ? resolveRegisteredSshServerId(nextHost, registeredSshServers)
+      : OTHER_SSH_SERVER_OPTION;
     const nextPort = String(initialSettings?.agent.transport === "ssh" ? (initialSettings.agent.port ?? 22) : 22);
     const nextUsername = initialSettings?.agent.transport === "ssh" ? (initialSettings.agent.username ?? "") : "";
     const nextPassword = initialSettings?.agent.transport === "ssh" ? (initialSettings.agent.password ?? "") : "";
@@ -63,6 +87,7 @@ export function ServerSettingsForm({
     setAgentProvider(nextProvider);
     setAgentTransport(nextTransport);
     setAgentHostname(nextHost);
+    setSelectedRegisteredSshServerId(nextSelectedRegisteredSshServerId);
     setAgentPort(nextPort);
     setAgentUsername(nextUsername);
     setAgentPassword(nextPassword);
@@ -72,7 +97,8 @@ export function ServerSettingsForm({
     const settings = buildSettings({
       provider: nextProvider,
       transport: nextTransport,
-      hostname: nextHost,
+      manualHostname: nextHost,
+      selectedRegisteredSshServerId: nextSelectedRegisteredSshServerId,
       port: nextPort,
       username: nextUsername,
       password: nextPassword,
@@ -83,14 +109,22 @@ export function ServerSettingsForm({
   function buildSettings(overrides?: {
     provider?: AgentProvider;
     transport?: AgentTransport;
-    hostname?: string;
+    manualHostname?: string;
+    selectedRegisteredSshServerId?: string;
     port?: string;
     username?: string;
     password?: string;
   }): ServerSettings {
     const provider = overrides?.provider ?? agentProvider;
     const transport = overrides?.transport ?? agentTransport;
-    const hostname = overrides?.hostname ?? agentHostname;
+    const manualHostname = overrides?.manualHostname ?? agentHostname;
+    const nextSelectedRegisteredSshServerId = overrides?.selectedRegisteredSshServerId ?? selectedRegisteredSshServerId;
+    const selectedRegisteredSshServer = registeredSshServers.find(
+      (server) => server.config.id === nextSelectedRegisteredSshServerId,
+    );
+    const hostname = nextSelectedRegisteredSshServerId !== OTHER_SSH_SERVER_OPTION && selectedRegisteredSshServer
+      ? selectedRegisteredSshServer.config.address
+      : manualHostname;
     const port = overrides?.port ?? agentPort;
     const username = overrides?.username ?? agentUsername;
     const password = overrides?.password ?? agentPassword;
@@ -126,7 +160,8 @@ export function ServerSettingsForm({
   function notifyChange(overrides?: {
     provider?: AgentProvider;
     transport?: AgentTransport;
-    hostname?: string;
+    manualHostname?: string;
+    selectedRegisteredSshServerId?: string;
     port?: string;
     username?: string;
     password?: string;
@@ -134,6 +169,13 @@ export function ServerSettingsForm({
     const settings = buildSettings(overrides);
     onChange(settings, validateSettings(settings));
   }
+
+  const selectedRegisteredSshServer = registeredSshServers.find(
+    (server) => server.config.id === selectedRegisteredSshServerId,
+  );
+  const showRegisteredSshServerSelect = agentTransport === "ssh" && registeredSshServers.length > 0;
+  const showManualHostnameInput = agentTransport === "ssh"
+    && (!showRegisteredSshServerSelect || selectedRegisteredSshServerId === OTHER_SSH_SERVER_OPTION);
 
   async function handleTest() {
     if (!onTest) {
@@ -195,23 +237,60 @@ export function ServerSettingsForm({
         {agentTransport === "ssh" && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="agent-hostname" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Hostname
-                </label>
-                <input
-                  id="agent-hostname"
-                  type="text"
-                  value={agentHostname}
-                  onChange={(e) => {
-                    setAgentHostname(e.target.value);
-                    setTestResult(null);
-                    notifyChange({ hostname: e.target.value });
-                  }}
-                  placeholder="remote-host"
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
-                />
-              </div>
+              {showRegisteredSshServerSelect && (
+                <div>
+                  <label
+                    htmlFor="agent-registered-ssh-server"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Server
+                  </label>
+                  <select
+                    id="agent-registered-ssh-server"
+                    value={selectedRegisteredSshServerId}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSelectedRegisteredSshServerId(value);
+                      setTestResult(null);
+                      notifyChange({ selectedRegisteredSshServerId: value });
+                    }}
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                  >
+                    {registeredSshServers.map((server) => (
+                      <option key={server.config.id} value={server.config.id}>
+                        {server.config.name}
+                      </option>
+                    ))}
+                    <option value={OTHER_SSH_SERVER_OPTION}>Other</option>
+                  </select>
+                  {selectedRegisteredSshServer && selectedRegisteredSshServerId !== OTHER_SSH_SERVER_OPTION && (
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      Using {selectedRegisteredSshServer.config.address}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {showManualHostnameInput && (
+                <div>
+                  <label htmlFor="agent-hostname" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Hostname
+                  </label>
+                  <input
+                    id="agent-hostname"
+                    type="text"
+                    value={agentHostname}
+                    onChange={(e) => {
+                      setAgentHostname(e.target.value);
+                      setTestResult(null);
+                      notifyChange({ manualHostname: e.target.value });
+                    }}
+                    placeholder="remote-host"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                  />
+                </div>
+              )}
+
               <div>
                 <label htmlFor="agent-port" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Port

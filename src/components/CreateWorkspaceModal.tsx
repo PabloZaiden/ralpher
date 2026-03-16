@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useMemo, type FormEvent } from "react
 import { Modal, Button } from "./common";
 import { ServerSettingsForm } from "./ServerSettingsForm";
 import type { ServerSettings } from "../types/settings";
+import type { SshServer } from "../types";
 import type { CreateWorkspaceRequest } from "../types/workspace";
 import { appFetch } from "../lib/public-path";
 
@@ -34,6 +35,8 @@ export interface CreateWorkspaceModalProps {
   error?: string | null;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
   remoteOnly?: boolean;
+  /** Registered standalone SSH servers available for hostname selection */
+  registeredSshServers?: SshServer[];
 }
 
 /**
@@ -46,6 +49,7 @@ export function CreateWorkspaceModal({
   creating = false,
   error,
   remoteOnly = false,
+  registeredSshServers = [],
 }: CreateWorkspaceModalProps) {
   const defaultServerSettings = useMemo(() => getCreateWorkspaceDefaultServerSettings(), []);
 
@@ -195,6 +199,7 @@ export function CreateWorkspaceModal({
           onTest={handleTestConnection}
           testing={testing}
           remoteOnly={remoteOnly}
+          registeredSshServers={registeredSshServers}
         />
 
         {/* Error message */}
