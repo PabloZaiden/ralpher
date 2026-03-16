@@ -478,8 +478,10 @@ class BackendManager {
     settings: ServerSettings,
     directory: string
   ): Promise<{ success: boolean; error?: string }> {
-    // Create a temporary backend for testing
-    const testBackend = this.createBackendForSettings(settings);
+    // Reuse the configured test backend when present so tests can stub connection behavior.
+    const testBackend = this.isTestBackend && this.testBackend
+      ? this.testBackend
+      : this.createBackendForSettings(settings);
     const config = buildConnectionConfig(settings, directory);
     const abortController = new AbortController();
     let timeoutId: ReturnType<typeof setTimeout> | undefined;

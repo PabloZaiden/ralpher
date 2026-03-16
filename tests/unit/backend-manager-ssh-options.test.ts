@@ -27,7 +27,8 @@ describe("buildConnectionConfig SSH command options", () => {
     expect(args).toContain("StrictHostKeyChecking=no");
     expect(args).toContain("UserKnownHostsFile=/dev/null");
     expect(args).toContain("alice@remote.example.com");
-    expect(args[args.length - 1]).toContain("bash -lc");
+    expect(args[args.length - 1]).toContain("sh -lc");
+    expect(args[args.length - 1]).toContain('exec "$shell_path" -ilc');
     expect(args[args.length - 1]).toContain("copilot");
     expect(args[args.length - 1]).toContain("--yolo");
     expect(args[args.length - 1]).toContain("--acp");
@@ -53,11 +54,11 @@ describe("buildConnectionConfig SSH command options", () => {
     expect(args).toContain("ConnectTimeout=10");
     expect(args).toContain("StrictHostKeyChecking=no");
     expect(args).toContain("UserKnownHostsFile=/dev/null");
-    expect(args[args.length - 1]).toContain("bash -lc");
+    expect(args[args.length - 1]).toContain("sh -lc");
+    expect(args[args.length - 1]).toContain('exec "$shell_path" -ilc');
     expect(args[args.length - 1]).toContain("copilot");
     expect(args[args.length - 1]).toContain("--yolo");
     expect(args[args.length - 1]).toContain("--acp");
-    expect(args[args.length - 1]).toContain("source ~/.profile");
   });
 
   test("uses an explicit identity file when one is configured", () => {

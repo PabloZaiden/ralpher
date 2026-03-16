@@ -1,8 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
-import { CommandExecutorImpl } from "../../src/core/remote-command-executor";
+import { buildSshRemoteShellCommand, CommandExecutorImpl } from "../../src/core/remote-command-executor";
 
 describe("CommandExecutorImpl SSH spawn cwd", () => {
+  test("builds a shell bootstrap that prefers zsh and falls back to bash/sh", () => {
+    const script = buildSshRemoteShellCommand("echo hello");
+
+    expect(script).toContain("sh -lc");
+    expect(script).toContain('shell_path="${SHELL:-}"');
+    expect(script).toContain('exec "$shell_path" -ilc');
+    expect(script).toContain('command -v sh');
+  });
+
   test("uses root cwd for SSH command execution", async () => {
     const originalSpawn = Bun.spawn;
     let capturedCwd: string | undefined;
@@ -32,8 +41,8 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
       const commandTokens = capturedCommand ?? [];
       const scriptArg = commandTokens[commandTokens.indexOf("--") + 1];
       expect(typeof scriptArg).toBe("string");
-      expect(scriptArg ?? "").toContain("bash -lc");
-      expect(scriptArg ?? "").toContain("source ~/.profile");
+      expect(scriptArg ?? "").toContain("sh -lc");
+      expect(scriptArg ?? "").toContain('exec "$shell_path" -ilc');
       expect(scriptArg ?? "").toContain("&&");
       expect(result.stderr).toContain("mock spawn failure");
     } finally {
@@ -67,8 +76,8 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
 
       const commandTokens = capturedCommand ?? [];
       const scriptArg = commandTokens[commandTokens.indexOf("--") + 1] ?? "";
-      expect(scriptArg).toContain("bash -lc");
-      expect(scriptArg).toContain("source ~/.profile");
+      expect(scriptArg).toContain("sh -lc");
+      expect(scriptArg).toContain('exec "$shell_path" -ilc');
       expect(scriptArg).toContain("git");
       expect(scriptArg).toContain("status");
       expect(scriptArg).toContain("--porcelain");

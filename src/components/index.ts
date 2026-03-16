@@ -13,6 +13,7 @@ export { SshSessionDetails } from "./SshSessionDetails";
 export { LogViewer } from "./LogViewer";
 export { CreateLoopForm } from "./CreateLoopForm";
 export { CreateSshSessionModal } from "./CreateSshSessionModal";
+export { ProvisioningJobView } from "./ProvisioningJobView";
 export { RenameSshSessionModal } from "./RenameSshSessionModal";
 export { LoopActionBar } from "./LoopActionBar";
 export { SshSessionSection } from "./SshSessionSection";

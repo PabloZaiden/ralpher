@@ -4,7 +4,7 @@
  * No external dependencies - uses native patterns.
  */
 
-import type { LoopEvent, SshSessionEvent } from "../types";
+import type { LoopEvent, ProvisioningEvent, SshSessionEvent } from "../types";
 import { log } from "./logger";
 
 type EventHandler<T> = (event: T) => void;
@@ -75,3 +75,8 @@ export const loopEventEmitter = new SimpleEventEmitter<LoopEvent>();
  * Global event emitter instance for SSH session events.
  */
 export const sshSessionEventEmitter = new SimpleEventEmitter<SshSessionEvent>();
+
+/**
+ * Global event emitter instance for provisioning job events.
+ */
+export const provisioningEventEmitter = new SimpleEventEmitter<ProvisioningEvent>();

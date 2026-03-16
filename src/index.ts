@@ -48,9 +48,16 @@ try {
         const loopId = url.searchParams.get("loopId") ?? undefined;
         const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
         const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
+        const provisioningJobId = url.searchParams.get("provisioningJobId") ?? undefined;
 
         const upgraded = server.upgrade(req, {
-          data: { loopId, sshSessionId, sshServerSessionId, terminalMode: false } as WebSocketData,
+          data: {
+            loopId,
+            sshSessionId,
+            sshServerSessionId,
+            provisioningJobId,
+            terminalMode: false,
+          } as WebSocketData,
         });
 
         if (upgraded) {

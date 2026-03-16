@@ -113,6 +113,7 @@ export interface DashboardModalsProps {
   showCreateWorkspaceModal: boolean;
   onCloseCreateWorkspaceModal: () => void;
   onCreateWorkspace: (request: CreateWorkspaceRequest) => Promise<Workspace | null>;
+  onProvisioningSuccess?: () => Promise<void>;
   sshServers: SshServer[];
 }
 
@@ -432,6 +433,7 @@ export function DashboardModals(props: DashboardModalsProps) {
         error={props.workspaceError}
         remoteOnly={props.remoteOnly}
         registeredSshServers={props.sshServers}
+        onProvisioningSuccess={props.onProvisioningSuccess}
       />
 
     </>

@@ -18,6 +18,15 @@ export class TestCommandExecutor implements CommandExecutor {
   async exec(command: string, args: string[], options?: CommandOptions): Promise<CommandResult> {
     try {
       const cwd = options?.cwd ?? process.cwd();
+      if (options?.signal?.aborted) {
+        return {
+          success: false,
+          stdout: "",
+          stderr: "Command aborted",
+          exitCode: 130,
+        };
+      }
+
       // Use Bun.spawn which handles cwd more reliably than Bun.$
       const proc = Bun.spawn([command, ...args], {
         cwd,
@@ -25,11 +34,12 @@ export class TestCommandExecutor implements CommandExecutor {
         stderr: "pipe",
         ...(options?.env ? { env: { ...process.env, ...options.env } } : {}),
       });
-      
-      // Wait for process to complete
-      const exitCode = await proc.exited;
+
       const stdout = await new Response(proc.stdout).text();
       const stderr = await new Response(proc.stderr).text();
+      options?.onStdoutChunk?.(stdout);
+      options?.onStderrChunk?.(stderr);
+      const exitCode = await proc.exited;
       
       return {
         success: exitCode === 0,
