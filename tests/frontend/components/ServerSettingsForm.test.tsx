@@ -6,6 +6,43 @@ import { describe, test, expect, mock } from "bun:test";
 import { ServerSettingsForm } from "@/components/ServerSettingsForm";
 import { renderWithUser, waitFor } from "../helpers/render";
 
+const registeredSshServers = [
+  {
+    config: {
+      id: "server-1",
+      name: "Build Box",
+      address: "10.0.0.5",
+      username: "vscode",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    publicKey: {
+      algorithm: "RSA-OAEP-256" as const,
+      publicKey: "public-key-1",
+      fingerprint: "fingerprint-1",
+      version: 1,
+      createdAt: new Date().toISOString(),
+    },
+  },
+  {
+    config: {
+      id: "server-2",
+      name: "Staging",
+      address: "10.0.0.6",
+      username: "deploy",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    publicKey: {
+      algorithm: "RSA-OAEP-256" as const,
+      publicKey: "public-key-2",
+      fingerprint: "fingerprint-2",
+      version: 1,
+      createdAt: new Date().toISOString(),
+    },
+  },
+];
+
 describe("ServerSettingsForm", () => {
   test("emits stdio settings by default without legacy fields", async () => {
     const onChange = mock();
@@ -118,5 +155,77 @@ describe("ServerSettingsForm", () => {
     expect(settings.agent.transport).toBe("ssh");
     expect(settings.agent.hostname).toBe("localhost");
     expect(settings.agent.port).toBe(22);
+  });
+
+  test("selecting a registered SSH server emits its address as hostname", async () => {
+    const onChange = mock();
+    const { getByLabelText, queryByLabelText, user } = renderWithUser(
+      <ServerSettingsForm
+        onChange={onChange}
+        remoteOnly={true}
+        registeredSshServers={registeredSshServers}
+      />
+    );
+
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalled();
+    });
+
+    const serverSelect = getByLabelText("Server") as HTMLSelectElement;
+    expect(serverSelect.value).toBe("__other__");
+    expect(getByLabelText("Hostname")).toBeTruthy();
+
+    await user.selectOptions(serverSelect, "server-1");
+
+    expect(queryByLabelText("Hostname")).not.toBeInTheDocument();
+
+    const [settings, isValid] = onChange.mock.calls.at(-1) as [
+      {
+        agent: {
+          transport: string;
+          hostname?: string;
+          port?: number;
+        };
+      },
+      boolean,
+    ];
+
+    expect(settings.agent.transport).toBe("ssh");
+    expect(settings.agent.hostname).toBe("10.0.0.5");
+    expect(settings.agent.port).toBe(22);
+    expect(isValid).toBe(true);
+  });
+
+  test("selecting Other reveals manual hostname entry and preserves manual edits", async () => {
+    const onChange = mock();
+    const { getByLabelText, user } = renderWithUser(
+      <ServerSettingsForm
+        onChange={onChange}
+        remoteOnly={true}
+        registeredSshServers={registeredSshServers}
+      />
+    );
+
+    const serverSelect = getByLabelText("Server") as HTMLSelectElement;
+    await user.selectOptions(serverSelect, "server-2");
+    await user.selectOptions(serverSelect, "__other__");
+
+    const hostInput = getByLabelText("Hostname") as HTMLInputElement;
+    await user.clear(hostInput);
+    await user.type(hostInput, "manual-host");
+
+    const [settings, isValid] = onChange.mock.calls.at(-1) as [
+      {
+        agent: {
+          transport: string;
+          hostname?: string;
+        };
+      },
+      boolean,
+    ];
+
+    expect(settings.agent.transport).toBe("ssh");
+    expect(settings.agent.hostname).toBe("manual-host");
+    expect(isValid).toBe(true);
   });
 });

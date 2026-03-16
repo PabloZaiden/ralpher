@@ -12,6 +12,7 @@ import type {
   CreateLoopRequest,
   CreateChatRequest,
   SshSession,
+  SshServer,
 } from "../types";
 import type { WorkspaceExportData, WorkspaceImportResult, CreateWorkspaceRequest } from "../types/workspace";
 import type { CreateLoopFormActionState } from "./CreateLoopForm";
@@ -112,6 +113,7 @@ export interface DashboardModalsProps {
   showCreateWorkspaceModal: boolean;
   onCloseCreateWorkspaceModal: () => void;
   onCreateWorkspace: (request: CreateWorkspaceRequest) => Promise<Workspace | null>;
+  sshServers: SshServer[];
 }
 
 export function DashboardModals(props: DashboardModalsProps) {
@@ -429,6 +431,7 @@ export function DashboardModals(props: DashboardModalsProps) {
         creating={props.workspaceCreating}
         error={props.workspaceError}
         remoteOnly={props.remoteOnly}
+        registeredSshServers={props.sshServers}
       />
 
     </>
