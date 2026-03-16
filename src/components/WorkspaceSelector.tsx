@@ -85,12 +85,12 @@ export function WorkspaceSelector({
           <p className="font-mono truncate">
             {workspaces.find((w) => w.id === selectedWorkspaceId)?.directory}
           </p>
-            <p className="truncate">
-              {(() => {
-                const workspace = workspaces.find((w) => w.id === selectedWorkspaceId);
-                return workspace ? getServerLabel(workspace.serverSettings, registeredSshServers) : "";
-              })()}
-            </p>
+          <p className="truncate">
+            {(() => {
+              const workspace = workspaces.find((w) => w.id === selectedWorkspaceId);
+              return workspace ? getServerLabel(workspace.serverSettings, registeredSshServers) : "";
+            })()}
+          </p>
         </div>
       )}
       

@@ -391,14 +391,14 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         }}
       />
 
-        <CreateSshSessionModal
-          isOpen={showCreateSshSessionModal}
-          onClose={handleCloseCreateSshSessionModal}
-          workspaces={sshWorkspaces}
-          registeredSshServers={sshServers}
-          onCreate={async (workspaceId) => {
-            await createWorkspaceSshSessionFor(workspaceId, { fromModal: true });
-          }}
+      <CreateSshSessionModal
+        isOpen={showCreateSshSessionModal}
+        onClose={handleCloseCreateSshSessionModal}
+        workspaces={sshWorkspaces}
+        registeredSshServers={sshServers}
+        onCreate={async (workspaceId) => {
+          await createWorkspaceSshSessionFor(workspaceId, { fromModal: true });
+        }}
         loading={creatingWorkspaceSshSession}
         error={createWorkspaceSshSessionError}
       />
