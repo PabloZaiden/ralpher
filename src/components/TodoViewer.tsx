@@ -131,7 +131,7 @@ export const TodoViewer = memo(function TodoViewer({
     <div
       ref={containerRef}
       id={id}
-      className={`bg-gray-900 text-gray-100 rounded-lg overflow-auto font-mono text-xs dark-scrollbar ${!maxHeight ? "flex-1 min-h-0" : ""}`}
+      className={`min-w-0 rounded-lg bg-gray-900 text-xs text-gray-100 dark-scrollbar overflow-x-hidden overflow-y-auto font-mono ${!maxHeight ? "flex-1 min-h-0" : ""}`}
       style={maxHeight ? { maxHeight } : undefined}
     >
       {isEmpty ? (

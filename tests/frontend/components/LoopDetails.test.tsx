@@ -1212,6 +1212,42 @@ describe("planning mode", () => {
     });
   });
 
+  test("keeps the plan panel vertically scrollable without panel-level horizontal scrolling", async () => {
+    const loop = createLoopWithStatus("planning", {
+      config: { id: LOOP_ID, name: "Wrapped Plan Loop" },
+      state: {
+        planMode: {
+          active: true,
+          feedbackRounds: 0,
+          planningFolderCleared: false,
+          isPlanReady: true,
+        },
+      },
+    });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({
+      exists: true,
+      content: "AVeryLongTokenWithoutSpacesThatShouldStillWrapInsideThePlanPanelInsteadOfExpandingTheWholeContainer",
+    }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: false }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { container, getByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Wrapped Plan Loop")).toBeTruthy();
+    });
+
+    const panel = container.querySelector(".dark-scrollbar.overflow-y-auto") as HTMLElement | null;
+    expect(panel).toBeTruthy();
+    expect(panel?.className).toContain("overflow-x-hidden");
+    expect(panel?.className).toContain("overflow-y-auto");
+  });
+
   test("does not show spinner in log panel when planning with isPlanReady=true", async () => {
     // When status is "planning" and isPlanReady is true, the LogViewer
     // should receive isActive=false so it shows "No logs yet. Waiting for activity."

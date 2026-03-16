@@ -203,7 +203,7 @@ export function AppSettingsModal({
                 </p>
                 {logLevelFromEnv ? (
                   <div className="text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-md px-3 py-2">
-                    Log level is controlled by the <code className="font-mono text-xs bg-amber-100 dark:bg-amber-800 px-1 py-0.5 rounded">RALPHER_LOG_LEVEL</code> environment variable.
+                    Log level is controlled by the <code className="break-all rounded bg-amber-100 px-1 py-0.5 font-mono text-xs dark:bg-amber-800">RALPHER_LOG_LEVEL</code> environment variable.
                     Current level: <strong>{logLevel}</strong>
                   </div>
                 ) : (
@@ -241,7 +241,7 @@ export function AppSettingsModal({
                 Warning: exported files contain server settings in plain text, including
                 passwords. Store exported files securely.
               </p>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 {onExportConfig && (
                   <Button
                     type="button"
@@ -298,7 +298,7 @@ export function AppSettingsModal({
                     <ul className="text-xs space-y-0.5">
                       {importResult.details.map((d, i) => (
                         <li key={i}>
-                          <span className={d.status === "created" ? "text-green-700 dark:text-green-400" : d.status === "failed" ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}>
+                          <span className={`break-all ${d.status === "created" ? "text-green-700 dark:text-green-400" : d.status === "failed" ? "text-red-600 dark:text-red-400" : "text-gray-500 dark:text-gray-400"}`}>
                             {d.status === "created" ? "+" : d.status === "failed" ? "✕" : "-"} {d.name} ({d.directory})
                             {d.reason ? ` — ${d.reason}` : ""}
                           </span>
@@ -359,7 +359,7 @@ export function AppSettingsModal({
                         </Button>
                       ) : !showResetTextConfirm ? (
                         // Step 2: "Are you sure?" confirmation
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                           <span className="text-sm text-red-600 dark:text-red-400">Are you sure?</span>
                           <Button
                             type="button"
@@ -389,7 +389,7 @@ export function AppSettingsModal({
                           </p>
                           <p className="text-sm text-red-600 dark:text-red-400">
                             To confirm, type{" "}
-                            <code className="font-mono font-bold bg-red-100 dark:bg-red-900/40 px-1.5 py-0.5 rounded text-red-800 dark:text-red-200">
+                            <code className="break-all rounded bg-red-100 px-1.5 py-0.5 font-mono font-bold text-red-800 dark:bg-red-900/40 dark:text-red-200">
                               {RESET_CONFIRMATION_PHRASE}
                             </code>
                             {" "}below.
@@ -405,7 +405,7 @@ export function AppSettingsModal({
                             spellCheck={false}
                             disabled={resetting || killingServer}
                           />
-                          <div className="flex items-center gap-3">
+                          <div className="flex flex-wrap items-center gap-3">
                             <Button
                               type="button"
                               variant="danger"
@@ -480,7 +480,7 @@ export function AppSettingsModal({
                         </Button>
                       ) : (
                         <div className="flex flex-col gap-2">
-                          <div className="flex items-center gap-3">
+                           <div className="flex flex-wrap items-center gap-3">
                             <span className="text-sm text-red-600 dark:text-red-400">Are you sure?</span>
                             <Button
                               type="button"
