@@ -4,7 +4,7 @@
  */
 
 import { useState } from "react";
-import type { Loop, Workspace } from "../types";
+import type { Loop, Workspace, SshServer } from "../types";
 import type { StatusGroups, StatusSectionKey, WorkspaceGroup } from "../hooks/useLoopGrouping";
 import type { DashboardViewMode } from "../types/preferences";
 import { sectionConfig } from "../hooks/useLoopGrouping";
@@ -20,6 +20,7 @@ export interface LoopGridProps {
   error: string | null;
   viewMode: DashboardViewMode;
   workspaceGroups: WorkspaceGroup[];
+  registeredSshServers?: readonly SshServer[];
   unassignedLoops: Loop[];
   unassignedStatusGroups: StatusGroups;
   onSelectLoop?: (loopId: string) => void;
@@ -41,6 +42,7 @@ export function LoopGrid({
   error,
   viewMode,
   workspaceGroups,
+  registeredSshServers = [],
   unassignedLoops,
   unassignedStatusGroups,
   onSelectLoop,
@@ -164,6 +166,7 @@ export function LoopGrid({
             <WorkspaceHeader
               workspace={workspace}
               loopCount={workspaceLoops.length}
+              registeredSshServers={registeredSshServers}
               onOpenSettings={() => onOpenWorkspaceSettings(workspace.id)}
             />
             <div className="space-y-6 pl-2">
@@ -212,9 +215,9 @@ export function LoopGrid({
                     <div className="text-sm text-gray-700 dark:text-gray-300 truncate">{workspace.name}</div>
                     <div
                       className="text-xs text-gray-500 dark:text-gray-400 truncate"
-                      title={getServerLabel(workspace.serverSettings)}
+                      title={getServerLabel(workspace.serverSettings, registeredSshServers)}
                     >
-                      {getServerLabel(workspace.serverSettings)}
+                      {getServerLabel(workspace.serverSettings, registeredSshServers)}
                     </div>
                   </div>
                   <button
@@ -271,10 +274,12 @@ export function LoopGrid({
 function WorkspaceHeader({
   workspace,
   loopCount,
+  registeredSshServers,
   onOpenSettings,
 }: {
   workspace: Workspace;
   loopCount: number;
+  registeredSshServers: readonly SshServer[];
   onOpenSettings: () => void;
 }) {
   return (
@@ -301,9 +306,9 @@ function WorkspaceHeader({
         </span>
         <span
           className="text-xs text-gray-400 dark:text-gray-500 truncate"
-          title={getServerLabel(workspace.serverSettings)}
+          title={getServerLabel(workspace.serverSettings, registeredSshServers)}
         >
-          {getServerLabel(workspace.serverSettings)}
+          {getServerLabel(workspace.serverSettings, registeredSshServers)}
         </span>
         <span className="text-sm text-gray-400 dark:text-gray-500 flex-shrink-0">
           ({loopCount} {loopCount === 1 ? "loop" : "loops"})
