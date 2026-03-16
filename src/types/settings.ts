@@ -9,6 +9,7 @@ import type {
   AgentProvider,
   AgentTransport,
 } from "./schemas/workspace";
+import type { SshServer } from "./ssh-server";
 export type {
   ServerSettings,
   AgentProvider,
@@ -144,6 +145,24 @@ function normalizeUsername(username: string | undefined): string {
   return username?.trim() ?? "";
 }
 
+function normalizeSshServerAddress(address: string): string {
+  return address.trim().toLowerCase();
+}
+
+export function findRegisteredSshServer(
+  hostname: string,
+  registeredSshServers: readonly SshServer[],
+): SshServer | undefined {
+  const normalizedHostname = normalizeSshServerAddress(hostname);
+  if (!normalizedHostname) {
+    return undefined;
+  }
+
+  return registeredSshServers.find((server) => {
+    return normalizeSshServerAddress(server.config.address) === normalizedHostname;
+  });
+}
+
 /**
  * Build a deterministic, credential-free fingerprint for workspace routing.
  */
@@ -163,12 +182,17 @@ export function getServerFingerprint(settings: ServerSettings): string {
 /**
  * Human-readable server label for disambiguating workspace lists.
  */
-export function getServerLabel(settings: ServerSettings): string {
+export function getServerLabel(
+  settings: ServerSettings,
+  registeredSshServers: readonly SshServer[] = [],
+): string {
   if (settings.agent.transport === "ssh") {
     const hostname = settings.agent.hostname.trim() || "127.0.0.1";
     const port = settings.agent.port ?? 22;
     const username = settings.agent.username?.trim();
-    const authority = username ? `${username}@${hostname}` : hostname;
+    const registeredServer = findRegisteredSshServer(hostname, registeredSshServers);
+    const hostDisplay = registeredServer?.config.name ?? hostname;
+    const authority = username ? `${username}@${hostDisplay}` : hostDisplay;
     return `${settings.agent.provider} via ssh (${authority}:${port})`;
   }
 

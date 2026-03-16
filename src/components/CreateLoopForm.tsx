@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
-import type { CreateLoopRequest, CreateChatRequest, ModelInfo, BranchInfo } from "../types";
+import type { CreateLoopRequest, CreateChatRequest, ModelInfo, BranchInfo, SshServer } from "../types";
 import type { Workspace } from "../types/workspace";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
 import { Button } from "./common";
@@ -90,6 +90,8 @@ export interface CreateLoopFormProps {
   workspacesLoading?: boolean;
   /** Workspace-related error */
   workspaceError?: string | null;
+  /** Registered SSH servers for workspace label resolution */
+  registeredSshServers?: readonly SshServer[];
   /** 
    * Optional render prop for action buttons. When provided, action buttons 
    * are NOT rendered inside the form - caller is responsible for rendering them.
@@ -121,6 +123,7 @@ export function CreateLoopForm({
   workspaces = [],
   workspacesLoading = false,
   workspaceError = null,
+  registeredSshServers = [],
   renderActions,
   mode = "loop",
 }: CreateLoopFormProps) {
@@ -545,6 +548,7 @@ export function CreateLoopForm({
           selectedWorkspaceId={selectedWorkspaceId}
           onSelect={handleWorkspaceSelect}
           error={workspaceError}
+          registeredSshServers={registeredSshServers}
         />
         {planningWarning && !planMode && !isChatMode && (
           <div className="mt-2 flex items-start gap-2 rounded-md bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-800 dark:text-amber-300">

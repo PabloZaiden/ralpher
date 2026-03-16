@@ -7,6 +7,7 @@ import { mock } from "bun:test";
 import { WorkspaceSelector } from "@/components/WorkspaceSelector";
 import { renderWithUser } from "../helpers/render";
 import { createWorkspace } from "../helpers/factories";
+import type { SshServer } from "@/types";
 
 describe("WorkspaceSelector", () => {
   describe("rendering", () => {
@@ -84,6 +85,54 @@ describe("WorkspaceSelector", () => {
       );
       expect(getByText("/home/user/project")).toBeInTheDocument();
       expect(getAllByText(/selected\.example/).length).toBeGreaterThan(0);
+    });
+
+    test("shows registered SSH server name instead of address when available", () => {
+      const workspace = createWorkspace({
+        id: "ws-registered",
+        name: "Registered Workspace",
+        directory: "/home/user/registered-project",
+        serverSettings: {
+          agent: {
+            provider: "opencode",
+            transport: "ssh",
+            hostname: "10.0.0.42",
+            port: 22,
+            username: "deploy",
+          },
+        },
+      });
+      const registeredSshServers: SshServer[] = [{
+        config: {
+          id: "ssh-server-1",
+          name: "Production Box",
+          address: "10.0.0.42",
+          username: "deploy",
+          createdAt: "2024-01-01T00:00:00.000Z",
+          updatedAt: "2024-01-01T00:00:00.000Z",
+        },
+        publicKey: {
+          algorithm: "RSA-OAEP-256",
+          publicKey: "public-key",
+          fingerprint: "fingerprint",
+          version: 1,
+          createdAt: "2024-01-01T00:00:00.000Z",
+        },
+      }];
+
+      const { getByRole, getByText, queryByText } = renderWithUser(
+        <WorkspaceSelector
+          workspaces={[workspace]}
+          selectedWorkspaceId={workspace.id}
+          registeredSshServers={registeredSshServers}
+          onSelect={mock()}
+        />
+      );
+      const select = getByRole("combobox") as HTMLSelectElement;
+
+      expect(Array.from(select.options).some((option) => option.text.includes("Production Box"))).toBe(true);
+      expect(getByText("opencode via ssh (deploy@Production Box:22)")).toBeInTheDocument();
+      expect(queryByText("opencode via ssh (deploy@10.0.0.42:22)")).not.toBeInTheDocument();
     });
 
     test("does not show directory when no workspace selected", () => {

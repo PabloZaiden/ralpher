@@ -5,7 +5,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Button, Modal } from "./common";
 import { WorkspaceSelector } from "./WorkspaceSelector";
-import type { Workspace } from "../types";
+import type { Workspace, SshServer } from "../types";
 
 export interface CreateSshSessionModalProps {
   isOpen: boolean;
@@ -14,6 +14,7 @@ export interface CreateSshSessionModalProps {
   onCreate: (workspaceId: string) => Promise<void>;
   loading?: boolean;
   error?: string | null;
+  registeredSshServers?: readonly SshServer[];
 }
 
 export function CreateSshSessionModal({
@@ -23,6 +24,7 @@ export function CreateSshSessionModal({
   onCreate,
   loading = false,
   error,
+  registeredSshServers = [],
 }: CreateSshSessionModalProps) {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | undefined>(undefined);
 
@@ -70,6 +72,7 @@ export function CreateSshSessionModal({
           selectedWorkspaceId={selectedWorkspaceId}
           onSelect={(workspaceId) => setSelectedWorkspaceId(workspaceId ?? undefined)}
           error={error}
+          registeredSshServers={registeredSshServers}
         />
       </form>
     </Modal>

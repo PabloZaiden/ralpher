@@ -5,19 +5,14 @@
 
 import { useEffect, useState } from "react";
 import { Button, PASSWORD_INPUT_PROPS } from "./common";
+import { findRegisteredSshServer } from "../types/settings";
 import type { ServerSettings, AgentProvider, AgentTransport } from "../types/settings";
 import type { SshServer } from "../types";
 
 const OTHER_SSH_SERVER_OPTION = "__other__";
 
 function resolveRegisteredSshServerId(hostname: string, registeredSshServers: readonly SshServer[]): string {
-  const normalizedHostname = hostname.trim();
-  if (!normalizedHostname) {
-    return OTHER_SSH_SERVER_OPTION;
-  }
-
-  return registeredSshServers.find((server) => server.config.address.trim() === normalizedHostname)?.config.id
-    ?? OTHER_SSH_SERVER_OPTION;
+  return findRegisteredSshServer(hostname, registeredSshServers)?.config.id ?? OTHER_SSH_SERVER_OPTION;
 }
 
 export interface ServerSettingsFormProps {

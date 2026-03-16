@@ -288,6 +288,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
             error={error}
             viewMode={viewMode}
             workspaceGroups={workspaceGroups}
+            registeredSshServers={sshServers}
             unassignedLoops={unassignedLoops}
             unassignedStatusGroups={unassignedStatusGroups}
             onSelectLoop={handleSelectItem}
@@ -394,6 +395,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         isOpen={showCreateSshSessionModal}
         onClose={handleCloseCreateSshSessionModal}
         workspaces={sshWorkspaces}
+        registeredSshServers={sshServers}
         onCreate={async (workspaceId) => {
           await createWorkspaceSshSessionFor(workspaceId, { fromModal: true });
         }}

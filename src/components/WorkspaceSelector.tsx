@@ -6,6 +6,7 @@
  */
 
 import type { ChangeEvent } from "react";
+import type { SshServer } from "../types";
 import type { Workspace } from "../types/workspace";
 import { getServerLabel } from "../types/settings";
 
@@ -20,6 +21,8 @@ export interface WorkspaceSelectorProps {
   onSelect: (workspaceId: string | null, directory: string) => void;
   /** Error message from workspace operations */
   error?: string | null;
+  /** Registered SSH servers for friendly label resolution */
+  registeredSshServers?: readonly SshServer[];
 }
 
 export function WorkspaceSelector({
@@ -28,6 +31,7 @@ export function WorkspaceSelector({
   selectedWorkspaceId,
   onSelect,
   error,
+  registeredSshServers = [],
 }: WorkspaceSelectorProps) {
   // Handle workspace selection from dropdown
   function handleWorkspaceChange(e: ChangeEvent<HTMLSelectElement>) {
@@ -71,7 +75,7 @@ export function WorkspaceSelector({
         
         {workspaces.map((workspace) => (
           <option key={workspace.id} value={workspace.id}>
-            {`${workspace.name} — ${getServerLabel(workspace.serverSettings)}`}
+            {`${workspace.name} — ${getServerLabel(workspace.serverSettings, registeredSshServers)}`}
           </option>
         ))}
       </select>
@@ -84,7 +88,7 @@ export function WorkspaceSelector({
           <p className="truncate">
             {(() => {
               const workspace = workspaces.find((w) => w.id === selectedWorkspaceId);
-              return workspace ? getServerLabel(workspace.serverSettings) : "";
+              return workspace ? getServerLabel(workspace.serverSettings, registeredSshServers) : "";
             })()}
           </p>
         </div>
