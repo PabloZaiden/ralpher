@@ -197,4 +197,63 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
       (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
     }
   });
+
+  test("returns promptly with exit code 130 when local execution is aborted", async () => {
+    const originalSpawn = Bun.spawn;
+    let killCalled = false;
+    let stdoutController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let stderrController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = (() => ({
+      stdout: new ReadableStream<Uint8Array>({
+        start(controller) {
+          stdoutController = controller;
+        },
+      }),
+      stderr: new ReadableStream<Uint8Array>({
+        start(controller) {
+          stderrController = controller;
+        },
+      }),
+      exited: new Promise<number>(() => {}),
+      kill: () => {
+        killCalled = true;
+        stdoutController?.close();
+        stderrController?.close();
+      },
+    })) as unknown as typeof Bun.spawn;
+
+    try {
+      const executor = new CommandExecutorImpl({
+        directory: "/tmp",
+      });
+      const controller = new AbortController();
+      const execution = executor.exec("sleep", ["30"], {
+        signal: controller.signal,
+        timeout: 5_000,
+      });
+
+      controller.abort();
+
+      const result = await Promise.race([
+        execution,
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error("Abort did not resolve promptly"));
+          }, 500);
+        }),
+      ]);
+
+      expect(killCalled).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(130);
+      expect(result.stderr).toBe("Command aborted");
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+    }
+  });
 });

@@ -301,6 +301,17 @@ export class CommandExecutorImpl implements CommandExecutor {
           return;
         }
 
+        if (signal.aborted) {
+          aborted = true;
+          try {
+            proc.kill();
+          } catch {
+            // Ignore kill errors during abort cleanup
+          }
+          resolve(130);
+          return;
+        }
+
         abortHandler = () => {
           aborted = true;
           try {
@@ -314,10 +325,11 @@ export class CommandExecutorImpl implements CommandExecutor {
         signal.addEventListener("abort", abortHandler, { once: true });
       });
 
-      const exitCode = await Promise.race([proc.exited, timeoutPromise]);
-      const racedExitCode = signal
-        ? await Promise.race([Promise.resolve(exitCode), abortPromise])
-        : exitCode;
+      const racedExitCode = await Promise.race([
+        proc.exited,
+        timeoutPromise,
+        ...(signal ? [abortPromise] : []),
+      ]);
       clearTimeout(timeoutId);
       if (signal && abortHandler) {
         signal.removeEventListener("abort", abortHandler);

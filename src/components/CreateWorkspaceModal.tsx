@@ -276,7 +276,7 @@ export function CreateWorkspaceModal({
       isOpen={isOpen}
       onClose={handleClose}
       title="Create Workspace"
-      description="Create a new workspace with server connection settings."
+      description="Create a new workspace manually with server connection settings or provision one automatically over SSH."
       size="md"
       footer={footer}
     >
