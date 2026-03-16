@@ -1064,7 +1064,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
 
                   {activeTab === "info" && (
                     <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-                      <div className="min-w-0 space-y-4">
+                      <div className="min-w-0 w-full space-y-4">
                       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{labels.capitalized} Information</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {/* Statistics */}
@@ -1254,7 +1254,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
 
                   {activeTab === "prompt" && (
                     <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-                      <div className="min-w-0 space-y-6">
+                      <div className="min-w-0 w-full space-y-6">
                       {/* Original Task Prompt (read-only) */}
                       <div>
                         <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
@@ -1458,7 +1458,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
 
                   {activeTab === "review" && (
                     <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-                      <div className="min-w-0 space-y-4">
+                      <div className="min-w-0 w-full space-y-4">
                       {loop.state.reviewMode ? (
                         <>
                           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
