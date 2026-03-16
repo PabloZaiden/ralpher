@@ -86,3 +86,9 @@ export {
   type CreateSshServerSessionRequest,
   type DeleteSshServerSessionRequest,
 } from "./ssh-server";
+
+// Provisioning schemas
+export {
+  CreateProvisioningJobRequestSchema,
+  type CreateProvisioningJobRequest,
+} from "./provisioning";

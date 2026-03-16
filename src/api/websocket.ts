@@ -27,10 +27,10 @@
  */
 
 import type { ServerWebSocket } from "bun";
-import { loopEventEmitter, sshSessionEventEmitter } from "../core/event-emitter";
+import { loopEventEmitter, provisioningEventEmitter, sshSessionEventEmitter } from "../core/event-emitter";
 import { SshTerminalBridge } from "../core/ssh-terminal-bridge";
 import { createLogger } from "../core/logger";
-import type { LoopEvent, SshSessionEvent } from "../types";
+import type { LoopEvent, ProvisioningEvent, SshSessionEvent } from "../types";
 
 const log = createLogger("api:websocket");
 
@@ -51,6 +51,8 @@ export interface WebSocketData {
   sshSessionId?: string;
   /** Optional standalone SSH server session ID to filter session events or attach a terminal */
   sshServerSessionId?: string;
+  /** Optional provisioning job ID to filter provisioning events */
+  provisioningJobId?: string;
   /** Optional forwarded port ID for proxied websocket traffic */
   portForwardId?: string;
   /** Whether this socket is a terminal transport socket */
@@ -178,6 +180,7 @@ export const websocketHandlers = {
       loopId,
       sshSessionId,
       sshServerSessionId,
+      provisioningJobId,
       terminalMode,
       portForwardMode,
       proxyTargetUrl,
@@ -250,35 +253,61 @@ export const websocketHandlers = {
       loopId: loopId ?? null,
       sshSessionId: sshSessionId ?? null,
       sshServerSessionId: sshServerSessionId ?? null,
+      provisioningJobId: provisioningJobId ?? null,
     }));
 
-    const loopUnsubscribe = loopEventEmitter.subscribe((event: LoopEvent) => {
-      // Filter by loopId if specified
-      if (loopId && "loopId" in event && event.loopId !== loopId) {
-        return;
-      }
+    const shouldSubscribeToLoopEvents = !provisioningJobId || !!loopId;
+    const loopUnsubscribe = shouldSubscribeToLoopEvents
+      ? loopEventEmitter.subscribe((event: LoopEvent) => {
+          if (loopId && "loopId" in event && event.loopId !== loopId) {
+            return;
+          }
 
-      try {
-        ws.send(JSON.stringify(event));
-      } catch (sendError) {
-        log.trace("Failed to send event to WebSocket client", { error: String(sendError) });
-      }
-    });
+          try {
+            ws.send(JSON.stringify(event));
+          } catch (sendError) {
+            log.trace("Failed to send event to WebSocket client", { error: String(sendError) });
+          }
+        })
+      : undefined;
 
-    const sshSessionUnsubscribe = sshSessionEventEmitter.subscribe((event: SshSessionEvent) => {
-      const expectedSessionId = sshSessionId ?? sshServerSessionId;
-      if (expectedSessionId && event.sshSessionId !== expectedSessionId) {
-        return;
-      }
+    const shouldSubscribeToSshEvents = !provisioningJobId || !!sshSessionId || !!sshServerSessionId;
+    const sshSessionUnsubscribe = shouldSubscribeToSshEvents
+      ? sshSessionEventEmitter.subscribe((event: SshSessionEvent) => {
+          const expectedSessionId = sshSessionId ?? sshServerSessionId;
+          if (expectedSessionId && event.sshSessionId !== expectedSessionId) {
+            return;
+          }
 
-      try {
-        ws.send(JSON.stringify(event));
-      } catch (sendError) {
-        log.trace("Failed to send SSH session event to WebSocket client", { error: String(sendError) });
-      }
-    });
+          try {
+            ws.send(JSON.stringify(event));
+          } catch (sendError) {
+            log.trace("Failed to send SSH session event to WebSocket client", { error: String(sendError) });
+          }
+        })
+      : undefined;
 
-    ws.data.unsubscribers = [loopUnsubscribe, sshSessionUnsubscribe];
+    const provisioningUnsubscribe = provisioningJobId
+      ? provisioningEventEmitter.subscribe((event: ProvisioningEvent) => {
+          if (event.provisioningJobId !== provisioningJobId) {
+            return;
+          }
+
+          try {
+            ws.send(JSON.stringify(event));
+          } catch (sendError) {
+            log.trace("Failed to send provisioning event to WebSocket client", {
+              error: String(sendError),
+            });
+          }
+        })
+      : undefined;
+
+    ws.data.unsubscribers = [
+      ...(loopUnsubscribe ? [loopUnsubscribe] : []),
+      ...(sshSessionUnsubscribe ? [sshSessionUnsubscribe] : []),
+      ...(provisioningUnsubscribe ? [provisioningUnsubscribe] : []),
+    ];
   },
 
   /**

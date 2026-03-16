@@ -371,6 +371,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         showCreateWorkspaceModal={modals.showCreateWorkspaceModal}
         onCloseCreateWorkspaceModal={() => modals.setShowCreateWorkspaceModal(false)}
         onCreateWorkspace={createWorkspace}
+        onProvisioningSuccess={refreshWorkspaces}
         sshServers={sshServers}
       />
 

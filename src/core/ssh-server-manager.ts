@@ -104,6 +104,17 @@ export class SshServerManager {
     return await getSshServerSession(id);
   }
 
+  async getCommandExecutor(
+    serverId: string,
+    password?: string,
+  ): Promise<{ server: SshServerConfig; executor: CommandExecutor }> {
+    const server = await this.requireServerConfig(serverId);
+    return {
+      server,
+      executor: this.buildExecutor(server, password ?? ""),
+    };
+  }
+
   async createSession(serverId: string, request: CreateSshServerSessionRequest): Promise<SshServerSession> {
     const server = await this.requireServerConfig(serverId);
     const connectionMode = this.getConnectionMode(request);

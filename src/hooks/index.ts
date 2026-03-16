@@ -20,6 +20,7 @@ export { useLoopGrouping, groupLoopsByStatus, sectionConfig, type StatusGroups, 
 export { useDashboardModals, type ModalState, type UncommittedModalState, type UseDashboardModalsResult } from "./useDashboardModals";
 export { useDashboardData, type UseDashboardDataResult } from "./useDashboardData";
 export { useViewModePreference, type UseViewModePreferenceResult, type DashboardViewMode } from "./useViewModePreference";
+export { useProvisioningJob, type UseProvisioningJobResult, type StartProvisioningJobRequest } from "./useProvisioningJob";
 
 // Shared loop action API functions
 export {

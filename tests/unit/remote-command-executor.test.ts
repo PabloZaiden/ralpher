@@ -1,8 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
-import { CommandExecutorImpl } from "../../src/core/remote-command-executor";
+import { buildSshRemoteShellCommand, CommandExecutorImpl } from "../../src/core/remote-command-executor";
 
 describe("CommandExecutorImpl SSH spawn cwd", () => {
+  test("builds a shell bootstrap that prefers zsh and falls back to bash/sh", () => {
+    const script = buildSshRemoteShellCommand("echo hello");
+
+    expect(script).toContain("sh -lc");
+    expect(script).toContain('shell_path="${SHELL:-}"');
+    expect(script).toContain('exec "$shell_path" -ilc');
+    expect(script).toContain('command -v sh');
+  });
+
   test("uses root cwd for SSH command execution", async () => {
     const originalSpawn = Bun.spawn;
     let capturedCwd: string | undefined;
@@ -32,8 +41,8 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
       const commandTokens = capturedCommand ?? [];
       const scriptArg = commandTokens[commandTokens.indexOf("--") + 1];
       expect(typeof scriptArg).toBe("string");
-      expect(scriptArg ?? "").toContain("bash -lc");
-      expect(scriptArg ?? "").toContain("source ~/.profile");
+      expect(scriptArg ?? "").toContain("sh -lc");
+      expect(scriptArg ?? "").toContain('exec "$shell_path" -ilc');
       expect(scriptArg ?? "").toContain("&&");
       expect(result.stderr).toContain("mock spawn failure");
     } finally {
@@ -67,8 +76,8 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
 
       const commandTokens = capturedCommand ?? [];
       const scriptArg = commandTokens[commandTokens.indexOf("--") + 1] ?? "";
-      expect(scriptArg).toContain("bash -lc");
-      expect(scriptArg).toContain("source ~/.profile");
+      expect(scriptArg).toContain("sh -lc");
+      expect(scriptArg).toContain('exec "$shell_path" -ilc');
       expect(scriptArg).toContain("git");
       expect(scriptArg).toContain("status");
       expect(scriptArg).toContain("--porcelain");
@@ -185,6 +194,65 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
       expect(identityFileIndex).toBeGreaterThanOrEqual(0);
       expect(commandTokens[identityFileIndex + 1]).toBe("/tmp/test-key");
     } finally {
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+    }
+  });
+
+  test("returns promptly with exit code 130 when local execution is aborted", async () => {
+    const originalSpawn = Bun.spawn;
+    let killCalled = false;
+    let stdoutController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let stderrController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = (() => ({
+      stdout: new ReadableStream<Uint8Array>({
+        start(controller) {
+          stdoutController = controller;
+        },
+      }),
+      stderr: new ReadableStream<Uint8Array>({
+        start(controller) {
+          stderrController = controller;
+        },
+      }),
+      exited: new Promise<number>(() => {}),
+      kill: () => {
+        killCalled = true;
+        stdoutController?.close();
+        stderrController?.close();
+      },
+    })) as unknown as typeof Bun.spawn;
+
+    try {
+      const executor = new CommandExecutorImpl({
+        directory: "/tmp",
+      });
+      const controller = new AbortController();
+      const execution = executor.exec("sleep", ["30"], {
+        signal: controller.signal,
+        timeout: 5_000,
+      });
+
+      controller.abort();
+
+      const result = await Promise.race([
+        execution,
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error("Abort did not resolve promptly"));
+          }, 500);
+        }),
+      ]);
+
+      expect(killCalled).toBe(true);
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(130);
+      expect(result.stderr).toBe("Command aborted");
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
       (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
     }
   });

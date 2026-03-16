@@ -24,6 +24,12 @@ export interface CommandOptions {
   timeout?: number;
   /** Environment variable overrides for the command */
   env?: Record<string, string>;
+  /** Abort signal for cancelling the running process */
+  signal?: AbortSignal;
+  /** Optional callback for incremental stdout chunks */
+  onStdoutChunk?: (chunk: string) => void;
+  /** Optional callback for incremental stderr chunks */
+  onStderrChunk?: (chunk: string) => void;
 }
 
 /**

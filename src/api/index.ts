@@ -26,6 +26,7 @@ import { workspacesRoutes } from "./workspaces";
 import { agentsMdRoutes } from "./agents-md";
 import { sshServersRoutes } from "./ssh-servers";
 import { sshSessionsRoutes } from "./ssh-sessions";
+import { provisioningRoutes } from "./provisioning";
 
 /**
  * All API routes combined.
@@ -53,6 +54,7 @@ export const apiRoutes = {
   ...agentsMdRoutes,
   ...sshServersRoutes,
   ...sshSessionsRoutes,
+  ...provisioningRoutes,
 };
 
 // Re-export individual route modules
@@ -68,3 +70,4 @@ export * from "./ssh-servers";
 export * from "./port-forwards";
 export * from "./ssh-sessions";
 export * from "./websocket";
+export * from "./provisioning";

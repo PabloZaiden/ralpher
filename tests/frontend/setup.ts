@@ -57,6 +57,8 @@ if (window.location.href === "about:blank") {
 // Clean up after each test to prevent DOM leaks between tests
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 // Reset location before each test so pathname-based public base path inference
@@ -64,4 +66,6 @@ afterEach(() => {
 beforeEach(() => {
   window.location.href = "http://localhost:3000/";
   window.location.hash = "#/";
+  window.localStorage.clear();
+  window.sessionStorage.clear();
 });

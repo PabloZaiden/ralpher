@@ -56,9 +56,52 @@ function buildEnvAssignments(env?: Record<string, string>): string[] {
   return assignments;
 }
 
+async function readProcessStream(
+  stream: ReadableStream<Uint8Array> | null | undefined,
+  onChunk?: (chunk: string) => void,
+): Promise<string> {
+  if (!stream) {
+    return "";
+  }
+
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let text = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      const chunk = decoder.decode(value, { stream: true });
+      text += chunk;
+      onChunk?.(chunk);
+    }
+
+    const finalChunk = decoder.decode();
+    if (finalChunk) {
+      text += finalChunk;
+      onChunk?.(finalChunk);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return text;
+}
+
 export function buildSshRemoteShellCommand(remoteCommand: string): string {
-  const wrappedRemoteCommand = `if [ -f ~/.profile ]; then source ~/.profile >/dev/null 2>&1; fi; ${remoteCommand}`;
-  return `bash -lc ${quoteShell(wrappedRemoteCommand)}`;
+  const shellBootstrapCommand = [
+    'shell_path="${SHELL:-}"',
+    'if [ -z "$shell_path" ]; then shell_path="$(getent passwd "$(id -un)" 2>/dev/null | cut -d: -f7)"; fi',
+    'if [ -z "$shell_path" ] || [ ! -x "$shell_path" ]; then shell_path="$(command -v sh 2>/dev/null || printf %s /bin/sh)"; fi',
+    `exec "$shell_path" -ilc ${quoteShell(remoteCommand)}`,
+    `exec sh -lc ${quoteShell(remoteCommand)}`,
+  ].join("; ");
+
+  return `sh -lc ${quoteShell(shellBootstrapCommand)}`;
 }
 
 function getSshAuthArgs(authMode: SshAuthMode): string[] {
@@ -165,9 +208,12 @@ export class CommandExecutorImpl implements CommandExecutor {
         const cwd = options?.cwd ?? this.directory;
         const timeout = options?.timeout ?? this.defaultTimeoutMs;
         const env = options?.env;
+        const signal = options?.signal;
+        const onStdoutChunk = options?.onStdoutChunk;
+        const onStderrChunk = options?.onStderrChunk;
         const result = this.provider === "ssh"
-          ? await this.execSsh(command, args, cwd, timeout, env)
-          : await this.execLocal(command, args, cwd, timeout, env);
+          ? await this.execSsh(command, args, cwd, timeout, env, signal, onStdoutChunk, onStderrChunk)
+          : await this.execLocal(command, args, cwd, timeout, env, signal, onStdoutChunk, onStderrChunk);
 
         if (!result.success) {
           log.error(`${LOG_PREFIX} Command failed: ${cmdStr}`);
@@ -210,8 +256,20 @@ export class CommandExecutorImpl implements CommandExecutor {
     cwd: string,
     timeoutMs: number,
     env?: Record<string, string>,
+    signal?: AbortSignal,
+    onStdoutChunk?: (chunk: string) => void,
+    onStderrChunk?: (chunk: string) => void,
   ): Promise<CommandResult> {
     try {
+      if (signal?.aborted) {
+        return {
+          success: false,
+          stdout: "",
+          stderr: "Command aborted",
+          exitCode: 130,
+        };
+      }
+
       const proc = Bun.spawn([command, ...args], {
         cwd,
         stdout: "pipe",
@@ -219,8 +277,13 @@ export class CommandExecutorImpl implements CommandExecutor {
         ...(env ? { env: { ...process.env, ...env } } : {}),
       });
 
+      const stdoutPromise = readProcessStream(proc.stdout, onStdoutChunk);
+      const stderrPromise = readProcessStream(proc.stderr, onStderrChunk);
+
       let timedOut = false;
+      let aborted = false;
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      let abortHandler: (() => void) | undefined;
       const timeoutPromise = new Promise<number>((resolve) => {
         timeoutId = setTimeout(() => {
           timedOut = true;
@@ -233,26 +296,70 @@ export class CommandExecutorImpl implements CommandExecutor {
         }, timeoutMs);
       });
 
-      const exitCode = await Promise.race([proc.exited, timeoutPromise]);
-      clearTimeout(timeoutId);
+      const abortPromise = new Promise<number>((resolve) => {
+        if (!signal) {
+          return;
+        }
 
-      const stdout = await new Response(proc.stdout).text();
-      const stderr = await new Response(proc.stderr).text();
+        if (signal.aborted) {
+          aborted = true;
+          try {
+            proc.kill();
+          } catch {
+            // Ignore kill errors during abort cleanup
+          }
+          resolve(130);
+          return;
+        }
+
+        abortHandler = () => {
+          aborted = true;
+          try {
+            proc.kill();
+          } catch {
+            // Ignore kill errors during abort cleanup
+          }
+          resolve(130);
+        };
+
+        signal.addEventListener("abort", abortHandler, { once: true });
+      });
+
+      const racedExitCode = await Promise.race([
+        proc.exited,
+        timeoutPromise,
+        ...(signal ? [abortPromise] : []),
+      ]);
+      clearTimeout(timeoutId);
+      if (signal && abortHandler) {
+        signal.removeEventListener("abort", abortHandler);
+      }
+
+      const [stdout, stderr] = await Promise.all([stdoutPromise, stderrPromise]);
 
       if (timedOut) {
         return {
           success: false,
           stdout,
           stderr: stderr || `Command timed out after ${timeoutMs}ms`,
-          exitCode,
+          exitCode: racedExitCode,
+        };
+      }
+
+      if (aborted || signal?.aborted) {
+        return {
+          success: false,
+          stdout,
+          stderr: stderr || "Command aborted",
+          exitCode: racedExitCode,
         };
       }
 
       return {
-        success: exitCode === 0,
+        success: racedExitCode === 0,
         stdout,
         stderr,
-        exitCode,
+        exitCode: racedExitCode,
       };
     } catch (error) {
       return {
@@ -270,6 +377,9 @@ export class CommandExecutorImpl implements CommandExecutor {
     cwd: string,
     timeoutMs: number,
     env?: Record<string, string>,
+    signal?: AbortSignal,
+    onStdoutChunk?: (chunk: string) => void,
+    onStderrChunk?: (chunk: string) => void,
   ): Promise<CommandResult> {
     if (!this.host) {
       return {
@@ -319,6 +429,9 @@ export class CommandExecutorImpl implements CommandExecutor {
         "/",
         timeoutMs,
         { SSHPASS: this.password },
+        signal,
+        onStdoutChunk,
+        onStderrChunk,
       );
     }
 
@@ -333,6 +446,10 @@ export class CommandExecutorImpl implements CommandExecutor {
       }),
       "/",
       timeoutMs,
+      undefined,
+      signal,
+      onStdoutChunk,
+      onStderrChunk,
     );
   }
 

@@ -12,3 +12,4 @@ export * from "./workspace";
 export * from "./settings";
 export * from "./preferences";
 export * from "./components";
+export * from "./provisioning";
