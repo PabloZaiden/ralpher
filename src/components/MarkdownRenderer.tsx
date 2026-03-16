@@ -33,9 +33,9 @@ export function MarkdownRenderer({ content, className = "", dimmed = false, rawM
   if (rawMode) {
     return (
       <div
-        className={`${dimmed ? "opacity-60" : ""} ${className}`.trim()}
+        className={`min-w-0 ${dimmed ? "opacity-60" : ""} ${className}`.trim()}
       >
-        <pre className="whitespace-pre-wrap break-words font-mono text-sm text-gray-900 dark:text-gray-100 overflow-x-auto">
+        <pre className="max-w-full whitespace-pre-wrap break-words font-mono text-sm text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
           {content}
         </pre>
       </div>
@@ -44,7 +44,7 @@ export function MarkdownRenderer({ content, className = "", dimmed = false, rawM
 
   return (
     <div
-      className={`prose prose-sm dark:prose-invert max-w-none ${dimmed ? "opacity-60" : ""} ${className}`.trim()}
+      className={`prose prose-sm dark:prose-invert min-w-0 max-w-none break-words [overflow-wrap:anywhere] [&_li]:break-words [&_p]:break-words [&_td]:break-words [&_th]:break-words ${dimmed ? "opacity-60" : ""} ${className}`.trim()}
     >
       <Markdown
         remarkPlugins={[remarkGfm]}
@@ -65,7 +65,7 @@ export function MarkdownRenderer({ content, className = "", dimmed = false, rawM
             const isInline = !className;
             if (isInline) {
               return (
-                <code className="bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded text-sm font-mono">
+                <code className="break-all rounded bg-gray-100 px-1.5 py-0.5 font-mono text-sm dark:bg-gray-800">
                   {children}
                 </code>
               );
@@ -73,7 +73,7 @@ export function MarkdownRenderer({ content, className = "", dimmed = false, rawM
             return <code className={className}>{children}</code>;
           },
           pre: ({ children }) => (
-            <pre className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg overflow-x-auto text-sm">
+            <pre className="max-w-full overflow-x-auto rounded-lg bg-gray-100 p-4 text-sm dark:bg-gray-800">
               {children}
             </pre>
           ),

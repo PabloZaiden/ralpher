@@ -121,7 +121,7 @@ export function Modal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
+    <div className="fixed inset-0 z-50 flex min-w-0 items-center justify-center overflow-x-hidden overflow-y-auto p-2 sm:p-4">
       {/* Overlay */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -133,7 +133,7 @@ export function Modal({
       <div
         ref={modalRef}
         tabIndex={-1}
-        className={`relative w-full ${sizeClasses[size]} rounded-lg bg-white shadow-xl dark:bg-gray-800 max-h-[calc(100vh-1.5rem)] max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100vh-2.5rem)] sm:max-h-[calc(100dvh-2.5rem)] flex flex-col`}
+        className={`relative flex w-full min-w-0 ${sizeClasses[size]} max-h-[calc(100vh-1.5rem)] max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-lg bg-white shadow-xl sm:max-h-[calc(100vh-2.5rem)] sm:max-h-[calc(100dvh-2.5rem)] dark:bg-gray-800`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
@@ -177,7 +177,9 @@ export function Modal({
         </div>
 
         {/* Content - scrollable */}
-        <div className="px-4 sm:px-6 py-3 sm:py-4 overflow-y-auto flex-1">{children}</div>
+        <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-3 sm:px-6 sm:py-4">
+          {children}
+        </div>
 
         {/* Footer */}
         {footer && (

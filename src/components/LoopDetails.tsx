@@ -807,8 +807,8 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
         )}
 
         {/* Full width content area */}
-        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
+              <div className="flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
                 {/* Tab navigation */}
                 <div className="flex border-b border-gray-200 dark:border-gray-700 mb-3 overflow-x-auto flex-shrink-0">
                   {visibleTabs.map((tab) => {
@@ -842,11 +842,11 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                 </div>
 
                 {/* Tab content */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex-1 min-h-0 flex flex-col overflow-hidden">
+                <div className="flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
                   {activeTab === "log" && (
-                    <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                    <div className="flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
                       {/* Side-by-side layout for logs and TODOs (75-25 split) */}
-                      <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 p-4 overflow-hidden">
+                      <div className="flex min-w-0 flex-1 min-h-0 flex-col gap-4 overflow-hidden p-4 lg:flex-row">
                         {/* Logs section */}
                         <div className={`flex flex-col min-w-0 min-h-0 ${
                           logsCollapsed ? 'flex-shrink-0' : `${todosCollapsed ? 'flex-1' : 'flex-[3]'}`
@@ -1063,7 +1063,8 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                   )}
 
                   {activeTab === "info" && (
-                    <div className="p-4 space-y-4 flex-1 overflow-auto dark-scrollbar">
+                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
+                      <div className="min-w-0 space-y-4">
                       <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{labels.capitalized} Information</h3>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {/* Statistics */}
@@ -1096,9 +1097,9 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                             <>
                               <div className="text-sm">
                                 <span className="text-gray-500 dark:text-gray-400">Branch: </span>
-                                <span className="font-mono font-medium text-gray-900 dark:text-gray-100">{state.git.originalBranch}</span>
+                                <span className="font-mono font-medium text-gray-900 dark:text-gray-100 break-all">{state.git.originalBranch}</span>
                                 <span className="text-gray-400 dark:text-gray-500"> → </span>
-                                <span className="font-mono font-medium text-gray-900 dark:text-gray-100">{state.git.workingBranch}</span>
+                                <span className="font-mono font-medium text-gray-900 dark:text-gray-100 break-all">{state.git.workingBranch}</span>
                               </div>
                               <div className="text-sm">
                                 <span className="text-gray-500 dark:text-gray-400">Commits: </span>
@@ -1247,17 +1248,19 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                           </div>
                         )}
                       </div>
+                      </div>
                     </div>
                   )}
 
                   {activeTab === "prompt" && (
-                    <div className="p-4 space-y-6 flex-1 overflow-auto dark-scrollbar">
+                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
+                      <div className="min-w-0 space-y-6">
                       {/* Original Task Prompt (read-only) */}
                       <div>
                         <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                           Original Task Prompt
                         </h3>
-                        <pre className="whitespace-pre-wrap text-sm text-gray-900 dark:text-gray-100 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4">
+                        <pre className="whitespace-pre-wrap break-words text-sm text-gray-900 dark:text-gray-100 font-mono bg-gray-50 dark:bg-gray-900 rounded-md p-4 [overflow-wrap:anywhere]">
                           {config.prompt || "No prompt specified."}
                         </pre>
                       </div>
@@ -1268,7 +1271,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                           <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-2">
                             Queued Message
                           </h3>
-                          <pre className="whitespace-pre-wrap text-sm text-yellow-700 dark:text-yellow-300 font-mono">
+                          <pre className="whitespace-pre-wrap break-words text-sm text-yellow-700 dark:text-yellow-300 font-mono [overflow-wrap:anywhere]">
                             {state.pendingPrompt}
                           </pre>
                           <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
@@ -1302,11 +1305,13 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                           Messages can only be queued while the {labels.singular} is running.
                         </p>
                       )}
+                      </div>
                     </div>
                   )}
 
                   {activeTab === "plan" && (
-                    <div className="p-4 flex-1 overflow-auto dark-scrollbar">
+                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
+                      <div className="min-w-0 flex-1">
                       {/* Feedback rounds counter (planning mode only) */}
                       {isPlanning && feedbackRounds > 0 && (
                         <div className="mb-3 flex items-center text-sm text-gray-600 dark:text-gray-400">
@@ -1330,7 +1335,7 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                       ) : isPlanning && planContent?.exists && !isPlanReady ? (
                         /* Plan content exists but AI is still writing */
                         <div className="relative">
-                          <MarkdownRenderer content={planContent.content} dimmed rawMode={!markdownEnabled} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
+                          <MarkdownRenderer content={planContent.content} dimmed rawMode={!markdownEnabled} className="min-w-0 rounded-lg bg-gray-50 p-4 dark:bg-gray-900" />
                           <div className="absolute top-4 right-4 flex items-center gap-3 text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 px-3 py-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
                             <span className="relative flex h-3 w-3">
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
@@ -1340,33 +1345,37 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                           </div>
                         </div>
                       ) : planContent?.exists ? (
-                        <MarkdownRenderer content={planContent.content} rawMode={!markdownEnabled} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
+                        <MarkdownRenderer content={planContent.content} rawMode={!markdownEnabled} className="min-w-0 rounded-lg bg-gray-50 p-4 dark:bg-gray-900" />
                       ) : (
                         <p className="text-gray-500 dark:text-gray-400 text-center py-8">
                           No plan.md file found in the project directory.
                         </p>
                       )}
+                      </div>
                     </div>
                   )}
 
                   {activeTab === "status" && (
-                    <div className="p-4 flex-1 overflow-auto dark-scrollbar">
+                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
+                      <div className="min-w-0 flex-1">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
                         </div>
                       ) : statusContent?.exists ? (
-                        <MarkdownRenderer content={statusContent.content} rawMode={!markdownEnabled} className="bg-gray-50 dark:bg-gray-900 p-4 rounded-lg" />
+                        <MarkdownRenderer content={statusContent.content} rawMode={!markdownEnabled} className="min-w-0 rounded-lg bg-gray-50 p-4 dark:bg-gray-900" />
                       ) : (
                         <p className="text-gray-500 dark:text-gray-400 text-center py-8">
                           No status.md file found in the project directory.
                         </p>
                       )}
+                      </div>
                     </div>
                   )}
 
                   {activeTab === "diff" && (
-                    <div className="p-4 flex-1 overflow-auto dark-scrollbar">
+                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
+                      <div className="min-w-0 flex-1">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
@@ -1443,11 +1452,13 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                           No changes yet.
                         </p>
                       )}
+                      </div>
                     </div>
                   )}
 
                   {activeTab === "review" && (
-                    <div className="p-4 space-y-4 flex-1 overflow-auto dark-scrollbar">
+                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
+                      <div className="min-w-0 space-y-4">
                       {loop.state.reviewMode ? (
                         <>
                           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -1485,10 +1496,10 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                                 {loop.state.reviewMode.reviewBranches.map((branch, index) => (
                                   <div
                                     key={index}
-                                    className="flex items-center gap-2 text-sm font-mono text-gray-700 dark:text-gray-300"
+                                    className="flex min-w-0 items-center gap-2 text-sm font-mono text-gray-700 dark:text-gray-300"
                                   >
                                     <span className="text-gray-400">{index + 1}.</span>
-                                    <span>{branch}</span>
+                                    <span className="break-all">{branch}</span>
                                   </div>
                                 ))}
                               </div>
@@ -1587,12 +1598,13 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
                           </p>
                         </div>
                       )}
+                      </div>
                     </div>
                   )}
 
                   {activeTab === "actions" && (
-                    <div className="p-4 flex-1 overflow-auto dark-scrollbar">
-                          <div className="max-w-md space-y-2">
+                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
+                          <div className="max-w-md min-w-0 space-y-2">
 
                           {isPlanning ? (
                           <>

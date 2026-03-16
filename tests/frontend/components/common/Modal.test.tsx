@@ -193,6 +193,22 @@ describe("Modal", () => {
   });
 
   describe("size", () => {
+    test("clips horizontal overflow in the overlay, dialog, and content area", () => {
+      const { getByRole } = renderWithUser(
+        <Modal isOpen={true} onClose={() => {}} title="Title">
+          <p>Content</p>
+        </Modal>
+      );
+      const dialog = getByRole("dialog");
+      expect(dialog.parentElement?.className).toContain("overflow-x-hidden");
+      expect(dialog.parentElement?.className).toContain("overflow-y-auto");
+      expect(dialog.className).toContain("min-w-0");
+      expect(dialog.className).toContain("overflow-hidden");
+      const content = dialog.children[1] as HTMLElement;
+      expect(content.className).toContain("overflow-x-hidden");
+      expect(content.className).toContain("overflow-y-auto");
+    });
+
     test("applies viewport height constraints with tighter mobile spacing", () => {
       const { getByRole } = renderWithUser(
         <Modal isOpen={true} onClose={() => {}} title="Title">

@@ -41,6 +41,16 @@ describe("LogViewer", () => {
       );
       expect(getByText("No logs yet. Waiting for activity.")).toBeInTheDocument();
     });
+
+    test("uses vertical scrolling while hiding panel-level horizontal overflow", () => {
+      const { container } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[]} />
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.className).toContain("min-w-0");
+      expect(root.className).toContain("overflow-x-hidden");
+      expect(root.className).toContain("overflow-y-auto");
+    });
   });
 
   describe("message rendering", () => {
