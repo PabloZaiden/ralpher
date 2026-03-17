@@ -129,6 +129,49 @@ describe("LoopCard", () => {
       expect(queryByText("Iterations:")).not.toBeInTheDocument();
       expect(queryByText("Last activity:")).not.toBeInTheDocument();
     });
+
+    test("renders stats after the error and git sections", () => {
+      const loop = createLoopWithStatus("failed", {
+        state: {
+          error: createLoopError({ message: "Still failed" }),
+          git: createGitState({ workingBranch: "feature-x-a1b2c3d" }),
+        },
+      });
+      const { getByText } = renderWithUser(<LoopCard loop={loop} />);
+
+      const errorMessage = getByText("Still failed");
+      const branchLabel = getByText("Branch:");
+      const iterationsLabel = getByText("Iterations:");
+
+      expect(errorMessage.compareDocumentPosition(iterationsLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+      expect(branchLabel.compareDocumentPosition(iterationsLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+    });
+
+    test("uses flex growth on the card body without overflow-prone h-full", () => {
+      const loop = createLoopWithStatus("running");
+      const { container } = renderWithUser(<LoopCard loop={loop} />);
+
+      const card = container.firstElementChild;
+      expect(card).not.toBeNull();
+      if (!(card instanceof HTMLElement)) {
+        throw new Error("Expected LoopCard root element");
+      }
+
+      const body = card.firstElementChild;
+      expect(body).not.toBeNull();
+      if (!(body instanceof HTMLElement)) {
+        throw new Error("Expected LoopCard body element");
+      }
+
+      expect(card.classList.contains("flex")).toBe(true);
+      expect(card.classList.contains("flex-col")).toBe(true);
+      expect(card.classList.contains("h-full")).toBe(true);
+      expect(body.classList.contains("flex")).toBe(true);
+      expect(body.classList.contains("flex-1")).toBe(true);
+      expect(body.classList.contains("flex-col")).toBe(true);
+      expect(body.classList.contains("min-h-0")).toBe(true);
+      expect(body.classList.contains("h-full")).toBe(false);
+    });
   });
 
   describe("error display", () => {
