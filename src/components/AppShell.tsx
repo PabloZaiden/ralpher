@@ -867,12 +867,33 @@ function SshServerView({
   sessions,
   headerOffsetClassName,
   onNavigate,
+  onDeleteServer,
 }: {
   server: SshServer;
   sessions: SshServerSession[];
   headerOffsetClassName?: string;
   onNavigate: (route: ShellRoute) => void;
+  onDeleteServer: () => Promise<boolean>;
 }) {
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
+  async function handleDeleteServer() {
+    try {
+      setDeleteSubmitting(true);
+      const deleted = await onDeleteServer();
+      if (deleted) {
+        setDeleteConfirmOpen(false);
+      }
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }
+
+  const deleteMessage = sessions.length === 0
+    ? `Delete "${server.config.name}"? This removes the saved SSH server metadata from Ralpher and any saved browser credential for this server.`
+    : `Delete "${server.config.name}" and its ${sessions.length} standalone session${sessions.length === 1 ? "" : "s"}? This removes the saved SSH server metadata from Ralpher, any saved browser credential for this server, and cannot be undone.`;
+
   return (
     <ShellPanel
       eyebrow="SSH server"
@@ -886,9 +907,23 @@ function SshServerView({
         </Badge>
       )}
       actions={(
-        <Button size="sm" onClick={() => onNavigate({ view: "compose", kind: "ssh-session", scopeId: server.config.id })}>
-          New Session
-        </Button>
+        <>
+          <Button
+            size="sm"
+            onClick={() => onNavigate({ view: "compose", kind: "ssh-session", scopeId: server.config.id })}
+            disabled={deleteSubmitting}
+          >
+            New Session
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={deleteSubmitting}
+          >
+            Delete Server
+          </Button>
+        </>
       )}
     >
       <div className="grid gap-4 lg:grid-cols-3">
@@ -934,6 +969,17 @@ function SshServerView({
           )}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        onConfirm={() => void handleDeleteServer()}
+        title="Delete SSH Server"
+        message={deleteMessage}
+        confirmLabel="Delete Server"
+        loading={deleteSubmitting}
+        variant="danger"
+      />
     </ShellPanel>
   );
 }
@@ -1479,6 +1525,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     error: sshServersError,
     refresh: refreshSshServers,
     createServer,
+    deleteServer,
     createSession: createStandaloneSession,
   } = useSshServers();
   const {
@@ -2412,6 +2459,16 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           sessions={sessionsByServerId[selectedServer.config.id] ?? []}
           headerOffsetClassName={shellHeaderOffsetClassName}
           onNavigate={navigateWithinShell}
+          onDeleteServer={async () => {
+            const deleted = await deleteServer(selectedServer.config.id);
+            if (!deleted) {
+              toast.error(`Failed to delete SSH server "${selectedServer.config.name}"`);
+              return false;
+            }
+            toast.success(`Deleted SSH server "${selectedServer.config.name}"`);
+            navigateWithinShell({ view: "home" });
+            return true;
+          }}
         />
       );
     }

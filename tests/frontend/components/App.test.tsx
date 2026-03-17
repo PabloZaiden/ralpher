@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { App } from "@/App";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
-import { renderWithUser, waitFor, act } from "../helpers/render";
+import { renderWithUser, waitFor, act, within } from "../helpers/render";
 import { createLoop, createSshSession, createWorkspace } from "../helpers/factories";
 
 const api = createMockApi();
@@ -289,6 +289,49 @@ describe("App shell", () => {
     await waitFor(() => {
       expect(serverRender.getByRole("heading", { name: "Deploy host" })).toBeTruthy();
       expect(serverRender.getByText("No standalone sessions yet for this SSH server.")).toBeTruthy();
+    });
+  });
+
+  test("lets users delete an SSH server from the shell detail route", async () => {
+    const server = createSshServer({ id: "server-1", name: "Deploy host" });
+    setupDefaultApi({ sshServers: [server] });
+    localStorage.setItem("ralpher.sshServerCredential.server-1", JSON.stringify({
+      encryptedCredential: {
+        algorithm: server.publicKey.algorithm,
+        fingerprint: server.publicKey.fingerprint,
+        version: server.publicKey.version,
+        ciphertext: "saved",
+      },
+      storedAt: isoNow(),
+    }));
+    api.delete("/api/ssh-servers/:id", (req) => {
+      expect(req.params["id"]).toBe("server-1");
+      return { success: true };
+    });
+
+    const { getByRole, getByText, queryByRole, user } = renderWithUser(<App />, { route: "#/server/server-1" });
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Deploy host" })).toBeTruthy();
+      expect(getByRole("button", { name: "Delete Server" })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: "Delete Server" }));
+
+    await waitFor(() => {
+      expect(getByText('Delete "Deploy host"? This removes the saved SSH server metadata from Ralpher and any saved browser credential for this server.')).toBeTruthy();
+    });
+
+    const deleteDialog = getByRole("dialog");
+    await user.click(within(deleteDialog).getByRole("button", { name: "Delete Server" }));
+
+    await waitFor(() => {
+      expect(api.calls("/api/ssh-servers/:id", "DELETE")).toHaveLength(1);
+      expect(window.location.hash).toBe("#/");
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
+      expect(getByText('Deleted SSH server "Deploy host"')).toBeTruthy();
+      expect(localStorage.getItem("ralpher.sshServerCredential.server-1")).toBeNull();
+      expect(queryByRole("dialog")).toBeNull();
     });
   });
 
