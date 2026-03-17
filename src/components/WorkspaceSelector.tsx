@@ -80,20 +80,6 @@ export function WorkspaceSelector({
         ))}
       </select>
       
-      {selectedWorkspaceId && (
-        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          <p className="font-mono truncate">
-            {workspaces.find((w) => w.id === selectedWorkspaceId)?.directory}
-          </p>
-          <p className="truncate">
-            {(() => {
-              const workspace = workspaces.find((w) => w.id === selectedWorkspaceId);
-              return workspace ? getServerLabel(workspace.serverSettings, registeredSshServers) : "";
-            })()}
-          </p>
-        </div>
-      )}
-      
       {hasNoWorkspaces && (
         <p className="mt-1 text-sm text-amber-600 dark:text-amber-400">
           Create a workspace from the dashboard first.

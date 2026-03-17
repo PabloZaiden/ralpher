@@ -2,7 +2,7 @@
  * CreateLoopForm component for creating new Ralph Loops.
  */
 
-import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useRef, useCallback, type FormEvent, type ReactNode } from "react";
 import type { CreateLoopRequest, CreateChatRequest, ModelInfo, BranchInfo, SshServer } from "../types";
 import type { Workspace } from "../types/workspace";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
@@ -100,6 +100,8 @@ export interface CreateLoopFormProps {
    * This is useful for rendering actions in a Modal footer (sticky position).
    */
   renderActions?: (state: CreateLoopFormActionState) => void;
+  /** Optional extra actions rendered beside the draft/save action group. */
+  leadingActions?: ReactNode;
   /** Mode: "loop" (default) or "chat" — controls which fields are shown */
   mode?: "loop" | "chat";
 }
@@ -128,6 +130,7 @@ export function CreateLoopForm({
   workspaceError = null,
   registeredSshServers = [],
   renderActions,
+  leadingActions,
   mode = "loop",
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
@@ -185,6 +188,11 @@ export function CreateLoopForm({
     setName(initialLoopData?.name ?? "");
     nameRef.current = initialLoopData?.name ?? "";
   }, [initialLoopData?.name]);
+
+  useEffect(() => {
+    setSelectedWorkspaceId(initialLoopData?.workspaceId);
+    setSelectedWorkspaceDirectory(initialLoopData?.directory ?? "");
+  }, [initialLoopData?.workspaceId, initialLoopData?.directory]);
 
   // Check if the selected model is enabled (connected)
   const selectedModelEnabled = selectedModel ? isModelEnabled(models, selectedModel) : false;
@@ -955,18 +963,20 @@ export function CreateLoopForm({
       {/* Actions - only render inline if renderActions prop is not provided */}
       {!renderActions && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-          {/* Left side - Save as Draft / Update Draft button */}
-          {(!isEditing || isEditingDraft) && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={(e) => handleSubmit(e, true)}
-              disabled={isSubmitting || !canSaveDraft}
-              loading={isSubmitting}
-            >
-              {isEditingDraft ? "Update Draft" : "Save as Draft"}
-            </Button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {leadingActions}
+            {(!isEditing || isEditingDraft) && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={(e) => handleSubmit(e, true)}
+                disabled={isSubmitting || !canSaveDraft}
+                loading={isSubmitting}
+              >
+                {isEditingDraft ? "Update Draft" : "Save as Draft"}
+              </Button>
+            )}
+          </div>
           
           {/* Right side - Cancel and Create/Start buttons */}
           <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 sm:ml-auto">

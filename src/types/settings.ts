@@ -42,6 +42,21 @@ export function getDefaultServerSettings(remoteOnly: boolean = false): ServerSet
 }
 
 /**
+ * Defaults for creating a new workspace from the UI.
+ * New workspaces should start on Copilot over SSH, regardless of remote-only mode.
+ */
+export function getCreateWorkspaceDefaultServerSettings(): ServerSettings {
+  return {
+    agent: {
+      provider: "copilot",
+      transport: "ssh",
+      hostname: "localhost",
+      port: 22,
+    },
+  };
+}
+
+/**
  * Parse persisted server settings with backward compatibility for legacy rows.
  */
 export function parseServerSettings(jsonString: string | null): ServerSettings {

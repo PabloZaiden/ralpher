@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type InputHTMLAttributes } from "react";
 import type {
   CreateChatRequest,
   CreateLoopRequest,
@@ -8,15 +8,17 @@ import type {
   SshServerSession,
   Workspace,
 } from "../types";
-import { getDefaultServerSettings, getServerLabel } from "../types/settings";
-import type { ServerSettings } from "../types/settings";
+import { getCreateWorkspaceDefaultServerSettings, getServerLabel } from "../types/settings";
+import type { AgentProvider, ServerSettings } from "../types/settings";
 import type { CreateWorkspaceRequest } from "../types/workspace";
 import { createLogger } from "../lib/logger";
 import { appFetch } from "../lib/public-path";
+import { getStoredSshServerCredential } from "../lib/ssh-browser-credentials";
 import {
   useDashboardData,
   useLoopGrouping,
   useLoops,
+  useProvisioningJob,
   useSshServers,
   useSshSessions,
   useToast,
@@ -26,10 +28,11 @@ import { getPlanningStatusLabel, getStatusLabel } from "../utils";
 import { AppSettingsPanel } from "./AppSettingsModal";
 import { CreateLoopForm, type CreateLoopFormSubmitRequest } from "./CreateLoopForm";
 import { LoopDetails } from "./LoopDetails";
+import { ProvisioningJobView } from "./ProvisioningJobView";
 import { ServerSettingsForm } from "./ServerSettingsForm";
 import { SshSessionDetails } from "./SshSessionDetails";
 import { WorkspaceSelector } from "./WorkspaceSelector";
-import { Badge, Button, GearIcon, SidebarIcon, getStatusBadgeVariant } from "./common";
+import { Badge, Button, ConfirmModal, GearIcon, PASSWORD_INPUT_PROPS, SidebarIcon, getStatusBadgeVariant } from "./common";
 
 const log = createLogger("AppShell");
 const SIDEBAR_SECTION_STORAGE_KEY = "ralpher.sidebarSectionCollapseState";
@@ -52,6 +55,47 @@ const SIDEBAR_SECTION_IDS: SidebarSectionId[] = [
   "workspace-ssh",
   "ssh-servers",
 ];
+
+interface WorkspaceSidebarGroup {
+  key: string;
+  title: string;
+  items: Loop[];
+}
+
+function getSshConnectionModeLabel(mode: SshConnectionMode): string {
+  return mode === "direct" ? "Direct SSH" : "Persistent SSH";
+}
+
+function groupSidebarItemsByWorkspace(
+  items: Loop[],
+  workspaces: readonly Workspace[],
+): WorkspaceSidebarGroup[] {
+  const workspacesById = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
+  const workspaceOrder = new Map(workspaces.map((workspace, index) => [workspace.id, index]));
+  const groups = new Map<string, WorkspaceSidebarGroup & { order: number }>();
+
+  for (const item of items) {
+    const workspace = workspacesById.get(item.config.workspaceId);
+    const key = workspace?.id ?? `missing:${item.config.workspaceId ?? item.config.id}`;
+    const group = groups.get(key) ?? {
+      key,
+      title: workspace?.name ?? "Unknown workspace",
+      order: workspace ? (workspaceOrder.get(workspace.id) ?? Number.MAX_SAFE_INTEGER) : Number.MAX_SAFE_INTEGER,
+      items: [],
+    };
+    group.items.push(item);
+    groups.set(key, group);
+  }
+
+  return Array.from(groups.values())
+    .sort((left, right) => {
+      if (left.order !== right.order) {
+        return left.order - right.order;
+      }
+      return left.title.localeCompare(right.title);
+    })
+    .map(({ key, title, items: groupedItems }) => ({ key, title, items: groupedItems }));
+}
 
 function isDesktopShellViewport(): boolean {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -283,7 +327,7 @@ function ShellPanel({
   children: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+    <div className="flex w-full min-w-0 flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
       <div className="flex flex-col gap-4 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-neutral-900/80">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-2">
@@ -326,6 +370,7 @@ function InlineField({
   type = "text",
   required = false,
   help,
+  inputProps,
 }: {
   id: string;
   label: string;
@@ -335,6 +380,7 @@ function InlineField({
   type?: string;
   required?: boolean;
   help?: string;
+  inputProps?: InputHTMLAttributes<HTMLInputElement>;
 }) {
   return (
     <div>
@@ -348,6 +394,7 @@ function InlineField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
+        {...inputProps}
         className="block w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700"
       />
       {help && <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">{help}</p>}
@@ -630,14 +677,6 @@ function SshServerView({
       eyebrow="SSH server"
       title={server.config.name}
       description={`${server.config.username}@${server.config.address}`}
-      actions={(
-        <>
-          <Button variant="secondary" onClick={() => onNavigate({ view: "compose", kind: "ssh-session" })}>
-            New Session
-          </Button>
-          <Button onClick={() => onNavigate({ view: "compose", kind: "ssh-server" })}>Register Another Server</Button>
-        </>
-      )}
     >
       <div className="grid gap-4 lg:grid-cols-3">
         <SummaryCard label="Address" value={server.config.address} meta="Stored without credentials on the server." />
@@ -824,7 +863,7 @@ function DraftLoopComposer({
     <ShellPanel
       eyebrow="Draft loop"
       title={`Edit ${loop.config.name}`}
-      description={selectedWorkspace ? `${selectedWorkspace.name} · ${loop.config.directory}` : loop.config.directory}
+      description={selectedWorkspace ? `Workspace: ${selectedWorkspace.name}` : loop.config.directory}
       actions={(
         <Button
           variant="ghost"
@@ -890,35 +929,28 @@ function DraftLoopComposer({
         workspacesLoading={workspacesLoading}
         workspaceError={workspaceError}
         registeredSshServers={registeredSshServers}
+        leadingActions={(
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={deleteSubmitting}
+          >
+            Delete Draft
+          </Button>
+        )}
       />
 
-      <div className="mt-6 rounded-2xl border border-red-200 bg-red-50/70 p-4 dark:border-red-900/50 dark:bg-red-950/20">
-        <p className="text-sm font-semibold text-red-900 dark:text-red-100">Delete draft</p>
-        <p className="mt-1 text-sm text-red-800 dark:text-red-200">
-          Remove this draft if you no longer need it. The draft will be marked as deleted and can be purged later.
-        </p>
-        {deleteConfirmOpen ? (
-          <div className="mt-4 space-y-3">
-            <p className="text-sm text-red-900 dark:text-red-100">
-              Are you sure you want to delete "{loop.config.name}"? The draft will be marked as deleted and can be purged later if needed.
-            </p>
-            <div className="flex flex-wrap gap-3">
-              <Button variant="ghost" onClick={() => setDeleteConfirmOpen(false)} disabled={deleteSubmitting}>
-                Keep Draft
-              </Button>
-              <Button onClick={() => void handleDeleteDraft()} loading={deleteSubmitting}>
-                Delete Draft
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-4">
-            <Button variant="secondary" onClick={() => setDeleteConfirmOpen(true)}>
-              Delete Draft
-            </Button>
-          </div>
-        )}
-      </div>
+      <ConfirmModal
+        isOpen={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        onConfirm={() => void handleDeleteDraft()}
+        title="Delete Draft"
+        message={`Are you sure you want to delete "${loop.config.name}"?`}
+        confirmLabel="Delete Draft"
+        loading={deleteSubmitting}
+        variant="danger"
+      />
     </ShellPanel>
   );
 }
@@ -944,7 +976,6 @@ function SshSessionComposer({
   const [targetType, setTargetType] = useState<"workspace" | "server">(workspaces.length > 0 ? "workspace" : "server");
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | undefined>(initialWorkspaceId ?? workspaces[0]?.id);
   const [selectedServerId, setSelectedServerId] = useState(servers[0]?.config.id ?? "");
-  const [sessionName, setSessionName] = useState("");
   const [connectionMode, setConnectionMode] = useState<SshConnectionMode>("dtach");
   const [submitting, setSubmitting] = useState(false);
 
@@ -971,7 +1002,6 @@ function SshSessionComposer({
         }
         const session = await onCreateWorkspaceSession({
           workspaceId: selectedWorkspaceId,
-          name: sessionName.trim() || undefined,
           connectionMode,
         });
         onNavigate({ view: "ssh", sshSessionId: session.config.id });
@@ -984,7 +1014,6 @@ function SshSessionComposer({
       }
 
       const session = await onCreateStandaloneSession(selectedServerId, {
-        name: sessionName.trim() || undefined,
         connectionMode,
       });
       onNavigate({ view: "ssh", sshSessionId: session.config.id });
@@ -1000,38 +1029,22 @@ function SshSessionComposer({
       eyebrow="Compose SSH"
       title="Create an SSH session"
       description="Create a workspace-backed or standalone SSH session."
-      actions={<Button variant="ghost" onClick={onCancel}>Cancel</Button>}
     >
       <form className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-neutral-950/50">
-            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Target</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setTargetType("workspace")}
-                className={[
-                  "rounded-xl border px-3 py-2 text-sm font-medium transition",
-                  targetType === "workspace"
-                    ? "border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-neutral-100 dark:text-gray-950"
-                    : "border-gray-300 bg-white text-gray-700 hover:border-gray-400 dark:border-gray-700 dark:bg-neutral-900 dark:text-gray-200",
-                ].join(" ")}
-              >
-                Workspace SSH
-              </button>
-              <button
-                type="button"
-                onClick={() => setTargetType("server")}
-                className={[
-                  "rounded-xl border px-3 py-2 text-sm font-medium transition",
-                  targetType === "server"
-                    ? "border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-neutral-100 dark:text-gray-950"
-                    : "border-gray-300 bg-white text-gray-700 hover:border-gray-400 dark:border-gray-700 dark:bg-neutral-900 dark:text-gray-200",
-                ].join(" ")}
-              >
-                Standalone server
-              </button>
-            </div>
+            <label htmlFor="ssh-target-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Target type
+            </label>
+            <select
+              id="ssh-target-type"
+              value={targetType}
+              onChange={(event) => setTargetType(event.target.value as "workspace" | "server")}
+              className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700"
+            >
+              <option value="workspace">Workspace</option>
+              <option value="server">Standalone SSH server</option>
+            </select>
           </div>
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-neutral-950/50">
             <label htmlFor="ssh-connection-mode" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -1051,15 +1064,6 @@ function SshSessionComposer({
             </p>
           </div>
         </div>
-
-        <InlineField
-          id="ssh-session-name"
-          label="Session name"
-          value={sessionName}
-          onChange={setSessionName}
-          placeholder="Optional display name"
-          help="Leave empty to use the default generated name."
-        />
 
         {targetType === "workspace" ? (
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-neutral-950/50">
@@ -1153,7 +1157,6 @@ function SshServerComposer({
       eyebrow="Compose SSH server"
       title="Register a standalone SSH server"
       description="Store server details. Passwords stay in the browser and are only requested when needed."
-      actions={<Button variant="ghost" onClick={onCancel}>Cancel</Button>}
     >
       <form className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
         <div className="grid gap-4 lg:grid-cols-2">
@@ -1168,6 +1171,7 @@ function SshServerComposer({
             placeholder="Optional"
             type="password"
             help="Stored only in the browser to streamline persistent standalone sessions."
+            inputProps={PASSWORD_INPUT_PROPS}
           />
         </div>
         <div className="flex flex-wrap gap-3">
@@ -1194,6 +1198,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     sessions,
     loading: sshSessionsLoading,
     error: sshSessionsError,
+    refresh: refreshSshSessions,
     createSession,
   } = useSshSessions();
   const {
@@ -1201,6 +1206,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     sessionsByServerId,
     loading: sshServersLoading,
     error: sshServersError,
+    refresh: refreshSshServers,
     createServer,
     createSession: createStandaloneSession,
   } = useSshServers();
@@ -1209,32 +1215,68 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     loading: workspacesLoading,
     saving: workspacesSaving,
     error: workspaceError,
+    refresh: refreshWorkspaces,
     createWorkspace,
     exportConfig,
     importConfig,
   } = useWorkspaces();
   const dashboardData = useDashboardData();
+  const provisioning = useProvisioningJob();
   const { workspaceGroups } = useLoopGrouping(loops, workspaces);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [collapsedSections, setCollapsedSections] = useState<SidebarSectionCollapseState>(() => loadSidebarSectionCollapseState());
+  const [workspaceCreateMode, setWorkspaceCreateMode] = useState<"manual" | "automatic">("manual");
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceDirectory, setWorkspaceDirectory] = useState("");
-  const [workspaceServerSettings, setWorkspaceServerSettings] = useState<ServerSettings>(() => getDefaultServerSettings(dashboardData.remoteOnly));
+  const [workspaceServerSettings, setWorkspaceServerSettings] = useState<ServerSettings>(() => getCreateWorkspaceDefaultServerSettings());
   const [workspaceServerSettingsValid, setWorkspaceServerSettingsValid] = useState(true);
   const [workspaceTesting, setWorkspaceTesting] = useState(false);
   const [workspaceCreateSubmitting, setWorkspaceCreateSubmitting] = useState(false);
+  const [automaticServerId, setAutomaticServerId] = useState("");
+  const [automaticRepoUrl, setAutomaticRepoUrl] = useState("");
+  const [automaticBasePath, setAutomaticBasePath] = useState("/workspaces");
+  const [automaticProvider, setAutomaticProvider] = useState<AgentProvider>("copilot");
+  const [automaticPassword, setAutomaticPassword] = useState("");
+  const lastProvisioningRefreshIdRef = useRef<string | null>(null);
 
   const sshWorkspaces = useMemo(() => {
     return workspaces.filter((workspace) => workspace.serverSettings.agent.transport === "ssh");
   }, [workspaces]);
 
+  const workspacesById = useMemo(() => {
+    return new Map(workspaces.map((workspace) => [workspace.id, workspace]));
+  }, [workspaces]);
+  const serversById = useMemo(() => {
+    return new Map(servers.map((server) => [server.config.id, server]));
+  }, [servers]);
   const loopItems = useMemo(() => loops.filter((loop) => loop.config.mode !== "chat"), [loops]);
   const draftLoopItems = useMemo(() => loopItems.filter((loop) => loop.state.status === "draft"), [loopItems]);
   const activeLoopItems = useMemo(() => loopItems.filter((loop) => loop.state.status !== "draft"), [loopItems]);
   const chatItems = useMemo(() => loops.filter((loop) => loop.config.mode === "chat"), [loops]);
   const standaloneSessions = useMemo(() => Object.values(sessionsByServerId).flat(), [sessionsByServerId]);
+  const draftGroups = useMemo(() => groupSidebarItemsByWorkspace(draftLoopItems, workspaces), [draftLoopItems, workspaces]);
+  const activeLoopGroups = useMemo(() => groupSidebarItemsByWorkspace(activeLoopItems, workspaces), [activeLoopItems, workspaces]);
+  const chatGroups = useMemo(() => groupSidebarItemsByWorkspace(chatItems, workspaces), [chatItems, workspaces]);
+  const allShellSessions = useMemo(() => {
+    return [
+      ...sessions.map((session) => ({
+        id: session.config.id,
+        title: session.config.name,
+        subtitle: `${workspacesById.get(session.config.workspaceId)?.name ?? "Unknown workspace"} · ${getSshConnectionModeLabel(session.config.connectionMode)}`,
+        badge: session.state.status,
+        createdAt: session.config.createdAt,
+      })),
+      ...standaloneSessions.map((session) => ({
+        id: session.config.id,
+        title: session.config.name,
+        subtitle: `${serversById.get(session.config.sshServerId)?.config.name ?? "Unknown server"} · ${getSshConnectionModeLabel(session.config.connectionMode)}`,
+        badge: session.state.status,
+        createdAt: session.config.createdAt,
+      })),
+    ].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  }, [serversById, sessions, standaloneSessions, workspacesById]);
   const selectedLoop = route.view === "loop"
     ? loopItems.find((loop) => loop.config.id === route.loopId) ?? null
     : null;
@@ -1257,14 +1299,46 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
 
   useEffect(() => {
     if (route.view !== "compose" || route.kind !== "workspace") {
-      setWorkspaceName("");
-      setWorkspaceDirectory("");
-      setWorkspaceServerSettings(getDefaultServerSettings(dashboardData.remoteOnly));
-      setWorkspaceServerSettingsValid(true);
-      setWorkspaceTesting(false);
-      setWorkspaceCreateSubmitting(false);
+      return;
     }
-  }, [dashboardData.remoteOnly, route]);
+
+    if (provisioning.activeJobId) {
+      setWorkspaceCreateMode("automatic");
+      return;
+    }
+
+    setWorkspaceCreateMode("manual");
+    setWorkspaceName("");
+    setWorkspaceDirectory("");
+    setWorkspaceServerSettings(getCreateWorkspaceDefaultServerSettings());
+    setWorkspaceServerSettingsValid(true);
+    setWorkspaceTesting(false);
+    setWorkspaceCreateSubmitting(false);
+    setAutomaticServerId(servers[0]?.config.id ?? "");
+    setAutomaticRepoUrl("");
+    setAutomaticBasePath("/workspaces");
+    setAutomaticProvider("copilot");
+    setAutomaticPassword("");
+  }, [provisioning.activeJobId, route, servers]);
+
+  useEffect(() => {
+    if (route.view !== "compose" || route.kind !== "workspace" || automaticServerId || !servers[0]) {
+      return;
+    }
+    setAutomaticServerId(servers[0].config.id);
+  }, [automaticServerId, route, servers]);
+
+  useEffect(() => {
+    const jobId = provisioning.snapshot?.job.config.id ?? null;
+    if (
+      provisioning.snapshot?.job.state.status === "completed"
+      && jobId
+      && lastProvisioningRefreshIdRef.current !== jobId
+    ) {
+      lastProvisioningRefreshIdRef.current = jobId;
+      void refreshWorkspaces();
+    }
+  }, [provisioning.snapshot?.job.config.id, provisioning.snapshot?.job.state.status, refreshWorkspaces]);
 
   useEffect(() => {
     saveSidebarSectionCollapseState(collapsedSections);
@@ -1405,12 +1479,55 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     }
   }
 
+  function handleBackToAutomaticWorkspaceForm() {
+    const config = provisioning.snapshot?.job.config;
+    if (!config) {
+      provisioning.clearActiveJob();
+      return;
+    }
+
+    setWorkspaceCreateMode("automatic");
+    setWorkspaceName(config.name);
+    setAutomaticServerId(config.sshServerId);
+    setAutomaticRepoUrl(config.repoUrl);
+    setAutomaticBasePath(config.basePath);
+    setAutomaticProvider(config.provider);
+    setAutomaticPassword("");
+    provisioning.clearActiveJob();
+  }
+
   async function handleCreateWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = workspaceName.trim();
+    if (!name) {
+      toast.error("Workspace name is required.");
+      return;
+    }
+
+    if (workspaceCreateMode === "automatic") {
+      if (!automaticServerId.trim() || !automaticRepoUrl.trim() || !automaticBasePath.trim()) {
+        toast.error("Saved SSH server, repository URL, and remote base path are required.");
+        return;
+      }
+
+      const snapshot = await provisioning.startJob({
+        name,
+        sshServerId: automaticServerId,
+        repoUrl: automaticRepoUrl.trim(),
+        basePath: automaticBasePath.trim(),
+        provider: automaticProvider,
+        password: automaticPassword,
+      });
+      if (snapshot) {
+        setWorkspaceCreateMode("automatic");
+        setAutomaticPassword("");
+      }
+      return;
+    }
+
     const directory = workspaceDirectory.trim();
-    if (!name || !directory || !workspaceServerSettingsValid) {
-      toast.error("Name, directory, and valid connection settings are required.");
+    if (!directory || !workspaceServerSettingsValid) {
+      toast.error("Directory and valid connection settings are required.");
       return;
     }
 
@@ -1443,19 +1560,11 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           description={kind === "chat"
             ? "Pick a workspace and model to start an interactive conversation."
             : "Pick a workspace, model, and prompt to start a new loop."}
-          actions={(
-            <Button
-              variant="ghost"
-              onClick={() => navigateWithinShell(composeWorkspace ? { view: "workspace", workspaceId: composeWorkspace.id } : { view: "home" })}
-            >
-              Cancel
-            </Button>
-          )}
         >
           <CreateLoopForm
             mode={kind}
             onSubmit={(request) => handleLoopSubmit(kind, request)}
-            onCancel={() => navigateWithinShell({ view: "home" })}
+            onCancel={() => navigateWithinShell(composeWorkspace ? { view: "workspace", workspaceId: composeWorkspace.id } : { view: "home" })}
             closeOnSuccess={false}
             models={dashboardData.models}
             modelsLoading={dashboardData.modelsLoading}
@@ -1481,19 +1590,92 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     }
 
     if (kind === "workspace") {
+      const provisioningStatus = provisioning.snapshot?.job.state.status;
+      const provisionedWorkspaceId = provisioning.snapshot?.workspace?.id ?? provisioning.snapshot?.job.state.workspaceId;
+      const canReturnToAutomaticForm = provisioningStatus === "failed" || provisioningStatus === "cancelled";
+      const selectedServerHasStoredCredential = automaticServerId
+        ? getStoredSshServerCredential(automaticServerId) !== null
+        : false;
+      const automaticFormValid = workspaceName.trim().length > 0
+        && automaticServerId.trim().length > 0
+        && automaticRepoUrl.trim().length > 0
+        && automaticBasePath.trim().length > 0;
+      const manualFormValid = workspaceName.trim().length > 0
+        && workspaceDirectory.trim().length > 0
+        && workspaceServerSettingsValid;
+
       return (
         <ShellPanel
           eyebrow="Compose workspace"
           title="Create a workspace"
-          description="Add a repository or remote workspace."
-          actions={(
-            <Button variant="ghost" onClick={() => navigateWithinShell({ view: "home" })}>
-              Cancel
-            </Button>
-          )}
+          description="Create a workspace manually or provision one automatically over SSH."
         >
-          <form className="space-y-6" onSubmit={(event) => void handleCreateWorkspace(event)}>
-            <div className="grid gap-4 lg:grid-cols-2">
+          {provisioning.activeJobId ? (
+            <div className="space-y-6">
+              <ProvisioningJobView
+                snapshot={provisioning.snapshot}
+                logs={provisioning.logs}
+                websocketStatus={provisioning.websocketStatus}
+                loading={provisioning.loading}
+                error={provisioning.error}
+              />
+              <div className="flex flex-wrap gap-3">
+                <Button variant="ghost" type="button" onClick={() => navigateWithinShell({ view: "home" })}>
+                  Back to Overview
+                </Button>
+                {canReturnToAutomaticForm && (
+                  <Button type="button" onClick={handleBackToAutomaticWorkspaceForm}>
+                    Back to Automatic Form
+                  </Button>
+                )}
+                {provisionedWorkspaceId && provisioningStatus === "completed" && (
+                  <Button
+                    type="button"
+                    onClick={() => navigateWithinShell({ view: "workspace", workspaceId: provisionedWorkspaceId })}
+                  >
+                    Open Workspace
+                  </Button>
+                )}
+                {(provisioningStatus === "running" || provisioningStatus === "pending") && (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={() => {
+                      void provisioning.cancelJob();
+                    }}
+                  >
+                    Cancel Job
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <form className="space-y-6" onSubmit={(event) => void handleCreateWorkspace(event)}>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className={`rounded-md px-3 py-2 text-sm font-medium ${
+                    workspaceCreateMode === "manual"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-gray-300"
+                  }`}
+                  onClick={() => setWorkspaceCreateMode("manual")}
+                >
+                  Manual
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-md px-3 py-2 text-sm font-medium ${
+                    workspaceCreateMode === "automatic"
+                      ? "bg-blue-600 text-white"
+                      : "bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-gray-300"
+                  }`}
+                  onClick={() => setWorkspaceCreateMode("automatic")}
+                >
+                  Automatic
+                </button>
+              </div>
+
               <InlineField
                 id="workspace-name"
                 label="Workspace name"
@@ -1502,38 +1684,128 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                 placeholder="Main repository"
                 required
               />
-              <InlineField
-                id="workspace-directory"
-                label="Directory"
-                value={workspaceDirectory}
-                onChange={setWorkspaceDirectory}
-                placeholder="/workspaces/project"
-                required
-                help="Absolute path on the selected workspace host."
-              />
-            </div>
-            <ServerSettingsForm
-              initialSettings={workspaceServerSettings}
-              onChange={(settings, isValid) => {
-                setWorkspaceServerSettings((current) => {
-                  return JSON.stringify(current) === JSON.stringify(settings) ? current : settings;
-                });
-                setWorkspaceServerSettingsValid(isValid);
-              }}
-              onTest={handleTestWorkspaceConnection}
-              testing={workspaceTesting}
-              remoteOnly={dashboardData.remoteOnly}
-              registeredSshServers={servers}
-            />
-            <div className="flex flex-wrap gap-3">
-              <Button variant="ghost" type="button" onClick={() => navigateWithinShell({ view: "home" })}>
-                Cancel
-              </Button>
-              <Button type="submit" loading={workspaceCreateSubmitting || workspacesSaving}>
-                Create Workspace
-              </Button>
-            </div>
-          </form>
+
+              {workspaceCreateMode === "manual" ? (
+                <>
+                  <InlineField
+                    id="workspace-directory"
+                    label="Directory"
+                    value={workspaceDirectory}
+                    onChange={setWorkspaceDirectory}
+                    placeholder="/workspaces/project"
+                    required
+                    help="Absolute path on the selected workspace host."
+                  />
+                  <ServerSettingsForm
+                    initialSettings={workspaceServerSettings}
+                    onChange={(settings, isValid) => {
+                      setWorkspaceServerSettings((current) => {
+                        return JSON.stringify(current) === JSON.stringify(settings) ? current : settings;
+                      });
+                      setWorkspaceServerSettingsValid(isValid);
+                    }}
+                    onTest={handleTestWorkspaceConnection}
+                    testing={workspaceTesting}
+                    remoteOnly={dashboardData.remoteOnly}
+                    registeredSshServers={servers}
+                  />
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="automatic-ssh-server" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Saved SSH server <span className="ml-1 text-red-500">*</span>
+                    </label>
+                    <select
+                      id="automatic-ssh-server"
+                      value={automaticServerId}
+                      onChange={(event) => setAutomaticServerId(event.target.value)}
+                      className="block w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700"
+                    >
+                      <option value="">Select a saved SSH server</option>
+                      {servers.map((server) => (
+                        <option key={server.config.id} value={server.config.id}>
+                          {server.config.name} ({server.config.username}@{server.config.address})
+                        </option>
+                      ))}
+                    </select>
+                    {servers.length === 0 && (
+                      <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                        Register a saved SSH server first to use automatic workspace provisioning.
+                      </p>
+                    )}
+                  </div>
+
+                  <InlineField
+                    id="automatic-repo-url"
+                    label="Git repository URL"
+                    value={automaticRepoUrl}
+                    onChange={setAutomaticRepoUrl}
+                    placeholder="git@github.com:owner/repo.git"
+                    required
+                    help="Repository to clone on the remote host."
+                  />
+
+                  <InlineField
+                    id="automatic-base-path"
+                    label="Remote base path"
+                    value={automaticBasePath}
+                    onChange={setAutomaticBasePath}
+                    placeholder="/workspaces"
+                    required
+                    help="Parent directory where the repo should be cloned."
+                  />
+
+                  <div>
+                    <label htmlFor="automatic-provider" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Provider <span className="ml-1 text-red-500">*</span>
+                    </label>
+                    <select
+                      id="automatic-provider"
+                      value={automaticProvider}
+                      onChange={(event) => setAutomaticProvider(event.target.value as AgentProvider)}
+                      className="block w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700"
+                    >
+                      <option value="copilot">copilot</option>
+                      <option value="opencode">opencode</option>
+                    </select>
+                  </div>
+
+                  {!selectedServerHasStoredCredential && (
+                    <InlineField
+                      id="automatic-ssh-password"
+                      label="SSH password"
+                      value={automaticPassword}
+                      onChange={setAutomaticPassword}
+                      placeholder="Leave blank for key-based auth"
+                      type="password"
+                      help="Stored only in the browser to start provisioning when password auth is required."
+                      inputProps={PASSWORD_INPUT_PROPS}
+                    />
+                  )}
+                </div>
+              )}
+
+              {provisioning.error && (
+                <div className="rounded-md border border-red-200 bg-red-50 p-3 dark:border-red-800 dark:bg-red-900/20">
+                  <p className="text-sm text-red-600 dark:text-red-400">{provisioning.error}</p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-3">
+                <Button variant="ghost" type="button" onClick={() => navigateWithinShell({ view: "home" })}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  loading={workspaceCreateMode === "automatic" ? provisioning.starting : (workspaceCreateSubmitting || workspacesSaving)}
+                  disabled={workspaceCreateMode === "automatic" ? !automaticFormValid : !manualFormValid}
+                >
+                  {workspaceCreateMode === "automatic" ? "Start Provisioning" : "Create Workspace"}
+                </Button>
+              </div>
+            </form>
+          )}
         </ShellPanel>
       );
     }
@@ -1626,7 +1898,11 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
       return (
         <SshSessionDetails
           sshSessionId={route.sshSessionId}
-          onBack={() => navigateWithinShell({ view: "home" })}
+          onBack={() => {
+            navigateWithinShell({ view: "home" });
+            void refreshSshSessions();
+            void refreshSshServers();
+          }}
           showBackButton={false}
         />
       );
@@ -1799,16 +2075,24 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             {draftLoopItems.length === 0 ? (
               <EmptySection message="No drafts yet." />
             ) : (
-              draftLoopItems.map((loop) => (
-                <SectionItem
-                  key={loop.config.id}
-                  active={route.view === "loop" && route.loopId === loop.config.id}
-                  title={loop.config.name}
-                  subtitle={loop.config.directory}
-                  badge={getStatusLabel(loop.state.status, loop.state.syncState)}
-                  onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
-                />
-              ))
+              <div className="space-y-3">
+                {draftGroups.map((group) => (
+                  <div key={group.key} className="space-y-1">
+                    <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+                      {group.title}
+                    </p>
+                    {group.items.map((loop) => (
+                      <SectionItem
+                        key={loop.config.id}
+                        active={route.view === "loop" && route.loopId === loop.config.id}
+                        title={loop.config.name}
+                        badge={getStatusLabel(loop.state.status, loop.state.syncState)}
+                        onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
             )}
           </ShellSection>
 
@@ -1823,16 +2107,24 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             {activeLoopItems.length === 0 ? (
               <EmptySection message="No loops yet." />
             ) : (
-              activeLoopItems.map((loop) => (
-                <SectionItem
-                  key={loop.config.id}
-                  active={route.view === "loop" && route.loopId === loop.config.id}
-                  title={loop.config.name}
-                  subtitle={loop.config.directory}
-                  badge={getStatusLabel(loop.state.status, loop.state.syncState)}
-                  onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
-                />
-              ))
+              <div className="space-y-3">
+                {activeLoopGroups.map((group) => (
+                  <div key={group.key} className="space-y-1">
+                    <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+                      {group.title}
+                    </p>
+                    {group.items.map((loop) => (
+                      <SectionItem
+                        key={loop.config.id}
+                        active={route.view === "loop" && route.loopId === loop.config.id}
+                        title={loop.config.name}
+                        badge={getStatusLabel(loop.state.status, loop.state.syncState)}
+                        onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
             )}
           </ShellSection>
 
@@ -1847,38 +2139,46 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             {chatItems.length === 0 ? (
               <EmptySection message="No chats yet." />
             ) : (
-              chatItems.map((chat) => (
-                <SectionItem
-                  key={chat.config.id}
-                  active={route.view === "chat" && route.chatId === chat.config.id}
-                  title={chat.config.name}
-                  subtitle={chat.config.directory}
-                  badge={getStatusLabel(chat.state.status, chat.state.syncState)}
-                  onClick={() => navigateWithinShell({ view: "chat", chatId: chat.config.id })}
-                />
-              ))
+              <div className="space-y-3">
+                {chatGroups.map((group) => (
+                  <div key={group.key} className="space-y-1">
+                    <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+                      {group.title}
+                    </p>
+                    {group.items.map((chat) => (
+                      <SectionItem
+                        key={chat.config.id}
+                        active={route.view === "chat" && route.chatId === chat.config.id}
+                        title={chat.config.name}
+                        badge={getStatusLabel(chat.state.status, chat.state.syncState)}
+                        onClick={() => navigateWithinShell({ view: "chat", chatId: chat.config.id })}
+                      />
+                    ))}
+                  </div>
+                ))}
+              </div>
             )}
           </ShellSection>
 
           <ShellSection
-            title="Workspace SSH"
-            count={sessions.length}
+            title="SSH Sessions"
+            count={allShellSessions.length}
             actionLabel="New"
             onAction={() => navigateWithinShell({ view: "compose", kind: "ssh-session" })}
             collapsed={isSectionCollapsed("workspace-ssh")}
             onToggle={() => toggleSectionCollapsed("workspace-ssh")}
           >
-            {sessions.length === 0 ? (
-              <EmptySection message="No workspace SSH sessions yet." />
+            {allShellSessions.length === 0 ? (
+              <EmptySection message="No SSH sessions yet." />
             ) : (
-              sessions.map((session) => (
+              allShellSessions.map((session) => (
                 <SectionItem
-                  key={session.config.id}
-                  active={route.view === "ssh" && route.sshSessionId === session.config.id}
-                  title={session.config.name}
-                  subtitle={sshWorkspaces.find((workspace) => workspace.id === session.config.workspaceId)?.name ?? session.config.directory}
-                  badge={session.state.status}
-                  onClick={() => navigateWithinShell({ view: "ssh", sshSessionId: session.config.id })}
+                  key={session.id}
+                  active={route.view === "ssh" && route.sshSessionId === session.id}
+                  title={session.title}
+                  subtitle={session.subtitle}
+                  badge={session.badge}
+                  onClick={() => navigateWithinShell({ view: "ssh", sshSessionId: session.id })}
                 />
               ))
             )}
@@ -1898,26 +2198,14 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               servers.map((server) => {
                 const serverSessions = sessionsByServerId[server.config.id] ?? [];
                 return (
-                  <div key={server.config.id} className="space-y-1">
-                    <SectionItem
-                      active={route.view === "ssh-server" && route.serverId === server.config.id}
-                      title={server.config.name}
-                      subtitle={`${server.config.username}@${server.config.address}`}
-                      badge={serverSessions.length > 0 ? String(serverSessions.length) : undefined}
-                      onClick={() => navigateWithinShell({ view: "ssh-server", serverId: server.config.id })}
-                    />
-                    {serverSessions.map((session) => (
-                      <SectionItem
-                        key={session.config.id}
-                        active={route.view === "ssh" && route.sshSessionId === session.config.id}
-                        title={session.config.name}
-                        subtitle={session.config.connectionMode === "direct" ? "Direct SSH" : "Persistent SSH"}
-                        badge={session.state.status}
-                        nested
-                        onClick={() => navigateWithinShell({ view: "ssh", sshSessionId: session.config.id })}
-                      />
-                    ))}
-                  </div>
+                  <SectionItem
+                    key={server.config.id}
+                    active={route.view === "ssh-server" && route.serverId === server.config.id}
+                    title={server.config.name}
+                    subtitle={`${server.config.username}@${server.config.address}`}
+                    badge={serverSessions.length > 0 ? String(serverSessions.length) : undefined}
+                    onClick={() => navigateWithinShell({ view: "ssh-server", serverId: server.config.id })}
+                  />
                 );
               })
             )}

@@ -11,17 +11,7 @@ import type { AgentProvider, ServerSettings, SshServer } from "../types";
 import type { CreateWorkspaceRequest } from "../types/workspace";
 import { appFetch } from "../lib/public-path";
 import { useProvisioningJob } from "../hooks/useProvisioningJob";
-
-function getCreateWorkspaceDefaultServerSettings(): ServerSettings {
-  return {
-    agent: {
-      provider: "copilot",
-      transport: "ssh",
-      hostname: "localhost",
-      port: 22,
-    },
-  };
-}
+import { getCreateWorkspaceDefaultServerSettings } from "../types/settings";
 
 export interface CreateWorkspaceModalProps {
   /** Whether the modal is open */
