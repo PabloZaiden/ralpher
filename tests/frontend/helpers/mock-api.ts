@@ -94,33 +94,28 @@ function extractPath(url: string): string {
   }
 }
 
-function getDefaultResponse(method: HttpMethod, path: string): unknown | undefined {
-  if (method === "GET" && /^\/api\/loops\/[^/]+\/port-forwards$/.test(path)) {
-    return [];
-  }
-
-  if (method === "GET" && /^\/api\/loops\/[^/]+\/pull-request$/.test(path)) {
-    return {
-      enabled: false,
-      destinationType: "disabled",
-      disabledReason: "disabled",
-    };
-  }
-
-  if (method === "GET" && /^\/api\/workspaces\/[^/]+\/agents-md$/.test(path)) {
-    return {
-      content: "# AGENTS.md",
-      fileExists: true,
-      analysis: {
-        isOptimized: false,
-        currentVersion: null,
-        updateAvailable: false,
-      },
-    };
-  }
-
-  return undefined;
+function createRouteConfig(method: HttpMethod, pattern: string, handler: RouteHandler, statusCode = 200): RouteConfig {
+  const { regex, paramNames } = patternToRegex(pattern);
+  return { pattern, regex, paramNames, method, handler, statusCode };
 }
+
+const DEFAULT_ROUTES: RouteConfig[] = [
+  createRouteConfig("GET", "/api/loops/:id/port-forwards", () => []),
+  createRouteConfig("GET", "/api/loops/:id/pull-request", () => ({
+    enabled: false,
+    destinationType: "disabled",
+    disabledReason: "disabled",
+  })),
+  createRouteConfig("GET", "/api/workspaces/:id/agents-md", () => ({
+    content: "# AGENTS.md",
+    fileExists: true,
+    analysis: {
+      isOptimized: false,
+      currentVersion: null,
+      updateAvailable: false,
+    },
+  })),
+];
 
 /**
  * Create a mock API instance for intercepting fetch calls.
@@ -142,14 +137,13 @@ export function createMockApi(): MockApiInstance {
   let originalWindowFetch: typeof window.fetch | null = null;
 
   function addRoute(method: HttpMethod, pattern: string, handler: RouteHandler, statusCode = 200): void {
-    const { regex, paramNames } = patternToRegex(pattern);
-    routes.push({ pattern, regex, paramNames, method, handler, statusCode });
+    routes.push(createRouteConfig(method, pattern, handler, statusCode));
   }
 
-  function matchRoute(method: HttpMethod, path: string): { route: RouteConfig; params: RouteParams } | null {
+  function matchRoute(routeSet: RouteConfig[], method: HttpMethod, path: string): { route: RouteConfig; params: RouteParams } | null {
     // Iterate in reverse so that later registrations take priority (allows overriding defaults)
-    for (let i = routes.length - 1; i >= 0; i--) {
-      const route = routes[i]!;
+    for (let i = routeSet.length - 1; i >= 0; i--) {
+      const route = routeSet[i]!;
       if (route.method !== method) continue;
       const match = route.regex.exec(path);
       if (match) {
@@ -168,16 +162,8 @@ export function createMockApi(): MockApiInstance {
     const method = ((init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase()) as HttpMethod;
     const path = extractPath(url);
 
-    const result = matchRoute(method, path);
+    const result = matchRoute(routes, method, path) ?? matchRoute(DEFAULT_ROUTES, method, path);
     if (!result) {
-      const defaultResponse = getDefaultResponse(method, path);
-      if (defaultResponse !== undefined) {
-        return new Response(JSON.stringify(defaultResponse), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      }
-
       // Return 404 for unmatched routes
       return new Response(JSON.stringify({ error: "not_found", message: `No mock handler for ${method} ${path}` }), {
         status: 404,

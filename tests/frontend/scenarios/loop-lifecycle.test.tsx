@@ -84,7 +84,6 @@ describe("loop lifecycle scenario", () => {
     expect(getAllByText("Running").length).toBeGreaterThan(0);
 
     await user.click(getAllByText("Feature Loop")[0]!);
-    await navigateToLoopRoute();
 
     await waitFor(() => {
       expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
