@@ -220,7 +220,7 @@ export function WorkspaceSettingsModal({
             onChange={(e) => setName(e.target.value)}
             placeholder="My Workspace"
             required
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
           />
         </div>
 
@@ -230,7 +230,7 @@ export function WorkspaceSettingsModal({
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Directory
             </label>
-            <div className="w-full break-all rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+            <div className="w-full break-all rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-600 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-400">
               {workspace.directory}
             </div>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -240,7 +240,7 @@ export function WorkspaceSettingsModal({
         )}
 
         {/* Connection Status */}
-        <div className="flex items-center gap-2 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
+        <div className="flex items-center gap-2 p-3 rounded-md bg-gray-50 dark:bg-neutral-900">
           <span className="text-sm text-gray-600 dark:text-gray-400">Connection Status:</span>
           {status?.connected ? (
             <Badge variant="success">Connected</Badge>
@@ -291,7 +291,7 @@ export function WorkspaceSettingsModal({
 
             {/* Loading state during initial fetch (may involve on-demand connection) */}
             {optimizer.loading && !optimizer.status && (
-              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
+              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-gray-50 dark:bg-neutral-900">
                 <LoadingSpinner className="w-4 h-4 text-gray-400 flex-shrink-0" />
                 <span className="text-sm text-gray-600 dark:text-gray-400">
                   Checking AGENTS.md status...
@@ -324,7 +324,7 @@ export function WorkspaceSettingsModal({
             )}
 
             {optimizer.status && !optimizer.status.analysis.isOptimized && (
-              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
+              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-gray-50 dark:bg-neutral-900">
                 <DocumentIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
                 <span className="text-sm text-gray-600 dark:text-gray-400">
                   {optimizer.status.fileExists
@@ -335,7 +335,7 @@ export function WorkspaceSettingsModal({
             )}
 
             {optimizer.status?.analysis.updateAvailable && optimizer.status.analysis.isOptimized && (
-              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-blue-50 dark:bg-gray-900/40 border border-blue-200 dark:border-gray-700">
+              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-blue-50 dark:bg-neutral-900/40 border border-blue-200 dark:border-gray-700">
                 <span className="text-sm text-blue-700 dark:text-blue-300">
                   An updated version of the Ralpher guidelines is available.
                 </span>

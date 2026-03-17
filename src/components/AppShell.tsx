@@ -172,7 +172,7 @@ function ShellSection({
               aria-expanded={!collapsed}
               aria-controls={contentId}
               aria-label={toggleLabel}
-              className="flex w-full min-w-0 items-center gap-2 rounded-lg px-1 py-1 text-left transition hover:bg-gray-100 dark:hover:bg-gray-800/60"
+              className="flex w-full min-w-0 items-center gap-2 rounded-lg px-1 py-1 text-left transition hover:bg-gray-100 dark:hover:bg-neutral-800/60"
             >
               <span className="text-xs text-gray-500 dark:text-gray-400">{collapsed ? "\u25B6" : "\u25BC"}</span>
               <span className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
@@ -181,7 +181,7 @@ function ShellSection({
             </button>
           </h2>
           {typeof count === "number" && (
-            <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+            <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-neutral-800 dark:text-gray-300">
               {count}
             </span>
           )}
@@ -190,7 +190,7 @@ function ShellSection({
           <button
             type="button"
             onClick={onAction}
-            className="rounded-md px-2 py-1 text-xs font-medium text-gray-500 transition hover:bg-gray-200 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+            className="rounded-md px-2 py-1 text-xs font-medium text-gray-500 transition hover:bg-gray-200 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-neutral-800 dark:hover:text-gray-100"
           >
             {actionLabel}
           </button>
@@ -228,8 +228,8 @@ function SectionItem({
         "flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition",
         nested ? "ml-3 w-[calc(100%-0.75rem)]" : "",
         active
-          ? "border-gray-900 bg-gray-900 text-white shadow-sm dark:border-gray-100 dark:bg-gray-100 dark:text-gray-950"
-          : "border-transparent bg-transparent text-gray-700 hover:border-gray-200 hover:bg-gray-100 dark:text-gray-200 dark:hover:border-gray-800 dark:hover:bg-gray-800/80",
+          ? "border-gray-900 bg-gray-900 text-white shadow-sm dark:border-gray-100 dark:bg-neutral-100 dark:text-gray-950"
+          : "border-transparent bg-transparent text-gray-700 hover:border-gray-200 hover:bg-gray-100 dark:text-gray-200 dark:hover:border-gray-800 dark:hover:bg-neutral-800/80",
       ].join(" ")}
     >
       <span className="min-w-0 flex-1">
@@ -250,8 +250,8 @@ function SectionItem({
           className={[
             "ml-3 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
             active
-              ? "bg-white/10 text-white dark:bg-gray-900/10 dark:text-gray-950"
-              : "bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
+              ? "bg-white/10 text-white dark:bg-neutral-900/10 dark:text-gray-950"
+              : "bg-gray-200 text-gray-600 dark:bg-neutral-700 dark:text-gray-300",
           ].join(" ")}
         >
           {badge}
@@ -284,7 +284,7 @@ function ShellPanel({
 }) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
-      <div className="flex flex-col gap-4 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900/80">
+      <div className="flex flex-col gap-4 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-neutral-900/80">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-2">
             {eyebrow && (
@@ -309,7 +309,7 @@ function ShellPanel({
 
 function SummaryCard({ label, value, meta }: { label: string; value: string | number; meta: string }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/50">
+    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-neutral-950/50">
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">{label}</p>
       <p className="mt-2 break-words text-3xl font-semibold text-gray-950 dark:text-gray-100">{value}</p>
       <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">{meta}</p>
@@ -348,7 +348,7 @@ function InlineField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="block w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700"
+        className="block w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700"
       />
       {help && <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">{help}</p>}
     </div>
@@ -400,7 +400,7 @@ function OverviewView({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
-        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-950/50">
+        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
           <div>
             <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">Recent activity</h2>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
@@ -423,7 +423,7 @@ function OverviewView({
                     key={loop.config.id}
                     type="button"
                     onClick={() => onNavigate(route)}
-                    className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 dark:hover:bg-gray-800"
+                    className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -441,7 +441,7 @@ function OverviewView({
           </div>
         </div>
 
-        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-950/50">
+        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
           <div>
             <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">Workspace map</h2>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
@@ -457,7 +457,7 @@ function OverviewView({
                   key={group.workspace.id}
                   type="button"
                   onClick={() => onNavigate({ view: "workspace", workspaceId: group.workspace.id })}
-                  className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 dark:hover:bg-gray-800"
+                  className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -467,7 +467,7 @@ function OverviewView({
                       {group.workspace.directory}
                     </span>
                   </span>
-                  <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                  <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-neutral-800 dark:text-gray-300">
                     {group.loops.length} items
                   </span>
                 </button>
@@ -533,7 +533,7 @@ function WorkspaceView({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-950/50">
+        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
           <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">Loops and chats</h2>
           <div className="space-y-2">
             {relatedLoops.length === 0 ? (
@@ -548,7 +548,7 @@ function WorkspaceView({
                     key={loop.config.id}
                     type="button"
                     onClick={() => onNavigate(route)}
-                    className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 dark:hover:bg-gray-800"
+                    className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -570,7 +570,7 @@ function WorkspaceView({
           </div>
         </div>
 
-        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-950/50">
+        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
           <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">SSH sessions</h2>
           <div className="space-y-2">
             {relatedSessions.length === 0 ? (
@@ -585,7 +585,7 @@ function WorkspaceView({
                   key={session.config.id}
                   type="button"
                   onClick={() => onNavigate({ view: "ssh", sshSessionId: session.config.id })}
-                  className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 dark:hover:bg-gray-800"
+                  className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -645,7 +645,7 @@ function SshServerView({
         <SummaryCard label="Saved sessions" value={sessions.length} meta="Standalone terminals attached to this host." />
       </div>
 
-      <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-gray-950/50">
+      <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
         <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">Standalone sessions</h2>
         <div className="space-y-2">
           {sessions.length === 0 ? (
@@ -656,7 +656,7 @@ function SshServerView({
                 key={session.config.id}
                 type="button"
                 onClick={() => onNavigate({ view: "ssh", sshSessionId: session.config.id })}
-                className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-gray-700 dark:hover:bg-gray-800"
+                className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
               >
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -1004,7 +1004,7 @@ function SshSessionComposer({
     >
       <form className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/50">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-neutral-950/50">
             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Target</p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
@@ -1013,8 +1013,8 @@ function SshSessionComposer({
                 className={[
                   "rounded-xl border px-3 py-2 text-sm font-medium transition",
                   targetType === "workspace"
-                    ? "border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-950"
-                    : "border-gray-300 bg-white text-gray-700 hover:border-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200",
+                    ? "border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-neutral-100 dark:text-gray-950"
+                    : "border-gray-300 bg-white text-gray-700 hover:border-gray-400 dark:border-gray-700 dark:bg-neutral-900 dark:text-gray-200",
                 ].join(" ")}
               >
                 Workspace SSH
@@ -1025,15 +1025,15 @@ function SshSessionComposer({
                 className={[
                   "rounded-xl border px-3 py-2 text-sm font-medium transition",
                   targetType === "server"
-                    ? "border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-950"
-                    : "border-gray-300 bg-white text-gray-700 hover:border-gray-400 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200",
+                    ? "border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-neutral-100 dark:text-gray-950"
+                    : "border-gray-300 bg-white text-gray-700 hover:border-gray-400 dark:border-gray-700 dark:bg-neutral-900 dark:text-gray-200",
                 ].join(" ")}
               >
                 Standalone server
               </button>
             </div>
           </div>
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/50">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-neutral-950/50">
             <label htmlFor="ssh-connection-mode" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Connection mode
             </label>
@@ -1041,7 +1041,7 @@ function SshSessionComposer({
               id="ssh-connection-mode"
               value={connectionMode}
               onChange={(event) => setConnectionMode(event.target.value as SshConnectionMode)}
-              className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700"
+              className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700"
             >
               <option value="dtach">Persistent SSH</option>
               <option value="direct">Direct SSH</option>
@@ -1062,7 +1062,7 @@ function SshSessionComposer({
         />
 
         {targetType === "workspace" ? (
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/50">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-neutral-950/50">
             <WorkspaceSelector
               workspaces={workspaces}
               selectedWorkspaceId={selectedWorkspaceId}
@@ -1071,7 +1071,7 @@ function SshSessionComposer({
             />
           </div>
         ) : (
-          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-950/50">
+          <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-neutral-950/50">
             <label htmlFor="ssh-server" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Server
             </label>
@@ -1079,7 +1079,7 @@ function SshSessionComposer({
               id="ssh-server"
               value={selectedServerId}
               onChange={(event) => setSelectedServerId(event.target.value)}
-              className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700"
+              className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700"
             >
               <option value="">Select a server…</option>
               {servers.map((server) => (
@@ -1715,10 +1715,10 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
   }
 
   return (
-    <div className="flex h-full min-h-screen bg-gray-100 text-gray-950 dark:bg-gray-950 dark:text-gray-100">
+    <div className="flex h-full min-h-screen bg-gray-100 text-gray-950 dark:bg-neutral-950 dark:text-gray-100">
       <div
         className={[
-          "fixed inset-0 z-30 bg-gray-950/50 transition lg:hidden",
+          "fixed inset-0 z-30 bg-neutral-950/50 transition lg:hidden",
           sidebarOpen ? "opacity-100" : "pointer-events-none opacity-0",
         ].join(" ")}
         onClick={() => setSidebarOpen(false)}
@@ -1728,7 +1728,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         hidden={sidebarCollapsed && !sidebarOpen}
         aria-hidden={sidebarCollapsed && !sidebarOpen}
         className={[
-          "fixed inset-y-0 left-0 z-40 flex w-80 max-w-[86vw] flex-col border-r border-gray-200 bg-gray-50/95 backdrop-blur transition-all duration-200 dark:border-gray-800 dark:bg-gray-900/95 lg:relative lg:inset-auto lg:z-10 lg:max-w-none lg:shrink-0",
+          "fixed inset-y-0 left-0 z-40 flex w-80 max-w-[86vw] flex-col border-r border-gray-200 bg-gray-50/95 backdrop-blur transition-all duration-200 dark:border-gray-800 dark:bg-neutral-900/95 lg:relative lg:inset-auto lg:z-10 lg:max-w-none lg:shrink-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
           sidebarCollapsed
             ? "lg:w-0 lg:min-w-0 lg:-translate-x-full lg:overflow-hidden lg:border-r-0 lg:opacity-0 lg:pointer-events-none"
@@ -1746,7 +1746,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               aria-label="Open settings"
               aria-current={route.view === "settings" ? "page" : undefined}
               className={[
-                "inline-flex h-10 w-10 items-center justify-center rounded-xl border bg-white shadow-sm transition dark:bg-gray-900",
+                "inline-flex h-10 w-10 items-center justify-center rounded-xl border bg-white shadow-sm transition dark:bg-neutral-900",
                 route.view === "settings"
                   ? "border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100"
                   : "border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100",
@@ -1759,7 +1759,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               type="button"
               onClick={hideSidebar}
               aria-label={sidebarOpen ? "Close sidebar" : "Hide sidebar"}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-neutral-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
             >
               <SidebarIcon size="h-5 w-5" />
             </button>
@@ -1926,13 +1926,13 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-gray-200 bg-white/90 px-4 backdrop-blur dark:border-gray-800 dark:bg-gray-950/85 sm:px-6">
+        <div className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-gray-200 bg-white/90 px-4 backdrop-blur dark:border-gray-800 dark:bg-neutral-950/85 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
               onClick={openSidebar}
               aria-label="Open navigation"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100 lg:hidden"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-neutral-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100 lg:hidden"
             >
               <SidebarIcon size="h-5 w-5" />
             </button>
@@ -1941,7 +1941,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                 type="button"
                 onClick={openSidebar}
                 aria-label="Open sidebar"
-                className="hidden h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100 lg:inline-flex"
+                className="hidden h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-neutral-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100 lg:inline-flex"
               >
                 <SidebarIcon size="h-5 w-5" />
               </button>

@@ -72,11 +72,11 @@ function CompactBar({
   contentClassName = "",
 }: CompactBarProps) {
   return (
-    <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-neutral-800">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
+        className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-gray-50 dark:hover:bg-neutral-700/50"
         aria-expanded={expanded}
       >
         <span className="shrink-0 text-[11px] text-gray-500 dark:text-gray-400">{expanded ? "▼" : "▶"}</span>
@@ -1540,8 +1540,8 @@ export function SshSessionDetails({
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col bg-gray-50 dark:bg-gray-900">
-      <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-800">
+    <div className="h-full min-h-0 flex flex-col bg-gray-50 dark:bg-neutral-900">
+      <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-neutral-800">
         <div className="flex flex-wrap items-center justify-between gap-1.5">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
             {showBackButton && onBack && (
@@ -1693,7 +1693,7 @@ export function SshSessionDetails({
                     Clear
                   </Button>
                 )}
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-neutral-700" aria-hidden="true" />
                 <Button
                   variant="secondary"
                   size="xs"
@@ -1775,7 +1775,7 @@ export function SshSessionDetails({
                 >
                   →
                 </Button>
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-neutral-700" aria-hidden="true" />
                 <Button
                   variant="secondary"
                   size="xs"
@@ -1785,7 +1785,7 @@ export function SshSessionDetails({
                 >
                   Copy selection
                 </Button>
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-neutral-700" aria-hidden="true" />
                 <Button
                   variant="secondary"
                   size="xs"
@@ -1818,7 +1818,7 @@ export function SshSessionDetails({
                 >
                   :q
                 </Button>
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-neutral-700" aria-hidden="true" />
                 <Button
                   variant="secondary"
                   size="xs"
@@ -1871,7 +1871,7 @@ export function SshSessionDetails({
               value={pendingTerminalClipboardText}
               onFocus={(event) => event.currentTarget.select()}
               onClick={(event) => event.currentTarget.select()}
-              className="min-h-24 w-full rounded-md border border-amber-200 bg-white/90 p-2 font-mono text-xs text-gray-900 shadow-sm outline-none focus:border-amber-400 dark:border-amber-800 dark:bg-gray-900 dark:text-gray-100"
+              className="min-h-24 w-full rounded-md border border-amber-200 bg-white/90 p-2 font-mono text-xs text-gray-900 shadow-sm outline-none focus:border-amber-400 dark:border-amber-800 dark:bg-neutral-900 dark:text-gray-100"
             />
           </Card>
         )}
@@ -1956,7 +1956,7 @@ export function SshSessionDetails({
               type="password"
               value={standalonePassword}
               onChange={(event) => setStandalonePassword(event.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600"
+              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
               {...PASSWORD_INPUT_PROPS}
             />
           </div>

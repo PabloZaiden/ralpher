@@ -15,22 +15,22 @@ import { ToastContext, useToastState, type Toast as ToastData, type ToastType } 
  */
 const TOAST_STYLES: Record<ToastType, { bg: string; border: string; icon: string }> = {
   success: {
-    bg: "bg-gray-900/95",
+    bg: "bg-neutral-900/95",
     border: "border-green-600/50",
     icon: "text-green-400",
   },
   error: {
-    bg: "bg-gray-900/95",
+    bg: "bg-neutral-900/95",
     border: "border-red-600/50",
     icon: "text-red-400",
   },
   warning: {
-    bg: "bg-gray-900/95",
+    bg: "bg-neutral-900/95",
     border: "border-yellow-600/50",
     icon: "text-yellow-400",
   },
   info: {
-    bg: "bg-gray-900/95",
+    bg: "bg-neutral-900/95",
     border: "border-blue-600/50",
     icon: "text-blue-400",
   },

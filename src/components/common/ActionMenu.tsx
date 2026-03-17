@@ -64,7 +64,7 @@ export function ActionMenu({ items, ariaLabel = "Actions" }: ActionMenuProps) {
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-gray-900 text-white transition-colors hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:bg-gray-100 dark:text-gray-950 dark:hover:bg-gray-200 dark:focus:ring-gray-500"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-gray-900 text-white transition-colors hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:bg-neutral-100 dark:text-gray-950 dark:hover:bg-neutral-200 dark:focus:ring-gray-500"
         aria-label={ariaLabel}
         aria-expanded={isOpen}
         aria-haspopup="true"
@@ -75,7 +75,7 @@ export function ActionMenu({ items, ariaLabel = "Actions" }: ActionMenuProps) {
       {/* Dropdown menu */}
       {isOpen && (
         <div
-          className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-md bg-white shadow-lg ring-1 ring-black/5 dark:bg-gray-800 dark:ring-gray-700"
+          className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-md bg-white shadow-lg ring-1 ring-black/5 dark:bg-neutral-800 dark:ring-gray-700"
           role="menu"
           aria-orientation="vertical"
         >
@@ -86,7 +86,7 @@ export function ActionMenu({ items, ariaLabel = "Actions" }: ActionMenuProps) {
                 type="button"
                 role="menuitem"
                 onClick={() => handleItemClick(item)}
-                className="flex w-full items-center px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700 transition-colors"
+                className="flex w-full items-center px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-neutral-700 transition-colors"
               >
                 {item.label}
               </button>

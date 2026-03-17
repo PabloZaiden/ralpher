@@ -93,9 +93,9 @@ export function AcceptLoopModal({
           <button
             onClick={handlePush}
             disabled={isLoading}
-            className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-gray-800 flex items-center justify-center">
+            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-neutral-800 flex items-center justify-center">
               {pushing ? (
                 <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-500 border-t-transparent" />
               ) : (
@@ -118,7 +118,7 @@ export function AcceptLoopModal({
           <button
             onClick={handleAccept}
             disabled={isLoading}
-            className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
               {accepting ? (

@@ -22,13 +22,13 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "bg-gray-900 text-white hover:bg-gray-800 focus:ring-gray-400 disabled:bg-gray-300 disabled:text-gray-600 dark:bg-gray-100 dark:text-gray-950 dark:hover:bg-gray-200 dark:focus:ring-gray-500 dark:disabled:bg-gray-800 dark:disabled:text-gray-500",
+    "bg-gray-900 text-white hover:bg-gray-800 focus:ring-gray-400 disabled:bg-gray-300 disabled:text-gray-600 dark:bg-neutral-100 dark:text-gray-950 dark:hover:bg-neutral-200 dark:focus:ring-gray-500 dark:disabled:bg-neutral-800 dark:disabled:text-gray-500",
   secondary:
-    "bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500 disabled:bg-gray-100 disabled:text-gray-400 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600 dark:disabled:bg-gray-800 dark:disabled:text-gray-500",
+    "bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500 disabled:bg-gray-100 disabled:text-gray-400 dark:bg-neutral-700 dark:text-gray-100 dark:hover:bg-neutral-600 dark:disabled:bg-neutral-800 dark:disabled:text-gray-500",
   danger:
     "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 disabled:bg-gray-300 disabled:text-gray-600",
   ghost:
-    "bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-gray-500 disabled:bg-gray-100 disabled:text-gray-400 dark:text-gray-300 dark:hover:bg-gray-800 dark:disabled:bg-gray-800 dark:disabled:text-gray-500",
+    "bg-transparent text-gray-700 hover:bg-gray-100 focus:ring-gray-500 disabled:bg-gray-100 disabled:text-gray-400 dark:text-gray-300 dark:hover:bg-neutral-800 dark:disabled:bg-neutral-800 dark:disabled:text-gray-500",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {

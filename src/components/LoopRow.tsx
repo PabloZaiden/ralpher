@@ -48,7 +48,7 @@ export function LoopRow({
 
   return (
     <div
-      className={`relative rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800 ${borderClass} ${
+      className={`relative rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-neutral-800 ${borderClass} ${
         onClick ? "cursor-pointer hover:border-gray-300 hover:shadow-md dark:hover:border-gray-600" : ""
       }`}
       onClick={onClick}
@@ -90,7 +90,7 @@ export function LoopRow({
                   e.stopPropagation();
                   onRename();
                 }}
-                className="flex-shrink-0 p-0.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700"
+                className="flex-shrink-0 p-0.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-neutral-700"
                 aria-label={isChatMode ? "Rename chat" : "Rename loop"}
                 title={isChatMode ? "Rename chat" : "Rename loop"}
               >

@@ -184,7 +184,7 @@ export function ServerSettingsForm({
 
   return (
     <div className="space-y-6">
-      <div className="space-y-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
+      <div className="space-y-4 p-4 rounded-lg bg-gray-50 dark:bg-neutral-900">
         <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Connection</h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -201,7 +201,7 @@ export function ServerSettingsForm({
                 setTestResult(null);
                 notifyChange({ provider: value });
               }}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
             >
               <option value="opencode">OpenCode</option>
               <option value="copilot">Copilot</option>
@@ -221,7 +221,7 @@ export function ServerSettingsForm({
                 setTestResult(null);
                 notifyChange({ transport: value });
               }}
-              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
             >
               <option value="stdio" disabled={remoteOnly}>stdio (local process)</option>
               <option value="ssh">ssh</option>
@@ -249,7 +249,7 @@ export function ServerSettingsForm({
                       setTestResult(null);
                       notifyChange({ selectedRegisteredSshServerId: value });
                     }}
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
                   >
                     {registeredSshServers.map((server) => (
                       <option key={server.config.id} value={server.config.id}>
@@ -281,7 +281,7 @@ export function ServerSettingsForm({
                       notifyChange({ manualHostname: e.target.value });
                     }}
                     placeholder="remote-host"
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
                   />
                 </div>
               )}
@@ -301,7 +301,7 @@ export function ServerSettingsForm({
                   }}
                   min="1"
                   max="65535"
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
                 />
               </div>
             </div>
@@ -321,7 +321,7 @@ export function ServerSettingsForm({
                     notifyChange({ username: e.target.value });
                   }}
                   placeholder="SSH username"
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
                 />
               </div>
 
@@ -340,7 +340,7 @@ export function ServerSettingsForm({
                       notifyChange({ password: e.target.value });
                     }}
                     placeholder="SSH password"
-                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 pr-10 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                    className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 pr-10 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
                     {...PASSWORD_INPUT_PROPS}
                   />
                   <button

@@ -131,7 +131,7 @@ export const TodoViewer = memo(function TodoViewer({
     <div
       ref={containerRef}
       id={id}
-      className={`min-w-0 rounded-lg bg-gray-900 text-xs text-gray-100 dark-scrollbar overflow-x-hidden overflow-y-auto font-mono ${!maxHeight ? "flex-1 min-h-0" : ""}`}
+      className={`min-w-0 rounded-lg bg-neutral-900 text-xs text-gray-100 dark-scrollbar overflow-x-hidden overflow-y-auto font-mono ${!maxHeight ? "flex-1 min-h-0" : ""}`}
       style={maxHeight ? { maxHeight } : undefined}
     >
       {isEmpty ? (
@@ -143,7 +143,7 @@ export const TodoViewer = memo(function TodoViewer({
           {todos.map((todo) => (
             <div
               key={todo.id}
-              className={`flex items-start gap-2 p-1.5 rounded border-l-2 ${getStatusBorderColor(todo.status)} bg-gray-800/50`}
+              className={`flex items-start gap-2 p-1.5 rounded border-l-2 ${getStatusBorderColor(todo.status)} bg-neutral-800/50`}
             >
               {/* Status Icon */}
               <span className={`flex-shrink-0 ${getStatusColor(todo.status)} text-xs`}>

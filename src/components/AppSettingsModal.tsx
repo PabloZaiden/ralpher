@@ -133,7 +133,7 @@ export function AppSettingsPanel({
           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
             Display Settings
           </h3>
-          <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
+          <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-neutral-900">
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -160,7 +160,7 @@ export function AppSettingsPanel({
           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
             Developer Settings
           </h3>
-          <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
+          <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-neutral-900">
             <div className="flex items-start gap-3">
               <div className="flex-1">
                 <label
@@ -184,7 +184,7 @@ export function AppSettingsPanel({
                     value={logLevel}
                     onChange={(e) => setLogLevel(e.target.value as LogLevelName)}
                     disabled={savingLogLevel}
-                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-gray-500 focus:ring-gray-500 disabled:opacity-50"
+                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-neutral-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-gray-500 focus:ring-gray-500 disabled:opacity-50"
                   >
                     {availableLevels.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -204,7 +204,7 @@ export function AppSettingsPanel({
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
               Import / Export Workspaces
             </h3>
-            <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
+            <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-neutral-900">
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Export all workspace configurations to a JSON file for backup or migration,
                 or import configurations from a previously exported file.
@@ -372,7 +372,7 @@ export function AppSettingsPanel({
                             value={resetConfirmText}
                             onChange={(e) => setResetConfirmText(e.target.value)}
                             placeholder="Type here to confirm"
-                            className="block w-full rounded-md border-red-300 dark:border-red-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2 disabled:opacity-50"
+                            className="block w-full rounded-md border-red-300 dark:border-red-700 bg-white dark:bg-neutral-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2 disabled:opacity-50"
                             autoComplete="off"
                             spellCheck={false}
                             disabled={resetting || killingServer}

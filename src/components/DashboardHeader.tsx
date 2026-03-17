@@ -40,7 +40,7 @@ export function DashboardHeader({
   );
 
   return (
-    <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 safe-area-top">
+    <header className="bg-white dark:bg-neutral-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 safe-area-top">
       <div className="px-4 sm:px-6 lg:px-8 py-3 sm:py-4">
         <div className="flex items-center justify-between gap-2 sm:gap-3">
           {/* Left: Title + version */}
@@ -64,8 +64,8 @@ export function DashboardHeader({
                 onClick={viewMode === "rows" ? undefined : onToggleViewMode}
                 className={`min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 sm:p-2 transition-colors ${
                   viewMode === "rows"
-                    ? "bg-blue-100 text-blue-700 dark:bg-gray-700/80 dark:text-blue-300"
-                    : "bg-white text-gray-500 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                    ? "bg-blue-100 text-blue-700 dark:bg-neutral-700/80 dark:text-blue-300"
+                    : "bg-white text-gray-500 hover:bg-gray-100 dark:bg-neutral-800 dark:text-gray-400 dark:hover:bg-neutral-700"
                 }`}
                 title="Row view"
                 aria-label="Switch to row view"
@@ -77,8 +77,8 @@ export function DashboardHeader({
                 onClick={viewMode === "cards" ? undefined : onToggleViewMode}
                 className={`min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 flex items-center justify-center p-1.5 sm:p-2 transition-colors ${
                   viewMode === "cards"
-                    ? "bg-blue-100 text-blue-700 dark:bg-gray-700/80 dark:text-blue-300"
-                    : "bg-white text-gray-500 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-400 dark:hover:bg-gray-700"
+                    ? "bg-blue-100 text-blue-700 dark:bg-neutral-700/80 dark:text-blue-300"
+                    : "bg-white text-gray-500 hover:bg-gray-100 dark:bg-neutral-800 dark:text-gray-400 dark:hover:bg-neutral-700"
                 }`}
                 title="Card view"
                 aria-label="Switch to card view"

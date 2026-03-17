@@ -238,7 +238,7 @@ export function UncommittedChangesModal({
             Please commit or stash your changes before starting a loop.
           </p>
           {error.changedFiles.length > 0 && (
-            <div className="bg-gray-50 dark:bg-gray-900 rounded-md p-3">
+            <div className="bg-gray-50 dark:bg-neutral-900 rounded-md p-3">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Changed files:
               </p>

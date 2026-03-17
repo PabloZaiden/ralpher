@@ -218,7 +218,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
   } = useWorkspaceServerSettings(modals.workspaceSettingsModal.workspaceId);
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
+    <div className="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-neutral-900">
       <DashboardHeader
         version={dashboardData.version}
         viewMode={viewMode}

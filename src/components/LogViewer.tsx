@@ -287,7 +287,7 @@ export const LogViewer = memo(function LogViewer({
     <div
       ref={containerRef}
       id={id}
-      className={`min-w-0 rounded-lg bg-gray-900 text-xs text-gray-100 dark-scrollbar overflow-x-hidden overflow-y-auto font-mono sm:text-sm ${!maxHeight ? "flex-1 min-h-0" : ""}`}
+      className={`min-w-0 rounded-lg bg-neutral-900 text-xs text-gray-100 dark-scrollbar overflow-x-hidden overflow-y-auto font-mono sm:text-sm ${!maxHeight ? "flex-1 min-h-0" : ""}`}
       style={maxHeight ? { maxHeight } : undefined}
     >
       {isEmpty ? (
@@ -369,7 +369,7 @@ export const LogViewer = memo(function LogViewer({
                           <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
                             Input
                           </summary>
-                          <pre className="mt-1 p-2 bg-gray-800 rounded text-xs overflow-x-auto">
+                          <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
                             {String(JSON.stringify(tool.input, null, 2))}
                           </pre>
                         </details>
@@ -379,7 +379,7 @@ export const LogViewer = memo(function LogViewer({
                           <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
                             Output
                           </summary>
-                          <pre className="mt-1 p-2 bg-gray-800 rounded text-xs overflow-x-auto">
+                          <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
                             {typeof tool.output === "string"
                               ? tool.output
                               : String(JSON.stringify(tool.output, null, 2))}
@@ -436,11 +436,11 @@ export const LogViewer = memo(function LogViewer({
                       {/* Show responseContent as proper text */}
                       {hasResponseContent && (
                         markdownEnabled ? (
-                          <div className={`mt-2 p-2 sm:p-3 bg-gray-800 rounded ${isReasoning ? "italic" : ""}`}>
+                          <div className={`mt-2 p-2 sm:p-3 bg-neutral-800 rounded ${isReasoning ? "italic" : ""}`}>
                             <MarkdownRenderer content={responseContent as string} className="text-xs" dimmed={isReasoning} />
                           </div>
                         ) : (
-                          <div className={`mt-2 p-2 sm:p-3 bg-gray-800 rounded whitespace-pre-wrap break-words text-xs leading-relaxed ${isReasoning ? "text-gray-400 italic" : "text-gray-200"}`}>
+                          <div className={`mt-2 p-2 sm:p-3 bg-neutral-800 rounded whitespace-pre-wrap break-words text-xs leading-relaxed ${isReasoning ? "text-gray-400 italic" : "text-gray-200"}`}>
                             {responseContent}
                           </div>
                         )
@@ -451,7 +451,7 @@ export const LogViewer = memo(function LogViewer({
                           <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
                             Details
                           </summary>
-                          <pre className="mt-1 p-2 bg-gray-800 rounded text-xs overflow-x-auto">
+                          <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
                             {JSON.stringify(otherDetails, null, 2)}
                           </pre>
                         </details>
