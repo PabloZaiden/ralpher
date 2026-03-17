@@ -9,7 +9,7 @@ import type {
   Workspace,
 } from "../types";
 import { getCreateWorkspaceDefaultServerSettings, getServerLabel } from "../types/settings";
-import type { AgentProvider, ConnectionStatus, ServerSettings } from "../types/settings";
+import type { AgentProvider, ServerSettings } from "../types/settings";
 import type { CreateWorkspaceRequest } from "../types/workspace";
 import { createLogger } from "../lib/logger";
 import { appFetch } from "../lib/public-path";
@@ -34,7 +34,18 @@ import { ServerSettingsForm } from "./ServerSettingsForm";
 import { SshSessionDetails } from "./SshSessionDetails";
 import { WorkspaceSettingsForm } from "./WorkspaceSettingsModal";
 import { WorkspaceSelector } from "./WorkspaceSelector";
-import { Badge, Button, ConfirmModal, GearIcon, PASSWORD_INPUT_PROPS, SidebarIcon, type BadgeVariant, getStatusBadgeVariant } from "./common";
+import {
+  ActionMenu,
+  type ActionMenuItem,
+  Badge,
+  Button,
+  ConfirmModal,
+  GearIcon,
+  PASSWORD_INPUT_PROPS,
+  SidebarIcon,
+  type BadgeVariant,
+  getStatusBadgeVariant,
+} from "./common";
 
 const log = createLogger("AppShell");
 const SIDEBAR_SECTION_STORAGE_KEY = "ralpher.sidebarSectionCollapseState";
@@ -70,22 +81,6 @@ function getWorkspaceGroupCollapseKey(sectionId: SidebarSectionId, groupKey: str
 
 function getSshConnectionModeLabel(mode: SshConnectionMode): string {
   return mode === "direct" ? "Direct SSH" : "Persistent SSH";
-}
-
-function getConnectionStatusBadge(status: ConnectionStatus | null | undefined): { label: string; variant: BadgeVariant } {
-  if (!status) {
-    return { label: "Idle", variant: "warning" };
-  }
-
-  if (status.connected) {
-    return { label: "Connected", variant: "success" };
-  }
-
-  if (status.error) {
-    return { label: "Error", variant: "error" };
-  }
-
-  return { label: "Idle", variant: "warning" };
 }
 
 function getProvisioningStatusBadgeVariant(status: string | undefined): BadgeVariant {
@@ -425,7 +420,7 @@ function ShellPanel({
       <div className="flex h-full min-h-0 flex-col bg-gray-50 dark:bg-neutral-900">
         <div className="border-b border-gray-200 bg-white px-4 py-2 dark:border-gray-800 dark:bg-neutral-800 sm:px-6 lg:px-8">
           <div className="ml-14 flex min-h-14 flex-wrap items-center gap-1.5 sm:ml-16 lg:ml-0">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            <div className="flex min-w-[10rem] flex-1 flex-wrap items-center gap-1.5">
               <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
                 {title}
               </h1>
@@ -441,7 +436,7 @@ function ShellPanel({
                 </span>
               )}
             </div>
-            {actions && <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">{actions}</div>}
+            {actions && <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5">{actions}</div>}
           </div>
         </div>
 
@@ -660,7 +655,6 @@ function WorkspaceView({
   relatedLoops,
   relatedSessions,
   registeredSshServers,
-  status,
   onOpenSettings,
   onNavigate,
 }: {
@@ -668,12 +662,26 @@ function WorkspaceView({
   relatedLoops: ReturnType<typeof useLoops>["loops"];
   relatedSessions: ReturnType<typeof useSshSessions>["sessions"];
   registeredSshServers: readonly SshServer[];
-  status: ConnectionStatus | null;
   onOpenSettings: () => void;
   onNavigate: (route: ShellRoute) => void;
 }) {
   const workspaceSshEnabled = workspace.serverSettings.agent.transport === "ssh";
-  const connectionBadge = getConnectionStatusBadge(status);
+  const createActionItems: ActionMenuItem[] = [
+    {
+      label: "New Loop",
+      onClick: () => onNavigate({ view: "compose", kind: "loop", scopeId: workspace.id }),
+    },
+    {
+      label: "New Chat",
+      onClick: () => onNavigate({ view: "compose", kind: "chat", scopeId: workspace.id }),
+    },
+    ...(workspaceSshEnabled
+      ? [{
+          label: "New SSH Session",
+          onClick: () => onNavigate({ view: "compose", kind: "ssh-session", scopeId: workspace.id }),
+        }]
+      : []),
+  ];
 
   return (
     <ShellPanel
@@ -682,31 +690,12 @@ function WorkspaceView({
       description={workspace.directory}
       descriptionClassName="hidden sm:inline font-mono"
       variant="compact"
-      badges={(
-        <>
-          <Badge variant={connectionBadge.variant} size="sm">{connectionBadge.label}</Badge>
-          <Badge variant="default" size="sm">{workspace.serverSettings.agent.provider}</Badge>
-          <Badge variant={workspace.serverSettings.agent.transport === "ssh" ? "info" : "default"} size="sm">
-            {workspace.serverSettings.agent.transport}
-          </Badge>
-        </>
-      )}
       actions={(
         <>
-          {workspaceSshEnabled && (
-            <Button variant="secondary" size="sm" onClick={() => onNavigate({ view: "compose", kind: "ssh-session", scopeId: workspace.id })}>
-              New SSH Session
-            </Button>
-          )}
-          <Button variant="secondary" size="sm" onClick={() => onNavigate({ view: "compose", kind: "chat", scopeId: workspace.id })}>
-            New Chat
-          </Button>
           <Button variant="secondary" size="sm" onClick={onOpenSettings}>
             Workspace Settings
           </Button>
-          <Button size="sm" onClick={() => onNavigate({ view: "compose", kind: "loop", scopeId: workspace.id })}>
-            New Loop
-          </Button>
+          <ActionMenu items={createActionItems} ariaLabel={`Create items in workspace ${workspace.name}`} />
         </>
       )}
     >
@@ -2251,7 +2240,6 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           relatedLoops={relatedLoops}
           relatedSessions={relatedSessions}
           registeredSshServers={servers}
-          status={workspaceStatus}
           onOpenSettings={() => navigateWithinShell({ view: "workspace-settings", workspaceId: selectedWorkspace.id })}
           onNavigate={navigateWithinShell}
         />
