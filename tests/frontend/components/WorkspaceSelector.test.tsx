@@ -62,7 +62,7 @@ describe("WorkspaceSelector", () => {
       expect(optionTexts.some((text) => text.includes("remote.example"))).toBe(true);
     });
 
-    test("shows directory and server label when workspace is selected", () => {
+    test("keeps the selected workspace in the dropdown without extra detail text", () => {
       const workspace = createWorkspace({
         id: "ws-1",
         name: "My Workspace",
@@ -76,18 +76,19 @@ describe("WorkspaceSelector", () => {
           },
         },
       });
-      const { getByText, getAllByText } = renderWithUser(
+      const { getByRole, queryByText } = renderWithUser(
         <WorkspaceSelector
           workspaces={[workspace]}
           selectedWorkspaceId="ws-1"
           onSelect={mock()}
         />
       );
-      expect(getByText("/home/user/project")).toBeInTheDocument();
-      expect(getAllByText(/selected\.example/).length).toBeGreaterThan(0);
+      const select = getByRole("combobox") as HTMLSelectElement;
+      expect(select.value).toBe("ws-1");
+      expect(queryByText("/home/user/project")).not.toBeInTheDocument();
     });
 
-    test("shows registered SSH server name instead of address when available", () => {
+    test("shows registered SSH server name in the dropdown option when available", () => {
       const workspace = createWorkspace({
         id: "ws-registered",
         name: "Registered Workspace",
@@ -120,7 +121,7 @@ describe("WorkspaceSelector", () => {
         },
       }];
 
-      const { getByRole, getByText, queryByText } = renderWithUser(
+      const { getByRole, queryByText } = renderWithUser(
         <WorkspaceSelector
           workspaces={[workspace]}
           selectedWorkspaceId={workspace.id}
@@ -129,10 +130,11 @@ describe("WorkspaceSelector", () => {
         />
       );
       const select = getByRole("combobox") as HTMLSelectElement;
+      const optionTexts = Array.from(select.options).map((option) => option.text);
 
-      expect(Array.from(select.options).some((option) => option.text.includes("Production Box"))).toBe(true);
-      expect(getByText("opencode via ssh (deploy@Production Box:22)")).toBeInTheDocument();
-      expect(queryByText("opencode via ssh (deploy@10.0.0.42:22)")).not.toBeInTheDocument();
+      expect(optionTexts.some((text) => text.includes("Production Box"))).toBe(true);
+      expect(optionTexts.some((text) => text.includes("deploy@10.0.0.42:22"))).toBe(false);
+      expect(queryByText("/home/user/registered-project")).not.toBeInTheDocument();
     });
 
     test("does not show directory when no workspace selected", () => {

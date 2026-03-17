@@ -38,8 +38,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   override render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-gray-950 flex items-center justify-center p-8">
-          <div className="max-w-lg w-full bg-gray-900 border border-red-800 rounded-lg p-6 text-center">
+        <div className="min-h-screen bg-neutral-950 flex items-center justify-center p-8">
+          <div className="max-w-lg w-full bg-neutral-900 border border-red-800 rounded-lg p-6 text-center">
             <h1 className="text-xl font-semibold text-red-400 mb-4">
               Something went wrong
             </h1>
@@ -47,14 +47,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               An unexpected error occurred in the application.
             </p>
             {this.state.error && (
-              <pre className="bg-gray-950 border border-gray-800 rounded p-3 mb-4 text-left text-xs text-red-300 overflow-auto max-h-40">
+              <pre className="bg-neutral-950 border border-gray-800 rounded p-3 mb-4 text-left text-xs text-red-300 overflow-auto max-h-40">
                 {this.state.error.message}
               </pre>
             )}
             <div className="flex gap-3 justify-center">
               <button
                 onClick={this.handleReset}
-                className="px-4 py-2 bg-gray-800 text-gray-200 rounded hover:bg-gray-700 text-sm"
+                className="px-4 py-2 bg-neutral-800 text-gray-200 rounded hover:bg-neutral-700 text-sm"
               >
                 Try Again
               </button>

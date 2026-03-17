@@ -480,3 +480,89 @@ describe("WorkspaceSettingsModal archived loop purge", () => {
     });
   });
 });
+
+describe("WorkspaceSettingsModal workspace deletion", () => {
+  test("disables workspace deletion while loops or chats still exist", async () => {
+    api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
+
+    const { getByRole, getByText } = renderWithUser(
+      <WorkspaceSettingsModal
+        {...defaultProps()}
+        onDeleteWorkspace={mock(() => Promise.resolve({ success: true }))}
+        workspaceLoopCount={2}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "Delete Workspace" })).toBeDisabled();
+      expect(
+        getByText("Delete the remaining 2 loops or chats in this workspace before removing it from Ralpher. This only removes the workspace record and does not delete files on disk.")
+      ).toBeInTheDocument();
+    });
+  });
+
+  test("opens a confirmation modal and closes on successful delete", async () => {
+    api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
+    const onClose = mock();
+    const onDeleteWorkspace = mock(() => Promise.resolve({ success: true }));
+
+    const { getByRole, getByText, user } = renderWithUser(
+      <WorkspaceSettingsModal
+        {...defaultProps()}
+        onClose={onClose}
+        onDeleteWorkspace={onDeleteWorkspace}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "Delete Workspace" })).toBeInTheDocument();
+    });
+
+    await user.click(getByRole("button", { name: "Delete Workspace" }));
+
+    await waitFor(() => {
+      expect(
+        getByText('Are you sure you want to delete workspace "Test Workspace"? This only removes it from Ralpher and does not delete files on disk.')
+      ).toBeInTheDocument();
+    });
+
+    await user.click(getByText("Delete"));
+
+    await waitFor(() => {
+      expect(onDeleteWorkspace).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+      expect(getByText('Deleted workspace "Test Workspace"')).toBeInTheDocument();
+    });
+  });
+
+  test("shows the delete failure and keeps the modal open when deletion is rejected", async () => {
+    api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
+    const onClose = mock();
+    const onDeleteWorkspace = mock(() => Promise.resolve({
+      success: false,
+      error: "Workspace has 1 loop(s). Delete all loops first.",
+    }));
+
+    const { getByRole, getByText, queryByText, user } = renderWithUser(
+      <WorkspaceSettingsModal
+        {...defaultProps()}
+        onClose={onClose}
+        onDeleteWorkspace={onDeleteWorkspace}
+      />
+    );
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "Delete Workspace" })).toBeInTheDocument();
+    });
+
+    await user.click(getByRole("button", { name: "Delete Workspace" }));
+    await user.click(getByText("Delete"));
+
+    await waitFor(() => {
+      expect(onDeleteWorkspace).toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+      expect(queryByText('Are you sure you want to delete workspace "Test Workspace"? This only removes it from Ralpher and does not delete files on disk.')).not.toBeInTheDocument();
+      expect(getByText("Workspace has 1 loop(s). Delete all loops first.")).toBeInTheDocument();
+    });
+  });
+});

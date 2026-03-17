@@ -309,6 +309,21 @@ describe("SshSessionDetails", () => {
     });
   });
 
+  test("hides the back button when embedded in the shell", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Embedded Layout" } }),
+    );
+
+    const { getByText, queryByRole } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-embedded-1" showBackButton={false} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Embedded Layout")).toBeTruthy();
+      expect(queryByRole("button", { name: /Back/ })).toBeNull();
+    });
+  });
+
   test("initializes the terminal with the configured ghostty-web font size and without xterm-specific rendering tweaks", async () => {
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Terminal Rendering" } }),
@@ -997,7 +1012,7 @@ describe("SshSessionDetails", () => {
     await waitFor(() => {
       expect(lastTerminal?.writes).toContain("prompt$ ");
       expect(terminalConnection.sentMessages).toContain(resizePayload);
-      expect(getByText("open")).toBeTruthy();
+      expect(getByText("connected")).toBeTruthy();
     });
   });
 
@@ -1076,7 +1091,7 @@ describe("SshSessionDetails", () => {
 
       await waitFor(() => {
         expect(api.calls("/api/ssh-sessions/:id", "GET")).toHaveLength(2);
-        expect(getByText("open")).toBeTruthy();
+        expect(getByText("connected")).toBeTruthy();
       });
 
       await act(async () => {
@@ -1084,7 +1099,7 @@ describe("SshSessionDetails", () => {
       });
 
       await waitFor(() => {
-        expect(getByText("closed")).toBeTruthy();
+        expect(getByText("disconnected")).toBeTruthy();
       });
 
       visibilityState = "hidden";
@@ -1116,7 +1131,7 @@ describe("SshSessionDetails", () => {
       });
 
       await waitFor(() => {
-        expect(getByText("open")).toBeTruthy();
+        expect(getByText("connected")).toBeTruthy();
         expect(api.calls("/api/ssh-sessions/:id", "GET")).toHaveLength(3);
       });
     } finally {
@@ -1564,7 +1579,7 @@ describe("SshSessionDetails", () => {
       });
 
       await waitFor(() => {
-        expect(getByText("closed")).toBeTruthy();
+        expect(getByText("disconnected")).toBeTruthy();
       });
 
       visibilityState = "hidden";
@@ -1685,7 +1700,7 @@ describe("SshSessionDetails", () => {
       });
 
       await waitFor(() => {
-        expect(getByText("closed")).toBeTruthy();
+        expect(getByText("disconnected")).toBeTruthy();
       });
 
       visibilityState = "hidden";
@@ -1857,10 +1872,14 @@ describe("SshSessionDetails", () => {
       version: 1,
       createdAt: new Date().toISOString(),
     }));
-    api.post("/api/ssh-servers/:id/credentials", () => ({
-      credentialToken: "token-456",
-      expiresAt: new Date().toISOString(),
-    }));
+    let credentialServerId = "";
+    api.post("/api/ssh-servers/:id/credentials", (req) => {
+      credentialServerId = req.params["id"] ?? "";
+      return {
+        credentialToken: "token-456",
+        expiresAt: new Date().toISOString(),
+      };
+    });
 
     const { getByLabelText, getByText, queryByText, user } = renderWithUser(
       <SshSessionDetails sshSessionId="standalone-ssh-2" onBack={() => {}} />,
@@ -1891,7 +1910,7 @@ describe("SshSessionDetails", () => {
       expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(1);
     });
 
-    expect(api.calls("/api/ssh-servers/:id/credentials", "POST")[0]?.params["id"]).toBe("server-1");
+    expect(credentialServerId).toBe("server-1");
     expect(globalThis.localStorage?.getItem("ralpher.sshServerCredential.server-1")).toBeTruthy();
   });
 

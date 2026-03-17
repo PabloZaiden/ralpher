@@ -1,8 +1,7 @@
 /**
  * E2E Scenario: Create Loop Workflow
  *
- * Tests the complete flow of creating a new loop from the Dashboard:
- * Open dashboard -> click "New Loop" -> select workspace -> fill form -> submit -> loop appears
+ * Tests the shell-native loop creation flow.
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
@@ -44,7 +43,6 @@ function setupApi(loops: ReturnType<typeof createLoop>[] = []) {
   api.get("/api/preferences/last-model", () => null);
   api.get("/api/preferences/log-level", () => ({ level: "info" }));
   api.get("/api/preferences/last-directory", () => null);
-  // These are fetched when a workspace is selected:
   api.get("/api/models", () => [connectedModel()]);
   api.get("/api/git/branches", () => ({
     branches: [{ name: "main", isCurrent: true, isDefault: true }],
@@ -52,36 +50,24 @@ function setupApi(loops: ReturnType<typeof createLoop>[] = []) {
   }));
   api.get("/api/git/default-branch", () => ({ defaultBranch: "main" }));
   api.get("/api/check-planning-dir", () => ({ warning: null }));
+  api.get("/api/loops/:id/diff", () => []);
+  api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+  api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+  api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+  api.get("/api/loops/:id/port-forwards", () => []);
+  api.get("/api/preferences/markdown-rendering", () => ({ enabled: false }));
 }
 
-/** Open the create modal and select the workspace */
-async function openCreateAndSelectWorkspace(
-  user: ReturnType<typeof renderWithUser>["user"],
-  getByText: ReturnType<typeof renderWithUser>["getByText"],
-  getByRole: ReturnType<typeof renderWithUser>["getByRole"],
-) {
-  // Wait for dashboard to load
+async function selectWorkspace(user: ReturnType<typeof renderWithUser>["user"]) {
   await waitFor(() => {
-    expect(getByText("Ralpher")).toBeTruthy();
+    const option = document.querySelector('select#workspace option[value="ws-1"]');
+    expect(option).toBeTruthy();
   });
-
-  // Click "New Loop"
-  await user.click(getByText("New Loop"));
-
-  // Wait for modal to appear
-  await waitFor(() => {
-    expect(getByRole("heading", { name: "Create New Loop" })).toBeTruthy();
-  });
-
-  // Select workspace from dropdown (required to enable form)
   const wsSelect = document.querySelector("select#workspace") as HTMLSelectElement;
-  expect(wsSelect).toBeTruthy();
   await user.selectOptions(wsSelect, "ws-1");
-
-  // Wait for models to load and form to be ready (Create Loop button appears)
   await waitFor(() => {
     const submitBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Create Loop") || b.textContent?.includes("Create Plan"),
+      (button) => button.textContent?.includes("Create Loop") || button.textContent?.includes("Create Plan"),
     );
     expect(submitBtn).toBeTruthy();
   });
@@ -101,27 +87,15 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-// ─── Create loop scenario ────────────────────────────────────────────────────
-
 describe("create loop scenario", () => {
-  test("user opens dashboard, clicks New Loop, and sees the create form", async () => {
+  test("shell create view is accessible and shows the form", async () => {
     setupApi();
-    const { getByText, getByRole, user } = renderWithUser(<App />);
+    const { getByRole } = renderWithUser(<App />, { route: "#/new/loop" });
 
-    // Dashboard loads
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getByRole("heading", { name: "Start a new loop" })).toBeTruthy();
     });
 
-    // Click "New Loop" button
-    await user.click(getByText("New Loop"));
-
-    // Create form modal appears
-    await waitFor(() => {
-      expect(getByRole("heading", { name: "Create New Loop" })).toBeTruthy();
-    });
-
-    // Workspace selector is visible
     expect(document.querySelector("select#workspace")).toBeTruthy();
   });
 
@@ -141,27 +115,21 @@ describe("create loop scenario", () => {
     api.put("/api/preferences/last-model", () => ({ success: true }));
     api.put("/api/preferences/last-directory", () => ({ success: true }));
 
-    const { getByText, getByRole, getByLabelText, user, queryByText } =
-      renderWithUser(<App />);
+    const { getByLabelText, user } = renderWithUser(<App />, { route: "#/new/loop" });
 
-    await openCreateAndSelectWorkspace(user, getByText, getByRole);
+    await selectWorkspace(user);
 
-    // Fill in the prompt (type single char to avoid OOM)
-    const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
-    await user.type(promptTextarea, "X");
-    const titleInput = getByLabelText(/Title/) as HTMLInputElement;
-    await user.type(titleInput, "X");
+    await user.type(getByLabelText(/Prompt/) as HTMLTextAreaElement, "X");
+    await user.type(getByLabelText(/Title/) as HTMLInputElement, "X");
 
-    // Submit the form
     const submitBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Create Loop") || b.textContent?.includes("Create Plan"),
+      (button) => button.textContent?.includes("Create Loop") || button.textContent?.includes("Create Plan"),
     );
     expect(submitBtn).toBeTruthy();
     await user.click(submitBtn!);
 
-    // Modal should close after successful submission
     await waitFor(() => {
-      expect(queryByText("Create New Loop")).toBeNull();
+      expect(window.location.hash).toBe("#/loop/new-loop-1");
     });
   });
 
@@ -169,16 +137,11 @@ describe("create loop scenario", () => {
     setupApi();
     api.post("/api/loops/title", () => ({ title: "Generated Loop Title" }));
 
-    const { getByText, getByRole, getByLabelText, user } = renderWithUser(<App />);
+    const { getByRole, getByLabelText, user } = renderWithUser(<App />, { route: "#/new/loop" });
 
-    await openCreateAndSelectWorkspace(user, getByText, getByRole);
-
-    const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
-    await user.type(promptTextarea, "X");
-
-    const generateTitleButton = getByRole("button", { name: "Generate title with AI" });
-    expect(generateTitleButton.textContent).toBe("");
-    await user.click(generateTitleButton);
+    await selectWorkspace(user);
+    await user.type(getByLabelText(/Prompt/) as HTMLTextAreaElement, "X");
+    await user.click(getByRole("button", { name: "Generate title with AI" }));
 
     await waitFor(() => {
       expect((getByLabelText(/Title/) as HTMLInputElement).value).toBe("Generated Loop Title");
@@ -187,19 +150,12 @@ describe("create loop scenario", () => {
 
   test("title spark button shows an error toast when generation fails", async () => {
     setupApi();
-    api.post(
-      "/api/loops/title",
-      () => ({ message: "Title generation failed" }),
-      500,
-    );
+    api.post("/api/loops/title", () => ({ message: "Title generation failed" }), 500);
 
-    const { getByText, getByRole, getByLabelText, user } = renderWithUser(<App />);
+    const { getByText, getByRole, getByLabelText, user } = renderWithUser(<App />, { route: "#/new/loop" });
 
-    await openCreateAndSelectWorkspace(user, getByText, getByRole);
-
-    const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
-    await user.type(promptTextarea, "X");
-
+    await selectWorkspace(user);
+    await user.type(getByLabelText(/Prompt/) as HTMLTextAreaElement, "X");
     await user.click(getByRole("button", { name: "Generate title with AI" }));
 
     await waitFor(() => {
@@ -207,7 +163,7 @@ describe("create loop scenario", () => {
     });
   });
 
-  test("create loop with 409 uncommitted changes shows conflict modal", async () => {
+  test("create loop with 409 uncommitted changes shows shell error feedback", async () => {
     setupApi();
     api.post(
       "/api/loops",
@@ -219,51 +175,38 @@ describe("create loop scenario", () => {
       409,
     );
 
-    const { getByText, getByRole, getByLabelText, user } = renderWithUser(
-      <App />,
-    );
+    const { getByLabelText, user } = renderWithUser(<App />, { route: "#/new/loop" });
 
-    await openCreateAndSelectWorkspace(user, getByText, getByRole);
+    await selectWorkspace(user);
+    await user.type(getByLabelText(/Prompt/) as HTMLTextAreaElement, "X");
+    await user.type(getByLabelText(/Title/) as HTMLInputElement, "X");
 
-    // Fill in the prompt
-    const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
-    await user.type(promptTextarea, "X");
-    const titleInput = getByLabelText(/Title/) as HTMLInputElement;
-    await user.type(titleInput, "X");
-
-    // Submit the form
     const submitBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Create Loop") || b.textContent?.includes("Create Plan"),
+      (button) => button.textContent?.includes("Create Loop") || button.textContent?.includes("Create Plan"),
     );
     expect(submitBtn).toBeTruthy();
     await user.click(submitBtn!);
 
-    // Uncommitted changes modal appears with "Cannot Start Loop" title
     await waitFor(() => {
-      expect(getByText("Cannot Start Loop")).toBeTruthy();
+      expect(document.body.textContent).toContain("Uncommitted changes blocked the new run. Resolve them and try again.");
     });
   });
 
-  test("cancel create loop closes the modal", async () => {
+  test("cancel create loop returns to the overview", async () => {
     setupApi();
-    const { getByText, getByRole, queryByText, user } = renderWithUser(
-      <App />,
-    );
+    const { getByRole, user } = renderWithUser(<App />, { route: "#/new/loop" });
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getByRole("heading", { name: "Start a new loop" })).toBeTruthy();
     });
 
-    await user.click(getByText("New Loop"));
-    await waitFor(() => {
-      expect(getByRole("heading", { name: "Create New Loop" })).toBeTruthy();
-    });
-
-    // Click Cancel
-    await user.click(getByText("Cancel"));
+    const cancelButtons = document.querySelectorAll("button");
+    const cancelButton = Array.from(cancelButtons).find((button) => button.textContent?.trim() === "Cancel");
+    expect(cancelButton).toBeTruthy();
+    await user.click(cancelButton!);
 
     await waitFor(() => {
-      expect(queryByText("Create New Loop")).toBeNull();
+      expect(window.location.hash).toBe("#/");
     });
   });
 });

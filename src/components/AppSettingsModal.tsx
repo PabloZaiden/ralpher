@@ -1,11 +1,11 @@
 /**
- * AppSettingsModal component for configuring global app settings.
+ * AppSettingsPanel component for configuring global app settings.
  * Contains markdown rendering preferences, log level settings, and reset options.
  * Server settings have moved to per-workspace WorkspaceSettingsModal.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Button } from "./common";
+import { Button, Modal } from "./common";
 import { useMarkdownPreference, useLogLevelPreference, useCountdownReload } from "../hooks";
 import type { LogLevelName } from "../lib/logger";
 import type { WorkspaceExportData, WorkspaceImportResult } from "../types/workspace";
@@ -13,11 +13,7 @@ import type { WorkspaceExportData, WorkspaceImportResult } from "../types/worksp
 /** The exact phrase the user must type to confirm a full reset. */
 const RESET_CONFIRMATION_PHRASE = "EXECUTE ORDER 66";
 
-export interface AppSettingsModalProps {
-  /** Whether the modal is open */
-  isOpen: boolean;
-  /** Callback when modal should close */
-  onClose: () => void;
+export interface AppSettingsPanelProps {
   /** Callback to reset all settings (destructive - deletes database) */
   onResetAll?: () => Promise<boolean>;
   /** Whether resetting all is in progress */
@@ -34,12 +30,15 @@ export interface AppSettingsModalProps {
   configSaving?: boolean;
 }
 
+export interface AppSettingsModalProps extends AppSettingsPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
 /**
- * AppSettingsModal provides UI for global app settings.
+ * AppSettingsPanel provides the shell-native UI for global app settings.
  */
-export function AppSettingsModal({
-  isOpen,
-  onClose,
+export function AppSettingsPanel({
   onResetAll,
   resetting = false,
   onKillServer,
@@ -47,7 +46,7 @@ export function AppSettingsModal({
   onExportConfig,
   onImportConfig,
   configSaving = false,
-}: AppSettingsModalProps) {
+}: AppSettingsPanelProps) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showResetTextConfirm, setShowResetTextConfirm] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState("");
@@ -80,21 +79,6 @@ export function AppSettingsModal({
 
   // Log level preference
   const { level: logLevel, availableLevels, setLevel: setLogLevel, saving: savingLogLevel, isFromEnv: logLevelFromEnv } = useLogLevelPreference();
-
-  // Reset state when modal closes
-  function handleClose() {
-    setShowResetConfirm(false);
-    setShowResetTextConfirm(false);
-    setResetConfirmText("");
-    setShowKillConfirm(false);
-    setServerKilled(false);
-    setKillError(false);
-    setImportResult(null);
-    setImportError(null);
-    setExportError(null);
-    setDangerZoneExpanded(false);
-    onClose();
-  }
 
   // Handle export: fetch data, then trigger browser file download
   async function handleExport() {
@@ -143,32 +127,20 @@ export function AppSettingsModal({
   }
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleClose}
-      title="App Settings"
-      description="Configure global app preferences"
-      size="md"
-      footer={
-        <Button variant="ghost" onClick={handleClose}>
-          Close
-        </Button>
-      }
-    >
-      <div className="space-y-6">
+    <div className="space-y-6">
         {/* Display Settings */}
         <div>
           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
             Display Settings
           </h3>
-          <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
+          <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-neutral-900">
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
                 checked={markdownEnabled}
                 onChange={() => toggleMarkdown()}
                 disabled={savingMarkdown}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                className="h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 disabled:opacity-50"
               />
               <div>
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -188,7 +160,7 @@ export function AppSettingsModal({
           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
             Developer Settings
           </h3>
-          <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
+          <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-neutral-900">
             <div className="flex items-start gap-3">
               <div className="flex-1">
                 <label
@@ -212,7 +184,7 @@ export function AppSettingsModal({
                     value={logLevel}
                     onChange={(e) => setLogLevel(e.target.value as LogLevelName)}
                     disabled={savingLogLevel}
-                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50"
+                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-neutral-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-gray-500 focus:ring-gray-500 disabled:opacity-50"
                   >
                     {availableLevels.map((option) => (
                       <option key={option.value} value={option.value}>
@@ -232,7 +204,7 @@ export function AppSettingsModal({
             <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
               Import / Export Workspaces
             </h3>
-            <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-gray-900">
+            <div className="space-y-3 p-4 rounded-lg bg-gray-50 dark:bg-neutral-900">
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 Export all workspace configurations to a JSON file for backup or migration,
                 or import configurations from a previously exported file.
@@ -400,7 +372,7 @@ export function AppSettingsModal({
                             value={resetConfirmText}
                             onChange={(e) => setResetConfirmText(e.target.value)}
                             placeholder="Type here to confirm"
-                            className="block w-full rounded-md border-red-300 dark:border-red-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2 disabled:opacity-50"
+                            className="block w-full rounded-md border-red-300 dark:border-red-700 bg-white dark:bg-neutral-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-red-500 focus:ring-red-500 px-3 py-2 disabled:opacity-50"
                             autoComplete="off"
                             spellCheck={false}
                             disabled={resetting || killingServer}
@@ -412,13 +384,12 @@ export function AppSettingsModal({
                               size="sm"
                               disabled={resetConfirmText !== RESET_CONFIRMATION_PHRASE || resetting || killingServer}
                               onClick={async () => {
-                                if (onResetAll) {
-                                  const success = await onResetAll();
-                                  if (success) {
+                               if (onResetAll) {
+                                 const success = await onResetAll();
+                                 if (success) {
                                     setShowResetConfirm(false);
                                     setShowResetTextConfirm(false);
                                     setResetConfirmText("");
-                                    onClose();
                                     // Reload the page to get fresh state
                                     window.location.reload();
                                   }
@@ -529,9 +500,31 @@ export function AppSettingsModal({
             </div>
           </div>
         )}
-      </div>
+    </div>
+  );
+}
+
+export function AppSettingsModal({
+  isOpen,
+  onClose,
+  ...props
+}: AppSettingsModalProps) {
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="App Settings"
+      description="Configure global app preferences"
+      size="md"
+      footer={(
+        <Button variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+      )}
+    >
+      <AppSettingsPanel {...props} />
     </Modal>
   );
 }
 
-export default AppSettingsModal;
+export default AppSettingsPanel;

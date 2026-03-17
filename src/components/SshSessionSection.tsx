@@ -53,7 +53,7 @@ export function SshSessionSection({
             return (
               <div
                 key={session.config.id}
-                className="relative rounded-lg border border-gray-200 bg-white transition-colors hover:border-gray-300 hover:shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600"
+                className="relative rounded-lg border border-gray-200 bg-white transition-colors hover:border-gray-300 hover:shadow-sm dark:border-gray-700 dark:bg-neutral-800 dark:hover:border-gray-600"
               >
                 <button
                   type="button"
@@ -81,7 +81,7 @@ export function SshSessionSection({
                       e.stopPropagation();
                       onRename(session.config.id);
                     }}
-                    className="pointer-events-auto absolute right-4 top-4 rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                    className="pointer-events-auto absolute right-4 top-4 rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-neutral-700 dark:hover:text-gray-300"
                     aria-label="Rename SSH session"
                     title="Rename SSH session"
                   >

@@ -210,7 +210,7 @@ export function LoopGrid({
             {workspaceGroups
               .filter(g => g.loops.length === 0)
               .map(({ workspace }) => (
-                <div key={workspace.id} className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-md">
+                <div key={workspace.id} className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-neutral-800 rounded-md">
                   <div className="min-w-0">
                     <div className="text-sm text-gray-700 dark:text-gray-300 truncate">{workspace.name}</div>
                     <div

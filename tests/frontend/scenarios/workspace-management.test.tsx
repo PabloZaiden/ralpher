@@ -1,8 +1,8 @@
 /**
  * E2E Scenario: Workspace Management
  *
- * Tests workspace CRUD workflows: creating workspaces, configuring settings,
- * and deleting empty workspaces.
+ * Tests shell-native workspace workflows: composing workspaces in the main
+ * panel, using registered SSH servers, and navigating workspace detail views.
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
@@ -50,6 +50,19 @@ function setupBaseApi() {
   }));
 }
 
+function getSectionActionButton(sectionTitle: string, actionLabel = "New"): HTMLButtonElement | undefined {
+  const section = Array.from(document.querySelectorAll("section")).find((candidate) =>
+    candidate.textContent?.includes(sectionTitle)
+  );
+  if (!section) {
+    return undefined;
+  }
+
+  return Array.from(section.querySelectorAll("button")).find((button) =>
+    button.textContent?.trim() === actionLabel
+  ) as HTMLButtonElement | undefined;
+}
+
 beforeEach(() => {
   api.reset();
   api.install();
@@ -67,28 +80,25 @@ afterEach(() => {
 // ─── Workspace management scenarios ──────────────────────────────────────────
 
 describe("workspace management scenario", () => {
-  test("clicking New Workspace opens the create workspace modal", async () => {
+  test("clicking New Workspace opens the shell composer", async () => {
     setupBaseApi();
     api.get("/api/loops", () => []);
     api.get("/api/workspaces", () => []);
 
-    const { getByText, user } = renderWithUser(<App />);
+    const { getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
-    // Click "New Workspace"
-    await user.click(getByText("New Workspace"));
+    const workspacesNewButton = getSectionActionButton("Workspaces");
+    expect(workspacesNewButton).toBeTruthy();
+    await user.click(workspacesNewButton!);
 
-    // Create Workspace modal appears (use heading role to avoid ambiguity with submit button)
     await waitFor(() => {
-      expect(
-        document.querySelector("h2")?.textContent?.includes("Create Workspace"),
-      ).toBe(true);
+      expect(getByRole("heading", { name: "Create a workspace" })).toBeTruthy();
     });
 
-    // Form fields exist
     expect(document.querySelector("#workspace-name")).toBeTruthy();
     expect(document.querySelector("#workspace-directory")).toBeTruthy();
   });
@@ -103,34 +113,48 @@ describe("workspace management scenario", () => {
       directory: "/workspaces/new-project",
       serverSettings: {
         agent: {
-          provider: "opencode",
-          transport: "stdio",
+          provider: "copilot",
+          transport: "ssh",
+          hostname: "localhost",
+          port: 22,
         },
       },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }));
+    api.get("/api/workspaces", () => [{
+      id: "ws-new",
+      name: "New Project",
+      directory: "/workspaces/new-project",
+      serverSettings: {
+        agent: {
+          provider: "copilot",
+          transport: "ssh",
+          hostname: "localhost",
+          port: 22,
+        },
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }]);
 
-    const { getByText, queryByText, user } = renderWithUser(<App />);
+    const { getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
-    // Open create workspace modal
-    await user.click(getByText("New Workspace"));
+    const workspacesNewButton = getSectionActionButton("Workspaces");
+    expect(workspacesNewButton).toBeTruthy();
+    await user.click(workspacesNewButton!);
     await waitFor(() => {
-      expect(
-        document.querySelector("h2")?.textContent?.includes("Create Workspace"),
-      ).toBe(true);
+      expect(getByRole("heading", { name: "Create a workspace" })).toBeTruthy();
     });
 
-    const providerSelect = document.querySelector("#agent-provider") as HTMLSelectElement;
-    const transportSelect = document.querySelector("#agent-transport") as HTMLSelectElement;
-    const hostnameInput = document.querySelector("#agent-hostname") as HTMLInputElement;
-    expect(providerSelect.value).toBe("copilot");
-    expect(transportSelect.value).toBe("ssh");
-    expect(hostnameInput.value).toBe("localhost");
+      const providerSelect = document.querySelector("#agent-provider") as HTMLSelectElement;
+      const transportSelect = document.querySelector("#agent-transport") as HTMLSelectElement;
+      expect(providerSelect.value).toBe("copilot");
+      expect(transportSelect.value).toBe("ssh");
 
     // Fill name
     const nameInput = document.querySelector("#workspace-name") as HTMLInputElement;
@@ -140,35 +164,32 @@ describe("workspace management scenario", () => {
     const dirInput = document.querySelector("#workspace-directory") as HTMLInputElement;
     await user.type(dirInput, "/");
 
-    // Submit the form via "Create Workspace" button in footer
     const createBtns = Array.from(document.querySelectorAll("button")).filter(
       (b) => b.textContent?.trim() === "Create Workspace",
     );
-    // The button in the footer (not the modal title)
     const submitBtn = createBtns.find((b) => b.type === "submit");
     expect(submitBtn).toBeTruthy();
     await user.click(submitBtn!);
 
-    // Modal should close after success
     await waitFor(() => {
-      expect(queryByText("Create a new workspace")).toBeNull();
+      expect(window.location.hash).toBe("#/workspace/ws-new");
+      expect(getByRole("heading", { name: "New Project" })).toBeTruthy();
     });
 
-    // API was called
     const postCalls = api.calls("/api/workspaces", "POST");
     expect(postCalls.length).toBeGreaterThan(0);
-    expect(postCalls[0]?.body).toEqual({
-      name: "X",
-      directory: "/",
-      serverSettings: {
-        agent: {
-          provider: "copilot",
-          transport: "ssh",
-          hostname: "localhost",
-          port: 22,
+      expect(postCalls[0]?.body).toEqual({
+        name: "X",
+        directory: "/",
+        serverSettings: {
+          agent: {
+            provider: "copilot",
+            transport: "ssh",
+            hostname: "localhost",
+            port: 22,
+          },
         },
-      },
-    });
+      });
   });
 
   test("create workspace can use a registered SSH server selection", async () => {
@@ -208,19 +229,38 @@ describe("workspace management scenario", () => {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     }));
+    api.get("/api/workspaces", () => [{
+      id: "ws-new",
+      name: "Build Workspace",
+      directory: "/workspaces/build",
+      serverSettings: {
+        agent: {
+          provider: "copilot",
+          transport: "ssh",
+          hostname: "10.0.0.5",
+          port: 22,
+        },
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }]);
 
-    const { getByText, queryByLabelText, user } = renderWithUser(<App />);
+    const { getByRole, queryByLabelText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
-    await user.click(getByText("New Workspace"));
+    const workspacesNewButton = getSectionActionButton("Workspaces");
+    expect(workspacesNewButton).toBeTruthy();
+    await user.click(workspacesNewButton!);
     await waitFor(() => {
-      expect(
-        document.querySelector("h2")?.textContent?.includes("Create Workspace"),
-      ).toBe(true);
+      expect(getByRole("heading", { name: "Create a workspace" })).toBeTruthy();
     });
+
+    const transportSelect = document.querySelector("#agent-transport") as HTMLSelectElement;
+    expect(transportSelect).toBeTruthy();
+    await user.selectOptions(transportSelect, "ssh");
 
     const serverSelect = document.querySelector("#agent-registered-ssh-server") as HTMLSelectElement;
     expect(serverSelect).toBeTruthy();
@@ -262,74 +302,53 @@ describe("workspace management scenario", () => {
     });
   });
 
-  test("cancel create workspace closes modal", async () => {
+  test("cancel create workspace returns to the overview", async () => {
     setupBaseApi();
     api.get("/api/loops", () => []);
     api.get("/api/workspaces", () => []);
 
-    const { getByText, queryByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
-    await user.click(getByText("New Workspace"));
+    const workspacesNewButton = getSectionActionButton("Workspaces");
+    expect(workspacesNewButton).toBeTruthy();
+    await user.click(workspacesNewButton!);
     await waitFor(() => {
-      expect(
-        document.querySelector("h2")?.textContent?.includes("Create Workspace"),
-      ).toBe(true);
+      expect(getByText("Create a workspace")).toBeTruthy();
     });
 
-    // Click Cancel
-    await user.click(getByText("Cancel"));
+    const cancelButtons = getAllByText("Cancel");
+    await user.click(cancelButtons.at(-1)!);
 
-    // Modal should close
     await waitFor(() => {
-      // The description text should be gone
-      expect(queryByText("Create a new workspace with server connection settings.")).toBeNull();
+      expect(window.location.hash).toBe("#/");
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
   });
 
-  test("empty workspace shows delete button and can be deleted", async () => {
+  test("workspace map includes empty workspaces and navigates to workspace details", async () => {
     setupBaseApi();
     api.get("/api/loops", () => []);
     api.get("/api/workspaces", () => [WORKSPACE]);
-    api.delete("/api/workspaces/:id", () => ({ success: true }));
 
-    const { getByText, getByTitle, user } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
-    // Empty workspaces section should appear since workspace has no loops
     await waitFor(() => {
-      expect(getByText("Empty Workspaces")).toBeTruthy();
+      expect(getByText("Workspace map")).toBeTruthy();
     });
 
-    // Workspace name appears in empty section
-    expect(getByText("Existing Project")).toBeTruthy();
-
-    // Click the delete button (X icon with title "Delete empty workspace")
-    const deleteBtn = getByTitle("Delete empty workspace");
-    await user.click(deleteBtn);
-
-    // ConfirmModal should appear with "Delete Workspace" title
+    await user.click(getAllByText("Existing Project")[0]!);
     await waitFor(() => {
-      expect(getByText("Delete Workspace")).toBeTruthy();
+      expect(window.location.hash).toBe("#/workspace/ws-1");
+      expect(getByRole("heading", { name: "Existing Project" })).toBeTruthy();
     });
-
-    // Click the "Delete" confirmation button in the modal
-    const confirmBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.trim() === "Delete" && b !== deleteBtn,
-    );
-    expect(confirmBtn).toBeTruthy();
-    await user.click(confirmBtn!);
-
-    // API should have been called to delete the workspace
-    await waitFor(() => {
-      const deleteCalls = api.calls("/api/workspaces/:id", "DELETE");
-      expect(deleteCalls.length).toBeGreaterThan(0);
-    });
+    expect(getByText("No loops or chats in this workspace yet.")).toBeTruthy();
   });
 
-  test("workspace settings modal opens from workspace header gear icon", async () => {
+  test("workspace route shows summary cards and related loop content", async () => {
     setupBaseApi();
 
     const loop = createLoopWithStatus("running", {
@@ -340,21 +359,18 @@ describe("workspace management scenario", () => {
     api.get("/api/workspaces", () => [WORKSPACE]);
     api.get("/api/workspaces/:id", () => WORKSPACE);
 
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
-    // Wait for workspace header to appear
     await waitFor(() => {
-      expect(getByText("Existing Project")).toBeTruthy();
+      expect(getAllByText("Existing Project").length).toBeGreaterThan(0);
     });
 
-    // Click the gear icon next to workspace name (title "Workspace Settings")
-    const gearBtns = Array.from(document.querySelectorAll("button[title='Workspace Settings']"));
-    expect(gearBtns.length).toBeGreaterThan(0);
-    await user.click(gearBtns[0] as HTMLButtonElement);
-
-    // Workspace settings modal should open
+    await user.click(getAllByText("Existing Project")[0]!);
     await waitFor(() => {
-      expect(getByText("Workspace Settings")).toBeTruthy();
+      expect(getByRole("heading", { name: "Existing Project" })).toBeTruthy();
     });
+    expect(getByText("Loops and chats")).toBeTruthy();
+    expect(getByText("SSH sessions")).toBeTruthy();
+    expect(getAllByText("In Workspace").length).toBeGreaterThan(0);
   });
 });

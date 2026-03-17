@@ -1,16 +1,15 @@
 /**
- * WorkspaceSettingsModal component for editing workspace settings.
- * Allows editing workspace name and server connection settings.
+ * Workspace settings form and legacy modal wrapper.
  */
 
-import { useState, useEffect, useCallback, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { Modal, Button, Badge, ConfirmModal } from "./common";
 import { ServerSettingsForm } from "./ServerSettingsForm";
 import type { ServerSettings, ConnectionStatus } from "../types/settings";
 import type { Workspace } from "../types/workspace";
 import { createLogger } from "../lib/logger";
 import { useAgentsMdOptimizer } from "../hooks/useAgentsMdOptimizer";
-import type { PurgeArchivedLoopsResult } from "../hooks";
+import { useToast, type PurgeArchivedLoopsResult } from "../hooks";
 
 const log = createLogger("WorkspaceSettingsModal");
 
@@ -31,8 +30,12 @@ export interface WorkspaceSettingsModalProps {
   onResetConnection?: () => Promise<boolean>;
   /** Callback to purge all archived loops for the workspace */
   onPurgeArchivedLoops?: () => Promise<PurgeArchivedLoopsResult>;
+  /** Callback to delete the workspace */
+  onDeleteWorkspace?: () => Promise<{ success: boolean; error?: string }>;
   /** Number of archived loops for the selected workspace */
   archivedLoopCount?: number;
+  /** Total number of loops/chats still assigned to the selected workspace */
+  workspaceLoopCount?: number;
   /** Whether saving is in progress */
   saving?: boolean;
   /** Whether testing is in progress */
@@ -46,39 +49,91 @@ export interface WorkspaceSettingsModalProps {
 }
 
 /**
- * WorkspaceSettingsModal provides UI for editing workspace and server connection settings.
+ * Shared workspace settings form used by both the shell page and the legacy modal wrapper.
  */
-export function WorkspaceSettingsModal({
-  isOpen,
-  onClose,
+export interface WorkspaceSettingsFormProps {
+  /** The workspace being edited */
+  workspace: Workspace | null;
+  /** Current connection status for the workspace */
+  status: ConnectionStatus | null;
+  /** Callback to save workspace (name and server settings) */
+  onSave: (name: string, settings: ServerSettings) => Promise<boolean>;
+  /** Callback to test connection */
+  onTest: (settings: ServerSettings) => Promise<{ success: boolean; error?: string }>;
+  /** Callback to reset connection for this workspace */
+  onResetConnection?: () => Promise<boolean>;
+  /** Callback to purge all archived loops for the workspace */
+  onPurgeArchivedLoops?: () => Promise<PurgeArchivedLoopsResult>;
+  /** Callback to delete the workspace */
+  onDeleteWorkspace?: () => Promise<{ success: boolean; error?: string }>;
+  /** Number of archived loops for the selected workspace */
+  archivedLoopCount?: number;
+  /** Total number of loops/chats still assigned to the selected workspace */
+  workspaceLoopCount?: number;
+  /** Whether saving is in progress */
+  saving?: boolean;
+  /** Whether testing is in progress */
+  testing?: boolean;
+  /** Whether resetting connection is in progress */
+  resettingConnection?: boolean;
+  /** Whether purging archived loops is in progress */
+  purgingArchivedLoops?: boolean;
+  /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
+  remoteOnly?: boolean;
+  /** Whether to render the inline connection status summary */
+  showConnectionStatus?: boolean;
+  /** Form id for external submit buttons */
+  formId?: string;
+  /** Called after a successful save */
+  onSaved?: () => void;
+  /** Called after a successful delete */
+  onDeleted?: () => void;
+  /** Reports current form validity */
+  onValidityChange?: (isValid: boolean) => void;
+}
+
+export function WorkspaceSettingsForm({
   workspace,
   status,
   onSave,
   onTest,
   onResetConnection,
   onPurgeArchivedLoops,
+  onDeleteWorkspace,
   archivedLoopCount = 0,
+  workspaceLoopCount = 0,
   saving = false,
   testing = false,
   resettingConnection = false,
   purgingArchivedLoops = false,
   remoteOnly = false,
-}: WorkspaceSettingsModalProps) {
+  showConnectionStatus = true,
+  formId = "workspace-settings-form",
+  onSaved,
+  onDeleted,
+  onValidityChange,
+}: WorkspaceSettingsFormProps) {
+  const toast = useToast();
   // Workspace name state
   const [name, setName] = useState("");
-  
+
   // Server settings state
   const [serverSettings, setServerSettings] = useState<ServerSettings | null>(null);
   const [isServerSettingsValid, setIsServerSettingsValid] = useState(true);
 
-  // Initialize form from workspace when modal opens
+  // Initialize form from workspace when the selected workspace changes
   useEffect(() => {
-    if (isOpen && workspace) {
+    if (workspace) {
       setName(workspace.name);
       setServerSettings(workspace.serverSettings);
       setIsServerSettingsValid(true);
+      return;
     }
-  }, [isOpen, workspace]);
+
+    setName("");
+    setServerSettings(null);
+    setIsServerSettingsValid(true);
+  }, [workspace]);
 
   // Handle form submission
   async function handleSubmit(e: FormEvent) {
@@ -90,7 +145,7 @@ export function WorkspaceSettingsModal({
     const success = await onSave(name.trim(), serverSettings);
     if (success) {
       log.debug("Workspace settings saved successfully");
-      onClose();
+      onSaved?.();
     } else {
       log.warn("Failed to save workspace settings");
     }
@@ -108,46 +163,48 @@ export function WorkspaceSettingsModal({
   }
 
   // AGENTS.md optimizer
-  const optimizer = useAgentsMdOptimizer();
+  const {
+    status: optimizerStatus,
+    loading: optimizerLoading,
+    error: optimizerError,
+    fetchStatus: fetchOptimizerStatus,
+    optimize: optimizeAgentsMd,
+    reset: resetOptimizer,
+  } = useAgentsMdOptimizer();
   const [optimizeSuccess, setOptimizeSuccess] = useState<boolean | null>(null);
   const [wasAlreadyOptimized, setWasAlreadyOptimized] = useState(false);
   const [showPurgeArchivedConfirm, setShowPurgeArchivedConfirm] = useState(false);
+  const [showDeleteWorkspaceConfirm, setShowDeleteWorkspaceConfirm] = useState(false);
   const [purgeArchivedResult, setPurgeArchivedResult] = useState<PurgeArchivedLoopsResult | null>(null);
   const [purgeArchivedError, setPurgeArchivedError] = useState<string | null>(null);
-
-  // Fetch AGENTS.md status when modal opens with a workspace
-  // The AGENTS.md API handles connection on-demand via getCommandExecutorAsync(),
-  // so we don't need to gate on status?.connected here.
-  const fetchOptimizerStatus = useCallback(async () => {
-    if (isOpen && workspace) {
-      setOptimizeSuccess(null);
-      setWasAlreadyOptimized(false);
-      await optimizer.fetchStatus(workspace.id);
-    }
-  }, [isOpen, workspace?.id]);
+  const [deletingWorkspace, setDeletingWorkspace] = useState(false);
 
   useEffect(() => {
-    fetchOptimizerStatus();
-  }, [fetchOptimizerStatus]);
+    setOptimizeSuccess(null);
+    setWasAlreadyOptimized(false);
+    setShowPurgeArchivedConfirm(false);
+    setShowDeleteWorkspaceConfirm(false);
+    setPurgeArchivedResult(null);
+    setPurgeArchivedError(null);
+    setDeletingWorkspace(false);
 
-  // Reset optimizer state when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      optimizer.reset();
-      setOptimizeSuccess(null);
-      setWasAlreadyOptimized(false);
-      setShowPurgeArchivedConfirm(false);
-      setPurgeArchivedResult(null);
-      setPurgeArchivedError(null);
+    if (!workspace) {
+      resetOptimizer();
+      return;
     }
-  }, [isOpen]);
+
+    void fetchOptimizerStatus(workspace.id);
+    return () => {
+      resetOptimizer();
+    };
+  }, [fetchOptimizerStatus, resetOptimizer, workspace]);
 
   // Handle applying optimization
   async function handleOptimize() {
     if (!workspace) return;
     setOptimizeSuccess(null);
     setWasAlreadyOptimized(false);
-    const result = await optimizer.optimize(workspace.id);
+    const result = await optimizeAgentsMd(workspace.id);
     if (result) {
       setOptimizeSuccess(true);
       setWasAlreadyOptimized(result.alreadyOptimized);
@@ -177,60 +234,68 @@ export function WorkspaceSettingsModal({
     }
   }
 
+  async function handleDeleteWorkspace() {
+    if (!workspace || !onDeleteWorkspace) {
+      return;
+    }
+
+    setDeletingWorkspace(true);
+    try {
+      const result = await onDeleteWorkspace();
+      setShowDeleteWorkspaceConfirm(false);
+      if (!result.success) {
+        toast.error(result.error || "Failed to delete workspace");
+        return;
+      }
+
+      toast.success(`Deleted workspace "${workspace.name}"`);
+      onDeleted?.();
+    } catch (error) {
+      setShowDeleteWorkspaceConfirm(false);
+      toast.error(String(error));
+    } finally {
+      setDeletingWorkspace(false);
+    }
+  }
+
   // Validation
   const isNameValid = name.trim().length > 0;
   const isValid = isNameValid && isServerSettingsValid;
+  const deleteWorkspaceDisabled = saving || deletingWorkspace || workspaceLoopCount > 0;
+
+  useEffect(() => {
+    onValidityChange?.(isValid);
+  }, [isValid, onValidityChange]);
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Workspace Settings"
-      description={workspace ? `Edit settings for "${workspace.name}"` : "Edit workspace settings"}
-      size="md"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            form="workspace-settings-form"
-            loading={saving}
-            disabled={!isValid}
-          >
-            Save Changes
-          </Button>
-        </>
-      }
-    >
-      <form id="workspace-settings-form" onSubmit={handleSubmit} className="space-y-6">
+    <>
+      <form id={formId} onSubmit={handleSubmit} className="space-y-6">
         {/* Workspace Name */}
         <div>
           <label
-            htmlFor="workspace-name"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            htmlFor={`${formId}-workspace-name`}
+            className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300"
           >
             Workspace Name
           </label>
           <input
             type="text"
-            id="workspace-name"
+            id={`${formId}-workspace-name`}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="My Workspace"
             required
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
           />
         </div>
 
         {/* Directory (read-only) */}
         {workspace && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
               Directory
             </label>
-            <div className="w-full break-all rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-400">
+            <div className="w-full break-all rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-mono text-gray-600 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-400">
               {workspace.directory}
             </div>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -239,25 +304,26 @@ export function WorkspaceSettingsModal({
           </div>
         )}
 
-        {/* Connection Status */}
-        <div className="flex items-center gap-2 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Connection Status:</span>
-          {status?.connected ? (
-            <Badge variant="success">Connected</Badge>
-          ) : status?.error ? (
-            <Badge variant="error">Error</Badge>
-          ) : (
-            <Badge variant="warning">Idle</Badge>
-          )}
-          {status && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              {status.provider}/{status.transport}
-            </span>
-          )}
-        </div>
+        {showConnectionStatus && (
+          <div className="flex items-center gap-2 rounded-md bg-gray-50 p-3 dark:bg-neutral-900">
+            <span className="text-sm text-gray-600 dark:text-gray-400">Connection Status:</span>
+            {status?.connected ? (
+              <Badge variant="success">Connected</Badge>
+            ) : status?.error ? (
+              <Badge variant="error">Error</Badge>
+            ) : (
+              <Badge variant="warning">Idle</Badge>
+            )}
+            {status && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {status.provider}/{status.transport}
+              </span>
+            )}
+          </div>
+        )}
 
         {status?.error && (
-          <div className="text-xs text-red-600 dark:text-red-400 break-words -mt-3">
+          <div className="-mt-3 break-words text-xs text-red-600 dark:text-red-400">
             {status.error}
           </div>
         )}
@@ -280,7 +346,7 @@ export function WorkspaceSettingsModal({
               <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
                 AGENTS.md Optimization
               </h3>
-              {optimizer.status?.analysis.isOptimized && (
+              {optimizerStatus?.analysis.isOptimized && (
                 <Badge variant="success" size="sm">Optimized</Badge>
               )}
             </div>
@@ -290,8 +356,8 @@ export function WorkspaceSettingsModal({
             </p>
 
             {/* Loading state during initial fetch (may involve on-demand connection) */}
-            {optimizer.loading && !optimizer.status && (
-              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
+            {optimizerLoading && !optimizerStatus && (
+              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-gray-50 dark:bg-neutral-900">
                 <LoadingSpinner className="w-4 h-4 text-gray-400 flex-shrink-0" />
                 <span className="text-sm text-gray-600 dark:text-gray-400">
                   Checking AGENTS.md status...
@@ -299,13 +365,17 @@ export function WorkspaceSettingsModal({
               </div>
             )}
 
-            {optimizer.error && (
+            {optimizerError && (
               <div className="mb-3 p-3 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900">
-                <p className="text-sm text-red-700 dark:text-red-300">{optimizer.error}</p>
+                <p className="text-sm text-red-700 dark:text-red-300">{optimizerError}</p>
                 <button
                   type="button"
-                  onClick={fetchOptimizerStatus}
-                  disabled={optimizer.loading}
+                  onClick={() => {
+                    if (workspace) {
+                      void fetchOptimizerStatus(workspace.id);
+                    }
+                  }}
+                  disabled={optimizerLoading || !workspace}
                   className="mt-2 text-xs font-medium text-red-700 dark:text-red-300 hover:text-red-800 dark:hover:text-red-200 underline disabled:opacity-50"
                 >
                   Retry
@@ -323,19 +393,19 @@ export function WorkspaceSettingsModal({
               </div>
             )}
 
-            {optimizer.status && !optimizer.status.analysis.isOptimized && (
-              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-gray-50 dark:bg-gray-900">
+            {optimizerStatus && !optimizerStatus.analysis.isOptimized && (
+              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-gray-50 dark:bg-neutral-900">
                 <DocumentIcon className="w-4 h-4 text-gray-400 flex-shrink-0" />
                 <span className="text-sm text-gray-600 dark:text-gray-400">
-                  {optimizer.status.fileExists
+                  {optimizerStatus.fileExists
                     ? "AGENTS.md exists but is not optimized for Ralpher."
                     : "No AGENTS.md file found. One will be created."}
                 </span>
               </div>
             )}
 
-            {optimizer.status?.analysis.updateAvailable && optimizer.status.analysis.isOptimized && (
-              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900">
+            {optimizerStatus?.analysis.updateAvailable && optimizerStatus.analysis.isOptimized && (
+              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-blue-50 dark:bg-neutral-900/40 border border-blue-200 dark:border-gray-700">
                 <span className="text-sm text-blue-700 dark:text-blue-300">
                   An updated version of the Ralpher guidelines is available.
                 </span>
@@ -343,17 +413,17 @@ export function WorkspaceSettingsModal({
             )}
 
             <div className="flex gap-2">
-              {(!optimizer.status?.analysis.isOptimized || optimizer.status?.analysis.updateAvailable) && !optimizer.error && (
+              {(!optimizerStatus?.analysis.isOptimized || optimizerStatus?.analysis.updateAvailable) && !optimizerError && (
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   onClick={handleOptimize}
-                  loading={optimizer.loading}
-                  disabled={optimizer.loading || !optimizer.status}
+                  loading={optimizerLoading}
+                  disabled={optimizerLoading || !optimizerStatus}
                 >
                   <OptimizeIcon className="w-4 h-4 mr-2" />
-                  {optimizer.status?.analysis.updateAvailable && optimizer.status.analysis.isOptimized
+                  {optimizerStatus?.analysis.updateAvailable && optimizerStatus.analysis.isOptimized
                     ? "Update AGENTS.md"
                     : "Optimize AGENTS.md"}
                 </Button>
@@ -448,6 +518,33 @@ export function WorkspaceSettingsModal({
             </div>
           </div>
         )}
+
+        {workspace && onDeleteWorkspace && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+            <div className="p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-200 mb-2">
+                Delete Workspace
+              </h3>
+              <p className="text-sm text-red-700 dark:text-red-300 mb-4">
+                {workspaceLoopCount > 0
+                  ? `Delete the remaining ${workspaceLoopCount} loop${workspaceLoopCount === 1 ? "" : "s"} or chat${workspaceLoopCount === 1 ? "" : "s"} in this workspace before removing it from Ralpher.`
+                  : "Remove this workspace from Ralpher now that it no longer contains loops or chats."}
+                {" "}This only removes the workspace record and does not delete files on disk.
+              </p>
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                onClick={() => setShowDeleteWorkspaceConfirm(true)}
+                loading={deletingWorkspace}
+                disabled={deleteWorkspaceDisabled}
+              >
+                <TrashIcon className="w-4 h-4 mr-2" />
+                Delete Workspace
+              </Button>
+            </div>
+          </div>
+        )}
       </form>
 
       <ConfirmModal
@@ -459,6 +556,67 @@ export function WorkspaceSettingsModal({
         confirmLabel="Purge All"
         loading={purgingArchivedLoops}
         variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={showDeleteWorkspaceConfirm}
+        onClose={() => setShowDeleteWorkspaceConfirm(false)}
+        onConfirm={handleDeleteWorkspace}
+        title="Delete Workspace"
+        message={`Are you sure you want to delete workspace "${workspace?.name ?? "this workspace"}"? This only removes it from Ralpher and does not delete files on disk.`}
+        confirmLabel="Delete"
+        loading={deletingWorkspace}
+        variant="danger"
+      />
+    </>
+  );
+}
+
+/**
+ * Legacy modal wrapper for workspace settings in the old dashboard flow.
+ */
+export function WorkspaceSettingsModal({
+  isOpen,
+  onClose,
+  ...props
+}: WorkspaceSettingsModalProps) {
+  const [isValid, setIsValid] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsValid(false);
+    }
+  }, [isOpen]);
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Workspace Settings"
+      description={props.workspace ? `Edit settings for "${props.workspace.name}"` : "Edit workspace settings"}
+      size="md"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose} disabled={props.saving}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="workspace-settings-modal-form"
+            loading={props.saving}
+            disabled={!isValid}
+          >
+            Save Changes
+          </Button>
+        </>
+      }
+    >
+      <WorkspaceSettingsForm
+        {...props}
+        formId="workspace-settings-modal-form"
+        onSaved={onClose}
+        onDeleted={onClose}
+        onValidityChange={setIsValid}
       />
     </Modal>
   );

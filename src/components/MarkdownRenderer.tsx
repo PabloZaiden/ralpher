@@ -65,7 +65,7 @@ export function MarkdownRenderer({ content, className = "", dimmed = false, rawM
             const isInline = !className;
             if (isInline) {
               return (
-                <code className="break-all rounded bg-gray-100 px-1.5 py-0.5 font-mono text-sm dark:bg-gray-800">
+                <code className="break-all rounded bg-gray-100 px-1.5 py-0.5 font-mono text-sm dark:bg-neutral-800">
                   {children}
                 </code>
               );
@@ -73,7 +73,7 @@ export function MarkdownRenderer({ content, className = "", dimmed = false, rawM
             return <code className={className}>{children}</code>;
           },
           pre: ({ children }) => (
-            <pre className="max-w-full overflow-x-auto rounded-lg bg-gray-100 p-4 text-sm dark:bg-gray-800">
+            <pre className="max-w-full overflow-x-auto rounded-lg bg-gray-100 p-4 text-sm dark:bg-neutral-800">
               {children}
             </pre>
           ),

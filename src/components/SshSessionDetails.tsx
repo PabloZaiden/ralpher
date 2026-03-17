@@ -32,24 +32,11 @@ function isStandaloneSession(session: NonNullable<ReturnType<typeof useSshSessio
   return "sshServerId" in session.config;
 }
 
-function getStatusVariant(status: string) {
-  switch (status) {
-    case "connected":
-      return "success";
-    case "connecting":
-      return "info";
-    case "failed":
-      return "error";
-    case "disconnected":
-      return "warning";
-    default:
-      return "default";
-  }
-}
-
 export interface SshSessionDetailsProps {
   sshSessionId: string;
-  onBack: () => void;
+  onBack?: () => void;
+  showBackButton?: boolean;
+  headerOffsetClassName?: string;
   copyTextToClipboard?: (text: string) => Promise<void>;
 }
 
@@ -71,11 +58,11 @@ function CompactBar({
   contentClassName = "",
 }: CompactBarProps) {
   return (
-    <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <div className="overflow-hidden rounded-md border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-neutral-800">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50"
+        className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-gray-50 dark:hover:bg-neutral-700/50"
         aria-expanded={expanded}
       >
         <span className="shrink-0 text-[11px] text-gray-500 dark:text-gray-400">{expanded ? "▼" : "▶"}</span>
@@ -722,6 +709,8 @@ function isStandaloneCredentialTokenError(message: string): boolean {
 export function SshSessionDetails({
   sshSessionId,
   onBack,
+  showBackButton = true,
+  headerOffsetClassName,
   copyTextToClipboard = writeTextToClipboard,
 }: SshSessionDetailsProps) {
   const toast = useToast();
@@ -1474,7 +1463,7 @@ export function SshSessionDetails({
       return;
     }
     setShowDeleteConfirm(false);
-    onBack();
+    onBack?.();
   }
 
   async function handleStandalonePasswordSubmit() {
@@ -1498,7 +1487,7 @@ export function SshSessionDetails({
           setShowPasswordPrompt(false);
           setPendingStandaloneAction(null);
           setShowDeleteConfirm(false);
-          onBack();
+          onBack?.();
         }
         return;
       }
@@ -1521,7 +1510,6 @@ export function SshSessionDetails({
 
   async function handleRename(newName: string) {
     await updateSession({ name: newName });
-    toast.success("SSH session renamed");
   }
 
   if (loading && !session) {
@@ -1531,37 +1519,33 @@ export function SshSessionDetails({
   if (!session) {
     return (
       <div className="p-6">
-        <Button variant="ghost" onClick={onBack}>← Back</Button>
+        {showBackButton && onBack && <Button variant="ghost" onClick={onBack}>← Back</Button>}
         <p className="mt-4 text-red-600 dark:text-red-400">{error || "SSH session not found."}</p>
       </div>
     );
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col bg-gray-50 dark:bg-gray-900">
-      <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-800">
-        <div className="flex flex-wrap items-center justify-between gap-1.5">
+    <div className="h-full min-h-0 flex flex-col bg-gray-50 dark:bg-neutral-900">
+      <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-neutral-800">
+        <div
+          className={[
+            headerOffsetClassName ?? "ml-14 sm:ml-16 lg:ml-0",
+            "flex min-h-14 flex-wrap items-center justify-between gap-1.5",
+          ].join(" ")}
+        >
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-            <Button variant="ghost" size="xs" onClick={onBack}>← Back</Button>
+            {showBackButton && onBack && (
+              <Button variant="ghost" size="xs" onClick={onBack}>← Back</Button>
+            )}
             <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
               {session.config.name}
             </h1>
-            <Badge variant={effectiveConnectionMode === "direct" ? "info" : "default"}>
-              {getSshConnectionModeLabel(effectiveConnectionMode ?? session.config.connectionMode)}
-            </Badge>
-            <Badge variant={getStatusVariant(session.state.status)}>
-              {session.state.status}
-            </Badge>
-            {session.state.notice && (
-              <Badge variant="warning">
-                fallback
-              </Badge>
-            )}
             <Badge variant={socketStatus === "open" ? "success" : socketStatus === "connecting" ? "info" : "warning"}>
-              {socketStatus}
+              {socketStatus === "open" ? "connected" : socketStatus === "closed" ? "disconnected" : "connecting"}
             </Badge>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
             {canRenameSession && (
               <Button
                 variant="ghost"
@@ -1689,7 +1673,7 @@ export function SshSessionDetails({
                     Clear
                   </Button>
                 )}
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-neutral-700" aria-hidden="true" />
                 <Button
                   variant="secondary"
                   size="xs"
@@ -1771,7 +1755,7 @@ export function SshSessionDetails({
                 >
                   →
                 </Button>
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-neutral-700" aria-hidden="true" />
                 <Button
                   variant="secondary"
                   size="xs"
@@ -1781,7 +1765,7 @@ export function SshSessionDetails({
                 >
                   Copy selection
                 </Button>
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-neutral-700" aria-hidden="true" />
                 <Button
                   variant="secondary"
                   size="xs"
@@ -1814,7 +1798,7 @@ export function SshSessionDetails({
                 >
                   :q
                 </Button>
-                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
+                <span className="mx-0.5 h-4 w-px shrink-0 bg-gray-200 dark:bg-neutral-700" aria-hidden="true" />
                 <Button
                   variant="secondary"
                   size="xs"
@@ -1867,7 +1851,7 @@ export function SshSessionDetails({
               value={pendingTerminalClipboardText}
               onFocus={(event) => event.currentTarget.select()}
               onClick={(event) => event.currentTarget.select()}
-              className="min-h-24 w-full rounded-md border border-amber-200 bg-white/90 p-2 font-mono text-xs text-gray-900 shadow-sm outline-none focus:border-amber-400 dark:border-amber-800 dark:bg-gray-900 dark:text-gray-100"
+              className="min-h-24 w-full rounded-md border border-amber-200 bg-white/90 p-2 font-mono text-xs text-gray-900 shadow-sm outline-none focus:border-amber-400 dark:border-amber-800 dark:bg-neutral-900 dark:text-gray-100"
             />
           </Card>
         )}
@@ -1952,7 +1936,7 @@ export function SshSessionDetails({
               type="password"
               value={standalonePassword}
               onChange={(event) => setStandalonePassword(event.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
               {...PASSWORD_INPUT_PROPS}
             />
           </div>

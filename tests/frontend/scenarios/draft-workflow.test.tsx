@@ -1,14 +1,14 @@
 /**
  * E2E Scenario: Draft Workflow
  *
- * Tests draft loop workflows: creating a draft, editing it, starting it,
- * and deleting a draft without starting.
+ * Tests the shell-native draft workflow: listing drafts, opening the inline editor,
+ * updating, starting, deleting, and creating a draft.
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
-import { renderWithUser, waitFor, within } from "../helpers/render";
+import { renderWithUser, waitFor } from "../helpers/render";
 import {
   createLoopWithStatus,
   createWorkspace,
@@ -63,6 +63,7 @@ function setupBaseApi() {
   }));
   api.get("/api/git/default-branch", () => ({ defaultBranch: "main" }));
   api.get("/api/check-planning-dir", () => ({ warning: null }));
+  api.get("/api/loops/:id/port-forwards", () => []);
 }
 
 beforeEach(() => {
@@ -79,84 +80,58 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-// ─── Draft workflow scenarios ────────────────────────────────────────────────
-
 describe("draft workflow scenario", () => {
   test("draft loop appears in Drafts section with Draft badge", async () => {
     setupBaseApi();
-    const draft = draftLoop();
-    api.get("/api/loops", () => [draft]);
+    api.get("/api/loops", () => [draftLoop()]);
     api.get("/api/workspaces", () => [WORKSPACE]);
 
-    const { getByText } = renderWithUser(<App />);
+    const { getByText, getAllByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("My Draft")).toBeTruthy();
+      expect(getByText("Drafts")).toBeTruthy();
+      expect(getAllByText("My Draft").length).toBeGreaterThan(0);
     });
 
-    // Should be in Drafts section
-    expect(getByText(/Drafts \(1\)/)).toBeTruthy();
-
-    // Should show Draft badge (getStatusLabel returns "Draft")
-    expect(getByText("Draft")).toBeTruthy();
+    expect(getAllByText("Draft").length).toBeGreaterThan(0);
   });
 
-  test("clicking draft loop row opens edit modal", async () => {
+  test("clicking a draft opens the inline draft editor", async () => {
     setupBaseApi();
-    const draft = draftLoop();
-    api.get("/api/loops", () => [draft]);
+    api.get("/api/loops", () => [draftLoop()]);
     api.get("/api/workspaces", () => [WORKSPACE]);
 
-    const { getByText, getByRole, user } = renderWithUser(<App />);
+    const { getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("My Draft")).toBeTruthy();
+      const draftButtons = Array.from(document.querySelectorAll("button")).filter((button) => button.textContent?.includes("My Draft"));
+      expect(draftButtons.length).toBeGreaterThan(0);
     });
 
-    // Click on the draft loop name (opens edit modal, not loop details)
-    await user.click(getByText("My Draft"));
+    const draftButtons = Array.from(document.querySelectorAll("button")).filter((button) => button.textContent?.includes("My Draft"));
+    await user.click(draftButtons[0]!);
 
-    // Edit Draft Loop modal opens
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Edit Draft Loop" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Edit My Draft" })).toBeTruthy();
     });
   });
 
-  test("edit draft modal shows Start Loop button", async () => {
+  test("inline draft editor shows Start Loop and Update Draft actions", async () => {
     setupBaseApi();
-    const draft = draftLoop();
-    api.get("/api/loops", () => [draft]);
+    api.get("/api/loops", () => [draftLoop()]);
     api.get("/api/workspaces", () => [WORKSPACE]);
 
-    const { getByText, getByRole, user } = renderWithUser(<App />);
+    const { getByRole } = renderWithUser(<App />, { route: "#/loop/draft-1" });
 
     await waitFor(() => {
-      expect(getByText("My Draft")).toBeTruthy();
+      expect(getByRole("heading", { name: "Edit My Draft" })).toBeTruthy();
     });
 
-    // Open edit modal by clicking the draft loop row
-    await user.click(getByText("My Draft"));
-
-    await waitFor(() => {
-      expect(getByRole("heading", { name: "Edit Draft Loop" })).toBeTruthy();
-    });
-
-    // Should have "Start Loop" button (not "Create Loop")
-    await waitFor(() => {
-      const startBtn = Array.from(document.querySelectorAll("button")).find(
-        (b) => b.textContent?.includes("Start Loop"),
-      );
-      expect(startBtn).toBeTruthy();
-    });
-
-    // Should have "Update Draft" button
-    const updateBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Update Draft"),
-    );
-    expect(updateBtn).toBeTruthy();
+    expect(getByRole("button", { name: "Start Loop" })).toBeTruthy();
+    expect(getByRole("button", { name: "Update Draft" })).toBeTruthy();
   });
 
-  test("start draft loop calls draft/start API", async () => {
+  test("starting a draft loop calls the draft/start API", async () => {
     setupBaseApi();
     const draft = draftLoop();
     api.get("/api/loops", () => [draft]);
@@ -164,86 +139,66 @@ describe("draft workflow scenario", () => {
     api.put("/api/loops/:id", () => draft);
     api.post("/api/loops/:id/draft/start", () => ({ success: true }));
 
-    const { getByText, getByRole, user } = renderWithUser(<App />);
+    const { getByRole, user } = renderWithUser(<App />, { route: "#/loop/draft-1" });
 
     await waitFor(() => {
-      expect(getByText("My Draft")).toBeTruthy();
+      expect(getByRole("button", { name: "Start Loop" })).toBeTruthy();
     });
-
-    // Open edit modal by clicking the draft loop row
-    await user.click(getByText("My Draft"));
-
+    const workspaceSelect = document.querySelector("select#workspace") as HTMLSelectElement;
+    expect(workspaceSelect).toBeTruthy();
+    await user.selectOptions(workspaceSelect, "");
+    await user.selectOptions(workspaceSelect, "ws-1");
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Edit Draft Loop" })).toBeTruthy();
+      const modelOption = document.querySelector('select#model option[value="anthropic:claude-sonnet-4-20250514:"]');
+      expect(modelOption).toBeTruthy();
     });
-
-    // Wait for Start Loop button
+    const modelSelect = document.querySelector("select#model") as HTMLSelectElement;
+    expect(modelSelect).toBeTruthy();
+    await user.selectOptions(modelSelect, "anthropic:claude-sonnet-4-20250514:");
     await waitFor(() => {
-      const startBtn = Array.from(document.querySelectorAll("button")).find(
-        (b) => b.textContent?.includes("Start Loop"),
-      );
-      expect(startBtn).toBeTruthy();
+      expect((getByRole("button", { name: "Start Loop" }) as HTMLButtonElement).disabled).toBe(false);
     });
 
-    // Click Start Loop
-    const startBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Start Loop"),
-    );
-    await user.click(startBtn!);
+    await user.click(getByRole("button", { name: "Start Loop" }));
 
-    // API should have been called
     await waitFor(() => {
       const calls = api.calls("/api/loops/:id/draft/start", "POST");
       expect(calls.length).toBeGreaterThan(0);
     });
   });
 
-  test("edit draft modal can delete an existing draft", async () => {
+  test("inline draft editor can delete an existing draft", async () => {
     setupBaseApi();
-    const draft = draftLoop();
-    api.get("/api/loops", () => [draft]);
+    api.get("/api/loops", () => [draftLoop()]);
     api.get("/api/workspaces", () => [WORKSPACE]);
-    api.delete("/api/loops/:id", () => ({ success: true }));
+    api.post("/api/loops/:id/purge", () => ({ success: true }));
 
-    const { getByText, getByRole, queryByRole, user } = renderWithUser(<App />);
-
-    await waitFor(() => {
-      expect(getByText("My Draft")).toBeTruthy();
-    });
-
-    await user.click(getByText("My Draft"));
+    const { getByRole, getByText, user } = renderWithUser(<App />, { route: "#/loop/draft-1" });
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Edit Draft Loop" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Edit My Draft" })).toBeTruthy();
     });
 
     await user.click(getByRole("button", { name: "Delete Draft" }));
 
     await waitFor(() => {
-      expect(getByText('Are you sure you want to delete "My Draft"? The draft will be marked as deleted and can be purged later if needed.')).toBeTruthy();
+      expect(getByText('Are you sure you want to delete "My Draft"?')).toBeTruthy();
     });
 
-    const dialogs = document.querySelectorAll('[role="dialog"]');
-    expect(dialogs.length).toBe(1);
-
-    const dialog = getByRole("dialog", { name: "Edit Draft Loop" });
-    await user.click(within(dialog).getByRole("button", { name: "Delete Draft" }));
+    const dialog = getByRole("dialog");
+    const confirmButton = Array.from(dialog.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Delete Draft",
+    );
+    expect(confirmButton).toBeTruthy();
+    await user.click(confirmButton!);
 
     await waitFor(() => {
-      const calls = api.calls("/api/loops/:id", "DELETE");
+      const calls = api.calls("/api/loops/:id/purge", "POST");
       expect(calls.length).toBeGreaterThan(0);
-    });
-
-    await waitFor(() => {
-      expect(queryByRole("heading", { name: "Edit Draft Loop" })).toBeNull();
     });
   });
 
-  // Note: "Delete draft from dashboard card" test was removed because
-  // Delete buttons were removed from dashboard cards/rows in PR #125.
-  // Drafts can now only be deleted from LoopDetails Actions tab.
-
-  test("save as draft from create loop form", async () => {
+  test("save as draft from the shell create loop form", async () => {
     setupBaseApi();
     api.get("/api/loops", () => []);
     api.get("/api/workspaces", () => [WORKSPACE]);
@@ -251,45 +206,27 @@ describe("draft workflow scenario", () => {
     api.put("/api/preferences/last-model", () => ({ success: true }));
     api.put("/api/preferences/last-directory", () => ({ success: true }));
 
-    const { getByText, getByRole, getByLabelText, user } = renderWithUser(<App />);
+    const { getByRole, getByLabelText, user } = renderWithUser(<App />, { route: "#/new/loop" });
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getByRole("heading", { name: "Start a new loop" })).toBeTruthy();
     });
 
-    // Open create modal
-    await user.click(getByText("New Loop"));
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Create New Loop" })).toBeTruthy();
+      const option = document.querySelector('select#workspace option[value="ws-1"]');
+      expect(option).toBeTruthy();
     });
-
-    // Select workspace
     const wsSelect = document.querySelector("select#workspace") as HTMLSelectElement;
     await user.selectOptions(wsSelect, "ws-1");
 
-    // Wait for form to be ready
     await waitFor(() => {
-      const draftBtn = Array.from(document.querySelectorAll("button")).find(
-        (b) => b.textContent?.includes("Save as Draft"),
-      );
-      expect(draftBtn).toBeTruthy();
+      expect(getByRole("button", { name: "Save as Draft" })).toBeTruthy();
     });
 
-    // Fill in required fields
-    const titleInput = getByLabelText(/Title/) as HTMLInputElement;
-    await user.type(titleInput, "New Draft");
+    await user.type(getByLabelText(/Title/) as HTMLInputElement, "New Draft");
+    await user.type(getByLabelText(/Prompt/) as HTMLTextAreaElement, "X");
+    await user.click(getByRole("button", { name: "Save as Draft" }));
 
-    const promptTextarea = getByLabelText(/Prompt/) as HTMLTextAreaElement;
-    await user.type(promptTextarea, "X");
-
-    // Click "Save as Draft" instead of "Create Loop"
-    const draftBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Save as Draft"),
-    );
-    expect(draftBtn).toBeTruthy();
-    await user.click(draftBtn!);
-
-    // API should have been called with draft flag
     await waitFor(() => {
       const calls = api.calls("/api/loops", "POST");
       expect(calls.length).toBeGreaterThan(0);

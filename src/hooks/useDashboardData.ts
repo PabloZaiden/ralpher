@@ -3,7 +3,7 @@
  * Manages config, health/version, models, branches, and planning directory state.
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { AppConfig, ModelInfo, HealthResponse, BranchInfo } from "../types";
 import { appFetch, setConfiguredPublicBasePath } from "../lib/public-path";
 import { useToast } from "./useToast";
@@ -70,6 +70,10 @@ export function useDashboardData(): UseDashboardDataResult {
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [currentBranch, setCurrentBranch] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("");
+  const modelsRequestIdRef = useRef(0);
+  const branchesRequestIdRef = useRef(0);
+  const defaultBranchRequestIdRef = useRef(0);
+  const planningRequestIdRef = useRef(0);
 
   // Fetch app config on mount
   useEffect(() => {
@@ -151,29 +155,42 @@ export function useDashboardData(): UseDashboardDataResult {
 
   // Fetch models when directory changes
   const fetchModels = useCallback(async (directory: string, workspaceId: string | null) => {
+    const requestId = ++modelsRequestIdRef.current;
     if (!directory || !workspaceId) {
       setModels([]);
+      setModelsLoading(false);
       return;
     }
 
     setModelsLoading(true);
     try {
       const response = await appFetch(`/api/models?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`);
+      if (requestId !== modelsRequestIdRef.current) {
+        return;
+      }
       if (response.ok) {
         const data = await response.json() as ModelInfo[];
+        if (requestId !== modelsRequestIdRef.current) {
+          return;
+        }
         setModels(data);
       } else {
         setModels([]);
       }
     } catch {
-      setModels([]);
+      if (requestId === modelsRequestIdRef.current) {
+        setModels([]);
+      }
     } finally {
-      setModelsLoading(false);
+      if (requestId === modelsRequestIdRef.current) {
+        setModelsLoading(false);
+      }
     }
   }, []);
 
   // Check planning directory
   const checkPlanningDir = useCallback(async (directory: string, workspaceId: string | null) => {
+    const requestId = ++planningRequestIdRef.current;
     if (!directory || !workspaceId) {
       setPlanningWarning(null);
       return;
@@ -183,22 +200,32 @@ export function useDashboardData(): UseDashboardDataResult {
       const response = await appFetch(
         `/api/check-planning-dir?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`
       );
+      if (requestId !== planningRequestIdRef.current) {
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
+        if (requestId !== planningRequestIdRef.current) {
+          return;
+        }
         setPlanningWarning(data.warning ?? null);
       } else {
         setPlanningWarning(null);
       }
     } catch {
-      setPlanningWarning(null);
+      if (requestId === planningRequestIdRef.current) {
+        setPlanningWarning(null);
+      }
     }
   }, []);
 
   // Fetch branches
   const fetchBranches = useCallback(async (directory: string, workspaceId: string | null) => {
+    const requestId = ++branchesRequestIdRef.current;
     if (!directory || !workspaceId) {
       setBranches([]);
       setCurrentBranch("");
+      setBranchesLoading(false);
       return;
     }
 
@@ -207,8 +234,14 @@ export function useDashboardData(): UseDashboardDataResult {
       const response = await appFetch(
         `/api/git/branches?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`
       );
+      if (requestId !== branchesRequestIdRef.current) {
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
+        if (requestId !== branchesRequestIdRef.current) {
+          return;
+        }
         setBranches(data.branches ?? []);
         setCurrentBranch(data.currentBranch ?? "");
       } else {
@@ -216,15 +249,20 @@ export function useDashboardData(): UseDashboardDataResult {
         setCurrentBranch("");
       }
     } catch {
-      setBranches([]);
-      setCurrentBranch("");
+      if (requestId === branchesRequestIdRef.current) {
+        setBranches([]);
+        setCurrentBranch("");
+      }
     } finally {
-      setBranchesLoading(false);
+      if (requestId === branchesRequestIdRef.current) {
+        setBranchesLoading(false);
+      }
     }
   }, []);
 
   // Fetch default branch
   const fetchDefaultBranch = useCallback(async (directory: string, workspaceId: string | null) => {
+    const requestId = ++defaultBranchRequestIdRef.current;
     if (!directory || !workspaceId) {
       setDefaultBranch("");
       return;
@@ -234,14 +272,22 @@ export function useDashboardData(): UseDashboardDataResult {
       const response = await appFetch(
         `/api/git/default-branch?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`
       );
+      if (requestId !== defaultBranchRequestIdRef.current) {
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
+        if (requestId !== defaultBranchRequestIdRef.current) {
+          return;
+        }
         setDefaultBranch(data.defaultBranch ?? "");
       } else {
         setDefaultBranch("");
       }
     } catch {
-      setDefaultBranch("");
+      if (requestId === defaultBranchRequestIdRef.current) {
+        setDefaultBranch("");
+      }
     }
   }, []);
 
@@ -252,18 +298,12 @@ export function useDashboardData(): UseDashboardDataResult {
       directory,
       modelsWorkspaceId,
     });
-    if (workspaceId !== modelsWorkspaceId) {
-      log.debug("Workspace changed, fetching data...");
-      setModelsWorkspaceId(workspaceId);
-      log.debug("Using directory from parameter:", directory);
-
-      fetchModels(directory, workspaceId);
-       fetchBranches(directory, workspaceId);
-       fetchDefaultBranch(directory, workspaceId);
-       checkPlanningDir(directory, workspaceId);
-    } else {
-      log.debug("Workspace unchanged, skipping fetch");
-    }
+    setModelsWorkspaceId(workspaceId);
+    log.debug("Fetching workspace data with directory:", directory);
+    fetchModels(directory, workspaceId);
+    fetchBranches(directory, workspaceId);
+    fetchDefaultBranch(directory, workspaceId);
+    checkPlanningDir(directory, workspaceId);
   }, [modelsWorkspaceId, fetchModels, checkPlanningDir, fetchBranches, fetchDefaultBranch]);
 
   // Reset state when create modal closes

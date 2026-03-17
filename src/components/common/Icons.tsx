@@ -97,3 +97,33 @@ export function GearIcon({ className = "", size = "h-4 w-4" }: IconProps) {
     </svg>
   );
 }
+
+/**
+ * Sidebar/panel icon for opening and closing the navigation rail.
+ */
+export function SidebarIcon({ className = "", size = "h-4 w-4" }: IconProps) {
+  return (
+    <svg
+      className={`${size} ${className}`.trim()}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <rect
+        x="3"
+        y="4"
+        width="18"
+        height="16"
+        rx="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9 4v16"
+      />
+    </svg>
+  );
+}

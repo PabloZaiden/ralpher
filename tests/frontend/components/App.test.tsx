@@ -1,40 +1,126 @@
-/**
- * Tests for App component (routing).
- *
- * Tests hash-based routing between Dashboard and LoopDetails views,
- * LogLevelInitializer wrapping, and navigation handlers.
- */
-
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { App } from "@/App";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor, act } from "../helpers/render";
 import { createLoop, createSshSession, createWorkspace } from "../helpers/factories";
-import { App } from "@/App";
 
 const api = createMockApi();
 const ws = createMockWebSocket();
 
-/** Set up the default API routes that App's children require. */
-function setupDefaultApi() {
-  // Dashboard needs: loops, workspaces, config, health, last-model, preferences
-  api.get("/api/loops", () => []);
-  api.get("/api/workspaces", () => []);
-  api.get("/api/ssh-sessions", () => []);
+function isoNow(): string {
+  return new Date().toISOString();
+}
+
+function createMatchMediaMock(matches: boolean): typeof window.matchMedia {
+  return (query: string) =>
+    ({
+      matches,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+}
+
+function createSshServer(overrides?: Partial<{
+  id: string;
+  name: string;
+  address: string;
+  username: string;
+}>) {
+  return {
+    config: {
+      id: overrides?.id ?? "server-1",
+      name: overrides?.name ?? "Build host",
+      address: overrides?.address ?? "server.example.com",
+      username: overrides?.username ?? "ubuntu",
+      createdAt: isoNow(),
+      updatedAt: isoNow(),
+    },
+    publicKey: {
+      algorithm: "RSA-OAEP-256" as const,
+      publicKey: "test-key",
+      fingerprint: "fingerprint",
+      version: 1,
+      createdAt: isoNow(),
+    },
+  };
+}
+
+function createStandaloneSession(serverId: string, overrides?: Partial<{ id: string; name: string }>) {
+  return {
+    config: {
+      id: overrides?.id ?? "standalone-session-1",
+      sshServerId: serverId,
+      name: overrides?.name ?? "Standalone SSH",
+      connectionMode: "dtach" as const,
+      remoteSessionName: "ralpher-standalone",
+      createdAt: isoNow(),
+      updatedAt: isoNow(),
+    },
+    state: {
+      status: "ready",
+    },
+  };
+}
+
+function setupDefaultApi(options?: {
+  loops?: ReturnType<typeof createLoop>[];
+  workspaces?: ReturnType<typeof createWorkspace>[];
+  sshSessions?: ReturnType<typeof createSshSession>[];
+  sshServers?: ReturnType<typeof createSshServer>[];
+  standaloneSessionsByServerId?: Record<string, ReturnType<typeof createStandaloneSession>[]>;
+}) {
+  const loops = options?.loops ?? [];
+  const workspaces = options?.workspaces ?? [];
+  const sshSessions = options?.sshSessions ?? [];
+  const sshServers = options?.sshServers ?? [];
+  const standaloneSessionsByServerId = options?.standaloneSessionsByServerId ?? {};
+
+  api.get("/api/loops", () => loops);
+  api.get("/api/workspaces", () => workspaces);
+  api.get("/api/ssh-sessions", () => sshSessions);
+  api.get("/api/ssh-servers", () => sshServers);
+  api.get("/api/ssh-servers/:id/sessions", (req) => standaloneSessionsByServerId[req.params["id"]!] ?? []);
   api.get("/api/config", () => ({ remoteOnly: false }));
   api.get("/api/health", () => ({ status: "ok", version: "1.0.0" }));
   api.get("/api/preferences/last-model", () => null);
   api.get("/api/preferences/log-level", () => ({ level: "info" }));
-  // LoopDetails needs: individual loop fetch, models, comments
-  api.get("/api/loops/:id", (req) =>
-    createLoop({ config: { id: req.params["id"], name: `Loop ${req.params["id"]}` } }),
-  );
+  api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
   api.get("/api/models", () => []);
+  api.get("/api/loops/:id", (req) => {
+    return loops.find((loop) => loop.config.id === req.params["id"])
+      ?? createLoop({ config: { id: req.params["id"], name: `Loop ${req.params["id"]}` } });
+  });
   api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
   api.get("/api/loops/:id/diff", () => []);
-  api.get("/api/ssh-sessions/:id", (req) =>
-    createSshSession({ config: { id: req.params["id"]!, name: `SSH ${req.params["id"]!}` } }),
-  );
+  api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+  api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+  api.get("/api/loops/:id/pull-request", () => ({
+    enabled: false,
+    destinationType: "disabled",
+    disabledReason: "disabled",
+  }));
+  api.get("/api/loops/:id/port-forwards", () => []);
+  api.get("/api/ssh-sessions/:id", (req) => {
+    return sshSessions.find((session) => session.config.id === req.params["id"])
+      ?? createSshSession({ config: { id: req.params["id"]!, name: `SSH ${req.params["id"]!}` } });
+  });
+  api.get("/api/ssh-server-sessions/:id", (req) => {
+    const session = Object.values(standaloneSessionsByServerId).flat().find((item) => item.config.id === req.params["id"]);
+    if (!session) {
+      throw new Error("Standalone session not found");
+    }
+    return session;
+  });
+  api.get("/api/ssh-servers/:id", (req) => {
+    return sshServers.find((server) => server.config.id === req.params["id"])
+      ?? createSshServer({ id: req.params["id"]! });
+  });
 }
 
 beforeEach(() => {
@@ -52,233 +138,216 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-// ─── Default route ──────────────────────────────────────────────────────────
-
-describe("default route", () => {
-  test("renders Dashboard by default when hash is empty", async () => {
-    const { getByText } = renderWithUser(<App />);
+describe("App shell", () => {
+  test("renders the shell overview by default", async () => {
+    const { getByRole, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-    });
-    // Dashboard shows "New Loop" button
-    expect(getByText("New Loop")).toBeTruthy();
-    expect(document.body.textContent?.match(/New SSH Session/g)?.length).toBe(1);
-  });
-
-  test("renders Dashboard when hash is #/", async () => {
-    window.location.hash = "/";
-
-    const { getByText } = renderWithUser(<App />);
-
-    await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-    });
-    expect(getByText("New Loop")).toBeTruthy();
-  });
-});
-
-// ─── Loop details route ─────────────────────────────────────────────────────
-
-describe("loop details route", () => {
-  test("renders LoopDetails when hash is #/loop/:id", async () => {
-    window.location.hash = "/loop/test-123";
-
-    const { getByText } = renderWithUser(<App />);
-
-    await waitFor(() => {
-      // LoopDetails header has a Back button
-      expect(getByText("← Back")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByText("Recent activity")).toBeTruthy();
+      expect(getByText("Workspace map")).toBeTruthy();
     });
   });
 
-  test("passes loopId from hash to LoopDetails", async () => {
-    const loopId = "my-loop-id";
-    api.get("/api/loops/:id", (req) =>
-      createLoop({ config: { id: req.params["id"], name: "My Test Loop" } }),
-    );
-
-    window.location.hash = `/loop/${loopId}`;
-
-    const { getByText } = renderWithUser(<App />);
+  test("renders shell-native workspace composer from the hash route", async () => {
+    const { getByRole } = renderWithUser(<App />, { route: "#/new/workspace" });
 
     await waitFor(() => {
-      expect(getByText("My Test Loop")).toBeTruthy();
+      expect(getByRole("heading", { name: "Create a workspace" })).toBeTruthy();
+      expect(getByRole("button", { name: "Create Workspace" })).toBeTruthy();
     });
   });
-});
 
-describe("ssh session route", () => {
-  test("renders SshSessionDetails when hash is #/ssh/:id", async () => {
-    window.location.hash = "/ssh/test-ssh-123";
-
-    const { getByText } = renderWithUser(<App />);
+  test("renders settings as a shell route instead of a modal", async () => {
+    const { getByRole, getByText, queryByRole } = renderWithUser(<App />, { route: "#/settings" });
 
     await waitFor(() => {
-      expect(getByText("SSH test-ssh-123")).toBeTruthy();
+      expect(getByRole("heading", { name: "Settings" })).toBeTruthy();
+      expect(getByText("Render Markdown")).toBeTruthy();
+    });
+
+    expect(queryByRole("dialog")).toBeNull();
+  });
+
+  test("renders loop details inside the shell without a back button", async () => {
+    const loop = createLoop({
+      config: { id: "loop-1", name: "Shell Loop", workspaceId: "workspace-1" },
+    });
+    setupDefaultApi({ loops: [loop] });
+    const { getAllByText, queryByRole } = renderWithUser(<App />, { route: "#/loop/loop-1" });
+
+    await waitFor(() => {
+      expect(getAllByText("Shell Loop").length).toBeGreaterThan(0);
+    });
+    expect(queryByRole("button", { name: /Back/ })).toBeNull();
+  });
+
+  test("renders workspace and SSH server detail views from dedicated shell routes", async () => {
+    const workspace = createWorkspace({ id: "workspace-1", name: "Frontend", directory: "/workspaces/frontend" });
+    const server = createSshServer({ id: "server-1", name: "Deploy host" });
+    setupDefaultApi({ workspaces: [workspace], sshServers: [server] });
+
+    const workspaceRender = renderWithUser(<App />, { route: "#/workspace/workspace-1" });
+
+    await waitFor(() => {
+      expect(workspaceRender.getByRole("heading", { name: "Frontend" })).toBeTruthy();
+      expect(workspaceRender.getAllByText("/workspaces/frontend").length).toBeGreaterThan(0);
+    });
+
+    workspaceRender.unmount();
+
+    const serverRender = renderWithUser(<App />, { route: "#/server/server-1" });
+
+    await waitFor(() => {
+      expect(serverRender.getByRole("heading", { name: "Deploy host" })).toBeTruthy();
+      expect(serverRender.getByText("No standalone sessions yet for this SSH server.")).toBeTruthy();
     });
   });
-});
 
-// ─── Hash change navigation ─────────────────────────────────────────────────
+  test("navigates to a loop when a sidebar item is clicked", async () => {
+    const workspace = createWorkspace({ id: "workspace-1", name: "Frontend", directory: "/workspaces/frontend" });
+    const loop = createLoop({
+      config: { id: "loop-1", name: "Sidebar Loop", workspaceId: workspace.id },
+      state: { status: "running", startedAt: isoNow(), currentIteration: 1 },
+    });
+    setupDefaultApi({ workspaces: [workspace], loops: [loop] });
 
-describe("hash change navigation", () => {
-  test("navigates from Dashboard to LoopDetails on hash change", async () => {
-    const { getByText } = renderWithUser(<App />);
+    const { getAllByText, user } = renderWithUser(<App />);
 
-    // Starts on Dashboard
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getAllByText("Sidebar Loop").length).toBeGreaterThan(0);
     });
 
-    // Change hash to loop details
+    await user.click(getAllByText("Sidebar Loop")[0]!);
+
+    await waitFor(() => {
+      expect(window.location.hash).toBe("#/loop/loop-1");
+    });
+  });
+
+  test("reacts to hash changes with the new shell routes", async () => {
+    const { getByRole } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+    });
+
     await act(async () => {
-      window.location.hash = "/loop/test-456";
+      window.location.hash = "/new/ssh-server";
       window.dispatchEvent(new HashChangeEvent("hashchange"));
     });
 
     await waitFor(() => {
-      expect(getByText("← Back")).toBeTruthy();
+      expect(getByRole("heading", { name: "Register a standalone SSH server" })).toBeTruthy();
     });
   });
 
-  test("navigates from LoopDetails back to Dashboard on hash change", async () => {
-    window.location.hash = "/loop/test-789";
-
-    const { getByText } = renderWithUser(<App />);
-
-    // Starts on LoopDetails
-    await waitFor(() => {
-      expect(getByText("← Back")).toBeTruthy();
-    });
-
-    // Change hash to dashboard
-    await act(async () => {
-      window.location.hash = "/";
-      window.dispatchEvent(new HashChangeEvent("hashchange"));
-    });
+  test("lets users collapse and expand sidebar sections", async () => {
+    const { getByRole, getByText, queryByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-      expect(getByText("New Loop")).toBeTruthy();
+      expect(getByRole("button", { name: "Collapse Workspaces section" })).toBeTruthy();
+      expect(getByText("No workspaces yet.")).toBeTruthy();
+    });
+
+    const collapseButton = getByRole("button", { name: "Collapse Workspaces section" });
+    expect(collapseButton).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(collapseButton);
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "Expand Workspaces section" })).toBeTruthy();
+      expect(queryByText("No workspaces yet.")).toBeNull();
+    });
+
+    await user.click(getByRole("button", { name: "Expand Workspaces section" }));
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "Collapse Workspaces section" })).toBeTruthy();
+      expect(getByText("No workspaces yet.")).toBeTruthy();
     });
   });
 
-  test("navigates back to Dashboard via Back button click", async () => {
-    window.location.hash = "/loop/test-back";
-
-    const { getByText, user } = renderWithUser(<App />);
+  test("restores collapsed sidebar sections from browser storage", async () => {
+    const firstRender = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("← Back")).toBeTruthy();
+      expect(firstRender.getByRole("button", { name: "Collapse Workspaces section" })).toBeTruthy();
     });
 
-    // Click back - this calls onBack which sets hash to "/"
-    await user.click(getByText("← Back"));
+    await firstRender.user.click(firstRender.getByRole("button", { name: "Collapse Workspaces section" }));
+
+    await waitFor(() => {
+      expect(firstRender.getByRole("button", { name: "Expand Workspaces section" })).toBeTruthy();
+      expect(firstRender.queryByText("No workspaces yet.")).toBeNull();
+    });
+
+    firstRender.unmount();
+
+    const secondRender = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(secondRender.getByRole("button", { name: "Expand Workspaces section" })).toBeTruthy();
+      expect(secondRender.queryByText("No workspaces yet.")).toBeNull();
+    });
+  });
+
+  test("hides and reopens the sidebar with header icon controls", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = createMatchMediaMock(true);
+
+    try {
+      const { getByLabelText, user } = renderWithUser(<App />);
+      const sidebar = document.querySelector("aside");
+
+      expect(sidebar).toBeTruthy();
+      expect(getByLabelText("Hide sidebar")).toBeTruthy();
+
+      await user.click(getByLabelText("Hide sidebar"));
+
+      await waitFor(() => {
+        expect(sidebar).toHaveAttribute("hidden");
+        expect(getByLabelText("Open sidebar")).toBeTruthy();
+      });
+
+      await user.click(getByLabelText("Open sidebar"));
+
+      await waitFor(() => {
+        expect(sidebar).not.toHaveAttribute("hidden");
+        expect(getByLabelText("Hide sidebar")).toBeTruthy();
+      });
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  test("settings button navigates to the shell settings view", async () => {
+    const { getByLabelText, getByRole, user } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+    });
+
+    await user.click(getByLabelText("Open settings"));
+
+    await waitFor(() => {
+      expect(window.location.hash).toBe("#/settings");
+      expect(getByRole("heading", { name: "Settings" })).toBeTruthy();
+    });
+  });
+
+  test("header brand returns to the overview route", async () => {
+    const { getByRole, user } = renderWithUser(<App />, { route: "#/settings" });
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Settings" })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: /ralpher/i }));
 
     await waitFor(() => {
       expect(window.location.hash).toBe("#/");
-    });
-  });
-});
-
-// ─── Dashboard loop selection ───────────────────────────────────────────────
-
-describe("dashboard loop selection", () => {
-  test("navigates to loop details when a loop card is clicked", async () => {
-    const loop = createLoop({
-      config: { id: "click-loop", name: "Click Me Loop", workspaceId: "ws-1" },
-      state: { status: "running", startedAt: new Date().toISOString(), currentIteration: 1 },
-    });
-    const workspace = createWorkspace({ id: "ws-1", name: "My Workspace" });
-    api.get("/api/loops", () => [loop]);
-    api.get("/api/workspaces", () => [workspace]);
-
-    const { getByText, user } = renderWithUser(<App />);
-
-    // Wait for loops to load
-    await waitFor(() => {
-      expect(getByText("Click Me Loop")).toBeTruthy();
-    });
-
-    // Click the loop card
-    await user.click(getByText("Click Me Loop"));
-
-    // Hash should have changed to loop details
-    await waitFor(() => {
-      expect(window.location.hash).toBe("#/loop/click-loop");
-    });
-  });
-});
-
-// ─── LogLevelInitializer ────────────────────────────────────────────────────
-
-describe("LogLevelInitializer", () => {
-  test("fetches log level preference on mount", async () => {
-    renderWithUser(<App />);
-
-    await waitFor(() => {
-      const logLevelCalls = api.calls("/api/preferences/log-level");
-      expect(logLevelCalls.length).toBeGreaterThan(0);
-    });
-  });
-
-  test("renders children immediately without waiting for log level", async () => {
-    // Even before log level fetch completes, Dashboard should render
-    const { getByText } = renderWithUser(<App />);
-
-    // Dashboard renders immediately
-    await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-    });
-  });
-});
-
-// ─── Edge cases ─────────────────────────────────────────────────────────────
-
-describe("edge cases", () => {
-  test("renders Dashboard for unknown hash routes", async () => {
-    window.location.hash = "/unknown/route";
-
-    const { getByText } = renderWithUser(<App />);
-
-    await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-    });
-    expect(getByText("New Loop")).toBeTruthy();
-  });
-
-  test("renders Dashboard when hash is #/loop/ with no ID", async () => {
-    window.location.hash = "/loop/";
-
-    const { getByText } = renderWithUser(<App />);
-
-    await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-    });
-  });
-
-  test("handles rapid hash changes", async () => {
-    const { getByText } = renderWithUser(<App />);
-
-    await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-    });
-
-    // Rapid hash changes
-    await act(async () => {
-      window.location.hash = "/loop/a";
-      window.dispatchEvent(new HashChangeEvent("hashchange"));
-      window.location.hash = "/loop/b";
-      window.dispatchEvent(new HashChangeEvent("hashchange"));
-      window.location.hash = "/";
-      window.dispatchEvent(new HashChangeEvent("hashchange"));
-    });
-
-    // Should end up on Dashboard
-    await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-      expect(getByText("New Loop")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
   });
 });

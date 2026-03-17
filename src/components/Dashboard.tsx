@@ -37,7 +37,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
     refresh,
     createLoop,
     createChat,
-    deleteLoop,
+    purgeLoop,
     updateLoop,
     purgeArchivedWorkspaceLoops,
   } = useLoops();
@@ -98,6 +98,14 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
       (group) => group.workspace.id === modals.workspaceSettingsModal.workspaceId
     )?.statusGroups.archived.length ?? 0;
   }, [modals.workspaceSettingsModal.workspaceId, workspaceGroups]);
+  const selectedWorkspaceLoopCount = useMemo(() => {
+    if (!modals.workspaceSettingsModal.workspaceId) {
+      return 0;
+    }
+    return workspaceGroups.find(
+      (group) => group.workspace.id === modals.workspaceSettingsModal.workspaceId
+    )?.loops.length ?? 0;
+  }, [modals.workspaceSettingsModal.workspaceId, workspaceGroups]);
 
   // Mode-aware selection handler: routes chats to #/chat/:id, loops to #/loop/:id
   const handleSelectItem = (loopId: string) => {
@@ -150,7 +158,6 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
 
   async function handleCreateWorkspaceSshSession() {
     if (workspacesLoading) {
-      toast.info("Loading SSH workspaces...");
       return;
     }
     if (workspaceError) {
@@ -191,12 +198,8 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         return result;
       }
 
-      if (result.totalArchived === 0) {
-        toast.info("No archived loops found for this workspace");
-      } else if (result.failures.length > 0) {
+      if (result.failures.length > 0) {
         toast.error(`Purged ${result.purgedCount} of ${result.totalArchived} archived loops`);
-      } else {
-        toast.success(`Purged ${result.purgedCount} archived loops`);
       }
 
       return result;
@@ -218,7 +221,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
   } = useWorkspaceServerSettings(modals.workspaceSettingsModal.workspaceId);
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900">
+    <div className="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-neutral-900">
       <DashboardHeader
         version={dashboardData.version}
         viewMode={viewMode}
@@ -315,7 +318,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         onCloseCreateModal={modals.handleCloseCreateModal}
         onCreateLoop={createLoop}
         onCreateChat={createChat}
-        onDeleteLoop={deleteLoop}
+        onDeleteDraft={purgeLoop}
         onRefresh={refresh}
         // Model/branch/workspace data
         models={dashboardData.models}
@@ -340,7 +343,6 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         onCloseSshSessionRenameModal={() => modals.setSshSessionRenameModal({ open: false, sessionId: null })}
         onRenameSshSession={async (sessionId, newName) => {
           await updateSession(sessionId, { name: newName });
-          toast.success("SSH session renamed");
         }}
         // App settings modal
         showServerSettingsModal={modals.showServerSettingsModal}
@@ -365,7 +367,9 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         resetWorkspaceConnection={resetWorkspaceConnection}
         updateWorkspaceSettings={updateWorkspaceSettings}
         archivedLoopCount={selectedWorkspaceArchivedLoopCount}
+        workspaceLoopCount={selectedWorkspaceLoopCount}
         purgeArchivedWorkspaceLoops={handlePurgeArchivedWorkspaceLoops}
+        onDeleteWorkspace={deleteWorkspace}
         refreshWorkspaces={refreshWorkspaces}
         remoteOnly={dashboardData.remoteOnly}
         // Create workspace modal

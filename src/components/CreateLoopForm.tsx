@@ -2,7 +2,7 @@
  * CreateLoopForm component for creating new Ralph Loops.
  */
 
-import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
+import { useState, useEffect, useRef, useCallback, type FormEvent, type ReactNode } from "react";
 import type { CreateLoopRequest, CreateChatRequest, ModelInfo, BranchInfo, SshServer } from "../types";
 import type { Workspace } from "../types/workspace";
 import { DEFAULT_LOOP_CONFIG } from "../types/loop";
@@ -44,6 +44,8 @@ export interface CreateLoopFormProps {
   onSubmit: (request: CreateLoopFormSubmitRequest) => Promise<boolean>;
   /** Callback when form is cancelled */
   onCancel: () => void;
+  /** Whether to call onCancel after a successful submit */
+  closeOnSuccess?: boolean;
   /** Whether form is submitting */
   loading?: boolean;
   /** Available models */
@@ -98,6 +100,8 @@ export interface CreateLoopFormProps {
    * This is useful for rendering actions in a Modal footer (sticky position).
    */
   renderActions?: (state: CreateLoopFormActionState) => void;
+  /** Optional extra actions rendered beside the draft/save action group. */
+  leadingActions?: ReactNode;
   /** Mode: "loop" (default) or "chat" — controls which fields are shown */
   mode?: "loop" | "chat";
 }
@@ -107,6 +111,7 @@ export type CreateLoopFormSubmitRequest = CreateLoopRequest | CreateChatRequest;
 export function CreateLoopForm({
   onSubmit,
   onCancel,
+  closeOnSuccess = true,
   loading = false,
   models = [],
   modelsLoading = false,
@@ -125,6 +130,7 @@ export function CreateLoopForm({
   workspaceError = null,
   registeredSshServers = [],
   renderActions,
+  leadingActions,
   mode = "loop",
 }: CreateLoopFormProps) {
   const isEditing = !!editLoopId;
@@ -182,6 +188,11 @@ export function CreateLoopForm({
     setName(initialLoopData?.name ?? "");
     nameRef.current = initialLoopData?.name ?? "";
   }, [initialLoopData?.name]);
+
+  useEffect(() => {
+    setSelectedWorkspaceId(initialLoopData?.workspaceId);
+    setSelectedWorkspaceDirectory(initialLoopData?.directory ?? "");
+  }, [initialLoopData?.workspaceId, initialLoopData?.directory]);
 
   // Check if the selected model is enabled (connected)
   const selectedModelEnabled = selectedModel ? isModelEnabled(models, selectedModel) : false;
@@ -400,8 +411,7 @@ export function CreateLoopForm({
 
     try {
       const success = await onSubmit(request);
-      if (success) {
-        // Close the modal on successful submission
+      if (success && closeOnSuccess) {
         onCancel();
       }
     } catch (error) {
@@ -436,12 +446,15 @@ export function CreateLoopForm({
 
   // Form ref for programmatic submission
   const formRef = useRef<HTMLFormElement>(null);
+  const cancelActionRef = useRef(onCancel);
+  const submitActionRef = useRef<() => void>(() => {});
+  const saveAsDraftActionRef = useRef<() => void>(() => {});
   
   // Check if form can be saved as a draft (basic fields only, model connectivity not required)
-  const canSaveDraft = !!selectedWorkspaceId && !!prompt.trim() && (isChatMode || !!name.trim());
+  const canSaveDraft = !isChatMode && !!selectedWorkspaceId && !!prompt.trim() && !!name.trim();
   
   // Check if form can be submitted to start a loop (also needs model to be enabled)
-  const canSubmit = canSaveDraft && selectedModelEnabled;
+  const canSubmit = !!selectedWorkspaceId && !!prompt.trim() && (isChatMode || !!name.trim()) && selectedModelEnabled;
 
   const canGenerateTitle = !isChatMode && !!selectedWorkspaceId && !!prompt.trim() && !isSubmitting && !generatingTitle;
   
@@ -460,6 +473,30 @@ export function CreateLoopForm({
       handleSubmit(syntheticEvent, true);
     }
   }, [canSaveDraft, handleSubmit]);
+
+  useEffect(() => {
+    cancelActionRef.current = onCancel;
+  }, [onCancel]);
+
+  useEffect(() => {
+    submitActionRef.current = handleSubmitClick;
+  }, [handleSubmitClick]);
+
+  useEffect(() => {
+    saveAsDraftActionRef.current = handleSaveAsDraftClick;
+  }, [handleSaveAsDraftClick]);
+
+  const handleExternalCancel = useCallback(() => {
+    cancelActionRef.current();
+  }, []);
+
+  const handleExternalSubmit = useCallback(() => {
+    submitActionRef.current();
+  }, []);
+
+  const handleExternalSaveAsDraft = useCallback(() => {
+    saveAsDraftActionRef.current();
+  }, []);
   
   // Call renderActions whenever action state changes
   const renderActionsRef = useRef<{
@@ -499,14 +536,13 @@ export function CreateLoopForm({
         isEditing,
         isEditingDraft,
         planMode,
-        onCancel,
-        onSubmit: handleSubmitClick,
-        onSaveAsDraft: handleSaveAsDraftClick,
+        onCancel: handleExternalCancel,
+        onSubmit: handleExternalSubmit,
+        onSaveAsDraft: handleExternalSaveAsDraft,
       });
     }
-    // Note: renderActions, onCancel, handleSubmitClick, handleSaveAsDraftClick are intentionally NOT in deps
-    // They are callbacks that change frequently but don't need to retrigger this effect
-    // We only want to notify parent when the actual state values change
+    // Note: renderActions is intentionally NOT in deps. We only want to notify
+    // parent layouts when the actual action state changes, not on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSubmitting, canSubmit, canSaveDraft, isEditing, isEditingDraft, planMode]);
 
@@ -586,7 +622,7 @@ export function CreateLoopForm({
             setUserChangedBranch(true);
           }}
           disabled={branchesLoading || branches.length === 0}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 font-mono text-sm"
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600 disabled:opacity-50 font-mono text-sm"
         >
           {branchesLoading && (
             <option value="">Loading branches...</option>
@@ -642,7 +678,7 @@ export function CreateLoopForm({
           onChange={setSelectedModel}
           models={models}
           loading={modelsLoading}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600 disabled:opacity-50"
         />
         {!modelsLoading && models.length > 0 && groupModelsByProvider(models).connectedProviders.length === 0 && (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
@@ -682,7 +718,7 @@ export function CreateLoopForm({
               }
             }
           }}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
         >
           <option value="">No template (custom prompt)</option>
           {PROMPT_TEMPLATES.map((t) => (
@@ -723,7 +759,7 @@ export function CreateLoopForm({
               placeholder="Short loop title"
               required
               maxLength={100}
-              className="block flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="block flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
             />
             <Button
               type="button"
@@ -775,7 +811,7 @@ export function CreateLoopForm({
           placeholder={isChatMode ? "Ask a question or describe what you want to do..." : (planMode ? "Describe what you want to achieve. The AI will create a detailed plan based on this." : "Do everything that's pending in the plan")}
           required
           rows={3}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 min-h-[76px] sm:min-h-[120px] resize-y"
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600 min-h-[76px] sm:min-h-[120px] resize-y"
         />
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           {isChatMode ? "Your first message to start the conversation" : "The prompt sent to the AI agent at the start of each iteration"}
@@ -790,7 +826,7 @@ export function CreateLoopForm({
             type="checkbox"
             checked={planMode}
             onChange={(e) => setPlanMode(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-300"
           />
           <div className="flex-1">
             <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -815,7 +851,7 @@ export function CreateLoopForm({
             type="checkbox"
             checked={planModeAutoReply}
             onChange={(e) => setPlanModeAutoReply(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-300"
           />
           <div className="flex-1">
             <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -835,7 +871,7 @@ export function CreateLoopForm({
             type="checkbox"
             checked={useWorktree}
             onChange={(e) => setUseWorktree(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-300"
           />
           <div className="flex-1">
             <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -853,7 +889,7 @@ export function CreateLoopForm({
       <button
         type="button"
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+        className="text-sm text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100"
       >
         {showAdvanced ? "Hide" : "Show"} advanced options
       </button>
@@ -861,7 +897,7 @@ export function CreateLoopForm({
 
       {/* Advanced options — hidden in chat mode */}
       {!isChatMode && showAdvanced && (
-        <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-md">
+        <div className="space-y-4 p-4 bg-gray-50 dark:bg-neutral-800 rounded-md">
           {/* Max iterations */}
           <div>
             <label
@@ -877,7 +913,7 @@ export function CreateLoopForm({
               onChange={(e) => setMaxIterations(e.target.value)}
               min="1"
               placeholder="Unlimited"
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Leave empty for unlimited iterations
@@ -899,7 +935,7 @@ export function CreateLoopForm({
               onChange={(e) => setMaxConsecutiveErrors(e.target.value)}
               min="0"
               placeholder="10"
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Failsafe exit after this many identical consecutive errors. 0 = unlimited. (default: 10)
@@ -921,7 +957,7 @@ export function CreateLoopForm({
               onChange={(e) => setActivityTimeoutSeconds(e.target.value)}
               min="60"
               placeholder={String(DEFAULT_LOOP_CONFIG.activityTimeoutSeconds)}
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Time without AI activity before treating as error and retrying. Minimum: 60 seconds. (default: {DEFAULT_LOOP_CONFIG.activityTimeoutSeconds})
@@ -935,7 +971,7 @@ export function CreateLoopForm({
                 type="checkbox"
                 checked={clearPlanningFolder}
                 onChange={(e) => setClearPlanningFolder(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-300"
               />
               <div className="flex-1">
                 <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -953,18 +989,20 @@ export function CreateLoopForm({
       {/* Actions - only render inline if renderActions prop is not provided */}
       {!renderActions && (
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-          {/* Left side - Save as Draft / Update Draft button */}
-          {(!isEditing || isEditingDraft) && (
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={(e) => handleSubmit(e, true)}
-              disabled={isSubmitting || !canSaveDraft}
-              loading={isSubmitting}
-            >
-              {isEditingDraft ? "Update Draft" : "Save as Draft"}
-            </Button>
-          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {leadingActions}
+            {!isChatMode && (!isEditing || isEditingDraft) && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={(e) => handleSubmit(e, true)}
+                disabled={isSubmitting || !canSaveDraft}
+                loading={isSubmitting}
+              >
+                {isEditingDraft ? "Update Draft" : "Save as Draft"}
+              </Button>
+            )}
+          </div>
           
           {/* Right side - Cancel and Create/Start buttons */}
           <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 sm:ml-auto">
@@ -977,9 +1015,11 @@ export function CreateLoopForm({
               Cancel
             </Button>
             <Button type="submit" loading={isSubmitting} disabled={isSubmitting || !canSubmit}>
-              {isEditing 
-                ? (planMode ? "Start Plan" : "Start Loop")
-                : (planMode ? "Create Plan" : "Create Loop")
+              {isChatMode
+                ? "Start Chat"
+                : isEditing
+                  ? (planMode ? "Start Plan" : "Start Loop")
+                  : (planMode ? "Create Plan" : "Create Loop")
               }
             </Button>
           </div>

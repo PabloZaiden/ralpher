@@ -72,7 +72,7 @@ export const ProvisioningJobView = memo(function ProvisioningJobView({
 
   if (loading && !snapshot) {
     return (
-      <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
+      <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-gray-700 dark:bg-neutral-900 dark:text-gray-300">
         Loading provisioning job…
       </div>
     );
@@ -80,7 +80,7 @@ export const ProvisioningJobView = memo(function ProvisioningJobView({
 
   if (!snapshot) {
     return (
-      <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
+      <div className="rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-gray-700 dark:bg-neutral-900 dark:text-gray-300">
         No provisioning job selected.
       </div>
     );
@@ -137,10 +137,10 @@ export const ProvisioningJobView = memo(function ProvisioningJobView({
                 key={step}
                 className={`rounded-md border px-3 py-2 text-sm ${
                   isCurrent
-                    ? "border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-100"
+                    ? "border-blue-300 bg-blue-50 text-blue-900 dark:border-gray-700 dark:bg-neutral-900/60 dark:text-blue-100"
                     : isDone
                       ? "border-green-200 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950/30 dark:text-green-100"
-                      : "border-gray-200 bg-white text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+                      : "border-gray-200 bg-white text-gray-600 dark:border-gray-700 dark:bg-neutral-900 dark:text-gray-300"
                 }`}
               >
                 {label}
@@ -159,7 +159,7 @@ export const ProvisioningJobView = memo(function ProvisioningJobView({
         </div>
         <div
           ref={logContainerRef}
-          className="max-h-80 overflow-auto rounded-md border border-gray-200 bg-gray-950 p-3 font-mono text-xs text-gray-100 dark:border-gray-700"
+          className="max-h-80 overflow-auto rounded-md border border-gray-200 bg-neutral-950 p-3 font-mono text-xs text-gray-100 dark:border-gray-700"
         >
           {logs.length === 0 ? (
             <div className="text-gray-400">Waiting for output…</div>

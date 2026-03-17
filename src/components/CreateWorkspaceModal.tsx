@@ -11,17 +11,7 @@ import type { AgentProvider, ServerSettings, SshServer } from "../types";
 import type { CreateWorkspaceRequest } from "../types/workspace";
 import { appFetch } from "../lib/public-path";
 import { useProvisioningJob } from "../hooks/useProvisioningJob";
-
-function getCreateWorkspaceDefaultServerSettings(): ServerSettings {
-  return {
-    agent: {
-      provider: "copilot",
-      transport: "ssh",
-      hostname: "localhost",
-      port: 22,
-    },
-  };
-}
+import { getCreateWorkspaceDefaultServerSettings } from "../types/settings";
 
 export interface CreateWorkspaceModalProps {
   /** Whether the modal is open */
@@ -296,7 +286,7 @@ export function CreateWorkspaceModal({
             className={`rounded-md px-3 py-2 text-sm font-medium ${
               mode === "manual"
                 ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                : "bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-gray-300"
             }`}
             onClick={() => setMode("manual")}
           >
@@ -307,7 +297,7 @@ export function CreateWorkspaceModal({
             className={`rounded-md px-3 py-2 text-sm font-medium ${
               mode === "automatic"
                 ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                : "bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-gray-300"
             }`}
             onClick={() => setMode("automatic")}
           >
@@ -330,7 +320,7 @@ export function CreateWorkspaceModal({
             onChange={(e) => setName(e.target.value)}
             placeholder="My Project"
             required
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
           />
         </div>
 
@@ -350,7 +340,7 @@ export function CreateWorkspaceModal({
                 onChange={(e) => setDirectory(e.target.value)}
                 placeholder="/path/to/project"
                 required
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-mono placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 font-mono"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Must be a git repository. Directory cannot be changed after creation.
@@ -379,7 +369,7 @@ export function CreateWorkspaceModal({
                 id="automatic-ssh-server"
                 value={automaticServerId}
                 onChange={(e) => setAutomaticServerId(e.target.value)}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
               >
                 <option value="">Select a saved SSH server</option>
                 {registeredSshServers.map((server) => (
@@ -409,7 +399,7 @@ export function CreateWorkspaceModal({
                 onChange={(e) => setAutomaticRepoUrl(e.target.value)}
                 placeholder="git@github.com:owner/repo.git"
                 required
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-mono placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 font-mono"
               />
             </div>
 
@@ -427,7 +417,7 @@ export function CreateWorkspaceModal({
                 onChange={(e) => setAutomaticBasePath(e.target.value)}
                 placeholder="/workspaces"
                 required
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-mono placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 font-mono"
               />
             </div>
 
@@ -442,7 +432,7 @@ export function CreateWorkspaceModal({
                 id="automatic-provider"
                 value={automaticProvider}
                 onChange={(e) => setAutomaticProvider(e.target.value as AgentProvider)}
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
               >
                 <option value="copilot">copilot</option>
                 <option value="opencode">opencode</option>
@@ -464,7 +454,7 @@ export function CreateWorkspaceModal({
                   value={automaticPassword}
                   onChange={(e) => setAutomaticPassword(e.target.value)}
                   placeholder="Leave blank for key-based auth"
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   The password is encrypted in the browser, exchanged for a short-lived token, and kept in memory only while provisioning runs.

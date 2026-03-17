@@ -117,6 +117,23 @@ describe("Frontend Test Infrastructure", () => {
       }
     });
 
+    test("tracks default route calls in call history", async () => {
+      const api = createMockApi();
+      api.install();
+
+      try {
+        const res = await fetch("/api/workspaces/ws-123/agents-md");
+        expect(res.status).toBe(200);
+
+        const calls = api.calls("/api/workspaces/:id/agents-md", "GET");
+        expect(calls).toHaveLength(1);
+        expect(calls[0]?.params).toEqual({ id: "ws-123" });
+        expect(api.allCalls()).toHaveLength(1);
+      } finally {
+        api.uninstall();
+      }
+    });
+
     test("handles MockApiError for error responses", async () => {
       const api = createMockApi();
       api.post("/api/loops", () => {

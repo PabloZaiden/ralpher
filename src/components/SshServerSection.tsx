@@ -70,7 +70,7 @@ export function SshServerSection({
             return (
               <div
                 key={server.config.id}
-                className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800"
+                className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-neutral-800"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -112,7 +112,7 @@ export function SshServerSection({
                             key={session.config.id}
                             type="button"
                             onClick={() => onSelectSession(session.config.id)}
-                            className="rounded-md border border-gray-200 bg-gray-50 p-3 text-left transition-colors hover:border-gray-300 hover:bg-white dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-gray-600 dark:hover:bg-gray-900"
+                            className="rounded-md border border-gray-200 bg-gray-50 p-3 text-left transition-colors hover:border-gray-300 hover:bg-white dark:border-gray-700 dark:bg-neutral-900/40 dark:hover:border-gray-600 dark:hover:bg-neutral-900"
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">

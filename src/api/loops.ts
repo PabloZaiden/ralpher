@@ -785,8 +785,8 @@ export const loopsControlRoutes = {
     /**
      * POST /api/loops/:id/purge - Permanently delete a loop from storage.
      * 
-     * Removes the loop from the database entirely. Only works for loops
-     * in final states (merged, pushed, deleted).
+     * Removes the loop from the database entirely. Drafts are removed immediately.
+     * Other loops only work in final states (merged, pushed, deleted).
      * 
      * @returns Success response
      */

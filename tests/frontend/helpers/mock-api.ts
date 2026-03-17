@@ -94,6 +94,29 @@ function extractPath(url: string): string {
   }
 }
 
+function createRouteConfig(method: HttpMethod, pattern: string, handler: RouteHandler, statusCode = 200): RouteConfig {
+  const { regex, paramNames } = patternToRegex(pattern);
+  return { pattern, regex, paramNames, method, handler, statusCode };
+}
+
+const DEFAULT_ROUTES: RouteConfig[] = [
+  createRouteConfig("GET", "/api/loops/:id/port-forwards", () => []),
+  createRouteConfig("GET", "/api/loops/:id/pull-request", () => ({
+    enabled: false,
+    destinationType: "disabled",
+    disabledReason: "disabled",
+  })),
+  createRouteConfig("GET", "/api/workspaces/:id/agents-md", () => ({
+    content: "# AGENTS.md",
+    fileExists: true,
+    analysis: {
+      isOptimized: false,
+      currentVersion: null,
+      updateAvailable: false,
+    },
+  })),
+];
+
 /**
  * Create a mock API instance for intercepting fetch calls.
  *
@@ -111,16 +134,16 @@ export function createMockApi(): MockApiInstance {
   const routes: RouteConfig[] = [];
   const callHistory: CallRecord[] = [];
   let originalFetch: typeof globalThis.fetch | null = null;
+  let originalWindowFetch: typeof window.fetch | null = null;
 
   function addRoute(method: HttpMethod, pattern: string, handler: RouteHandler, statusCode = 200): void {
-    const { regex, paramNames } = patternToRegex(pattern);
-    routes.push({ pattern, regex, paramNames, method, handler, statusCode });
+    routes.push(createRouteConfig(method, pattern, handler, statusCode));
   }
 
-  function matchRoute(method: HttpMethod, path: string): { route: RouteConfig; params: RouteParams } | null {
+  function matchRoute(routeSet: RouteConfig[], method: HttpMethod, path: string): { route: RouteConfig; params: RouteParams } | null {
     // Iterate in reverse so that later registrations take priority (allows overriding defaults)
-    for (let i = routes.length - 1; i >= 0; i--) {
-      const route = routes[i]!;
+    for (let i = routeSet.length - 1; i >= 0; i--) {
+      const route = routeSet[i]!;
       if (route.method !== method) continue;
       const match = route.regex.exec(path);
       if (match) {
@@ -139,7 +162,7 @@ export function createMockApi(): MockApiInstance {
     const method = ((init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase()) as HttpMethod;
     const path = extractPath(url);
 
-    const result = matchRoute(method, path);
+    const result = matchRoute(routes, method, path) ?? matchRoute(DEFAULT_ROUTES, method, path);
     if (!result) {
       // Return 404 for unmatched routes
       return new Response(JSON.stringify({ error: "not_found", message: `No mock handler for ${method} ${path}` }), {
@@ -233,13 +256,23 @@ export function createMockApi(): MockApiInstance {
       if (!originalFetch) {
         originalFetch = globalThis.fetch;
       }
+      if (typeof window !== "undefined" && !originalWindowFetch) {
+        originalWindowFetch = window.fetch;
+      }
       globalThis.fetch = mockFetch as typeof globalThis.fetch;
+      if (typeof window !== "undefined") {
+        window.fetch = mockFetch as typeof window.fetch;
+      }
     },
 
     uninstall: () => {
       if (originalFetch) {
         globalThis.fetch = originalFetch;
         originalFetch = null;
+      }
+      if (typeof window !== "undefined" && originalWindowFetch) {
+        window.fetch = originalWindowFetch;
+        originalWindowFetch = null;
       }
     },
   };

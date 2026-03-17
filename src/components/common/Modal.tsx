@@ -133,7 +133,7 @@ export function Modal({
       <div
         ref={modalRef}
         tabIndex={-1}
-        className={`relative flex w-full min-w-0 ${sizeClasses[size]} max-h-[calc(100vh-1.5rem)] max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-lg bg-white shadow-xl sm:max-h-[calc(100vh-2.5rem)] sm:max-h-[calc(100dvh-2.5rem)] dark:bg-gray-800`}
+        className={`relative flex w-full min-w-0 ${sizeClasses[size]} max-h-[calc(100vh-1.5rem)] max-h-[calc(100dvh-1.5rem)] flex-col overflow-hidden rounded-lg bg-white shadow-xl sm:max-h-[calc(100vh-2.5rem)] sm:max-h-[calc(100dvh-2.5rem)] dark:bg-neutral-800`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
@@ -156,7 +156,7 @@ export function Modal({
           {showCloseButton && (
             <button
               onClick={onClose}
-              className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+              className="flex-shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-500 dark:hover:bg-neutral-700 dark:hover:text-gray-300"
               aria-label="Close"
             >
               <svg

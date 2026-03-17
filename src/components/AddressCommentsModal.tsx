@@ -130,14 +130,14 @@ export function AddressCommentsModal({
             placeholder="Enter your review comments here. Be specific about what needs to be changed or improved..."
             rows={10}
             disabled={submitting}
-            className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-neutral-700 px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
           />
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
             The loop will restart and address these comments by making targeted changes to the code.
           </p>
         </div>
 
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3">
+        <div className="bg-blue-50 dark:bg-neutral-900/40 border border-blue-200 dark:border-gray-700 rounded-md p-3">
           <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
             How it works
           </h4>

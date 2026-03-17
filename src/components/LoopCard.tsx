@@ -86,7 +86,7 @@ export function LoopCard({
                   e.stopPropagation();
                   onRename();
                 }}
-                className="flex-shrink-0 p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-700"
+                className="flex-shrink-0 p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-neutral-700"
                 aria-label={isChatMode ? "Rename chat" : "Rename loop"}
                 title={isChatMode ? "Rename chat" : "Rename loop"}
               >

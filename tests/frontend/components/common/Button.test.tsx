@@ -23,7 +23,7 @@ describe("Button", () => {
     test("applies primary variant classes by default", () => {
       const { getByRole } = renderWithUser(<Button>Primary</Button>);
       const btn = getByRole("button");
-      expect(btn.className).toContain("bg-blue-600");
+      expect(btn.className).toContain("bg-gray-900");
     });
 
     test("applies secondary variant classes", () => {
