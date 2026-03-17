@@ -242,8 +242,8 @@ describe("loop lifecycle scenario", () => {
     await user.click(confirmBtn!);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-      expect(getByText("Overview")).toBeTruthy();
+      expect(getByRole("button", { name: "RALPHER" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
   });
 
@@ -308,7 +308,7 @@ describe("loop lifecycle scenario", () => {
     });
     setupApi(loop);
 
-    const { getAllByText, getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getAllByText("Nav Loop").length).toBeGreaterThan(0);
@@ -319,11 +319,11 @@ describe("loop lifecycle scenario", () => {
       expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
     });
 
-    await user.click(getByText("Ralpher"));
+    await user.click(getByRole("button", { name: "RALPHER" }));
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-      expect(getByText("Everything lives in one shell now")).toBeTruthy();
+      expect(getByRole("button", { name: "RALPHER" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
   });
 });

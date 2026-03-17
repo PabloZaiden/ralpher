@@ -50,6 +50,19 @@ function setupBaseApi() {
   }));
 }
 
+function getSectionActionButton(sectionTitle: string, actionLabel = "New"): HTMLButtonElement | undefined {
+  const section = Array.from(document.querySelectorAll("section")).find((candidate) =>
+    candidate.textContent?.includes(sectionTitle)
+  );
+  if (!section) {
+    return undefined;
+  }
+
+  return Array.from(section.querySelectorAll("button")).find((button) =>
+    button.textContent?.trim() === actionLabel
+  ) as HTMLButtonElement | undefined;
+}
+
 beforeEach(() => {
   api.reset();
   api.install();
@@ -72,13 +85,15 @@ describe("workspace management scenario", () => {
     api.get("/api/loops", () => []);
     api.get("/api/workspaces", () => []);
 
-    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
+    const { getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
-    await user.click(getAllByText("New Workspace")[0]!);
+    const workspacesNewButton = getSectionActionButton("Workspaces");
+    expect(workspacesNewButton).toBeTruthy();
+    await user.click(workspacesNewButton!);
 
     await waitFor(() => {
       expect(getByRole("heading", { name: "Create a workspace" })).toBeTruthy();
@@ -119,13 +134,15 @@ describe("workspace management scenario", () => {
       updatedAt: new Date().toISOString(),
     }]);
 
-    const { getAllByText, getByRole, user } = renderWithUser(<App />);
+    const { getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getAllByText("New Workspace").length).toBeGreaterThan(0);
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
-    await user.click(getAllByText("New Workspace")[0]!);
+    const workspacesNewButton = getSectionActionButton("Workspaces");
+    expect(workspacesNewButton).toBeTruthy();
+    await user.click(workspacesNewButton!);
     await waitFor(() => {
       expect(getByRole("heading", { name: "Create a workspace" })).toBeTruthy();
     });
@@ -222,13 +239,15 @@ describe("workspace management scenario", () => {
       updatedAt: new Date().toISOString(),
     }]);
 
-    const { getAllByText, getByRole, queryByLabelText, user } = renderWithUser(<App />);
+    const { getByRole, queryByLabelText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getAllByText("New Workspace").length).toBeGreaterThan(0);
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
-    await user.click(getAllByText("New Workspace")[0]!);
+    const workspacesNewButton = getSectionActionButton("Workspaces");
+    expect(workspacesNewButton).toBeTruthy();
+    await user.click(workspacesNewButton!);
     await waitFor(() => {
       expect(getByRole("heading", { name: "Create a workspace" })).toBeTruthy();
     });
@@ -282,13 +301,15 @@ describe("workspace management scenario", () => {
     api.get("/api/loops", () => []);
     api.get("/api/workspaces", () => []);
 
-    const { getAllByText, getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
-    await user.click(getAllByText("New Workspace")[0]!);
+    const workspacesNewButton = getSectionActionButton("Workspaces");
+    expect(workspacesNewButton).toBeTruthy();
+    await user.click(workspacesNewButton!);
     await waitFor(() => {
       expect(getByText("Create a workspace")).toBeTruthy();
     });
@@ -298,7 +319,7 @@ describe("workspace management scenario", () => {
 
     await waitFor(() => {
       expect(window.location.hash).toBe("#/");
-      expect(getByText("Everything lives in one shell now")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
   });
 

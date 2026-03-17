@@ -47,6 +47,19 @@ function setupBaseApi() {
   api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
 }
 
+function getSectionActionButton(sectionTitle: string, actionLabel = "New"): HTMLButtonElement | undefined {
+  const section = Array.from(document.querySelectorAll("section")).find((candidate) =>
+    candidate.textContent?.includes(sectionTitle)
+  );
+  if (!section) {
+    return undefined;
+  }
+
+  return Array.from(section.querySelectorAll("button")).find((button) =>
+    button.textContent?.trim() === actionLabel
+  ) as HTMLButtonElement | undefined;
+}
+
 beforeEach(() => {
   api.reset();
   api.install();
@@ -155,13 +168,15 @@ describe("error handling scenario", () => {
       409,
     );
 
-    const { getAllByText, getByRole, getByLabelText, getByText, user } = renderWithUser(<App />);
+    const { getByRole, getByLabelText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
-    await user.click(getAllByText("New Loop")[0]!);
+    const loopsNewButton = getSectionActionButton("Loops");
+    expect(loopsNewButton).toBeTruthy();
+    await user.click(loopsNewButton!);
     await waitFor(() => {
       expect(getByRole("heading", { name: "Start a new loop" })).toBeTruthy();
     });

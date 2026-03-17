@@ -29,14 +29,12 @@ import { LoopDetails } from "./LoopDetails";
 import { ServerSettingsForm } from "./ServerSettingsForm";
 import { SshSessionDetails } from "./SshSessionDetails";
 import { WorkspaceSelector } from "./WorkspaceSelector";
-import { Badge, Button, GearIcon, getStatusBadgeVariant } from "./common";
+import { Badge, Button, GearIcon, SidebarIcon, getStatusBadgeVariant } from "./common";
 
 const log = createLogger("AppShell");
 const SIDEBAR_SECTION_STORAGE_KEY = "ralpher.sidebarSectionCollapseState";
 
 type SidebarSectionId =
-  | "navigate"
-  | "create"
   | "workspaces"
   | "drafts"
   | "loops"
@@ -47,8 +45,6 @@ type SidebarSectionId =
 type SidebarSectionCollapseState = Partial<Record<SidebarSectionId, boolean>>;
 
 const SIDEBAR_SECTION_IDS: SidebarSectionId[] = [
-  "navigate",
-  "create",
   "workspaces",
   "drafts",
   "loops",
@@ -56,6 +52,14 @@ const SIDEBAR_SECTION_IDS: SidebarSectionId[] = [
   "workspace-ssh",
   "ssh-servers",
 ];
+
+function isDesktopShellViewport(): boolean {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+    return false;
+  }
+
+  return window.matchMedia("(min-width: 1024px)").matches;
+}
 
 function getSidebarSectionStorage(): Storage | null {
   if (typeof window === "undefined") {
@@ -380,20 +384,9 @@ function OverviewView({
 
   return (
     <ShellPanel
-      eyebrow="Workspace shell"
-      title="Everything lives in one shell now"
-      description="Move between workspaces, loops, chats, SSH sessions, and servers without leaving the main application frame. Primary create flows now open in the main panel instead of the old dashboard modal hub."
-      actions={(
-        <>
-          <Button variant="secondary" onClick={() => onNavigate({ view: "compose", kind: "workspace" })}>
-            New Workspace
-          </Button>
-          <Button variant="secondary" onClick={() => onNavigate({ view: "compose", kind: "ssh-session" })}>
-            New SSH Session
-          </Button>
-          <Button onClick={() => onNavigate({ view: "compose", kind: "loop" })}>New Loop</Button>
-        </>
-      )}
+      eyebrow="Overview"
+      title="Overview"
+      description="Recent activity, workspace coverage, and quick access to active work."
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Workspaces" value={workspaces.length} meta="Tracked repositories and hosts." />
@@ -416,7 +409,7 @@ function OverviewView({
           </div>
           <div className="space-y-2">
             {recentLoops.length === 0 ? (
-              <EmptySection message="Create a loop, chat, workspace, or SSH session from the sidebar to populate the shell." />
+              <EmptySection message="Recent activity will appear here as you start work." />
             ) : (
               recentLoops.map((loop) => {
                 const route = loop.config.mode === "chat"
@@ -457,7 +450,7 @@ function OverviewView({
           </div>
           <div className="space-y-2">
             {workspaceGroups.length === 0 ? (
-              <EmptySection message="No workspaces yet. Start by creating one in the shell." />
+              <EmptySection message="No workspaces yet. Start by creating one." />
             ) : (
               workspaceGroups.map((group) => (
                 <button
@@ -1006,7 +999,7 @@ function SshSessionComposer({
     <ShellPanel
       eyebrow="Compose SSH"
       title="Create an SSH session"
-      description="Create workspace-backed or standalone SSH sessions in the main panel. On mobile, the drawer closes as soon as the session opens."
+      description="Create a workspace-backed or standalone SSH session."
       actions={<Button variant="ghost" onClick={onCancel}>Cancel</Button>}
     >
       <form className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
@@ -1159,7 +1152,7 @@ function SshServerComposer({
     <ShellPanel
       eyebrow="Compose SSH server"
       title="Register a standalone SSH server"
-      description="Store server metadata in-shell. Passwords remain browser-only and are still only requested when genuinely needed."
+      description="Store server details. Passwords stay in the browser and are only requested when needed."
       actions={<Button variant="ghost" onClick={onCancel}>Cancel</Button>}
     >
       <form className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
@@ -1277,12 +1270,50 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     saveSidebarSectionCollapseState(collapsedSections);
   }, [collapsedSections]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+    const handleChange = (event: MediaQueryListEvent) => {
+      if (event.matches) {
+        setSidebarOpen(false);
+      }
+    };
+
+    if (mediaQuery.matches) {
+      setSidebarOpen(false);
+    }
+
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
   const shellLoading = loopsLoading || sshSessionsLoading || sshServersLoading || workspacesLoading;
   const shellErrors = [loopsError, sshSessionsError, sshServersError, workspaceError].filter(Boolean);
 
   const navigateWithinShell = (nextRoute: ShellRoute) => {
     setSidebarOpen(false);
     onNavigate(nextRoute);
+  };
+
+  const openSidebar = () => {
+    if (isDesktopShellViewport()) {
+      setSidebarCollapsed(false);
+      return;
+    }
+
+    setSidebarOpen(true);
+  };
+
+  const hideSidebar = () => {
+    if (isDesktopShellViewport()) {
+      setSidebarCollapsed(true);
+      return;
+    }
+
+    setSidebarOpen(false);
   };
 
   function isSectionCollapsed(sectionId: SidebarSectionId): boolean {
@@ -1410,8 +1441,8 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             ? composeWorkspace ? `Start a new chat in ${composeWorkspace.name}` : "Start a new chat"
             : composeWorkspace ? `Start a new loop in ${composeWorkspace.name}` : "Start a new loop"}
           description={kind === "chat"
-            ? "Pick a workspace, choose a model, and start an interactive conversation without leaving the shell."
-            : "Create a new Ralph loop in the main panel. The old modal-first flow is replaced with an in-shell composer."}
+            ? "Pick a workspace and model to start an interactive conversation."
+            : "Pick a workspace, model, and prompt to start a new loop."}
           actions={(
             <Button
               variant="ghost"
@@ -1454,7 +1485,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         <ShellPanel
           eyebrow="Compose workspace"
           title="Create a workspace"
-          description="Add a repository or remote workspace directly in the shell. This covers the primary manual flow without returning to the old dashboard modal stack."
+          description="Add a repository or remote workspace."
           actions={(
             <Button variant="ghost" onClick={() => navigateWithinShell({ view: "home" })}>
               Cancel
@@ -1532,7 +1563,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
 
   function renderMainContent() {
     if (shellLoading && route.view === "home") {
-      return <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading shell…</div>;
+      return <div className="p-6 text-sm text-gray-500 dark:text-gray-400">Loading…</div>;
     }
 
     if (route.view === "loop") {
@@ -1573,6 +1604,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
       return (
         <LoopDetails
           loopId={route.loopId}
+          onBack={() => navigateWithinShell({ view: "home" })}
           showBackButton={false}
           onSelectSshSession={(sshSessionId) => navigateWithinShell({ view: "ssh", sshSessionId })}
         />
@@ -1583,6 +1615,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
       return (
         <LoopDetails
           loopId={route.chatId}
+          onBack={() => navigateWithinShell({ view: "home" })}
           showBackButton={false}
           onSelectSshSession={(sshSessionId) => navigateWithinShell({ view: "ssh", sshSessionId })}
         />
@@ -1590,7 +1623,13 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     }
 
     if (route.view === "ssh") {
-      return <SshSessionDetails sshSessionId={route.sshSessionId} showBackButton={false} />;
+      return (
+        <SshSessionDetails
+          sshSessionId={route.sshSessionId}
+          onBack={() => navigateWithinShell({ view: "home" })}
+          showBackButton={false}
+        />
+      );
     }
 
     if (route.view === "workspace") {
@@ -1640,7 +1679,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         <ShellPanel
           eyebrow="App settings"
           title="Settings"
-          description="Manage global display, developer, import/export, and destructive server actions without leaving the shell."
+          description="Manage display, developer, import/export, and server controls."
           actions={(
             <Button variant="ghost" onClick={() => navigateWithinShell({ view: "home" })}>
               Back to overview
@@ -1686,98 +1725,31 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
       />
 
       <aside
+        hidden={sidebarCollapsed && !sidebarOpen}
+        aria-hidden={sidebarCollapsed && !sidebarOpen}
         className={[
-          "fixed inset-y-0 left-0 z-40 flex w-80 max-w-[86vw] flex-col border-r border-gray-200 bg-gray-50/95 backdrop-blur transition dark:border-gray-800 dark:bg-gray-900/95 lg:static lg:max-w-none",
-          sidebarCollapsed ? "lg:w-24" : "lg:w-80",
-          sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex w-80 max-w-[86vw] flex-col border-r border-gray-200 bg-gray-50/95 backdrop-blur transition-all duration-200 dark:border-gray-800 dark:bg-gray-900/95 lg:relative lg:inset-auto lg:z-10 lg:max-w-none lg:shrink-0",
+          sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          sidebarCollapsed
+            ? "lg:w-0 lg:min-w-0 lg:-translate-x-full lg:overflow-hidden lg:border-r-0 lg:opacity-0 lg:pointer-events-none"
+            : "lg:w-80 lg:translate-x-0 lg:opacity-100",
         ].join(" ")}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-gray-200 px-4 py-4 dark:border-gray-800">
+        <div className="flex h-16 items-center justify-between gap-3 border-b border-gray-200 px-4 dark:border-gray-800">
+          <span className="text-xs font-semibold uppercase tracking-[0.24em] text-gray-500 dark:text-gray-400">
+            Browse
+          </span>
           <button
             type="button"
-            onClick={() => navigateWithinShell({ view: "home" })}
-            className="min-w-0 text-left"
+            onClick={hideSidebar}
+            aria-label={sidebarOpen ? "Close sidebar" : "Hide sidebar"}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
           >
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-gray-500 dark:text-gray-400">Ralpher</p>
-            {!sidebarCollapsed && <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Unified assistant shell</p>}
+            <SidebarIcon size="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setSidebarCollapsed((current) => !current)}
-              className="hidden rounded-xl border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100 lg:inline-flex"
-            >
-              {sidebarCollapsed ? "Expand" : "Collapse"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(false)}
-              className="rounded-xl border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100 lg:hidden"
-            >
-              Close
-            </button>
-          </div>
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-3 py-4 dark-scrollbar">
-          <ShellSection
-            title="Navigate"
-            collapsed={isSectionCollapsed("navigate")}
-            onToggle={() => toggleSectionCollapsed("navigate")}
-          >
-            <SectionItem
-              active={route.view === "home"}
-              title={sidebarCollapsed ? "Home" : "Overview"}
-              subtitle={sidebarCollapsed ? undefined : "Recent work, counts, and quick actions"}
-              onClick={() => navigateWithinShell({ view: "home" })}
-            />
-            <SectionItem
-              active={route.view === "settings"}
-              title="Settings"
-              subtitle={sidebarCollapsed ? undefined : "Global preferences and maintenance"}
-              onClick={() => navigateWithinShell({ view: "settings" })}
-            />
-          </ShellSection>
-
-          <ShellSection
-            title="Create"
-            actionLabel={sidebarCollapsed ? undefined : "Loop"}
-            onAction={sidebarCollapsed ? undefined : () => navigateWithinShell({ view: "compose", kind: "loop" })}
-            collapsed={isSectionCollapsed("create")}
-            onToggle={() => toggleSectionCollapsed("create")}
-          >
-            <SectionItem
-              active={route.view === "compose" && route.kind === "loop"}
-              title={sidebarCollapsed ? "Loop" : "New Loop"}
-              subtitle={sidebarCollapsed ? undefined : "Run a task-oriented Ralph loop"}
-              onClick={() => navigateWithinShell({ view: "compose", kind: "loop" })}
-            />
-            <SectionItem
-              active={route.view === "compose" && route.kind === "chat"}
-              title={sidebarCollapsed ? "Chat" : "New Chat"}
-              subtitle={sidebarCollapsed ? undefined : "Start an interactive assistant thread"}
-              onClick={() => navigateWithinShell({ view: "compose", kind: "chat" })}
-            />
-            <SectionItem
-              active={route.view === "compose" && route.kind === "workspace"}
-              title={sidebarCollapsed ? "Workspace" : "New Workspace"}
-              subtitle={sidebarCollapsed ? undefined : "Register a repo or remote workspace"}
-              onClick={() => navigateWithinShell({ view: "compose", kind: "workspace" })}
-            />
-            <SectionItem
-              active={route.view === "compose" && route.kind === "ssh-session"}
-              title={sidebarCollapsed ? "Session" : "New SSH Session"}
-              subtitle={sidebarCollapsed ? undefined : "Create workspace or standalone SSH"}
-              onClick={() => navigateWithinShell({ view: "compose", kind: "ssh-session" })}
-            />
-            <SectionItem
-              active={route.view === "compose" && route.kind === "ssh-server"}
-              title={sidebarCollapsed ? "Server" : "New SSH Server"}
-              subtitle={sidebarCollapsed ? undefined : "Register a standalone server"}
-              onClick={() => navigateWithinShell({ view: "compose", kind: "ssh-server" })}
-            />
-          </ShellSection>
-
           <ShellSection
             title="Workspaces"
             count={workspaces.length}
@@ -1794,7 +1766,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                   key={workspace.id}
                   active={route.view === "workspace" && route.workspaceId === workspace.id}
                   title={workspace.name}
-                  subtitle={sidebarCollapsed ? undefined : workspace.directory}
+                  subtitle={workspace.directory}
                   onClick={() => navigateWithinShell({ view: "workspace", workspaceId: workspace.id })}
                 />
               ))
@@ -1815,7 +1787,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                   key={loop.config.id}
                   active={route.view === "loop" && route.loopId === loop.config.id}
                   title={loop.config.name}
-                  subtitle={sidebarCollapsed ? undefined : loop.config.directory}
+                  subtitle={loop.config.directory}
                   badge={getStatusLabel(loop.state.status, loop.state.syncState)}
                   onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
                 />
@@ -1839,7 +1811,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                   key={loop.config.id}
                   active={route.view === "loop" && route.loopId === loop.config.id}
                   title={loop.config.name}
-                  subtitle={sidebarCollapsed ? undefined : loop.config.directory}
+                  subtitle={loop.config.directory}
                   badge={getStatusLabel(loop.state.status, loop.state.syncState)}
                   onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
                 />
@@ -1863,7 +1835,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                   key={chat.config.id}
                   active={route.view === "chat" && route.chatId === chat.config.id}
                   title={chat.config.name}
-                  subtitle={sidebarCollapsed ? undefined : chat.config.directory}
+                  subtitle={chat.config.directory}
                   badge={getStatusLabel(chat.state.status, chat.state.syncState)}
                   onClick={() => navigateWithinShell({ view: "chat", chatId: chat.config.id })}
                 />
@@ -1887,7 +1859,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                   key={session.config.id}
                   active={route.view === "ssh" && route.sshSessionId === session.config.id}
                   title={session.config.name}
-                  subtitle={sidebarCollapsed ? undefined : sshWorkspaces.find((workspace) => workspace.id === session.config.workspaceId)?.name ?? session.config.directory}
+                  subtitle={sshWorkspaces.find((workspace) => workspace.id === session.config.workspaceId)?.name ?? session.config.directory}
                   badge={session.state.status}
                   onClick={() => navigateWithinShell({ view: "ssh", sshSessionId: session.config.id })}
                 />
@@ -1913,11 +1885,11 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                     <SectionItem
                       active={route.view === "ssh-server" && route.serverId === server.config.id}
                       title={server.config.name}
-                      subtitle={sidebarCollapsed ? undefined : `${server.config.username}@${server.config.address}`}
+                      subtitle={`${server.config.username}@${server.config.address}`}
                       badge={serverSessions.length > 0 ? String(serverSessions.length) : undefined}
                       onClick={() => navigateWithinShell({ view: "ssh-server", serverId: server.config.id })}
                     />
-                    {!sidebarCollapsed && serverSessions.map((session) => (
+                    {serverSessions.map((session) => (
                       <SectionItem
                         key={session.config.id}
                         active={route.view === "ssh" && route.sshSessionId === session.config.id}
@@ -1937,21 +1909,8 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-gray-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-gray-800 dark:bg-gray-950/85 sm:px-6">
+        <div className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-gray-200 bg-white/90 px-4 backdrop-blur dark:border-gray-800 dark:bg-gray-950/85 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setSidebarOpen(true)}
-              className="inline-flex h-10 items-center justify-center rounded-xl border border-gray-200 bg-white px-3 text-sm font-medium text-gray-700 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-200 dark:hover:border-gray-700 dark:hover:text-gray-100 lg:hidden"
-            >
-              Menu
-            </button>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{currentTitle}</p>
-              <p className="truncate text-xs text-gray-500 dark:text-gray-400">Persistent sidebar shell</p>
-            </div>
-          </div>
-          <>
             <button
               type="button"
               onClick={() => navigateWithinShell({ view: "settings" })}
@@ -1960,7 +1919,35 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             >
               <GearIcon size="h-5 w-5" />
             </button>
-          </>
+            <button
+              type="button"
+              onClick={openSidebar}
+              aria-label="Open navigation"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100 lg:hidden"
+            >
+              <SidebarIcon size="h-5 w-5" />
+            </button>
+            {sidebarCollapsed && (
+              <button
+                type="button"
+                onClick={openSidebar}
+                aria-label="Open sidebar"
+                className="hidden h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100 lg:inline-flex"
+              >
+                <SidebarIcon size="h-5 w-5" />
+              </button>
+            )}
+            <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">{currentTitle}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigateWithinShell({ view: "home" })}
+            className="min-w-0 text-right"
+          >
+            <span className="truncate text-xs font-semibold uppercase tracking-[0.24em] text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100">
+              RALPHER
+            </span>
+          </button>
         </div>
 
         {shellErrors.length > 0 && (

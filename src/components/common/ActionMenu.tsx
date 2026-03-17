@@ -64,7 +64,7 @@ export function ActionMenu({ items, ariaLabel = "Actions" }: ActionMenuProps) {
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
-        className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-gray-900 text-white transition-colors hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 dark:bg-gray-100 dark:text-gray-950 dark:hover:bg-gray-200 dark:focus:ring-gray-500"
         aria-label={ariaLabel}
         aria-expanded={isOpen}
         aria-haspopup="true"

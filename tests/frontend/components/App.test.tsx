@@ -12,6 +12,20 @@ function isoNow(): string {
   return new Date().toISOString();
 }
 
+function createMatchMediaMock(matches: boolean): typeof window.matchMedia {
+  return (query: string) =>
+    ({
+      matches,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+}
+
 function createSshServer(overrides?: Partial<{
   id: string;
   name: string;
@@ -126,12 +140,12 @@ afterEach(() => {
 
 describe("App shell", () => {
   test("renders the shell overview by default", async () => {
-    const { getByText } = renderWithUser(<App />);
+    const { getByRole, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Unified assistant shell")).toBeTruthy();
-      expect(getByText("Everything lives in one shell now")).toBeTruthy();
-      expect(getByText("Workspace shell")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByText("Recent activity")).toBeTruthy();
+      expect(getByText("Workspace map")).toBeTruthy();
     });
   });
 
@@ -212,10 +226,10 @@ describe("App shell", () => {
   });
 
   test("reacts to hash changes with the new shell routes", async () => {
-    const { getByText, getByRole } = renderWithUser(<App />);
+    const { getByRole } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Everything lives in one shell now")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
     await act(async () => {
@@ -229,28 +243,28 @@ describe("App shell", () => {
   });
 
   test("lets users collapse and expand sidebar sections", async () => {
-    const { getByRole, queryByRole, user } = renderWithUser(<App />);
+    const { getByRole, getByText, queryByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByRole("button", { name: "Collapse Create section" })).toBeTruthy();
-      expect(getByRole("button", { name: /Run a task-oriented Ralph loop/ })).toBeTruthy();
+      expect(getByRole("button", { name: "Collapse Workspaces section" })).toBeTruthy();
+      expect(getByText("No workspaces yet.")).toBeTruthy();
     });
 
-    const collapseButton = getByRole("button", { name: "Collapse Create section" });
+    const collapseButton = getByRole("button", { name: "Collapse Workspaces section" });
     expect(collapseButton).toHaveAttribute("aria-expanded", "true");
 
     await user.click(collapseButton);
 
     await waitFor(() => {
-      expect(getByRole("button", { name: "Expand Create section" })).toBeTruthy();
-      expect(queryByRole("button", { name: /Run a task-oriented Ralph loop/ })).toBeNull();
+      expect(getByRole("button", { name: "Expand Workspaces section" })).toBeTruthy();
+      expect(queryByText("No workspaces yet.")).toBeNull();
     });
 
-    await user.click(getByRole("button", { name: "Expand Create section" }));
+    await user.click(getByRole("button", { name: "Expand Workspaces section" }));
 
     await waitFor(() => {
-      expect(getByRole("button", { name: "Collapse Create section" })).toBeTruthy();
-      expect(getByRole("button", { name: /Run a task-oriented Ralph loop/ })).toBeTruthy();
+      expect(getByRole("button", { name: "Collapse Workspaces section" })).toBeTruthy();
+      expect(getByText("No workspaces yet.")).toBeTruthy();
     });
   });
 
@@ -258,14 +272,14 @@ describe("App shell", () => {
     const firstRender = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(firstRender.getByRole("button", { name: "Collapse Create section" })).toBeTruthy();
+      expect(firstRender.getByRole("button", { name: "Collapse Workspaces section" })).toBeTruthy();
     });
 
-    await firstRender.user.click(firstRender.getByRole("button", { name: "Collapse Create section" }));
+    await firstRender.user.click(firstRender.getByRole("button", { name: "Collapse Workspaces section" }));
 
     await waitFor(() => {
-      expect(firstRender.getByRole("button", { name: "Expand Create section" })).toBeTruthy();
-      expect(firstRender.queryByRole("button", { name: /Run a task-oriented Ralph loop/ })).toBeNull();
+      expect(firstRender.getByRole("button", { name: "Expand Workspaces section" })).toBeTruthy();
+      expect(firstRender.queryByText("No workspaces yet.")).toBeNull();
     });
 
     firstRender.unmount();
@@ -273,16 +287,45 @@ describe("App shell", () => {
     const secondRender = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(secondRender.getByRole("button", { name: "Expand Create section" })).toBeTruthy();
-      expect(secondRender.queryByRole("button", { name: /Run a task-oriented Ralph loop/ })).toBeNull();
+      expect(secondRender.getByRole("button", { name: "Expand Workspaces section" })).toBeTruthy();
+      expect(secondRender.queryByText("No workspaces yet.")).toBeNull();
     });
   });
 
+  test("hides and reopens the sidebar with header icon controls", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = createMatchMediaMock(true);
+
+    try {
+      const { getByLabelText, user } = renderWithUser(<App />);
+      const sidebar = document.querySelector("aside");
+
+      expect(sidebar).toBeTruthy();
+      expect(getByLabelText("Hide sidebar")).toBeTruthy();
+
+      await user.click(getByLabelText("Hide sidebar"));
+
+      await waitFor(() => {
+        expect(sidebar).toHaveAttribute("hidden");
+        expect(getByLabelText("Open sidebar")).toBeTruthy();
+      });
+
+      await user.click(getByLabelText("Open sidebar"));
+
+      await waitFor(() => {
+        expect(sidebar).not.toHaveAttribute("hidden");
+        expect(getByLabelText("Hide sidebar")).toBeTruthy();
+      });
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
   test("settings button navigates to the shell settings view", async () => {
-    const { getByLabelText, getByRole, getByText, user } = renderWithUser(<App />);
+    const { getByLabelText, getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Everything lives in one shell now")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
     await user.click(getByLabelText("Open settings"));
@@ -290,6 +333,21 @@ describe("App shell", () => {
     await waitFor(() => {
       expect(window.location.hash).toBe("#/settings");
       expect(getByRole("heading", { name: "Settings" })).toBeTruthy();
+    });
+  });
+
+  test("header brand returns to the overview route", async () => {
+    const { getByRole, user } = renderWithUser(<App />, { route: "#/settings" });
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Settings" })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: "RALPHER" }));
+
+    await waitFor(() => {
+      expect(window.location.hash).toBe("#/");
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
   });
 });

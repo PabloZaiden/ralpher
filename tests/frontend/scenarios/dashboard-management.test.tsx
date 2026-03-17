@@ -80,12 +80,12 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops", () => []);
     api.get("/api/workspaces", () => [WORKSPACE_A]);
 
-    const { getByText } = renderWithUser(<App />);
+    const { getByRole, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Everything lives in one shell now")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
-    expect(getByText("Create a loop, chat, workspace, or SSH session from the sidebar to populate the shell.")).toBeTruthy();
+    expect(getByText("Recent activity will appear here as you start work.")).toBeTruthy();
   });
 
   test("overview shows recent loops and the workspace map", async () => {
@@ -153,7 +153,7 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops/:id", () => loop);
     api.get("/api/workspaces", () => [WORKSPACE_A]);
 
-    const { getAllByText, getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getAllByText("Round Trip").length).toBeGreaterThan(0);
@@ -164,12 +164,12 @@ describe("dashboard management scenario", () => {
       expect(window.location.hash).toBe("#/loop/round-trip-1");
     });
 
-    await user.click(getByText("Ralpher"));
+    await user.click(getByRole("button", { name: "RALPHER" }));
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
-      expect(getAllByText("New Loop").length).toBeGreaterThan(0);
-      expect(getByText("Everything lives in one shell now")).toBeTruthy();
+      expect(getByRole("button", { name: "RALPHER" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByText("Recent activity")).toBeTruthy();
     });
   });
 
@@ -178,10 +178,10 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops", () => []);
     api.get("/api/workspaces", () => []);
 
-    const { getByLabelText, getByRole, getByText, user } = renderWithUser(<App />);
+    const { getByLabelText, getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
     });
 
     await user.click(getByLabelText("Open settings"));
