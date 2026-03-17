@@ -83,7 +83,7 @@ describe("dashboard management scenario", () => {
     const { getByRole, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
     expect(getByText("Recent activity will appear here as you start work.")).toBeTruthy();
   });
@@ -168,7 +168,7 @@ describe("dashboard management scenario", () => {
 
     await waitFor(() => {
       expect(getByRole("button", { name: /ralpher/i })).toBeTruthy();
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
       expect(getByText("Recent activity")).toBeTruthy();
     });
   });
@@ -181,7 +181,7 @@ describe("dashboard management scenario", () => {
     const { getByLabelText, getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
 
     await user.click(getByLabelText("Open settings"));

@@ -143,7 +143,7 @@ describe("App shell", () => {
     const { getByRole, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
       expect(getByText("Recent activity")).toBeTruthy();
       expect(getByText("Workspace map")).toBeTruthy();
     });
@@ -229,7 +229,7 @@ describe("App shell", () => {
     const { getByRole } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
 
     await act(async () => {
@@ -325,7 +325,7 @@ describe("App shell", () => {
     const { getByLabelText, getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
 
     await user.click(getByLabelText("Open settings"));
@@ -347,7 +347,7 @@ describe("App shell", () => {
 
     await waitFor(() => {
       expect(window.location.hash).toBe("#/");
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
   });
 });
