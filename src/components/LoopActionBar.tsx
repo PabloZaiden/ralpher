@@ -193,7 +193,7 @@ export function LoopActionBar({
             onChange={(e) => setMessage(e.target.value)}
             placeholder={isPlanning ? "Send feedback on the plan..." : isChatMode ? "Type a message..." : "Send a message to steer the agent..."}
             disabled={disabled || isSubmitting}
-            className="flex-1 min-w-0 h-9 text-sm px-3 rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+            className="flex-1 min-w-0 h-9 text-sm px-3 rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
           />
 
           {/* Submit button */}

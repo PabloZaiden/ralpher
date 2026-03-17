@@ -69,6 +69,17 @@
     }
   }
 
+  input::placeholder,
+  textarea::placeholder {
+    color: currentColor;
+    opacity: 0.42;
+  }
+
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    opacity: 0.24;
+  }
+
   /* Custom scrollbar for dark backgrounds */
   .dark-scrollbar {
     scrollbar-width: thin;

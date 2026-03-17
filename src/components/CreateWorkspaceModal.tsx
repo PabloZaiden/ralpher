@@ -330,7 +330,7 @@ export function CreateWorkspaceModal({
             onChange={(e) => setName(e.target.value)}
             placeholder="My Project"
             required
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
           />
         </div>
 
@@ -350,7 +350,7 @@ export function CreateWorkspaceModal({
                 onChange={(e) => setDirectory(e.target.value)}
                 placeholder="/path/to/project"
                 required
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-mono placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-mono"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 Must be a git repository. Directory cannot be changed after creation.
@@ -409,7 +409,7 @@ export function CreateWorkspaceModal({
                 onChange={(e) => setAutomaticRepoUrl(e.target.value)}
                 placeholder="git@github.com:owner/repo.git"
                 required
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-mono placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-mono"
               />
             </div>
 
@@ -427,7 +427,7 @@ export function CreateWorkspaceModal({
                 onChange={(e) => setAutomaticBasePath(e.target.value)}
                 placeholder="/workspaces"
                 required
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-mono placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 font-mono"
               />
             </div>
 
@@ -464,7 +464,7 @@ export function CreateWorkspaceModal({
                   value={automaticPassword}
                   onChange={(e) => setAutomaticPassword(e.target.value)}
                   placeholder="Leave blank for key-based auth"
-                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+                  className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
                 />
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   The password is encrypted in the browser, exchanged for a short-lived token, and kept in memory only while provisioning runs.

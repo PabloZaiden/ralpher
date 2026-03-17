@@ -725,7 +725,7 @@ export function CreateLoopForm({
               placeholder="Short loop title"
               required
               maxLength={100}
-              className="block flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="block flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600"
             />
             <Button
               type="button"
@@ -777,7 +777,7 @@ export function CreateLoopForm({
           placeholder={isChatMode ? "Ask a question or describe what you want to do..." : (planMode ? "Describe what you want to achieve. The AI will create a detailed plan based on this." : "Do everything that's pending in the plan")}
           required
           rows={3}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500 min-h-[76px] sm:min-h-[120px] resize-y"
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 min-h-[76px] sm:min-h-[120px] resize-y"
         />
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           {isChatMode ? "Your first message to start the conversation" : "The prompt sent to the AI agent at the start of each iteration"}
@@ -879,7 +879,7 @@ export function CreateLoopForm({
               onChange={(e) => setMaxIterations(e.target.value)}
               min="1"
               placeholder="Unlimited"
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Leave empty for unlimited iterations
@@ -901,7 +901,7 @@ export function CreateLoopForm({
               onChange={(e) => setMaxConsecutiveErrors(e.target.value)}
               min="0"
               placeholder="10"
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Failsafe exit after this many identical consecutive errors. 0 = unlimited. (default: 10)
@@ -923,7 +923,7 @@ export function CreateLoopForm({
               onChange={(e) => setActivityTimeoutSeconds(e.target.value)}
               min="60"
               placeholder={String(DEFAULT_LOOP_CONFIG.activityTimeoutSeconds)}
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Time without AI activity before treating as error and retrying. Minimum: 60 seconds. (default: {DEFAULT_LOOP_CONFIG.activityTimeoutSeconds})

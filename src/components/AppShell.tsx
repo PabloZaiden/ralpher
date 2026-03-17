@@ -1739,14 +1739,31 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           <span className="text-xs font-semibold uppercase tracking-[0.24em] text-gray-500 dark:text-gray-400">
             Browse
           </span>
-          <button
-            type="button"
-            onClick={hideSidebar}
-            aria-label={sidebarOpen ? "Close sidebar" : "Hide sidebar"}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
-          >
-            <SidebarIcon size="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => navigateWithinShell({ view: "settings" })}
+              aria-label="Open settings"
+              aria-current={route.view === "settings" ? "page" : undefined}
+              className={[
+                "inline-flex h-10 w-10 items-center justify-center rounded-xl border bg-white shadow-sm transition dark:bg-gray-900",
+                route.view === "settings"
+                  ? "border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100"
+                  : "border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100",
+              ].join(" ")}
+              title="Settings"
+            >
+              <GearIcon size="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={hideSidebar}
+              aria-label={sidebarOpen ? "Close sidebar" : "Hide sidebar"}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
+            >
+              <SidebarIcon size="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-3 py-4 dark-scrollbar">
@@ -1911,14 +1928,6 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-gray-200 bg-white/90 px-4 backdrop-blur dark:border-gray-800 dark:bg-gray-950/85 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigateWithinShell({ view: "settings" })}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
-              aria-label="Open settings"
-            >
-              <GearIcon size="h-5 w-5" />
-            </button>
             <button
               type="button"
               onClick={openSidebar}

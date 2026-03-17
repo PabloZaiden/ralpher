@@ -137,7 +137,7 @@ export const ProvisioningJobView = memo(function ProvisioningJobView({
                 key={step}
                 className={`rounded-md border px-3 py-2 text-sm ${
                   isCurrent
-                    ? "border-blue-300 bg-blue-50 text-blue-900 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-100"
+                    ? "border-blue-300 bg-blue-50 text-blue-900 dark:border-gray-700 dark:bg-gray-900/60 dark:text-blue-100"
                     : isDone
                       ? "border-green-200 bg-green-50 text-green-900 dark:border-green-800 dark:bg-green-950/30 dark:text-green-100"
                       : "border-gray-200 bg-white text-gray-600 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"

@@ -220,7 +220,7 @@ export function WorkspaceSettingsModal({
             onChange={(e) => setName(e.target.value)}
             placeholder="My Workspace"
             required
-            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
           />
         </div>
 
@@ -335,7 +335,7 @@ export function WorkspaceSettingsModal({
             )}
 
             {optimizer.status?.analysis.updateAvailable && optimizer.status.analysis.isOptimized && (
-              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900">
+              <div className="flex items-center gap-2 mb-3 p-3 rounded-md bg-blue-50 dark:bg-gray-900/40 border border-blue-200 dark:border-gray-700">
                 <span className="text-sm text-blue-700 dark:text-blue-300">
                   An updated version of the Ralpher guidelines is available.
                 </span>
