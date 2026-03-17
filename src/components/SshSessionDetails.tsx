@@ -93,8 +93,7 @@ function CompactBar({
 
 const touchButtonClassName = "min-h-[28px] shrink-0 whitespace-nowrap px-1.5 py-0.5 text-[11px]";
 const TERMINAL_FONT_SIZE_PX = 12;
-const TERMINAL_NERD_FONT_FAMILIES = [
-  "Ralpher Terminal Nerd Font",
+const TERMINAL_SYMBOL_FONT_FAMILIES = [
   "Liga SFMono Nerd Font",
   "MesloLGS NF",
   "MonaspiceNe Nerd Font Mono",
@@ -112,7 +111,9 @@ const TERMINAL_NERD_FONT_FAMILIES = [
   "Symbols Nerd Font Mono",
   "Symbols Nerd Font",
 ] as const;
+const TERMINAL_BUNDLED_NERD_FONT_FAMILIES = ["Ralpher Terminal Nerd Font"] as const;
 const TERMINAL_TEXT_FONT_FAMILIES = [
+  "SFMono-Regular",
   "SF Mono",
   "Menlo",
   "Monaco",
@@ -130,30 +131,48 @@ function buildTerminalFontFamily(fontFamilies: readonly string[]) {
   return fontFamilies.map((fontFamily) => formatTerminalFontFamily(fontFamily)).join(", ");
 }
 
-// Safari canvas rendering does not reliably fall back for Nerd Font private-use glyphs,
-// so prefer patched monospace families before the plain text-only system fonts.
+// Prefer locally installed patched fonts so the browser terminal tracks the host's
+// native terminal appearance more closely. Keep Nerd Fonts only as fallbacks for
+// symbol/private-use glyphs so the main text shape stays closer to native macOS terminals.
 const TERMINAL_FONT_FAMILY = buildTerminalFontFamily([
-  ...TERMINAL_NERD_FONT_FAMILIES,
   ...TERMINAL_TEXT_FONT_FAMILIES,
+  ...TERMINAL_SYMBOL_FONT_FAMILIES,
+  ...TERMINAL_BUNDLED_NERD_FONT_FAMILIES,
 ]);
 const TERMINAL_PADDING_X_PX = 2;
 const TERMINAL_PADDING_BOTTOM_PX = 2;
 const TERMINAL_PADDING_TOP_PX = 4;
+const TERMINAL_OSC_QUERY_SEQUENCE_START = "\u001b]";
+const TERMINAL_OSC_STRING_TERMINATOR = "\u001b\\";
+const TERMINAL_OSC_BELL_TERMINATOR = "\u0007";
+const TERMINAL_OSC_C1_TERMINATOR = "\u009c";
 const TERMINAL_MOUSE_BUTTON_MODE = 1000;
 const TERMINAL_MOUSE_DRAG_MODE = 1002;
 const TERMINAL_MOUSE_ANY_MOTION_MODE = 1003;
 const TERMINAL_MOUSE_SGR_MODE = 1006;
 const TERMINAL_THEME = {
-  background: "#111827",
-  foreground: "#d1d5db",
-  cursor: "#f9fafb",
-  cursorAccent: "#111827",
-  selectionBackground: "#374151",
-  selectionForeground: "#f9fafb",
-  black: "#111827",
-  white: "#d1d5db",
-  brightBlack: "#4b5563",
-  brightWhite: "#f9fafb",
+  background: "#1e1e1e",
+  foreground: "#d4d4d4",
+  cursor: "#aeafad",
+  cursorAccent: "#1e1e1e",
+  selectionBackground: "#264f78",
+  selectionForeground: "#ffffff",
+  black: "#000000",
+  red: "#cd3131",
+  green: "#0dbc79",
+  yellow: "#e5e510",
+  blue: "#2472c8",
+  magenta: "#bc3fbc",
+  cyan: "#11a8cd",
+  white: "#e5e5e5",
+  brightBlack: "#666666",
+  brightRed: "#f14c4c",
+  brightGreen: "#23d18b",
+  brightYellow: "#f5f543",
+  brightBlue: "#3b8eea",
+  brightMagenta: "#d670d6",
+  brightCyan: "#29b8db",
+  brightWhite: "#ffffff",
 } as const;
 
 let ghosttyInitPromise: Promise<void> | null = null;
@@ -175,7 +194,7 @@ async function resolveTerminalFontFamily() {
   }
 
   await Promise.allSettled(
-    TERMINAL_NERD_FONT_FAMILIES.map((fontFamily) =>
+    [...TERMINAL_SYMBOL_FONT_FAMILIES, ...TERMINAL_BUNDLED_NERD_FONT_FAMILIES].map((fontFamily) =>
       document.fonts.load(
         `${TERMINAL_FONT_SIZE_PX}px ${buildTerminalFontFamily([fontFamily])}`,
         TERMINAL_GLYPH_SAMPLE,
@@ -184,18 +203,18 @@ async function resolveTerminalFontFamily() {
   );
   await document.fonts.ready;
 
-  for (const fontFamily of TERMINAL_NERD_FONT_FAMILIES) {
-    if (
+  const availableSymbolFonts = [...TERMINAL_SYMBOL_FONT_FAMILIES, ...TERMINAL_BUNDLED_NERD_FONT_FAMILIES]
+    .filter((fontFamily) =>
       document.fonts.check(
         `${TERMINAL_FONT_SIZE_PX}px ${buildTerminalFontFamily([fontFamily])}`,
         TERMINAL_GLYPH_SAMPLE,
       )
-    ) {
-      return buildTerminalFontFamily([fontFamily, ...TERMINAL_TEXT_FONT_FAMILIES]);
-    }
-  }
+    );
 
-  return TERMINAL_FONT_FAMILY;
+  return buildTerminalFontFamily([
+    ...TERMINAL_TEXT_FONT_FAMILIES,
+    ...availableSymbolFonts,
+  ]);
 }
 
 async function remeasureTerminalFont(terminal: Terminal, fitAddon: FitAddon | null) {
@@ -217,6 +236,222 @@ async function remeasureTerminalFont(terminal: Terminal, fitAddon: FitAddon | nu
 
   terminal.renderer.resize(terminal.cols, terminal.rows);
   terminal.renderer.render(terminal.wasmTerm, true, terminal.getViewportY());
+}
+
+function toOscRgb(color: string): string | null {
+  const match = /^#([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+  if (!match) {
+    return null;
+  }
+
+  return `rgb:${match[1]}/${match[2]}/${match[3]}`;
+}
+
+function buildTerminalOscColorReply(command: "10" | "11"): string | null {
+  const color = command === "10" ? TERMINAL_THEME.foreground : TERMINAL_THEME.background;
+  const rgb = toOscRgb(color);
+  return rgb ? `${TERMINAL_OSC_QUERY_SEQUENCE_START}${command};${rgb}${TERMINAL_OSC_STRING_TERMINATOR}` : null;
+}
+
+const TERMINAL_ANSI_PALETTE = [
+  TERMINAL_THEME.black,
+  TERMINAL_THEME.red,
+  TERMINAL_THEME.green,
+  TERMINAL_THEME.yellow,
+  TERMINAL_THEME.blue,
+  TERMINAL_THEME.magenta,
+  TERMINAL_THEME.cyan,
+  TERMINAL_THEME.white,
+  TERMINAL_THEME.brightBlack,
+  TERMINAL_THEME.brightRed,
+  TERMINAL_THEME.brightGreen,
+  TERMINAL_THEME.brightYellow,
+  TERMINAL_THEME.brightBlue,
+  TERMINAL_THEME.brightMagenta,
+  TERMINAL_THEME.brightCyan,
+  TERMINAL_THEME.brightWhite,
+] as const;
+
+function formatOscRgbComponent(value: number): string {
+  return value.toString(16).padStart(2, "0");
+}
+
+function buildOscRgbFromChannels(red: number, green: number, blue: number): string {
+  return `rgb:${formatOscRgbComponent(red)}/${formatOscRgbComponent(green)}/${formatOscRgbComponent(blue)}`;
+}
+
+function getTerminalPaletteOscRgb(index: number): string | null {
+  if (index >= 0 && index < TERMINAL_ANSI_PALETTE.length) {
+    return toOscRgb(TERMINAL_ANSI_PALETTE[index] ?? "") ?? null;
+  }
+
+  if (index >= 16 && index <= 231) {
+    const cubeIndex = index - 16;
+    const blue = cubeIndex % 6;
+    const green = Math.floor(cubeIndex / 6) % 6;
+    const red = Math.floor(cubeIndex / 36);
+    const toChannel = (value: number) => value === 0 ? 0 : 55 + value * 40;
+
+    return buildOscRgbFromChannels(toChannel(red), toChannel(green), toChannel(blue));
+  }
+
+  if (index >= 232 && index <= 255) {
+    const gray = 8 + (index - 232) * 10;
+    return buildOscRgbFromChannels(gray, gray, gray);
+  }
+
+  return null;
+}
+
+function buildTerminalOscPaletteReply(payload: string): string | null {
+  const parts = payload.split(";");
+  if (parts.length === 0 || parts.length % 2 !== 0) {
+    return null;
+  }
+
+  const replyParts: string[] = [];
+  for (let index = 0; index < parts.length; index += 2) {
+    const paletteIndex = Number(parts[index]);
+    const queryValue = parts[index + 1];
+    if (!Number.isInteger(paletteIndex) || paletteIndex < 0 || queryValue !== "?") {
+      return null;
+    }
+
+    const rgb = getTerminalPaletteOscRgb(paletteIndex);
+    if (!rgb) {
+      return null;
+    }
+
+    replyParts.push(String(paletteIndex), rgb);
+  }
+
+  return `${TERMINAL_OSC_QUERY_SEQUENCE_START}4;${replyParts.join(";")}${TERMINAL_OSC_STRING_TERMINATOR}`;
+}
+
+type TerminalOscColorQuery = {
+  command: "4" | "10" | "11";
+  index: number;
+  length: number;
+};
+
+type ParsedTerminalOscColorQueries = {
+  visibleOutput: string;
+  replies: string[];
+  remainder: string;
+};
+
+function findTerminalOscColorQuery(buffer: string, cursor: number): TerminalOscColorQuery | null {
+  const query4Index = buffer.indexOf(`${TERMINAL_OSC_QUERY_SEQUENCE_START}4;`, cursor);
+  const query10Index = buffer.indexOf(`${TERMINAL_OSC_QUERY_SEQUENCE_START}10;?`, cursor);
+  const query11Index = buffer.indexOf(`${TERMINAL_OSC_QUERY_SEQUENCE_START}11;?`, cursor);
+  const candidates = [
+    query4Index >= 0 ? { command: "4" as const, index: query4Index, length: `${TERMINAL_OSC_QUERY_SEQUENCE_START}4;`.length } : null,
+    query10Index >= 0 ? { command: "10" as const, index: query10Index, length: `${TERMINAL_OSC_QUERY_SEQUENCE_START}10;?`.length } : null,
+    query11Index >= 0 ? { command: "11" as const, index: query11Index, length: `${TERMINAL_OSC_QUERY_SEQUENCE_START}11;?`.length } : null,
+  ].filter((candidate): candidate is TerminalOscColorQuery => candidate !== null);
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return candidates.reduce((earliest, candidate) => candidate.index < earliest.index ? candidate : earliest);
+}
+
+function findTerminalOscQueryTerminator(buffer: string, cursor: number): { index: number; length: number } | null {
+  const bellIndex = buffer.indexOf(TERMINAL_OSC_BELL_TERMINATOR, cursor);
+  const stringIndex = buffer.indexOf(TERMINAL_OSC_STRING_TERMINATOR, cursor);
+  const c1Index = buffer.indexOf(TERMINAL_OSC_C1_TERMINATOR, cursor);
+  const candidates = [
+    bellIndex >= 0 ? { index: bellIndex, length: TERMINAL_OSC_BELL_TERMINATOR.length } : null,
+    stringIndex >= 0 ? { index: stringIndex, length: TERMINAL_OSC_STRING_TERMINATOR.length } : null,
+    c1Index >= 0 ? { index: c1Index, length: TERMINAL_OSC_C1_TERMINATOR.length } : null,
+  ].filter((candidate): candidate is { index: number; length: number } => candidate !== null);
+
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return candidates.reduce((earliest, candidate) => candidate.index < earliest.index ? candidate : earliest);
+}
+
+function getTerminalOscQueryCarryoverLength(buffer: string): number {
+  const query = findTerminalOscColorQuery(buffer, 0);
+  if (query) {
+    const terminator = findTerminalOscQueryTerminator(buffer, query.index + query.length);
+    if (!terminator) {
+      return buffer.length - query.index;
+    }
+  }
+
+  const queryPrefixes = [
+    `${TERMINAL_OSC_QUERY_SEQUENCE_START}4;`,
+    `${TERMINAL_OSC_QUERY_SEQUENCE_START}10;?`,
+    `${TERMINAL_OSC_QUERY_SEQUENCE_START}11;?`,
+  ];
+  const maxCarryoverLength = queryPrefixes.reduce((maxLength, prefix) => Math.max(maxLength, prefix.length), 0) - 1;
+
+  for (let length = Math.min(buffer.length, maxCarryoverLength); length > 0; length -= 1) {
+    const suffix = buffer.slice(-length);
+    if (queryPrefixes.some((prefix) => prefix.startsWith(suffix))) {
+      return length;
+    }
+  }
+
+  return 0;
+}
+
+function parseTerminalOscColorQueries(buffer: string): ParsedTerminalOscColorQueries {
+  let visibleOutput = "";
+  const replies: string[] = [];
+  let cursor = 0;
+
+  while (cursor < buffer.length) {
+    const query = findTerminalOscColorQuery(buffer, cursor);
+    if (!query) {
+      const carryoverLength = getTerminalOscQueryCarryoverLength(buffer.slice(cursor));
+      const flushEnd = buffer.length - carryoverLength;
+      visibleOutput += buffer.slice(cursor, flushEnd);
+      return {
+        visibleOutput,
+        replies,
+        remainder: buffer.slice(flushEnd),
+      };
+    }
+
+    visibleOutput += buffer.slice(cursor, query.index);
+    const terminator = findTerminalOscQueryTerminator(buffer, query.index + query.length);
+    if (!terminator) {
+      return {
+        visibleOutput,
+        replies,
+        remainder: buffer.slice(query.index),
+      };
+    }
+
+    if (query.command === "4") {
+      const payload = buffer.slice(query.index + query.length, terminator.index);
+      const reply = buildTerminalOscPaletteReply(payload);
+      if (reply) {
+        replies.push(reply);
+      } else {
+        visibleOutput += buffer.slice(query.index, terminator.index + terminator.length);
+      }
+      cursor = terminator.index + terminator.length;
+      continue;
+    }
+
+    const reply = buildTerminalOscColorReply(query.command);
+    if (reply) {
+      replies.push(reply);
+    }
+    cursor = terminator.index + terminator.length;
+  }
+
+  return {
+    visibleOutput,
+    replies,
+    remainder: "",
+  };
 }
 
 type TerminalMousePosition = {
@@ -500,6 +735,7 @@ export function SshSessionDetails({
   const standaloneCredentialTokenRef = useRef<string | null>(null);
   const pendingStandaloneActionRef = useRef<"terminal" | "delete" | null>(null);
   const pendingOutputRef = useRef<string[]>([]);
+  const pendingOscColorQueryRef = useRef("");
   const lastSentResizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const terminalConnectInFlightRef = useRef(false);
   const standaloneTokenRecoveryAttemptedRef = useRef(false);
@@ -669,7 +905,10 @@ export function SshSessionDetails({
     return true;
   }, [focusTerminal, showErrorToast]);
 
-  const sendTerminalInput = useCallback((data: string, options?: { notifyOnFailure?: boolean }): boolean => {
+  const sendTerminalInput = useCallback((
+    data: string,
+    options?: { focusTerminal?: boolean; notifyOnFailure?: boolean },
+  ): boolean => {
     return sendTerminalPayload({
       type: "terminal.input",
       data,
@@ -708,6 +947,26 @@ export function SshSessionDetails({
 
     sendTerminalResize(terminal.cols, terminal.rows);
   }, [sendTerminalResize]);
+
+  const writeTerminalOutput = useCallback((chunk: string) => {
+    const parsed = parseTerminalOscColorQueries(`${pendingOscColorQueryRef.current}${chunk}`);
+    pendingOscColorQueryRef.current = parsed.remainder;
+
+    for (const reply of parsed.replies) {
+      void sendTerminalInput(reply, { focusTerminal: false, notifyOnFailure: false });
+    }
+
+    if (!parsed.visibleOutput) {
+      return;
+    }
+
+    if (!terminalRef.current) {
+      pendingOutputRef.current.push(parsed.visibleOutput);
+      return;
+    }
+
+    terminalRef.current.write(parsed.visibleOutput);
+  }, [sendTerminalInput]);
 
   const flushPendingOutput = useCallback(() => {
     if (!terminalRef.current || pendingOutputRef.current.length === 0) {
@@ -898,6 +1157,7 @@ export function SshSessionDetails({
       terminalSocketRef.current?.close();
       terminalReadyRef.current = false;
       pendingOutputRef.current = [];
+      pendingOscColorQueryRef.current = "";
       lastSentResizeRef.current = null;
       clearSelectedTerminalText();
       setSocketStatus("connecting");
@@ -933,11 +1193,7 @@ export function SshSessionDetails({
           if (!terminalReadyRef.current) {
             markTerminalReady();
           }
-          if (!terminalRef.current) {
-            pendingOutputRef.current.push(data.data);
-          } else {
-            terminalRef.current.write(data.data);
-          }
+          writeTerminalOutput(data.data);
         }
         if (data.type === "terminal.error" && data.message) {
           terminalRef.current?.writeln(`\r\n${data.message}`);
@@ -955,6 +1211,7 @@ export function SshSessionDetails({
             standaloneTokenRecoveryAttemptedRef.current = true;
             terminalReadyRef.current = false;
             lastSentResizeRef.current = null;
+            pendingOscColorQueryRef.current = "";
             setSocketStatus("closed");
             if (terminalSocketRef.current === ws) {
               terminalSocketRef.current = null;
@@ -968,6 +1225,7 @@ export function SshSessionDetails({
         if (data.type === "terminal.closed") {
           terminalReadyRef.current = false;
           lastSentResizeRef.current = null;
+          pendingOscColorQueryRef.current = "";
           clearSelectedTerminalText();
           setSocketStatus("closed");
         }
@@ -979,6 +1237,7 @@ export function SshSessionDetails({
         terminalSocketRef.current = null;
         terminalReadyRef.current = false;
         lastSentResizeRef.current = null;
+        pendingOscColorQueryRef.current = "";
         clearSelectedTerminalText();
         setSocketStatus("closed");
       };
@@ -988,6 +1247,7 @@ export function SshSessionDetails({
         }
         terminalReadyRef.current = false;
         lastSentResizeRef.current = null;
+        pendingOscColorQueryRef.current = "";
         clearSelectedTerminalText();
         setSocketStatus("closed");
       };
@@ -1002,6 +1262,7 @@ export function SshSessionDetails({
       terminalUrl,
       clearSelectedTerminalText,
       showErrorToast,
+      writeTerminalOutput,
     ]);
 
   const recoverTerminalOnForeground = useCallback(() => {
@@ -1607,12 +1868,12 @@ export function SshSessionDetails({
 
         <Card
           padding={false}
-          className="min-h-0 flex flex-1 flex-col overflow-visible rounded-sm bg-gray-900 dark:bg-gray-900"
-          bodyClassName="min-h-0 flex flex-1 flex-col bg-gray-900"
+          className="min-h-0 flex flex-1 flex-col overflow-visible rounded-sm bg-[#1e1e1e] dark:bg-[#1e1e1e]"
+          bodyClassName="min-h-0 flex flex-1 flex-col bg-[#1e1e1e] dark:bg-[#1e1e1e]"
         >
           <div
             ref={terminalContainerRef}
-            className="relative box-border min-h-0 h-full flex-1 bg-gray-900 w-full"
+            className="relative box-border min-h-0 h-full flex-1 bg-[#1e1e1e] w-full"
             style={{
               padding: `${TERMINAL_PADDING_TOP_PX}px ${TERMINAL_PADDING_X_PX}px ${TERMINAL_PADDING_BOTTOM_PX}px`,
             }}

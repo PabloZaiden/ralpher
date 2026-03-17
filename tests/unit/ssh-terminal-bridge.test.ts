@@ -204,6 +204,8 @@ describe("SshTerminalBridge", () => {
     expect(command).toContain("client_tty_file='/tmp/ralpher-terminal-ssh-session-1.tty'");
     expect(command).toContain("session_tty_file='/tmp/ralpher-terminal-ssh-session-1.session.tty'");
     expect(command).toMatch(/cd .*\/workspaces\/example.*\|\| exit 1;/);
+    expect(command).toContain("COLORTERM='truecolor';");
+    expect(command).toContain("export COLORTERM;");
     expect(command).toContain("dtach -N \"$session_socket\" -Ez bash -lc");
     expect(command).toContain("dtach -a \"$session_socket\" -E -z -r winch");
   });
@@ -233,6 +235,7 @@ describe("SshTerminalBridge", () => {
 
       expect(lastSpawnCommand?.[0]).toBe("ssh");
       expect(lastSpawnEnv?.["TERM"]).toBe("xterm-256color");
+      expect(lastSpawnEnv?.["COLORTERM"]).toBe("truecolor");
 
       await bridge.dispose();
     } finally {
@@ -257,6 +260,7 @@ describe("SshTerminalBridge", () => {
 
       expect(lastSpawnCommand?.[0]).toBe("ssh");
       expect(lastSpawnEnv?.["TERM"]).toBe("screen-256color");
+      expect(lastSpawnEnv?.["COLORTERM"]).toBe("truecolor");
 
       await bridge.dispose();
     } finally {
