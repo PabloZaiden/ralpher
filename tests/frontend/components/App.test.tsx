@@ -343,7 +343,7 @@ describe("App shell", () => {
       expect(getByRole("heading", { name: "Settings" })).toBeTruthy();
     });
 
-    await user.click(getByRole("button", { name: "RALPHER" }));
+    await user.click(getByRole("button", { name: /ralpher/i }));
 
     await waitFor(() => {
       expect(window.location.hash).toBe("#/");

@@ -164,10 +164,10 @@ describe("dashboard management scenario", () => {
       expect(window.location.hash).toBe("#/loop/round-trip-1");
     });
 
-    await user.click(getByRole("button", { name: "RALPHER" }));
+    await user.click(getByRole("button", { name: /ralpher/i }));
 
     await waitFor(() => {
-      expect(getByRole("button", { name: "RALPHER" })).toBeTruthy();
+      expect(getByRole("button", { name: /ralpher/i })).toBeTruthy();
       expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
       expect(getByText("Recent activity")).toBeTruthy();
     });

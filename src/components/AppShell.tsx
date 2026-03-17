@@ -9,7 +9,7 @@ import type {
   Workspace,
 } from "../types";
 import { getCreateWorkspaceDefaultServerSettings, getServerLabel } from "../types/settings";
-import type { AgentProvider, ServerSettings } from "../types/settings";
+import type { AgentProvider, ConnectionStatus, ServerSettings } from "../types/settings";
 import type { CreateWorkspaceRequest } from "../types/workspace";
 import { createLogger } from "../lib/logger";
 import { appFetch } from "../lib/public-path";
@@ -27,14 +27,14 @@ import {
 } from "../hooks";
 import { getPlanningStatusLabel, getStatusLabel } from "../utils";
 import { AppSettingsPanel } from "./AppSettingsModal";
-import { CreateLoopForm, type CreateLoopFormSubmitRequest } from "./CreateLoopForm";
+import { CreateLoopForm, type CreateLoopFormActionState, type CreateLoopFormSubmitRequest } from "./CreateLoopForm";
 import { LoopDetails } from "./LoopDetails";
 import { ProvisioningJobView } from "./ProvisioningJobView";
 import { ServerSettingsForm } from "./ServerSettingsForm";
 import { SshSessionDetails } from "./SshSessionDetails";
 import { WorkspaceSettingsForm } from "./WorkspaceSettingsModal";
 import { WorkspaceSelector } from "./WorkspaceSelector";
-import { Badge, Button, ConfirmModal, GearIcon, PASSWORD_INPUT_PROPS, SidebarIcon, getStatusBadgeVariant } from "./common";
+import { Badge, Button, ConfirmModal, GearIcon, PASSWORD_INPUT_PROPS, SidebarIcon, type BadgeVariant, getStatusBadgeVariant } from "./common";
 
 const log = createLogger("AppShell");
 const SIDEBAR_SECTION_STORAGE_KEY = "ralpher.sidebarSectionCollapseState";
@@ -70,6 +70,39 @@ function getWorkspaceGroupCollapseKey(sectionId: SidebarSectionId, groupKey: str
 
 function getSshConnectionModeLabel(mode: SshConnectionMode): string {
   return mode === "direct" ? "Direct SSH" : "Persistent SSH";
+}
+
+function getConnectionStatusBadge(status: ConnectionStatus | null | undefined): { label: string; variant: BadgeVariant } {
+  if (!status) {
+    return { label: "Idle", variant: "warning" };
+  }
+
+  if (status.connected) {
+    return { label: "Connected", variant: "success" };
+  }
+
+  if (status.error) {
+    return { label: "Error", variant: "error" };
+  }
+
+  return { label: "Idle", variant: "warning" };
+}
+
+function getProvisioningStatusBadgeVariant(status: string | undefined): BadgeVariant {
+  switch (status) {
+    case "completed":
+      return "success";
+    case "failed":
+      return "error";
+    case "running":
+      return "info";
+    case "pending":
+      return "warning";
+    case "cancelled":
+      return "default";
+    default:
+      return "default";
+  }
 }
 
 function groupSidebarItemsByWorkspace(
@@ -370,24 +403,71 @@ function ShellPanel({
   eyebrow: _eyebrow,
   title,
   description,
+  descriptionClassName,
   actions,
+  badges,
+  variant = "card",
+  bodyClassName,
   children,
 }: {
   eyebrow?: string;
   title: string;
   description?: string;
+  descriptionClassName?: string;
   actions?: React.ReactNode;
+  badges?: React.ReactNode;
+  variant?: "card" | "compact";
+  bodyClassName?: string;
   children: React.ReactNode;
 }) {
+  if (variant === "compact") {
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-gray-50 dark:bg-neutral-900">
+        <div className="border-b border-gray-200 bg-white px-4 py-2 dark:border-gray-800 dark:bg-neutral-800 sm:px-6 lg:px-8">
+          <div className="ml-14 flex min-h-14 flex-wrap items-center justify-between gap-1.5 sm:ml-16 lg:ml-0">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+              <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
+                {title}
+              </h1>
+              {badges && <div className="flex flex-wrap items-center gap-1.5">{badges}</div>}
+              {description && (
+                <span
+                  className={[
+                    "min-w-0 max-w-full truncate text-xs text-gray-500 dark:text-gray-400",
+                    descriptionClassName ?? "",
+                  ].join(" ").trim()}
+                >
+                  {description}
+                </span>
+              )}
+            </div>
+            {actions && <div className="flex w-full flex-wrap items-center gap-1.5 lg:w-auto lg:justify-end">{actions}</div>}
+          </div>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+          <div className={bodyClassName ?? "space-y-6"}>
+            {children}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex w-full min-w-0 flex-col gap-6 px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+    <div className="flex w-full min-w-0 flex-col gap-6 px-4 pb-5 pt-16 sm:px-6 sm:pt-20 lg:px-8 lg:pb-8 lg:pt-8">
       <div className="flex flex-col gap-4 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-neutral-900/80">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="space-y-2">
             <div>
-              <h1 className="text-2xl font-semibold text-gray-950 dark:text-gray-100">{title}</h1>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold text-gray-950 dark:text-gray-100">{title}</h1>
+                {badges && <div className="flex flex-wrap items-center gap-2">{badges}</div>}
+              </div>
               {description && (
-                <p className="mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-400">{description}</p>
+                <p className={["mt-2 max-w-3xl text-sm text-gray-600 dark:text-gray-400", descriptionClassName ?? ""].join(" ").trim()}>
+                  {description}
+                </p>
               )}
             </div>
           </div>
@@ -481,7 +561,7 @@ function OverviewView({
     <ShellPanel
       eyebrow="Overview"
       title="Overview"
-      description="Recent activity, workspace coverage, and quick access to active work."
+      variant="compact"
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Workspaces" value={workspaces.length} meta="Tracked repositories and hosts." />
@@ -580,6 +660,7 @@ function WorkspaceView({
   relatedLoops,
   relatedSessions,
   registeredSshServers,
+  status,
   onOpenSettings,
   onNavigate,
 }: {
@@ -587,30 +668,45 @@ function WorkspaceView({
   relatedLoops: ReturnType<typeof useLoops>["loops"];
   relatedSessions: ReturnType<typeof useSshSessions>["sessions"];
   registeredSshServers: readonly SshServer[];
+  status: ConnectionStatus | null;
   onOpenSettings: () => void;
   onNavigate: (route: ShellRoute) => void;
 }) {
   const workspaceSshEnabled = workspace.serverSettings.agent.transport === "ssh";
+  const connectionBadge = getConnectionStatusBadge(status);
 
   return (
     <ShellPanel
       eyebrow="Workspace"
       title={workspace.name}
       description={workspace.directory}
+      descriptionClassName="hidden sm:inline font-mono"
+      variant="compact"
+      badges={(
+        <>
+          <Badge variant={connectionBadge.variant} size="sm">{connectionBadge.label}</Badge>
+          <Badge variant="default" size="sm">{workspace.serverSettings.agent.provider}</Badge>
+          <Badge variant={workspace.serverSettings.agent.transport === "ssh" ? "info" : "default"} size="sm">
+            {workspace.serverSettings.agent.transport}
+          </Badge>
+        </>
+      )}
       actions={(
         <>
-          <Button variant="secondary" onClick={onOpenSettings}>
-            Workspace Settings
-          </Button>
-          <Button variant="secondary" onClick={() => onNavigate({ view: "compose", kind: "chat", scopeId: workspace.id })}>
+          {workspaceSshEnabled && (
+            <Button variant="secondary" size="sm" onClick={() => onNavigate({ view: "compose", kind: "ssh-session", scopeId: workspace.id })}>
+              New SSH Session
+            </Button>
+          )}
+          <Button variant="secondary" size="sm" onClick={() => onNavigate({ view: "compose", kind: "chat", scopeId: workspace.id })}>
             New Chat
           </Button>
-          <Button variant="secondary" onClick={() => onNavigate({ view: "compose", kind: "loop", scopeId: workspace.id })}>
+          <Button variant="secondary" size="sm" onClick={onOpenSettings}>
+            Workspace Settings
+          </Button>
+          <Button size="sm" onClick={() => onNavigate({ view: "compose", kind: "loop", scopeId: workspace.id })}>
             New Loop
           </Button>
-          {workspaceSshEnabled && (
-            <Button onClick={() => onNavigate({ view: "compose", kind: "ssh-session", scopeId: workspace.id })}>New SSH Session</Button>
-          )}
         </>
       )}
     >
@@ -730,8 +826,14 @@ function SshServerView({
       eyebrow="SSH server"
       title={server.config.name}
       description={`${server.config.username}@${server.config.address}`}
+      variant="compact"
+      badges={(
+        <Badge variant="default" size="sm">
+          {sessions.length} session{sessions.length === 1 ? "" : "s"}
+        </Badge>
+      )}
       actions={(
-        <Button onClick={() => onNavigate({ view: "compose", kind: "ssh-session", scopeId: server.config.id })}>
+        <Button size="sm" onClick={() => onNavigate({ view: "compose", kind: "ssh-session", scopeId: server.config.id })}>
           New Session
         </Button>
       )}
@@ -824,11 +926,18 @@ function DraftLoopComposer({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [startConflict, setStartConflict] = useState<{ message: string; changedFiles: string[] } | null>(null);
+  const [actionState, setActionState] = useState<CreateLoopFormActionState | null>(null);
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === loop.config.workspaceId) ?? null;
   const exitRoute = selectedWorkspace
     ? { view: "workspace", workspaceId: selectedWorkspace.id } satisfies ShellRoute
     : { view: "home" } satisfies ShellRoute;
+
+  function handleCancel() {
+    setStartConflict(null);
+    setDeleteConfirmOpen(false);
+    onNavigate(exitRoute);
+  }
 
   async function persistDraftChanges(request: CreateLoopRequest): Promise<boolean> {
     try {
@@ -918,18 +1027,54 @@ function DraftLoopComposer({
     <ShellPanel
       eyebrow="Draft loop"
       title={`Edit ${loop.config.name}`}
-      description={selectedWorkspace ? `Workspace: ${selectedWorkspace.name}` : loop.config.directory}
+      description={selectedWorkspace ? selectedWorkspace.name : loop.config.directory}
+      variant="compact"
+      badges={(
+        <>
+          <Badge variant="default" size="sm">Draft</Badge>
+          {actionState?.planMode && <Badge variant="planning" size="sm">Plan mode</Badge>}
+        </>
+      )}
       actions={(
-        <Button
-          variant="ghost"
-          onClick={() => {
-            setStartConflict(null);
-            setDeleteConfirmOpen(false);
-            onNavigate(exitRoute);
-          }}
-        >
-          Cancel
-        </Button>
+        <>
+          <Button
+            type="button"
+            variant="danger"
+            size="sm"
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={deleteSubmitting || actionState?.isSubmitting}
+          >
+            Delete Draft
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={actionState?.onCancel ?? handleCancel}
+            disabled={deleteSubmitting || actionState?.isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={actionState?.onSaveAsDraft}
+            disabled={deleteSubmitting || !actionState?.canSaveDraft}
+            loading={actionState?.isSubmitting ?? false}
+          >
+            Update Draft
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={actionState?.onSubmit}
+            disabled={deleteSubmitting || !actionState?.canSubmit}
+            loading={actionState?.isSubmitting ?? false}
+          >
+            {actionState?.planMode ? "Start Plan" : "Start Loop"}
+          </Button>
+        </>
       )}
     >
       {startConflict && (
@@ -948,11 +1093,7 @@ function DraftLoopComposer({
 
       <CreateLoopForm
         onSubmit={handleDraftSubmit}
-        onCancel={() => {
-          setStartConflict(null);
-          setDeleteConfirmOpen(false);
-          onNavigate(exitRoute);
-        }}
+        onCancel={handleCancel}
         closeOnSuccess={false}
         models={models}
         modelsLoading={modelsLoading}
@@ -984,16 +1125,7 @@ function DraftLoopComposer({
         workspacesLoading={workspacesLoading}
         workspaceError={workspaceError}
         registeredSshServers={registeredSshServers}
-        leadingActions={(
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => setDeleteConfirmOpen(true)}
-            disabled={deleteSubmitting}
-          >
-            Delete Draft
-          </Button>
-        )}
+        renderActions={setActionState}
       />
 
       <ConfirmModal
@@ -1030,6 +1162,7 @@ function SshSessionComposer({
   onCreateStandaloneSession: ReturnType<typeof useSshServers>["createSession"];
 }) {
   const toast = useToast();
+  const formId = useId();
   const [targetType, setTargetType] = useState<"workspace" | "server">(
     initialWorkspaceId ? "workspace" : initialServerId ? "server" : (workspaces.length > 0 ? "workspace" : "server"),
   );
@@ -1087,9 +1220,29 @@ function SshSessionComposer({
     <ShellPanel
       eyebrow="SSH session"
       title="Create an SSH session"
-      description="Create a workspace-backed or standalone SSH session."
+      variant="compact"
+      badges={(
+        <>
+          <Badge variant="default" size="sm">
+            {targetType === "workspace" ? "Workspace" : "Standalone server"}
+          </Badge>
+          <Badge variant={connectionMode === "direct" ? "warning" : "info"} size="sm">
+            {getSshConnectionModeLabel(connectionMode)}
+          </Badge>
+        </>
+      )}
+      actions={(
+        <>
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button type="submit" form={formId} size="sm" loading={submitting}>
+            Create SSH Session
+          </Button>
+        </>
+      )}
     >
-      <form className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
+      <form id={formId} className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-neutral-950/50">
             <label htmlFor="ssh-target-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -1159,10 +1312,6 @@ function SshSessionComposer({
           </div>
         )}
 
-        <div className="flex flex-wrap gap-3">
-          <Button variant="ghost" type="button" onClick={onCancel}>Cancel</Button>
-          <Button type="submit" loading={submitting}>Create SSH Session</Button>
-        </div>
       </form>
     </ShellPanel>
   );
@@ -1178,6 +1327,7 @@ function SshServerComposer({
   onCreateServer: ReturnType<typeof useSshServers>["createServer"];
 }) {
   const toast = useToast();
+  const formId = useId();
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [username, setUsername] = useState("");
@@ -1215,9 +1365,22 @@ function SshServerComposer({
     <ShellPanel
       eyebrow="SSH server"
       title="Register a standalone SSH server"
-      description="Store server details. Passwords stay encrypted in the client and are only requested when needed."
+      variant="compact"
+      badges={(
+        <Badge variant="info" size="sm">Standalone SSH</Badge>
+      )}
+      actions={(
+        <>
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>
+            Cancel
+          </Button>
+          <Button type="submit" form={formId} size="sm" loading={submitting}>
+            Create SSH Server
+          </Button>
+        </>
+      )}
     >
-      <form className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
+      <form id={formId} className="space-y-6" onSubmit={(event) => void handleSubmit(event)}>
         <div className="grid gap-4 lg:grid-cols-2">
           <InlineField id="server-name" label="Server name" value={name} onChange={setName} placeholder="Production host" required />
           <InlineField id="server-address" label="Address" value={address} onChange={setAddress} placeholder="server.example.com" required />
@@ -1232,10 +1395,6 @@ function SshServerComposer({
             help="Stored encrypted in this client to streamline persistent standalone sessions."
             inputProps={PASSWORD_INPUT_PROPS}
           />
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Button variant="ghost" type="button" onClick={onCancel}>Cancel</Button>
-          <Button type="submit" loading={submitting}>Create SSH Server</Button>
         </div>
       </form>
     </ShellPanel>
@@ -1297,6 +1456,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
   const [workspaceCreateSubmitting, setWorkspaceCreateSubmitting] = useState(false);
   const [workspaceSettingsFormValid, setWorkspaceSettingsFormValid] = useState(false);
   const [workspaceArchivedLoopsPurging, setWorkspaceArchivedLoopsPurging] = useState(false);
+  const [composeActionState, setComposeActionState] = useState<CreateLoopFormActionState | null>(null);
   const [automaticServerId, setAutomaticServerId] = useState("");
   const [automaticRepoUrl, setAutomaticRepoUrl] = useState("");
   const [automaticBasePath, setAutomaticBasePath] = useState("/workspaces");
@@ -1384,6 +1544,12 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
       dashboardData.resetCreateModalState();
     }
   }, [dashboardData.resetCreateModalState, route]);
+
+  useEffect(() => {
+    if (route.view !== "compose" || (route.kind !== "loop" && route.kind !== "chat")) {
+      setComposeActionState(null);
+    }
+  }, [route.view, route.view === "compose" ? route.kind : undefined]);
 
   useEffect(() => {
     if (route.view !== "workspace-settings") {
@@ -1638,21 +1804,71 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
 
   function renderComposeView(kind: ComposeKind) {
     if (kind === "loop" || kind === "chat") {
+      const handleComposeCancel = () => navigateWithinShell(
+        composeWorkspace ? { view: "workspace", workspaceId: composeWorkspace.id } : { view: "home" },
+      );
+
       return (
         <ShellPanel
           eyebrow={kind === "chat" ? "Chat" : "Loop"}
           title={kind === "chat"
             ? composeWorkspace ? `Start a new chat in ${composeWorkspace.name}` : "Start a new chat"
             : composeWorkspace ? `Start a new loop in ${composeWorkspace.name}` : "Start a new loop"}
-          description={kind === "chat"
-            ? "Pick a workspace and model to start an interactive conversation."
-            : "Pick a workspace, model, and prompt to start a new loop."}
+          description={composeWorkspace?.directory}
+          descriptionClassName="hidden sm:inline font-mono"
+          variant="compact"
+          badges={(
+            <>
+              <Badge variant="default" size="sm">{kind === "chat" ? "Chat" : "Loop"}</Badge>
+              {kind === "loop" && composeActionState?.planMode && <Badge variant="planning" size="sm">Plan mode</Badge>}
+            </>
+          )}
+          actions={(
+            <>
+              {kind === "loop" && composeActionState && (!composeActionState.isEditing || composeActionState.isEditingDraft) && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={composeActionState.onSaveAsDraft}
+                  disabled={!composeActionState.canSaveDraft}
+                  loading={composeActionState.isSubmitting}
+                >
+                  {composeActionState.isEditingDraft ? "Update Draft" : "Save as Draft"}
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={composeActionState?.onCancel ?? handleComposeCancel}
+                disabled={composeActionState?.isSubmitting}
+              >
+                Cancel
+              </Button>
+              {composeActionState && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={composeActionState.onSubmit}
+                  disabled={!composeActionState.canSubmit}
+                  loading={composeActionState.isSubmitting}
+                >
+                  {kind === "chat"
+                    ? "Start Chat"
+                    : composeActionState.isEditing
+                      ? (composeActionState.planMode ? "Start Plan" : "Start Loop")
+                      : (composeActionState.planMode ? "Create Plan" : "Create Loop")}
+                </Button>
+              )}
+            </>
+          )}
         >
           <CreateLoopForm
             key={`${kind}:${composeWorkspace?.id ?? "none"}`}
             mode={kind}
             onSubmit={(request) => handleLoopSubmit(kind, request)}
-            onCancel={() => navigateWithinShell(composeWorkspace ? { view: "workspace", workspaceId: composeWorkspace.id } : { view: "home" })}
+            onCancel={handleComposeCancel}
             closeOnSuccess={false}
             models={dashboardData.models}
             modelsLoading={dashboardData.modelsLoading}
@@ -1672,12 +1888,14 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             workspacesLoading={workspacesLoading}
             workspaceError={workspaceError}
             registeredSshServers={servers}
+            renderActions={setComposeActionState}
           />
         </ShellPanel>
       );
     }
 
     if (kind === "workspace") {
+      const workspaceCreateFormId = "workspace-create-form";
       const provisioningStatus = provisioning.snapshot?.job.state.status;
       const provisionedWorkspaceId = provisioning.snapshot?.workspace?.id ?? provisioning.snapshot?.job.state.workspaceId;
       const canReturnToAutomaticForm = provisioningStatus === "failed" || provisioningStatus === "cancelled";
@@ -1696,7 +1914,80 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         <ShellPanel
           eyebrow="Workspace"
           title="Create a workspace"
-          description="Create a workspace manually or provision one automatically over SSH."
+          variant="compact"
+          badges={(
+            <>
+              <Badge variant={workspaceCreateMode === "automatic" ? "info" : "default"} size="sm">
+                {workspaceCreateMode === "automatic" ? "Automatic" : "Manual"}
+              </Badge>
+              {provisioningStatus && (
+                <Badge variant={getProvisioningStatusBadgeVariant(provisioningStatus)} size="sm">
+                  {provisioningStatus}
+                </Badge>
+              )}
+            </>
+          )}
+          actions={provisioning.activeJobId ? (
+            <>
+              {canReturnToAutomaticForm && (
+                <Button type="button" size="sm" onClick={handleBackToAutomaticWorkspaceForm}>
+                  Back to Automatic Form
+                </Button>
+              )}
+              {provisionedWorkspaceId && provisioningStatus === "completed" && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => navigateWithinShell({ view: "workspace", workspaceId: provisionedWorkspaceId })}
+                >
+                  Open Workspace
+                </Button>
+              )}
+              {(provisioningStatus === "running" || provisioningStatus === "pending") && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="danger"
+                  onClick={() => {
+                    void provisioning.cancelJob();
+                  }}
+                >
+                  Cancel Job
+                </Button>
+              )}
+            </>
+          ) : (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant={workspaceCreateMode === "manual" ? "primary" : "secondary"}
+                onClick={() => setWorkspaceCreateMode("manual")}
+              >
+                Manual
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={workspaceCreateMode === "automatic" ? "primary" : "secondary"}
+                onClick={() => setWorkspaceCreateMode("automatic")}
+              >
+                Automatic
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => navigateWithinShell({ view: "home" })}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                form={workspaceCreateFormId}
+                size="sm"
+                loading={workspaceCreateMode === "automatic" ? provisioning.starting : (workspaceCreateSubmitting || workspacesSaving)}
+                disabled={workspaceCreateMode === "automatic" ? !automaticFormValid : !manualFormValid}
+              >
+                {workspaceCreateMode === "automatic" ? "Start Provisioning" : "Create Workspace"}
+              </Button>
+            </>
+          )}
         >
           {provisioning.activeJobId ? (
             <div className="space-y-6">
@@ -1707,60 +1998,9 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                 loading={provisioning.loading}
                 error={provisioning.error}
               />
-              <div className="flex flex-wrap gap-3">
-                {canReturnToAutomaticForm && (
-                  <Button type="button" onClick={handleBackToAutomaticWorkspaceForm}>
-                    Back to Automatic Form
-                  </Button>
-                )}
-                {provisionedWorkspaceId && provisioningStatus === "completed" && (
-                  <Button
-                    type="button"
-                    onClick={() => navigateWithinShell({ view: "workspace", workspaceId: provisionedWorkspaceId })}
-                  >
-                    Open Workspace
-                  </Button>
-                )}
-                {(provisioningStatus === "running" || provisioningStatus === "pending") && (
-                  <Button
-                    type="button"
-                    variant="danger"
-                    onClick={() => {
-                      void provisioning.cancelJob();
-                    }}
-                  >
-                    Cancel Job
-                  </Button>
-                )}
-              </div>
             </div>
           ) : (
-            <form className="space-y-6" onSubmit={(event) => void handleCreateWorkspace(event)}>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className={`rounded-md px-3 py-2 text-sm font-medium ${
-                    workspaceCreateMode === "manual"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-gray-300"
-                  }`}
-                  onClick={() => setWorkspaceCreateMode("manual")}
-                >
-                  Manual
-                </button>
-                <button
-                  type="button"
-                  className={`rounded-md px-3 py-2 text-sm font-medium ${
-                    workspaceCreateMode === "automatic"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-700 dark:bg-neutral-800 dark:text-gray-300"
-                  }`}
-                  onClick={() => setWorkspaceCreateMode("automatic")}
-                >
-                  Automatic
-                </button>
-              </div>
-
+            <form id={workspaceCreateFormId} className="space-y-6" onSubmit={(event) => void handleCreateWorkspace(event)}>
               <InlineField
                 id="workspace-name"
                 label="Workspace name"
@@ -1876,19 +2116,6 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                   <p className="text-sm text-red-600 dark:text-red-400">{provisioning.error}</p>
                 </div>
               )}
-
-              <div className="flex flex-wrap gap-3">
-                <Button variant="ghost" type="button" onClick={() => navigateWithinShell({ view: "home" })}>
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  loading={workspaceCreateMode === "automatic" ? provisioning.starting : (workspaceCreateSubmitting || workspacesSaving)}
-                  disabled={workspaceCreateMode === "automatic" ? !automaticFormValid : !manualFormValid}
-                >
-                  {workspaceCreateMode === "automatic" ? "Start Provisioning" : "Create Workspace"}
-                </Button>
-              </div>
             </form>
           )}
         </ShellPanel>
@@ -2016,6 +2243,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           relatedLoops={relatedLoops}
           relatedSessions={relatedSessions}
           registeredSshServers={servers}
+          status={workspaceStatus}
           onOpenSettings={() => navigateWithinShell({ view: "workspace-settings", workspaceId: selectedWorkspace.id })}
           onNavigate={navigateWithinShell}
         />
@@ -2036,10 +2264,26 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           eyebrow="Workspace settings"
           title="Workspace Settings"
           description={workspaceFromHook?.directory ?? selectedWorkspace.directory}
+          descriptionClassName="hidden sm:inline font-mono"
+          variant="compact"
+          badges={(
+            <>
+              <Badge variant={getConnectionStatusBadge(workspaceStatus).variant} size="sm">
+                {getConnectionStatusBadge(workspaceStatus).label}
+              </Badge>
+              {workspaceStatus && <Badge variant="default" size="sm">{workspaceStatus.provider}</Badge>}
+              {workspaceStatus && (
+                <Badge variant={workspaceStatus.transport === "ssh" ? "info" : "default"} size="sm">
+                  {workspaceStatus.transport}
+                </Badge>
+              )}
+            </>
+          )}
           actions={(
             <Button
               type="submit"
               form="workspace-settings-shell-form"
+              size="sm"
               loading={workspaceSettingsSaving}
               disabled={!workspaceSettingsFormValid || workspaceSettingsLoading || !workspaceFromHook}
             >
@@ -2077,6 +2321,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               resettingConnection={workspaceSettingsResetting}
               purgingArchivedLoops={workspaceArchivedLoopsPurging}
               remoteOnly={dashboardData.remoteOnly}
+              showConnectionStatus={false}
               formId="workspace-settings-shell-form"
               onSaved={() => navigateWithinShell({ view: "workspace", workspaceId: selectedWorkspace.id })}
               onValidityChange={setWorkspaceSettingsFormValid}
@@ -2114,7 +2359,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         <ShellPanel
           eyebrow="App settings"
           title="Settings"
-          description="Manage display, developer, import/export, and server controls."
+          variant="compact"
         >
           <AppSettingsPanel
             onResetAll={dashboardData.resetAllSettings}
@@ -2390,13 +2635,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               </button>
             )}
           </div>
-          <main
-            className={[
-              "h-full overflow-auto",
-              "pl-16 sm:pl-20 lg:pl-0",
-              sidebarCollapsed ? "lg:pl-20" : "",
-            ].join(" ")}
-          >
+          <main className="h-full overflow-auto">
             {renderMainContent()}
           </main>
         </div>

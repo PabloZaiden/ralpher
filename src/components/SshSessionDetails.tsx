@@ -32,21 +32,6 @@ function isStandaloneSession(session: NonNullable<ReturnType<typeof useSshSessio
   return "sshServerId" in session.config;
 }
 
-function getStatusVariant(status: string) {
-  switch (status) {
-    case "connected":
-      return "success";
-    case "connecting":
-      return "info";
-    case "failed":
-      return "error";
-    case "disconnected":
-      return "warning";
-    default:
-      return "default";
-  }
-}
-
 export interface SshSessionDetailsProps {
   sshSessionId: string;
   onBack?: () => void;
@@ -1541,7 +1526,7 @@ export function SshSessionDetails({
   return (
     <div className="h-full min-h-0 flex flex-col bg-gray-50 dark:bg-neutral-900">
       <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-neutral-800">
-        <div className="flex min-h-10 flex-wrap items-center justify-between gap-1.5">
+        <div className="ml-14 flex min-h-14 flex-wrap items-center justify-between gap-1.5 sm:ml-16 lg:ml-0">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
             {showBackButton && onBack && (
               <Button variant="ghost" size="xs" onClick={onBack}>← Back</Button>
@@ -1549,22 +1534,11 @@ export function SshSessionDetails({
             <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
               {session.config.name}
             </h1>
-            <Badge variant={effectiveConnectionMode === "direct" ? "info" : "default"}>
-              {getSshConnectionModeLabel(effectiveConnectionMode ?? session.config.connectionMode)}
-            </Badge>
-            <Badge variant={getStatusVariant(session.state.status)}>
-              {session.state.status}
-            </Badge>
-            {session.state.notice && (
-              <Badge variant="warning">
-                fallback
-              </Badge>
-            )}
             <Badge variant={socketStatus === "open" ? "success" : socketStatus === "connecting" ? "info" : "warning"}>
-              {socketStatus}
+              {socketStatus === "open" ? "connected" : socketStatus === "closed" ? "disconnected" : "connecting"}
             </Badge>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
             {canRenameSession && (
               <Button
                 variant="ghost"

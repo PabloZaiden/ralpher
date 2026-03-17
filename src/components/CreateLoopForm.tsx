@@ -446,6 +446,9 @@ export function CreateLoopForm({
 
   // Form ref for programmatic submission
   const formRef = useRef<HTMLFormElement>(null);
+  const cancelActionRef = useRef(onCancel);
+  const submitActionRef = useRef<() => void>(() => {});
+  const saveAsDraftActionRef = useRef<() => void>(() => {});
   
   // Check if form can be saved as a draft (basic fields only, model connectivity not required)
   const canSaveDraft = !isChatMode && !!selectedWorkspaceId && !!prompt.trim() && !!name.trim();
@@ -470,6 +473,30 @@ export function CreateLoopForm({
       handleSubmit(syntheticEvent, true);
     }
   }, [canSaveDraft, handleSubmit]);
+
+  useEffect(() => {
+    cancelActionRef.current = onCancel;
+  }, [onCancel]);
+
+  useEffect(() => {
+    submitActionRef.current = handleSubmitClick;
+  }, [handleSubmitClick]);
+
+  useEffect(() => {
+    saveAsDraftActionRef.current = handleSaveAsDraftClick;
+  }, [handleSaveAsDraftClick]);
+
+  const handleExternalCancel = useCallback(() => {
+    cancelActionRef.current();
+  }, []);
+
+  const handleExternalSubmit = useCallback(() => {
+    submitActionRef.current();
+  }, []);
+
+  const handleExternalSaveAsDraft = useCallback(() => {
+    saveAsDraftActionRef.current();
+  }, []);
   
   // Call renderActions whenever action state changes
   const renderActionsRef = useRef<{
@@ -509,14 +536,13 @@ export function CreateLoopForm({
         isEditing,
         isEditingDraft,
         planMode,
-        onCancel,
-        onSubmit: handleSubmitClick,
-        onSaveAsDraft: handleSaveAsDraftClick,
+        onCancel: handleExternalCancel,
+        onSubmit: handleExternalSubmit,
+        onSaveAsDraft: handleExternalSaveAsDraft,
       });
     }
-    // Note: renderActions, onCancel, handleSubmitClick, handleSaveAsDraftClick are intentionally NOT in deps
-    // They are callbacks that change frequently but don't need to retrigger this effect
-    // We only want to notify parent when the actual state values change
+    // Note: renderActions is intentionally NOT in deps. We only want to notify
+    // parent layouts when the actual action state changes, not on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSubmitting, canSubmit, canSaveDraft, isEditing, isEditingDraft, planMode]);
 

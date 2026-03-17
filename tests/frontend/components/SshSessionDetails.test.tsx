@@ -1872,10 +1872,14 @@ describe("SshSessionDetails", () => {
       version: 1,
       createdAt: new Date().toISOString(),
     }));
-    api.post("/api/ssh-servers/:id/credentials", () => ({
-      credentialToken: "token-456",
-      expiresAt: new Date().toISOString(),
-    }));
+    let credentialServerId = "";
+    api.post("/api/ssh-servers/:id/credentials", (req) => {
+      credentialServerId = req.params["id"] ?? "";
+      return {
+        credentialToken: "token-456",
+        expiresAt: new Date().toISOString(),
+      };
+    });
 
     const { getByLabelText, getByText, queryByText, user } = renderWithUser(
       <SshSessionDetails sshSessionId="standalone-ssh-2" onBack={() => {}} />,
@@ -1906,7 +1910,7 @@ describe("SshSessionDetails", () => {
       expect(api.calls("/api/ssh-servers/:id/credentials", "POST")).toHaveLength(1);
     });
 
-    expect(api.calls("/api/ssh-servers/:id/credentials", "POST")[0]?.params["id"]).toBe("server-1");
+    expect(credentialServerId).toBe("server-1");
     expect(globalThis.localStorage?.getItem("ralpher.sshServerCredential.server-1")).toBeTruthy();
   });
 

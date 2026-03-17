@@ -72,6 +72,8 @@ export interface WorkspaceSettingsFormProps {
   purgingArchivedLoops?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
   remoteOnly?: boolean;
+  /** Whether to render the inline connection status summary */
+  showConnectionStatus?: boolean;
   /** Form id for external submit buttons */
   formId?: string;
   /** Called after a successful save */
@@ -93,6 +95,7 @@ export function WorkspaceSettingsForm({
   resettingConnection = false,
   purgingArchivedLoops = false,
   remoteOnly = false,
+  showConnectionStatus = true,
   formId = "workspace-settings-form",
   onSaved,
   onValidityChange,
@@ -258,22 +261,23 @@ export function WorkspaceSettingsForm({
           </div>
         )}
 
-        {/* Connection Status */}
-        <div className="flex items-center gap-2 rounded-md bg-gray-50 p-3 dark:bg-neutral-900">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Connection Status:</span>
-          {status?.connected ? (
-            <Badge variant="success">Connected</Badge>
-          ) : status?.error ? (
-            <Badge variant="error">Error</Badge>
-          ) : (
-            <Badge variant="warning">Idle</Badge>
-          )}
-          {status && (
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              {status.provider}/{status.transport}
-            </span>
-          )}
-        </div>
+        {showConnectionStatus && (
+          <div className="flex items-center gap-2 rounded-md bg-gray-50 p-3 dark:bg-neutral-900">
+            <span className="text-sm text-gray-600 dark:text-gray-400">Connection Status:</span>
+            {status?.connected ? (
+              <Badge variant="success">Connected</Badge>
+            ) : status?.error ? (
+              <Badge variant="error">Error</Badge>
+            ) : (
+              <Badge variant="warning">Idle</Badge>
+            )}
+            {status && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {status.provider}/{status.transport}
+              </span>
+            )}
+          </div>
+        )}
 
         {status?.error && (
           <div className="-mt-3 break-words text-xs text-red-600 dark:text-red-400">

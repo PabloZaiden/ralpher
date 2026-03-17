@@ -711,7 +711,7 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
       {/* Header - compact single line */}
       <header className="bg-white dark:bg-neutral-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 safe-area-top">
         <div className="px-4 sm:px-6 lg:px-8 py-2">
-          <div className="flex min-h-10 items-center gap-3">
+          <div className="ml-14 flex min-h-14 flex-wrap items-center gap-3 sm:ml-16 lg:ml-0">
             {showBackButton && onBack && (
               <Button variant="ghost" size="sm" onClick={onBack}>
                 ← Back

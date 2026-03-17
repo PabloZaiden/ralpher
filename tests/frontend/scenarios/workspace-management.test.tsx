@@ -113,8 +113,10 @@ describe("workspace management scenario", () => {
       directory: "/workspaces/new-project",
       serverSettings: {
         agent: {
-          provider: "opencode",
-          transport: "stdio",
+          provider: "copilot",
+          transport: "ssh",
+          hostname: "localhost",
+          port: 22,
         },
       },
       createdAt: new Date().toISOString(),
@@ -126,8 +128,10 @@ describe("workspace management scenario", () => {
       directory: "/workspaces/new-project",
       serverSettings: {
         agent: {
-          provider: "opencode",
-          transport: "stdio",
+          provider: "copilot",
+          transport: "ssh",
+          hostname: "localhost",
+          port: 22,
         },
       },
       createdAt: new Date().toISOString(),
@@ -147,10 +151,10 @@ describe("workspace management scenario", () => {
       expect(getByRole("heading", { name: "Create a workspace" })).toBeTruthy();
     });
 
-    const providerSelect = document.querySelector("#agent-provider") as HTMLSelectElement;
-    const transportSelect = document.querySelector("#agent-transport") as HTMLSelectElement;
-    expect(providerSelect.value).toBe("opencode");
-    expect(transportSelect.value).toBe("stdio");
+      const providerSelect = document.querySelector("#agent-provider") as HTMLSelectElement;
+      const transportSelect = document.querySelector("#agent-transport") as HTMLSelectElement;
+      expect(providerSelect.value).toBe("copilot");
+      expect(transportSelect.value).toBe("ssh");
 
     // Fill name
     const nameInput = document.querySelector("#workspace-name") as HTMLInputElement;
@@ -174,16 +178,18 @@ describe("workspace management scenario", () => {
 
     const postCalls = api.calls("/api/workspaces", "POST");
     expect(postCalls.length).toBeGreaterThan(0);
-    expect(postCalls[0]?.body).toEqual({
-      name: "X",
-      directory: "/",
-      serverSettings: {
-        agent: {
-          provider: "opencode",
-          transport: "stdio",
+      expect(postCalls[0]?.body).toEqual({
+        name: "X",
+        directory: "/",
+        serverSettings: {
+          agent: {
+            provider: "copilot",
+            transport: "ssh",
+            hostname: "localhost",
+            port: 22,
+          },
         },
-      },
-    });
+      });
   });
 
   test("create workspace can use a registered SSH server selection", async () => {
@@ -214,7 +220,7 @@ describe("workspace management scenario", () => {
       directory: "/workspaces/build",
       serverSettings: {
         agent: {
-          provider: "opencode",
+          provider: "copilot",
           transport: "ssh",
           hostname: "10.0.0.5",
           port: 22,
@@ -229,7 +235,7 @@ describe("workspace management scenario", () => {
       directory: "/workspaces/build",
       serverSettings: {
         agent: {
-          provider: "opencode",
+          provider: "copilot",
           transport: "ssh",
           hostname: "10.0.0.5",
           port: 22,
@@ -287,7 +293,7 @@ describe("workspace management scenario", () => {
       directory: "/workspaces/build",
       serverSettings: {
         agent: {
-          provider: "opencode",
+          provider: "copilot",
           transport: "ssh",
           hostname: "10.0.0.5",
           port: 22,

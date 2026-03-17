@@ -171,7 +171,7 @@ describe("draft workflow scenario", () => {
     setupBaseApi();
     api.get("/api/loops", () => [draftLoop()]);
     api.get("/api/workspaces", () => [WORKSPACE]);
-    api.delete("/api/loops/:id", () => ({ success: true }));
+    api.post("/api/loops/:id/purge", () => ({ success: true }));
 
     const { getByRole, getByText, user } = renderWithUser(<App />, { route: "#/loop/draft-1" });
 
@@ -182,13 +182,18 @@ describe("draft workflow scenario", () => {
     await user.click(getByRole("button", { name: "Delete Draft" }));
 
     await waitFor(() => {
-      expect(getByText('Are you sure you want to delete "My Draft"? The draft will be marked as deleted and can be purged later if needed.')).toBeTruthy();
+      expect(getByText('Are you sure you want to delete "My Draft"?')).toBeTruthy();
     });
 
-    await user.click(getByRole("button", { name: "Delete Draft" }));
+    const dialog = getByRole("dialog");
+    const confirmButton = Array.from(dialog.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Delete Draft",
+    );
+    expect(confirmButton).toBeTruthy();
+    await user.click(confirmButton!);
 
     await waitFor(() => {
-      const calls = api.calls("/api/loops/:id", "DELETE");
+      const calls = api.calls("/api/loops/:id/purge", "POST");
       expect(calls.length).toBeGreaterThan(0);
     });
   });
