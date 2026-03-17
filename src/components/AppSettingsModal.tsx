@@ -1,11 +1,11 @@
 /**
- * AppSettingsModal component for configuring global app settings.
+ * AppSettingsPanel component for configuring global app settings.
  * Contains markdown rendering preferences, log level settings, and reset options.
  * Server settings have moved to per-workspace WorkspaceSettingsModal.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Button } from "./common";
+import { Button, Modal } from "./common";
 import { useMarkdownPreference, useLogLevelPreference, useCountdownReload } from "../hooks";
 import type { LogLevelName } from "../lib/logger";
 import type { WorkspaceExportData, WorkspaceImportResult } from "../types/workspace";
@@ -13,11 +13,7 @@ import type { WorkspaceExportData, WorkspaceImportResult } from "../types/worksp
 /** The exact phrase the user must type to confirm a full reset. */
 const RESET_CONFIRMATION_PHRASE = "EXECUTE ORDER 66";
 
-export interface AppSettingsModalProps {
-  /** Whether the modal is open */
-  isOpen: boolean;
-  /** Callback when modal should close */
-  onClose: () => void;
+export interface AppSettingsPanelProps {
   /** Callback to reset all settings (destructive - deletes database) */
   onResetAll?: () => Promise<boolean>;
   /** Whether resetting all is in progress */
@@ -34,12 +30,15 @@ export interface AppSettingsModalProps {
   configSaving?: boolean;
 }
 
+export interface AppSettingsModalProps extends AppSettingsPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
 /**
- * AppSettingsModal provides UI for global app settings.
+ * AppSettingsPanel provides the shell-native UI for global app settings.
  */
-export function AppSettingsModal({
-  isOpen,
-  onClose,
+export function AppSettingsPanel({
   onResetAll,
   resetting = false,
   onKillServer,
@@ -47,7 +46,7 @@ export function AppSettingsModal({
   onExportConfig,
   onImportConfig,
   configSaving = false,
-}: AppSettingsModalProps) {
+}: AppSettingsPanelProps) {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showResetTextConfirm, setShowResetTextConfirm] = useState(false);
   const [resetConfirmText, setResetConfirmText] = useState("");
@@ -80,21 +79,6 @@ export function AppSettingsModal({
 
   // Log level preference
   const { level: logLevel, availableLevels, setLevel: setLogLevel, saving: savingLogLevel, isFromEnv: logLevelFromEnv } = useLogLevelPreference();
-
-  // Reset state when modal closes
-  function handleClose() {
-    setShowResetConfirm(false);
-    setShowResetTextConfirm(false);
-    setResetConfirmText("");
-    setShowKillConfirm(false);
-    setServerKilled(false);
-    setKillError(false);
-    setImportResult(null);
-    setImportError(null);
-    setExportError(null);
-    setDangerZoneExpanded(false);
-    onClose();
-  }
 
   // Handle export: fetch data, then trigger browser file download
   async function handleExport() {
@@ -143,19 +127,7 @@ export function AppSettingsModal({
   }
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={handleClose}
-      title="App Settings"
-      description="Configure global app preferences"
-      size="md"
-      footer={
-        <Button variant="ghost" onClick={handleClose}>
-          Close
-        </Button>
-      }
-    >
-      <div className="space-y-6">
+    <div className="space-y-6">
         {/* Display Settings */}
         <div>
           <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-4">
@@ -412,13 +384,12 @@ export function AppSettingsModal({
                               size="sm"
                               disabled={resetConfirmText !== RESET_CONFIRMATION_PHRASE || resetting || killingServer}
                               onClick={async () => {
-                                if (onResetAll) {
-                                  const success = await onResetAll();
-                                  if (success) {
+                               if (onResetAll) {
+                                 const success = await onResetAll();
+                                 if (success) {
                                     setShowResetConfirm(false);
                                     setShowResetTextConfirm(false);
                                     setResetConfirmText("");
-                                    onClose();
                                     // Reload the page to get fresh state
                                     window.location.reload();
                                   }
@@ -529,9 +500,31 @@ export function AppSettingsModal({
             </div>
           </div>
         )}
-      </div>
+    </div>
+  );
+}
+
+export function AppSettingsModal({
+  isOpen,
+  onClose,
+  ...props
+}: AppSettingsModalProps) {
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="App Settings"
+      description="Configure global app preferences"
+      size="md"
+      footer={(
+        <Button variant="ghost" onClick={onClose}>
+          Close
+        </Button>
+      )}
+    >
+      <AppSettingsPanel {...props} />
     </Modal>
   );
 }
 
-export default AppSettingsModal;
+export default AppSettingsPanel;

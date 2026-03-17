@@ -1,8 +1,8 @@
 /**
- * E2E Scenario: Dashboard Management
+ * E2E Scenario: Shell overview management
  *
- * Tests dashboard-level workflows: viewing loops grouped by workspace/status,
- * navigating between loops, empty state, settings modal, and status groups.
+ * Tests shell-level workflows: overview empty states, sidebar/detail navigation,
+ * settings navigation, and workspace mapping in the shell-first UI.
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
@@ -49,6 +49,12 @@ function setupBaseApi() {
   api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
   api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
   api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+  api.get("/api/loops/:id/port-forwards", () => []);
+  api.get("/api/loops/:id/pull-request", () => ({
+    enabled: false,
+    destinationType: "disabled",
+    disabledReason: "disabled",
+  }));
   api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
 }
 
@@ -69,7 +75,7 @@ afterEach(() => {
 // ─── Dashboard management scenarios ──────────────────────────────────────────
 
 describe("dashboard management scenario", () => {
-  test("empty state shows 'No loops yet' message", async () => {
+  test("overview empty state explains how to populate the shell", async () => {
     setupBaseApi();
     api.get("/api/loops", () => []);
     api.get("/api/workspaces", () => [WORKSPACE_A]);
@@ -77,12 +83,12 @@ describe("dashboard management scenario", () => {
     const { getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("No loops yet")).toBeTruthy();
+      expect(getByText("Everything lives in one shell now")).toBeTruthy();
     });
-    expect(getByText(/Click "New Loop" to create your first Ralph Loop/)).toBeTruthy();
+    expect(getByText("Create a loop, chat, workspace, or SSH session from the sidebar to populate the shell.")).toBeTruthy();
   });
 
-  test("loops are grouped by workspace with status sections", async () => {
+  test("overview shows recent loops and the workspace map", async () => {
     setupBaseApi();
 
     const runningLoop = createLoopWithStatus("running", {
@@ -98,25 +104,17 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops", () => [runningLoop, completedLoop, draftLoop]);
     api.get("/api/workspaces", () => [WORKSPACE_A, WORKSPACE_B]);
 
-    const { getByText } = renderWithUser(<App />);
+    const { getAllByText, getByText } = renderWithUser(<App />);
 
-    // Wait for dashboard to load
     await waitFor(() => {
-      expect(getByText("Project Alpha")).toBeTruthy();
+      expect(getAllByText("Project Alpha").length).toBeGreaterThan(0);
     });
 
-    // Workspace names are shown
-    expect(getByText("Project Beta")).toBeTruthy();
-
-    // Loop names appear
-    expect(getByText("Running Task")).toBeTruthy();
-    expect(getByText("Done Task")).toBeTruthy();
-    expect(getByText("Draft Task")).toBeTruthy();
-
-    // Status group headers appear
-    expect(getByText(/Active \(1\)/)).toBeTruthy();
-    expect(getByText(/Completed \(1\)/)).toBeTruthy();
-    expect(getByText(/Drafts \(1\)/)).toBeTruthy();
+    expect(getAllByText("Project Beta").length).toBeGreaterThan(0);
+    expect(getByText("Workspace map")).toBeTruthy();
+    expect(getAllByText("Running Task").length).toBeGreaterThan(0);
+    expect(getAllByText("Done Task").length).toBeGreaterThan(0);
+    expect(getAllByText("Draft Task").length).toBeGreaterThan(0);
   });
 
   test("clicking a loop card navigates to loop details", async () => {
@@ -130,23 +128,21 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops/:id", () => loop);
     api.get("/api/workspaces", () => [WORKSPACE_A]);
 
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Nav Target")).toBeTruthy();
+      expect(getAllByText("Nav Target").length).toBeGreaterThan(0);
     });
 
-    // Click on the loop card
-    await user.click(getByText("Nav Target"));
+    await user.click(getAllByText("Nav Target")[0]!);
 
-    // Should navigate to loop details
     await waitFor(() => {
-      expect(getByText("← Back")).toBeTruthy();
+      expect(window.location.hash).toBe("#/loop/nav-loop-1");
     });
-    expect(getByText("Nav Target")).toBeTruthy();
+    expect(getAllByText("Nav Target").length).toBeGreaterThan(0);
   });
 
-  test("navigating to loop details and back preserves dashboard", async () => {
+  test("navigating to loop details and back preserves the overview", async () => {
     setupBaseApi();
 
     const loop = createLoopWithStatus("completed", {
@@ -157,51 +153,46 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops/:id", () => loop);
     api.get("/api/workspaces", () => [WORKSPACE_A]);
 
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByText, user } = renderWithUser(<App />);
 
-    // Dashboard loads
     await waitFor(() => {
-      expect(getByText("Round Trip")).toBeTruthy();
+      expect(getAllByText("Round Trip").length).toBeGreaterThan(0);
     });
 
-    // Navigate to details
-    await user.click(getByText("Round Trip"));
+    await user.click(getAllByText("Round Trip")[0]!);
     await waitFor(() => {
-      expect(getByText("← Back")).toBeTruthy();
+      expect(window.location.hash).toBe("#/loop/round-trip-1");
     });
 
-    // Navigate back
-    await user.click(getByText("← Back"));
+    await user.click(getByText("Ralpher"));
 
-    // Dashboard is back
     await waitFor(() => {
       expect(getByText("Ralpher")).toBeTruthy();
-      expect(getByText("New Loop")).toBeTruthy();
-      expect(getByText("Round Trip")).toBeTruthy();
+      expect(getAllByText("New Loop").length).toBeGreaterThan(0);
+      expect(getByText("Everything lives in one shell now")).toBeTruthy();
     });
   });
 
-  test("settings button opens App Settings modal", async () => {
+  test("settings button opens the shell settings view", async () => {
     setupBaseApi();
     api.get("/api/loops", () => []);
     api.get("/api/workspaces", () => []);
 
-    const { getByText, getByTitle, user } = renderWithUser(<App />);
+    const { getByLabelText, getByRole, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getByText("Ralpher")).toBeTruthy();
     });
 
-    // Click the settings button (has title "App Settings")
-    await user.click(getByTitle("App Settings"));
+    await user.click(getByLabelText("Open settings"));
 
-    // App Settings modal opens
     await waitFor(() => {
-      expect(getByText("App Settings")).toBeTruthy();
+      expect(window.location.hash).toBe("#/settings");
+      expect(getByRole("heading", { name: "Settings" })).toBeTruthy();
     });
   });
 
-  test("awaiting feedback status group shows loops with addressable review mode", async () => {
+  test("addressable review loops remain reachable from the shell", async () => {
     setupBaseApi();
 
     const pushedLoop = createLoopWithStatus("pushed", {
@@ -219,44 +210,38 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops", () => [pushedLoop]);
     api.get("/api/workspaces", () => [WORKSPACE_A]);
 
-    const { getByText } = renderWithUser(<App />);
+    const { getAllByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Pushed Loop")).toBeTruthy();
+      expect(getAllByText("Pushed Loop").length).toBeGreaterThan(0);
     });
-
-    // Should show in "Awaiting Feedback" section
-    expect(getByText(/Awaiting Feedback \(1\)/)).toBeTruthy();
-
-    // Should show Addressable badge
-    expect(getByText("Addressable")).toBeTruthy();
-
-    // Note: Address Comments button was removed from dashboard cards/rows in PR #125.
-    // Address comments is now only accessible from LoopDetails Actions tab.
   });
 
-  test("version number is displayed in header", async () => {
+  test("overview displays shell summary cards", async () => {
     setupBaseApi();
-    api.get("/api/loops", () => []);
-    api.get("/api/workspaces", () => []);
+    api.get("/api/loops", () => [
+      createLoopWithStatus("running", {
+        config: { id: "summary-loop", name: "Summary Loop", directory: "/workspaces/alpha", workspaceId: "ws-a" },
+      }),
+    ]);
+    api.get("/api/workspaces", () => [WORKSPACE_A, WORKSPACE_B]);
 
-    const { getByText } = renderWithUser(<App />);
+    const { getAllByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Ralpher")).toBeTruthy();
+      expect(getAllByText("Workspaces").length).toBeGreaterThan(0);
     });
 
-    // Version is shown
-    await waitFor(() => {
-      expect(getByText("v1.0.0")).toBeTruthy();
-    });
+    expect(getAllByText("Loops").length).toBeGreaterThan(0);
+    expect(getAllByText("Chats").length).toBeGreaterThan(0);
+    expect(getAllByText("SSH").length).toBeGreaterThan(0);
   });
 
   // Note: "connection status indicator shows connected state" test was removed because
   // the "Connected" text indicator was removed from the Dashboard in PR #118.
   // WebSocket connection status is no longer displayed as a text label.
 
-  test("empty workspaces section shows workspaces with no loops", async () => {
+  test("workspace map includes workspaces with no loops", async () => {
     setupBaseApi();
 
     const loopInA = createLoopWithStatus("running", {
@@ -266,11 +251,12 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops", () => [loopInA]);
     api.get("/api/workspaces", () => [WORKSPACE_A, WORKSPACE_B]);
 
-    const { getByText } = renderWithUser(<App />);
+    const { getAllByText, getByText } = renderWithUser(<App />);
 
-    // Workspace B has no loops, should show in empty workspaces section
     await waitFor(() => {
-      expect(getByText("Empty Workspaces")).toBeTruthy();
+      expect(getByText("Workspace map")).toBeTruthy();
     });
+    expect(getAllByText("Project Beta").length).toBeGreaterThan(0);
+    expect(getByText("0 items")).toBeTruthy();
   });
 });

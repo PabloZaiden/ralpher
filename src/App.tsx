@@ -45,6 +45,10 @@ function parseHash(): ShellRoute {
     }
   }
 
+  if (hash === "/settings") {
+    return { view: "settings" };
+  }
+
   if (hash.startsWith("/new/")) {
     const [kind, scopeId] = hash.slice(5).split("/");
     if (
@@ -80,6 +84,9 @@ function navigateTo(route: ShellRoute) {
       return;
     case "ssh-server":
       window.location.hash = `/server/${route.serverId}`;
+      return;
+    case "settings":
+      window.location.hash = "/settings";
       return;
     case "compose":
       window.location.hash = route.scopeId

@@ -22,7 +22,7 @@ import {
   useWorkspaces,
 } from "../hooks";
 import { getPlanningStatusLabel, getStatusLabel } from "../utils";
-import { AppSettingsModal } from "./AppSettingsModal";
+import { AppSettingsPanel } from "./AppSettingsModal";
 import { CreateLoopForm, type CreateLoopFormSubmitRequest } from "./CreateLoopForm";
 import { LoopDetails } from "./LoopDetails";
 import { ServerSettingsForm } from "./ServerSettingsForm";
@@ -32,6 +32,7 @@ import { Badge, Button, GearIcon, getStatusBadgeVariant } from "./common";
 
 export type ShellRoute =
   | { view: "home" }
+  | { view: "settings" }
   | { view: "loop"; loopId: string }
   | { view: "chat"; chatId: string }
   | { view: "ssh"; sshSessionId: string }
@@ -1115,8 +1116,6 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceDirectory, setWorkspaceDirectory] = useState("");
   const [workspaceServerSettings, setWorkspaceServerSettings] = useState<ServerSettings>(() => getDefaultServerSettings(dashboardData.remoteOnly));
@@ -1176,6 +1175,8 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     switch (route.view) {
       case "home":
         return "Overview";
+      case "settings":
+        return "Settings";
       case "loop":
         return selectedLoop?.config.name ?? "Loop";
       case "chat":
@@ -1509,6 +1510,31 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
       return renderComposeView(route.kind);
     }
 
+    if (route.view === "settings") {
+      return (
+        <ShellPanel
+          eyebrow="App settings"
+          title="Settings"
+          description="Manage global display, developer, import/export, and destructive server actions without leaving the shell."
+          actions={(
+            <Button variant="ghost" onClick={() => navigateWithinShell({ view: "home" })}>
+              Back to overview
+            </Button>
+          )}
+        >
+          <AppSettingsPanel
+            onResetAll={dashboardData.resetAllSettings}
+            resetting={dashboardData.appSettingsResetting}
+            onKillServer={dashboardData.killServer}
+            killingServer={dashboardData.appSettingsKilling}
+            onExportConfig={exportConfig}
+            onImportConfig={importConfig}
+            configSaving={workspacesSaving}
+          />
+        </ShellPanel>
+      );
+    }
+
     return (
       <OverviewView
         workspaces={workspaces}
@@ -1575,6 +1601,12 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               title={sidebarCollapsed ? "Home" : "Overview"}
               subtitle={sidebarCollapsed ? undefined : "Recent work, counts, and quick actions"}
               onClick={() => navigateWithinShell({ view: "home" })}
+            />
+            <SectionItem
+              active={route.view === "settings"}
+              title="Settings"
+              subtitle={sidebarCollapsed ? undefined : "Global preferences and maintenance"}
+              onClick={() => navigateWithinShell({ view: "settings" })}
             />
           </ShellSection>
 
@@ -1747,23 +1779,12 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           <>
             <button
               type="button"
-              onClick={() => setSettingsOpen(true)}
+              onClick={() => navigateWithinShell({ view: "settings" })}
               className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
               aria-label="Open settings"
             >
               <GearIcon size="h-5 w-5" />
             </button>
-            <AppSettingsModal
-              isOpen={settingsOpen}
-              onClose={() => setSettingsOpen(false)}
-              onResetAll={dashboardData.resetAllSettings}
-              resetting={dashboardData.appSettingsResetting}
-              onKillServer={dashboardData.killServer}
-              killingServer={dashboardData.appSettingsKilling}
-              onExportConfig={exportConfig}
-              onImportConfig={importConfig}
-              configSaving={workspacesSaving}
-            />
           </>
         </div>
 

@@ -144,6 +144,17 @@ describe("App shell", () => {
     });
   });
 
+  test("renders settings as a shell route instead of a modal", async () => {
+    const { getByRole, getByText, queryByRole } = renderWithUser(<App />, { route: "#/settings" });
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Settings" })).toBeTruthy();
+      expect(getByText("Render Markdown")).toBeTruthy();
+    });
+
+    expect(queryByRole("dialog")).toBeNull();
+  });
+
   test("renders loop details inside the shell without a back button", async () => {
     const loop = createLoop({
       config: { id: "loop-1", name: "Shell Loop", workspaceId: "workspace-1" },
@@ -214,6 +225,21 @@ describe("App shell", () => {
 
     await waitFor(() => {
       expect(getByRole("heading", { name: "Register a standalone SSH server" })).toBeTruthy();
+    });
+  });
+
+  test("settings button navigates to the shell settings view", async () => {
+    const { getByLabelText, getByRole, getByText, user } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByText("Everything lives in one shell now")).toBeTruthy();
+    });
+
+    await user.click(getByLabelText("Open settings"));
+
+    await waitFor(() => {
+      expect(window.location.hash).toBe("#/settings");
+      expect(getByRole("heading", { name: "Settings" })).toBeTruthy();
     });
   });
 });
