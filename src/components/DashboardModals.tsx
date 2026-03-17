@@ -105,7 +105,9 @@ export interface DashboardModalsProps {
   resetWorkspaceConnection: UseWorkspaceServerSettingsResult["resetConnection"];
   updateWorkspaceSettings: UseWorkspaceServerSettingsResult["updateWorkspace"];
   archivedLoopCount: number;
+  workspaceLoopCount: number;
   purgeArchivedWorkspaceLoops: (workspaceId: string) => Promise<PurgeArchivedLoopsResult>;
+  onDeleteWorkspace: (workspaceId: string) => Promise<{ success: boolean; error?: string }>;
   refreshWorkspaces: () => Promise<void>;
   remoteOnly: boolean;
 
@@ -414,7 +416,17 @@ export function DashboardModals(props: DashboardModalsProps) {
           }
           return await props.purgeArchivedWorkspaceLoops(props.workspaceSettingsModal.workspaceId);
         }}
+        onDeleteWorkspace={async () => {
+          if (!props.workspaceSettingsModal.workspaceId) {
+            return {
+              success: false,
+              error: "Workspace settings are unavailable right now.",
+            };
+          }
+          return await props.onDeleteWorkspace(props.workspaceSettingsModal.workspaceId);
+        }}
         archivedLoopCount={props.archivedLoopCount}
+        workspaceLoopCount={props.workspaceLoopCount}
         saving={props.workspaceSettingsSaving}
         testing={props.workspaceSettingsTesting}
         resettingConnection={props.workspaceSettingsResetting}

@@ -424,7 +424,7 @@ function ShellPanel({
     return (
       <div className="flex h-full min-h-0 flex-col bg-gray-50 dark:bg-neutral-900">
         <div className="border-b border-gray-200 bg-white px-4 py-2 dark:border-gray-800 dark:bg-neutral-800 sm:px-6 lg:px-8">
-          <div className="ml-14 flex min-h-14 flex-wrap items-center justify-between gap-1.5 sm:ml-16 lg:ml-0">
+          <div className="ml-14 flex min-h-14 flex-wrap items-center gap-1.5 sm:ml-16 lg:ml-0">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
               <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
                 {title}
@@ -441,7 +441,7 @@ function ShellPanel({
                 </span>
               )}
             </div>
-            {actions && <div className="flex w-full flex-wrap items-center gap-1.5 lg:w-auto lg:justify-end">{actions}</div>}
+            {actions && <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">{actions}</div>}
           </div>
         </div>
 
@@ -1436,6 +1436,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     error: workspaceError,
     refresh: refreshWorkspaces,
     createWorkspace,
+    deleteWorkspace,
     exportConfig,
     importConfig,
   } = useWorkspaces();
@@ -1537,6 +1538,13 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     }
 
     return workspaceGroups.find((group) => group.workspace.id === workspaceSettingsWorkspaceId)?.statusGroups.archived.length ?? 0;
+  }, [workspaceGroups, workspaceSettingsWorkspaceId]);
+  const selectedWorkspaceLoopCount = useMemo(() => {
+    if (!workspaceSettingsWorkspaceId) {
+      return 0;
+    }
+
+    return workspaceGroups.find((group) => group.workspace.id === workspaceSettingsWorkspaceId)?.loops.length ?? 0;
   }, [workspaceGroups, workspaceSettingsWorkspaceId]);
 
   useEffect(() => {
@@ -2266,19 +2274,6 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           description={workspaceFromHook?.directory ?? selectedWorkspace.directory}
           descriptionClassName="hidden sm:inline font-mono"
           variant="compact"
-          badges={(
-            <>
-              <Badge variant={getConnectionStatusBadge(workspaceStatus).variant} size="sm">
-                {getConnectionStatusBadge(workspaceStatus).label}
-              </Badge>
-              {workspaceStatus && <Badge variant="default" size="sm">{workspaceStatus.provider}</Badge>}
-              {workspaceStatus && (
-                <Badge variant={workspaceStatus.transport === "ssh" ? "info" : "default"} size="sm">
-                  {workspaceStatus.transport}
-                </Badge>
-              )}
-            </>
-          )}
           actions={(
             <Button
               type="submit"
@@ -2315,7 +2310,11 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               onPurgeArchivedLoops={workspaceSettingsWorkspaceId
                 ? async () => await handlePurgeArchivedLoops(workspaceSettingsWorkspaceId)
                 : undefined}
+              onDeleteWorkspace={workspaceSettingsWorkspaceId
+                ? async () => await deleteWorkspace(workspaceSettingsWorkspaceId)
+                : undefined}
               archivedLoopCount={selectedWorkspaceArchivedLoopCount}
+              workspaceLoopCount={selectedWorkspaceLoopCount}
               saving={workspaceSettingsSaving}
               testing={workspaceSettingsTesting}
               resettingConnection={workspaceSettingsResetting}
@@ -2324,6 +2323,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               showConnectionStatus={false}
               formId="workspace-settings-shell-form"
               onSaved={() => navigateWithinShell({ view: "workspace", workspaceId: selectedWorkspace.id })}
+              onDeleted={() => navigateWithinShell({ view: "home" })}
               onValidityChange={setWorkspaceSettingsFormValid}
             />
           ) : (

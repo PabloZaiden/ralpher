@@ -9,7 +9,7 @@ import type { ServerSettings, ConnectionStatus } from "../types/settings";
 import type { Workspace } from "../types/workspace";
 import { createLogger } from "../lib/logger";
 import { useAgentsMdOptimizer } from "../hooks/useAgentsMdOptimizer";
-import type { PurgeArchivedLoopsResult } from "../hooks";
+import { useToast, type PurgeArchivedLoopsResult } from "../hooks";
 
 const log = createLogger("WorkspaceSettingsModal");
 
@@ -30,8 +30,12 @@ export interface WorkspaceSettingsModalProps {
   onResetConnection?: () => Promise<boolean>;
   /** Callback to purge all archived loops for the workspace */
   onPurgeArchivedLoops?: () => Promise<PurgeArchivedLoopsResult>;
+  /** Callback to delete the workspace */
+  onDeleteWorkspace?: () => Promise<{ success: boolean; error?: string }>;
   /** Number of archived loops for the selected workspace */
   archivedLoopCount?: number;
+  /** Total number of loops/chats still assigned to the selected workspace */
+  workspaceLoopCount?: number;
   /** Whether saving is in progress */
   saving?: boolean;
   /** Whether testing is in progress */
@@ -60,8 +64,12 @@ export interface WorkspaceSettingsFormProps {
   onResetConnection?: () => Promise<boolean>;
   /** Callback to purge all archived loops for the workspace */
   onPurgeArchivedLoops?: () => Promise<PurgeArchivedLoopsResult>;
+  /** Callback to delete the workspace */
+  onDeleteWorkspace?: () => Promise<{ success: boolean; error?: string }>;
   /** Number of archived loops for the selected workspace */
   archivedLoopCount?: number;
+  /** Total number of loops/chats still assigned to the selected workspace */
+  workspaceLoopCount?: number;
   /** Whether saving is in progress */
   saving?: boolean;
   /** Whether testing is in progress */
@@ -78,6 +86,8 @@ export interface WorkspaceSettingsFormProps {
   formId?: string;
   /** Called after a successful save */
   onSaved?: () => void;
+  /** Called after a successful delete */
+  onDeleted?: () => void;
   /** Reports current form validity */
   onValidityChange?: (isValid: boolean) => void;
 }
@@ -89,8 +99,10 @@ export function WorkspaceSettingsForm({
   onTest,
   onResetConnection,
   onPurgeArchivedLoops,
+  onDeleteWorkspace,
   archivedLoopCount = 0,
-  saving: _saving = false,
+  workspaceLoopCount = 0,
+  saving = false,
   testing = false,
   resettingConnection = false,
   purgingArchivedLoops = false,
@@ -98,8 +110,10 @@ export function WorkspaceSettingsForm({
   showConnectionStatus = true,
   formId = "workspace-settings-form",
   onSaved,
+  onDeleted,
   onValidityChange,
 }: WorkspaceSettingsFormProps) {
+  const toast = useToast();
   // Workspace name state
   const [name, setName] = useState("");
 
@@ -160,15 +174,19 @@ export function WorkspaceSettingsForm({
   const [optimizeSuccess, setOptimizeSuccess] = useState<boolean | null>(null);
   const [wasAlreadyOptimized, setWasAlreadyOptimized] = useState(false);
   const [showPurgeArchivedConfirm, setShowPurgeArchivedConfirm] = useState(false);
+  const [showDeleteWorkspaceConfirm, setShowDeleteWorkspaceConfirm] = useState(false);
   const [purgeArchivedResult, setPurgeArchivedResult] = useState<PurgeArchivedLoopsResult | null>(null);
   const [purgeArchivedError, setPurgeArchivedError] = useState<string | null>(null);
+  const [deletingWorkspace, setDeletingWorkspace] = useState(false);
 
   useEffect(() => {
     setOptimizeSuccess(null);
     setWasAlreadyOptimized(false);
     setShowPurgeArchivedConfirm(false);
+    setShowDeleteWorkspaceConfirm(false);
     setPurgeArchivedResult(null);
     setPurgeArchivedError(null);
+    setDeletingWorkspace(false);
 
     if (!workspace) {
       resetOptimizer();
@@ -216,9 +234,34 @@ export function WorkspaceSettingsForm({
     }
   }
 
+  async function handleDeleteWorkspace() {
+    if (!workspace || !onDeleteWorkspace) {
+      return;
+    }
+
+    setDeletingWorkspace(true);
+    try {
+      const result = await onDeleteWorkspace();
+      setShowDeleteWorkspaceConfirm(false);
+      if (!result.success) {
+        toast.error(result.error || "Failed to delete workspace");
+        return;
+      }
+
+      toast.success(`Deleted workspace "${workspace.name}"`);
+      onDeleted?.();
+    } catch (error) {
+      setShowDeleteWorkspaceConfirm(false);
+      toast.error(String(error));
+    } finally {
+      setDeletingWorkspace(false);
+    }
+  }
+
   // Validation
   const isNameValid = name.trim().length > 0;
   const isValid = isNameValid && isServerSettingsValid;
+  const deleteWorkspaceDisabled = saving || deletingWorkspace || workspaceLoopCount > 0;
 
   useEffect(() => {
     onValidityChange?.(isValid);
@@ -475,6 +518,33 @@ export function WorkspaceSettingsForm({
             </div>
           </div>
         )}
+
+        {workspace && onDeleteWorkspace && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
+            <div className="p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
+              <h3 className="text-sm font-medium text-red-800 dark:text-red-200 mb-2">
+                Delete Workspace
+              </h3>
+              <p className="text-sm text-red-700 dark:text-red-300 mb-4">
+                {workspaceLoopCount > 0
+                  ? `Delete the remaining ${workspaceLoopCount} loop${workspaceLoopCount === 1 ? "" : "s"} or chat${workspaceLoopCount === 1 ? "" : "s"} in this workspace before removing it from Ralpher.`
+                  : "Remove this workspace from Ralpher now that it no longer contains loops or chats."}
+                {" "}This only removes the workspace record and does not delete files on disk.
+              </p>
+              <Button
+                type="button"
+                variant="danger"
+                size="sm"
+                onClick={() => setShowDeleteWorkspaceConfirm(true)}
+                loading={deletingWorkspace}
+                disabled={deleteWorkspaceDisabled}
+              >
+                <TrashIcon className="w-4 h-4 mr-2" />
+                Delete Workspace
+              </Button>
+            </div>
+          </div>
+        )}
       </form>
 
       <ConfirmModal
@@ -485,6 +555,17 @@ export function WorkspaceSettingsForm({
         message={`Are you sure you want to permanently delete all ${archivedLoopCount} archived loops for "${workspace?.name ?? "this workspace"}"? This cannot be undone.`}
         confirmLabel="Purge All"
         loading={purgingArchivedLoops}
+        variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={showDeleteWorkspaceConfirm}
+        onClose={() => setShowDeleteWorkspaceConfirm(false)}
+        onConfirm={handleDeleteWorkspace}
+        title="Delete Workspace"
+        message={`Are you sure you want to delete workspace "${workspace?.name ?? "this workspace"}"? This only removes it from Ralpher and does not delete files on disk.`}
+        confirmLabel="Delete"
+        loading={deletingWorkspace}
         variant="danger"
       />
     </>
@@ -534,6 +615,7 @@ export function WorkspaceSettingsModal({
         {...props}
         formId="workspace-settings-modal-form"
         onSaved={onClose}
+        onDeleted={onClose}
         onValidityChange={setIsValid}
       />
     </Modal>

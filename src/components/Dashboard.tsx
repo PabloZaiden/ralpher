@@ -98,6 +98,14 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
       (group) => group.workspace.id === modals.workspaceSettingsModal.workspaceId
     )?.statusGroups.archived.length ?? 0;
   }, [modals.workspaceSettingsModal.workspaceId, workspaceGroups]);
+  const selectedWorkspaceLoopCount = useMemo(() => {
+    if (!modals.workspaceSettingsModal.workspaceId) {
+      return 0;
+    }
+    return workspaceGroups.find(
+      (group) => group.workspace.id === modals.workspaceSettingsModal.workspaceId
+    )?.loops.length ?? 0;
+  }, [modals.workspaceSettingsModal.workspaceId, workspaceGroups]);
 
   // Mode-aware selection handler: routes chats to #/chat/:id, loops to #/loop/:id
   const handleSelectItem = (loopId: string) => {
@@ -359,7 +367,9 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         resetWorkspaceConnection={resetWorkspaceConnection}
         updateWorkspaceSettings={updateWorkspaceSettings}
         archivedLoopCount={selectedWorkspaceArchivedLoopCount}
+        workspaceLoopCount={selectedWorkspaceLoopCount}
         purgeArchivedWorkspaceLoops={handlePurgeArchivedWorkspaceLoops}
+        onDeleteWorkspace={deleteWorkspace}
         refreshWorkspaces={refreshWorkspaces}
         remoteOnly={dashboardData.remoteOnly}
         // Create workspace modal

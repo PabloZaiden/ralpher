@@ -1012,7 +1012,7 @@ describe("SshSessionDetails", () => {
     await waitFor(() => {
       expect(lastTerminal?.writes).toContain("prompt$ ");
       expect(terminalConnection.sentMessages).toContain(resizePayload);
-      expect(getByText("open")).toBeTruthy();
+      expect(getByText("connected")).toBeTruthy();
     });
   });
 
@@ -1091,7 +1091,7 @@ describe("SshSessionDetails", () => {
 
       await waitFor(() => {
         expect(api.calls("/api/ssh-sessions/:id", "GET")).toHaveLength(2);
-        expect(getByText("open")).toBeTruthy();
+        expect(getByText("connected")).toBeTruthy();
       });
 
       await act(async () => {
@@ -1099,7 +1099,7 @@ describe("SshSessionDetails", () => {
       });
 
       await waitFor(() => {
-        expect(getByText("closed")).toBeTruthy();
+        expect(getByText("disconnected")).toBeTruthy();
       });
 
       visibilityState = "hidden";
@@ -1131,7 +1131,7 @@ describe("SshSessionDetails", () => {
       });
 
       await waitFor(() => {
-        expect(getByText("open")).toBeTruthy();
+        expect(getByText("connected")).toBeTruthy();
         expect(api.calls("/api/ssh-sessions/:id", "GET")).toHaveLength(3);
       });
     } finally {
@@ -1579,7 +1579,7 @@ describe("SshSessionDetails", () => {
       });
 
       await waitFor(() => {
-        expect(getByText("closed")).toBeTruthy();
+        expect(getByText("disconnected")).toBeTruthy();
       });
 
       visibilityState = "hidden";
@@ -1700,7 +1700,7 @@ describe("SshSessionDetails", () => {
       });
 
       await waitFor(() => {
-        expect(getByText("closed")).toBeTruthy();
+        expect(getByText("disconnected")).toBeTruthy();
       });
 
       visibilityState = "hidden";
