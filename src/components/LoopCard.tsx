@@ -45,7 +45,8 @@ export function LoopCard({
     <Card
       clickable={!!onClick}
       onClick={onClick}
-      className={`relative ${isActive ? "ring-2 ring-blue-500" : ""} ${isPlanning ? planningRingClass : ""}`}
+      className={`relative h-full ${isActive ? "ring-2 ring-blue-500" : ""} ${isPlanning ? planningRingClass : ""}`}
+      bodyClassName="flex h-full flex-col"
     >
       {/* Status indicator */}
       {isActive && !isPlanning && (
@@ -117,25 +118,6 @@ export function LoopCard({
         )}
       </div>
 
-      {/* Stats */}
-      {!isDraft && (
-        <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-3 sm:mb-4 text-xs sm:text-sm">
-          <div className="min-w-0">
-            <span className="text-gray-500 dark:text-gray-400 block sm:inline">Iterations:</span>
-            <span className="ml-0 sm:ml-2 font-medium text-gray-900 dark:text-gray-100 block sm:inline">
-              {state.currentIteration}
-              {config.maxIterations ? `/${config.maxIterations}` : ""}
-            </span>
-          </div>
-          <div className="min-w-0">
-            <span className="text-gray-500 dark:text-gray-400 block sm:inline">Last activity:</span>
-            <span className="ml-0 sm:ml-2 font-medium text-gray-900 dark:text-gray-100 block sm:inline">
-              {formatRelativeTime(state.lastActivityAt)}
-            </span>
-          </div>
-        </div>
-      )}
-
       {/* Error display - show when loop has an error */}
       {state.error && (
         <div className="mb-3 sm:mb-4 p-2 rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
@@ -157,6 +139,25 @@ export function LoopCard({
               ({state.git.commits.length} commits)
             </span>
           )}
+        </div>
+      )}
+
+      {/* Stats */}
+      {!isDraft && (
+        <div className="mt-auto grid grid-cols-2 gap-2 sm:gap-4 text-xs sm:text-sm">
+          <div className="min-w-0">
+            <span className="text-gray-500 dark:text-gray-400 block sm:inline">Iterations:</span>
+            <span className="ml-0 sm:ml-2 font-medium text-gray-900 dark:text-gray-100 block sm:inline">
+              {state.currentIteration}
+              {config.maxIterations ? `/${config.maxIterations}` : ""}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <span className="text-gray-500 dark:text-gray-400 block sm:inline">Last activity:</span>
+            <span className="ml-0 sm:ml-2 font-medium text-gray-900 dark:text-gray-100 block sm:inline">
+              {formatRelativeTime(state.lastActivityAt)}
+            </span>
+          </div>
         </div>
       )}
     </Card>
