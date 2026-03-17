@@ -877,17 +877,20 @@ function SshServerView({
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   async function handleDeleteServer() {
-    setDeleteSubmitting(true);
-    const deleted = await onDeleteServer();
-    if (deleted) {
-      return;
+    try {
+      setDeleteSubmitting(true);
+      const deleted = await onDeleteServer();
+      if (deleted) {
+        setDeleteConfirmOpen(false);
+      }
+    } finally {
+      setDeleteSubmitting(false);
     }
-    setDeleteSubmitting(false);
   }
 
   const deleteMessage = sessions.length === 0
-    ? `Delete "${server.config.name}"? This removes the saved SSH server metadata from Ralpher.`
-    : `Delete "${server.config.name}" and its ${sessions.length} standalone session${sessions.length === 1 ? "" : "s"}? This cannot be undone.`;
+    ? `Delete "${server.config.name}"? This removes the saved SSH server metadata from Ralpher and any saved browser credential for this server.`
+    : `Delete "${server.config.name}" and its ${sessions.length} standalone session${sessions.length === 1 ? "" : "s"}? This removes the saved SSH server metadata from Ralpher, any saved browser credential for this server, and cannot be undone.`;
 
   return (
     <ShellPanel

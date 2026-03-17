@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { App } from "@/App";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
-import { renderWithUser, waitFor, act } from "../helpers/render";
+import { renderWithUser, waitFor, act, within } from "../helpers/render";
 import { createLoop, createSshSession, createWorkspace } from "../helpers/factories";
 
 const api = createMockApi();
@@ -207,13 +207,21 @@ describe("App shell", () => {
   test("lets users delete an SSH server from the shell detail route", async () => {
     const server = createSshServer({ id: "server-1", name: "Deploy host" });
     setupDefaultApi({ sshServers: [server] });
-    localStorage.setItem("ralpher.sshServerCredential.server-1", JSON.stringify({ encryptedCredential: "saved" }));
+    localStorage.setItem("ralpher.sshServerCredential.server-1", JSON.stringify({
+      encryptedCredential: {
+        algorithm: server.publicKey.algorithm,
+        fingerprint: server.publicKey.fingerprint,
+        version: server.publicKey.version,
+        ciphertext: "saved",
+      },
+      storedAt: isoNow(),
+    }));
     api.delete("/api/ssh-servers/:id", (req) => {
       expect(req.params["id"]).toBe("server-1");
       return { success: true };
     });
 
-    const { getAllByRole, getByRole, getByText, queryByRole, user } = renderWithUser(<App />, { route: "#/server/server-1" });
+    const { getByRole, getByText, queryByRole, user } = renderWithUser(<App />, { route: "#/server/server-1" });
 
     await waitFor(() => {
       expect(getByRole("heading", { name: "Deploy host" })).toBeTruthy();
@@ -223,10 +231,11 @@ describe("App shell", () => {
     await user.click(getByRole("button", { name: "Delete Server" }));
 
     await waitFor(() => {
-      expect(getByText('Delete "Deploy host"? This removes the saved SSH server metadata from Ralpher.')).toBeTruthy();
+      expect(getByText('Delete "Deploy host"? This removes the saved SSH server metadata from Ralpher and any saved browser credential for this server.')).toBeTruthy();
     });
 
-    await user.click(getAllByRole("button", { name: "Delete Server" })[1]!);
+    const deleteDialog = getByRole("dialog");
+    await user.click(within(deleteDialog).getByRole("button", { name: "Delete Server" }));
 
     await waitFor(() => {
       expect(api.calls("/api/ssh-servers/:id", "DELETE")).toHaveLength(1);
