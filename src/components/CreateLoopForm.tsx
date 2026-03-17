@@ -588,7 +588,7 @@ export function CreateLoopForm({
             setUserChangedBranch(true);
           }}
           disabled={branchesLoading || branches.length === 0}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50 font-mono text-sm"
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 disabled:opacity-50 font-mono text-sm"
         >
           {branchesLoading && (
             <option value="">Loading branches...</option>
@@ -644,7 +644,7 @@ export function CreateLoopForm({
           onChange={setSelectedModel}
           models={models}
           loading={modelsLoading}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 disabled:opacity-50"
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 disabled:opacity-50"
         />
         {!modelsLoading && models.length > 0 && groupModelsByProvider(models).connectedProviders.length === 0 && (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400">
@@ -684,7 +684,7 @@ export function CreateLoopForm({
               }
             }
           }}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100"
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600"
         >
           <option value="">No template (custom prompt)</option>
           {PROMPT_TEMPLATES.map((t) => (
@@ -725,7 +725,7 @@ export function CreateLoopForm({
               placeholder="Short loop title"
               required
               maxLength={100}
-              className="block flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="block flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
             <Button
               type="button"
@@ -777,7 +777,7 @@ export function CreateLoopForm({
           placeholder={isChatMode ? "Ask a question or describe what you want to do..." : (planMode ? "Describe what you want to achieve. The AI will create a detailed plan based on this." : "Do everything that's pending in the plan")}
           required
           rows={3}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 min-h-[76px] sm:min-h-[120px] resize-y"
+          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500 min-h-[76px] sm:min-h-[120px] resize-y"
         />
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
           {isChatMode ? "Your first message to start the conversation" : "The prompt sent to the AI agent at the start of each iteration"}
@@ -792,7 +792,7 @@ export function CreateLoopForm({
             type="checkbox"
             checked={planMode}
             onChange={(e) => setPlanMode(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300"
           />
           <div className="flex-1">
             <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -817,7 +817,7 @@ export function CreateLoopForm({
             type="checkbox"
             checked={planModeAutoReply}
             onChange={(e) => setPlanModeAutoReply(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300"
           />
           <div className="flex-1">
             <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -837,7 +837,7 @@ export function CreateLoopForm({
             type="checkbox"
             checked={useWorktree}
             onChange={(e) => setUseWorktree(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+            className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300"
           />
           <div className="flex-1">
             <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -855,7 +855,7 @@ export function CreateLoopForm({
       <button
         type="button"
         onClick={() => setShowAdvanced(!showAdvanced)}
-        className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+        className="text-sm text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100"
       >
         {showAdvanced ? "Hide" : "Show"} advanced options
       </button>
@@ -879,7 +879,7 @@ export function CreateLoopForm({
               onChange={(e) => setMaxIterations(e.target.value)}
               min="1"
               placeholder="Unlimited"
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Leave empty for unlimited iterations
@@ -901,7 +901,7 @@ export function CreateLoopForm({
               onChange={(e) => setMaxConsecutiveErrors(e.target.value)}
               min="0"
               placeholder="10"
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Failsafe exit after this many identical consecutive errors. 0 = unlimited. (default: 10)
@@ -923,7 +923,7 @@ export function CreateLoopForm({
               onChange={(e) => setActivityTimeoutSeconds(e.target.value)}
               min="60"
               placeholder={String(DEFAULT_LOOP_CONFIG.activityTimeoutSeconds)}
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500"
+              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 dark:focus:ring-gray-600 placeholder:text-gray-400 dark:placeholder:text-gray-500"
             />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Time without AI activity before treating as error and retrying. Minimum: 60 seconds. (default: {DEFAULT_LOOP_CONFIG.activityTimeoutSeconds})
@@ -937,7 +937,7 @@ export function CreateLoopForm({
                 type="checkbox"
                 checked={clearPlanningFolder}
                 onChange={(e) => setClearPlanningFolder(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700"
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300"
               />
               <div className="flex-1">
                 <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">

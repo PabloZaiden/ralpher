@@ -94,7 +94,7 @@ function DiffPatchViewer({ patch }: { patch: string }) {
         } else if (line.startsWith("-") && !line.startsWith("---")) {
           className = "text-red-400 bg-red-950/50";
         } else if (line.startsWith("@@")) {
-          className = "text-blue-400";
+          className = "text-gray-300";
         } else if (line.startsWith("diff --git") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++")) {
           className = "text-gray-500";
         }
@@ -672,7 +672,7 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
   if (loading && !loop) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent" />
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-500 border-t-transparent" />
       </div>
     );
   }
@@ -739,17 +739,17 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
             <Badge variant={isPlanning ? (isPlanReady ? "plan_ready" : "planning") : getStatusBadgeVariant(state.status)} size="sm">
               {isPlanning ? getPlanningStatusLabel(isPlanReady) : getStatusLabel(state.status, state.syncState)}
             </Badge>
-            {/* Activity dot: pulsing blue for running, pulsing cyan for planning, static amber for plan ready */}
+            {/* Activity dot: pulsing neutral for active/planning, static amber for plan ready */}
             {isActive && !isPlanning && (
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-500" />
               </span>
             )}
             {isPlanningActive && (
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500" />
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-500 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-600" />
               </span>
             )}
             {isPlanReady && (
@@ -826,7 +826,7 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                         onClick={() => handleTabChange(tab.id)}
                         className={`relative px-1.5 sm:px-4 py-1.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                           activeTab === tab.id
-                            ? "border-blue-500 text-blue-600 dark:text-blue-400"
+                            ? "border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100"
                             : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
                         }`}
                       >
@@ -834,13 +834,13 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                           {tab.label}
                           {showPlanWritingIndicator && (
                             <span className="relative flex h-2 w-2">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500" />
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-500 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-600" />
                             </span>
                           )}
                         </span>
                         {hasUpdate && !showPlanWritingIndicator && activeTab !== tab.id && (
-                          <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-blue-500" />
+                          <span className="absolute top-0.5 right-0.5 h-1.5 w-1.5 rounded-full bg-gray-500" />
                         )}
                       </button>
                     );
@@ -1032,7 +1032,7 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                               type="checkbox"
                               checked={showSystemInfo}
                               onChange={(e) => setShowSystemInfo(e.target.checked)}
-                              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                              className="rounded border-gray-300 dark:border-gray-600 text-gray-700 focus:ring-gray-500 focus:ring-offset-0 dark:text-gray-300"
                             />
                             <span>Show system info</span>
                           </label>
@@ -1041,7 +1041,7 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                               type="checkbox"
                               checked={showReasoning}
                               onChange={(e) => setShowReasoning(e.target.checked)}
-                              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                              className="rounded border-gray-300 dark:border-gray-600 text-gray-700 focus:ring-gray-500 focus:ring-offset-0 dark:text-gray-300"
                             />
                             <span>Show reasoning</span>
                           </label>
@@ -1050,7 +1050,7 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                               type="checkbox"
                               checked={showTools}
                               onChange={(e) => setShowTools(e.target.checked)}
-                              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                              className="rounded border-gray-300 dark:border-gray-600 text-gray-700 focus:ring-gray-500 focus:ring-offset-0 dark:text-gray-300"
                             />
                             <span>Show tools</span>
                           </label>
@@ -1059,7 +1059,7 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                               type="checkbox"
                               checked={autoScroll}
                               onChange={(e) => setAutoScroll(e.target.checked)}
-                              className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                              className="rounded border-gray-300 dark:border-gray-600 text-gray-700 focus:ring-gray-500 focus:ring-offset-0 dark:text-gray-300"
                             />
                             <span>Autoscroll</span>
                           </label>
@@ -1139,8 +1139,8 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                           disabled={sshConnecting}
                           className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
-                            <span className="text-sky-600 dark:text-sky-400 text-sm">⌁</span>
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                            <span className="text-gray-700 dark:text-gray-300 text-sm">⌁</span>
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -1288,11 +1288,11 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
 
                       {/* Pending model status (read-only) */}
                       {state.pendingModel && (
-                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                          <h3 className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                        <div className="bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+                          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
                             Model Change Queued
                           </h3>
-                          <p className="text-sm text-blue-700 dark:text-blue-300">
+                          <p className="text-sm text-gray-700 dark:text-gray-300">
                             Model will change to <span className="font-mono font-medium">{state.pendingModel.modelID}</span> after the current step.
                           </p>
                         </div>
@@ -1327,14 +1327,14 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
 
                       {loadingContent && !isPlanning ? (
                         <div className="flex justify-center py-8">
-                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
+                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-500 border-t-transparent" />
                         </div>
                       ) : isPlanning && !planContent?.exists ? (
                         /* Waiting for AI to generate plan (no content yet) */
                         <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400 py-8 justify-center">
                           <span className="relative flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500" />
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-500 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-gray-600" />
                           </span>
                           <span>Waiting for AI to generate plan...</span>
                         </div>
@@ -1344,8 +1344,8 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                           <MarkdownRenderer content={planContent.content} dimmed rawMode={!markdownEnabled} className="min-w-0 rounded-lg bg-gray-50 p-4 dark:bg-gray-900" />
                           <div className="absolute top-4 right-4 flex items-center gap-3 text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 px-3 py-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
                             <span className="relative flex h-3 w-3">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-3 w-3 bg-cyan-500" />
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-500 opacity-75" />
+                              <span className="relative inline-flex rounded-full h-3 w-3 bg-gray-600" />
                             </span>
                             <span className="text-sm font-medium">AI is still writing...</span>
                           </div>
@@ -1366,7 +1366,7 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                       <div className="min-w-0 flex-1">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
-                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
+                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-500 border-t-transparent" />
                         </div>
                       ) : statusContent?.exists ? (
                         <MarkdownRenderer content={statusContent.content} rawMode={!markdownEnabled} className="min-w-0 rounded-lg bg-gray-50 p-4 dark:bg-gray-900" />
@@ -1384,7 +1384,7 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                       <div className="min-w-0 flex-1">
                       {loadingContent ? (
                         <div className="flex justify-center py-8">
-                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent" />
+                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-500 border-t-transparent" />
                         </div>
                       ) : diffContent.length > 0 ? (
                         <div className="space-y-2">
@@ -1428,7 +1428,7 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                                         : file.status === "deleted"
                                         ? "text-red-600 dark:text-red-400"
                                         : file.status === "renamed"
-                                        ? "text-purple-600 dark:text-purple-400"
+                                        ? "text-gray-600 dark:text-gray-300"
                                         : "text-yellow-600 dark:text-yellow-400"
                                     }`}
                                   >
@@ -1467,8 +1467,8 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                       <div className="min-w-0 w-full space-y-4">
                       {loop.state.reviewMode ? (
                         <>
-                          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3">
+                          <div className="bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
+                            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
                               Review Mode Status
                             </h3>
                             <div className="space-y-2 text-sm">
@@ -1639,8 +1639,8 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                               disabled={planActionSubmitting || !isPlanReady || !planContent?.content?.trim()}
                               className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
-                                <span className="text-sky-600 dark:text-sky-400 text-sm">⌁</span>
+                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                <span className="text-gray-700 dark:text-gray-300 text-sm">⌁</span>
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
@@ -1677,8 +1677,8 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                                 disabled={loadingPullRequestDestination || !pullRequestDestination?.enabled}
                                 className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                               >
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                                  <span className="text-indigo-600 dark:text-indigo-400 text-sm">↗</span>
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                  <span className="text-gray-700 dark:text-gray-300 text-sm">↗</span>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Go to PR</div>
@@ -1700,8 +1700,8 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                                 onClick={() => setAddressCommentsModal(true)}
                                 className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
                               >
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                                  <span className="text-blue-600 dark:text-blue-400 text-sm">💬</span>
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                  <span className="text-gray-700 dark:text-gray-300 text-sm">💬</span>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Address Comments</div>
@@ -1715,8 +1715,8 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
                                 onClick={() => setUpdateBranchModal(true)}
                                 className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left"
                               >
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                                  <span className="text-purple-600 dark:text-purple-400 text-sm">⟳</span>
+                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
+                                  <span className="text-gray-700 dark:text-gray-300 text-sm">⟳</span>
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Update Branch</div>

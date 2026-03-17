@@ -168,7 +168,7 @@ export function AppSettingsModal({
                 checked={markdownEnabled}
                 onChange={() => toggleMarkdown()}
                 disabled={savingMarkdown}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:opacity-50"
+                className="h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 disabled:opacity-50"
               />
               <div>
                 <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -212,7 +212,7 @@ export function AppSettingsModal({
                     value={logLevel}
                     onChange={(e) => setLogLevel(e.target.value as LogLevelName)}
                     disabled={savingLogLevel}
-                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 disabled:opacity-50"
+                    className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 shadow-sm focus:border-gray-500 focus:ring-gray-500 disabled:opacity-50"
                   >
                     {availableLevels.map((option) => (
                       <option key={option.value} value={option.value}>

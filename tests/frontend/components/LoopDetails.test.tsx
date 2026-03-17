@@ -309,10 +309,10 @@ describe("tab navigation", () => {
       expect(getByText("Test Loop")).toBeTruthy();
     });
 
-    // Log tab button should have active styling (border-blue-500)
+    // Log tab button should have active styling
     const logTab = getByText("Log").closest("button");
     expect(logTab).toBeTruthy();
-    expect(logTab!.className).toContain("border-blue-500");
+    expect(logTab!.className).toContain("border-gray-900");
   });
 
   test("can switch to Info tab", async () => {
@@ -1298,7 +1298,7 @@ describe("planning mode", () => {
     expect(queryByText("Working...")).toBeNull();
   });
 
-  test("shows pulsing cyan activity indicator when planning with isPlanReady=false", async () => {
+  test("shows pulsing neutral activity indicator when planning with isPlanReady=false", async () => {
     const loop = createLoopWithStatus("planning", {
       config: { id: LOOP_ID, name: "Cyan Indicator Loop" },
     });
@@ -1317,15 +1317,15 @@ describe("planning mode", () => {
       expect(getByText("Cyan Indicator Loop")).toBeTruthy();
     });
 
-    // Should have a pulsing cyan indicator (animate-ping + bg-cyan-400)
+    // Should have a pulsing neutral indicator
     const header = container.querySelector("header");
     expect(header).toBeTruthy();
-    const cyanPinger = header!.querySelector(".animate-ping.bg-cyan-400");
-    expect(cyanPinger).toBeTruthy();
+    const planningPinger = header!.querySelector(".animate-ping.bg-gray-500");
+    expect(planningPinger).toBeTruthy();
 
-    // Should NOT have a blue pulsing indicator (that's for running state)
-    const bluePinger = header!.querySelector(".animate-ping.bg-blue-400");
-    expect(bluePinger).toBeNull();
+    // Should NOT have the running-state neutral indicator
+    const runningPinger = header!.querySelector(".animate-ping.bg-gray-400");
+    expect(runningPinger).toBeNull();
   });
 
   test("shows static amber activity indicator when planning with isPlanReady=true", async () => {
@@ -1366,7 +1366,7 @@ describe("planning mode", () => {
     expect(pinger).toBeNull();
   });
 
-  test("running loop shows pulsing blue indicator, not planning indicators", async () => {
+  test("running loop shows pulsing neutral activity indicator, not planning indicators", async () => {
     setupDefaultApi();
     const { getByText, container } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
 
@@ -1374,15 +1374,15 @@ describe("planning mode", () => {
       expect(getByText("Test Loop")).toBeTruthy();
     });
 
-    // Should have a pulsing blue indicator
+    // Should have a pulsing neutral indicator
     const header = container.querySelector("header");
     expect(header).toBeTruthy();
-    const bluePinger = header!.querySelector(".animate-ping.bg-blue-400");
-    expect(bluePinger).toBeTruthy();
+    const runningPinger = header!.querySelector(".animate-ping.bg-gray-400");
+    expect(runningPinger).toBeTruthy();
 
-    // Should NOT have cyan or amber indicators
-    const cyanPinger = header!.querySelector(".animate-ping.bg-cyan-400");
-    expect(cyanPinger).toBeNull();
+    // Should NOT have the planning or amber indicators
+    const planningPinger = header!.querySelector(".animate-ping.bg-gray-500");
+    expect(planningPinger).toBeNull();
     const amberDot = header!.querySelector(".bg-amber-500");
     expect(amberDot).toBeNull();
   });
