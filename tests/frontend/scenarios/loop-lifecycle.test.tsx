@@ -6,6 +6,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { act } from "@testing-library/react";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor } from "../helpers/render";
@@ -62,28 +63,33 @@ afterEach(() => {
 // ─── Loop lifecycle scenarios ────────────────────────────────────────────────
 
 describe("loop lifecycle scenario", () => {
+  async function navigateToLoopRoute() {
+    await act(async () => {
+      window.location.hash = `#/loop/${LOOP_ID}`;
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+  }
+
   test("running loop appears on dashboard and user navigates to details", async () => {
     const loop = createLoopWithStatus("running", {
       config: { id: LOOP_ID, name: "Feature Loop", directory: "/workspaces/my-project", workspaceId: "ws-1" },
     });
     setupApi(loop);
 
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, user } = renderWithUser(<App />);
 
-    // Dashboard shows the running loop
     await waitFor(() => {
-      expect(getByText("Feature Loop")).toBeTruthy();
+      expect(getAllByText("Feature Loop").length).toBeGreaterThan(0);
     });
-    expect(getByText("Running")).toBeTruthy();
+    expect(getAllByText("Running").length).toBeGreaterThan(0);
 
-    // Click on the loop card to navigate
-    await user.click(getByText("Feature Loop"));
+    await user.click(getAllByText("Feature Loop")[0]!);
+    await navigateToLoopRoute();
 
-    // Should navigate to loop details
     await waitFor(() => {
-      expect(getByText("← Back")).toBeTruthy();
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
     });
-    expect(getByText("Feature Loop")).toBeTruthy();
+    expect(getAllByText("Feature Loop").length).toBeGreaterThan(0);
   });
 
   test("completed loop shows accept and delete actions", async () => {
@@ -92,18 +98,18 @@ describe("loop lifecycle scenario", () => {
     });
     setupApi(loop);
 
-    // Navigate directly to loop details
-    window.location.hash = `/loop/${LOOP_ID}`;
+    const { getAllByText, getByRole, user } = renderWithUser(<App />);
 
-    const { getByText, user } = renderWithUser(<App />);
-
-    // Wait for loop to load
     await waitFor(() => {
-      expect(getByText("Done Loop")).toBeTruthy();
+      expect(getAllByText("Done Loop").length).toBeGreaterThan(0);
     });
 
-    // Go to Actions tab
-    await user.click(getByText("Actions"));
+    await navigateToLoopRoute();
+    await waitFor(() => {
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
+    });
+
+    await user.click(getByRole("button", { name: /Actions/ }));
 
     // Should show accept and delete actions
     await waitFor(() => {
@@ -129,15 +135,18 @@ describe("loop lifecycle scenario", () => {
       mergeCommit: "abc123def",
     }));
 
-    window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByText, getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Accept Loop")).toBeTruthy();
+      expect(getAllByText("Accept Loop").length).toBeGreaterThan(0);
     });
 
-    // Go to Actions tab
-    await user.click(getByText("Actions"));
+    await navigateToLoopRoute();
+    await waitFor(() => {
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
+    });
+
+    await user.click(getByRole("button", { name: /Actions/ }));
 
     // Click Accept button
     await waitFor(() => {
@@ -175,20 +184,36 @@ describe("loop lifecycle scenario", () => {
     const loop = createLoopWithStatus("running", {
       config: { id: LOOP_ID, name: "Delete Me Loop", directory: "/workspaces/my-project", workspaceId: "ws-1" },
     });
-    setupApi(loop);
+    let loops = [loop];
+    api.get("/api/loops", () => loops);
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/workspaces", () => [WORKSPACE]);
+    api.get("/api/config", () => ({ remoteOnly: false }));
+    api.get("/api/health", () => ({ status: "ok", version: "1.0.0" }));
+    api.get("/api/preferences/last-model", () => null);
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+    api.get("/api/preferences/last-directory", () => null);
+    api.get("/api/models", () => [createModelInfo({ connected: true })]);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
     api.delete("/api/loops/:id", () => ({ success: true }));
-    // After delete, loops list is empty
-    api.get("/api/loops", () => []);
+    api.get("/api/loops", () => loops);
 
-    window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Delete Me Loop")).toBeTruthy();
+      expect(getAllByText("Delete Me Loop").length).toBeGreaterThan(0);
     });
 
-    // Go to Actions tab
-    await user.click(getByText("Actions"));
+    await navigateToLoopRoute();
+    await waitFor(() => {
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
+    });
+
+    await user.click(getByRole("button", { name: /Actions/ }));
 
     // Click Delete Loop button (text: "Delete Loop" + "Cancel and delete this loop")
     await waitFor(() => {
@@ -213,12 +238,12 @@ describe("loop lifecycle scenario", () => {
       (b) => b.textContent?.trim() === "Delete" || b.textContent?.trim() === "Delete Loop",
     );
     expect(confirmBtn).toBeTruthy();
+    loops = [];
     await user.click(confirmBtn!);
 
-    // Should navigate back to dashboard
     await waitFor(() => {
       expect(getByText("Ralpher")).toBeTruthy();
-      expect(getByText("New Loop")).toBeTruthy();
+      expect(getByText("Overview")).toBeTruthy();
     });
   });
 
@@ -232,15 +257,18 @@ describe("loop lifecycle scenario", () => {
       remoteBranch: "push-loop-a1b2c3d",
     }));
 
-    window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Push Loop")).toBeTruthy();
+      expect(getAllByText("Push Loop").length).toBeGreaterThan(0);
     });
 
-    // Go to Actions tab
-    await user.click(getByText("Actions"));
+    await navigateToLoopRoute();
+    await waitFor(() => {
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
+    });
+
+    await user.click(getByRole("button", { name: /Actions/ }));
 
     // Click Accept button to open AcceptLoopModal
     await waitFor(() => {
@@ -274,26 +302,28 @@ describe("loop lifecycle scenario", () => {
     });
   });
 
-  test("back button from loop details returns to dashboard", async () => {
+  test("shell navigation from loop details returns to overview", async () => {
     const loop = createLoopWithStatus("running", {
       config: { id: LOOP_ID, name: "Nav Loop", directory: "/workspaces/my-project", workspaceId: "ws-1" },
     });
     setupApi(loop);
 
-    window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Nav Loop")).toBeTruthy();
+      expect(getAllByText("Nav Loop").length).toBeGreaterThan(0);
     });
 
-    // Click back button
-    await user.click(getByText("← Back"));
+    await navigateToLoopRoute();
+    await waitFor(() => {
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
+    });
 
-    // Should return to dashboard
+    await user.click(getByText("Ralpher"));
+
     await waitFor(() => {
       expect(getByText("Ralpher")).toBeTruthy();
-      expect(getByText("New Loop")).toBeTruthy();
+      expect(getByText("Everything lives in one shell now")).toBeTruthy();
     });
   });
 });

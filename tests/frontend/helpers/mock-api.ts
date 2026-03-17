@@ -94,6 +94,34 @@ function extractPath(url: string): string {
   }
 }
 
+function getDefaultResponse(method: HttpMethod, path: string): unknown | undefined {
+  if (method === "GET" && /^\/api\/loops\/[^/]+\/port-forwards$/.test(path)) {
+    return [];
+  }
+
+  if (method === "GET" && /^\/api\/loops\/[^/]+\/pull-request$/.test(path)) {
+    return {
+      enabled: false,
+      destinationType: "disabled",
+      disabledReason: "disabled",
+    };
+  }
+
+  if (method === "GET" && /^\/api\/workspaces\/[^/]+\/agents-md$/.test(path)) {
+    return {
+      content: "# AGENTS.md",
+      fileExists: true,
+      analysis: {
+        isOptimized: false,
+        currentVersion: null,
+        updateAvailable: false,
+      },
+    };
+  }
+
+  return undefined;
+}
+
 /**
  * Create a mock API instance for intercepting fetch calls.
  *
@@ -142,6 +170,14 @@ export function createMockApi(): MockApiInstance {
 
     const result = matchRoute(method, path);
     if (!result) {
+      const defaultResponse = getDefaultResponse(method, path);
+      if (defaultResponse !== undefined) {
+        return new Response(JSON.stringify(defaultResponse), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
       // Return 404 for unmatched routes
       return new Response(JSON.stringify({ error: "not_found", message: `No mock handler for ${method} ${path}` }), {
         status: 404,

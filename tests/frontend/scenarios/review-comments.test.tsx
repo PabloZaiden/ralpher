@@ -6,6 +6,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { act } from "@testing-library/react";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor } from "../helpers/render";
@@ -89,20 +90,35 @@ afterEach(() => {
 // ─── Review comments scenarios ───────────────────────────────────────────────
 
 describe("review comments scenario", () => {
-  test("pushed addressable loop shows Addressable badge on dashboard", async () => {
+  async function navigateToLoopRoute() {
+    await act(async () => {
+      window.location.hash = `#/loop/${LOOP_ID}`;
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+  }
+
+  test("pushed addressable loop exposes review actions in loop details", async () => {
     const loop = pushedAddressableLoop(0);
     setupApi(loop);
 
-    const { getByText } = renderWithUser(<App />);
+    const { getAllByText, getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Pushed Loop")).toBeTruthy();
+      expect(getAllByText("Pushed Loop").length).toBeGreaterThan(0);
     });
 
-    // Addressable badge should be visible on the dashboard row
-    expect(getByText("Addressable")).toBeTruthy();
-    // Note: Address Comments button was removed from dashboard cards/rows in PR #125.
-    // Address comments is now only accessible from LoopDetails Actions tab.
+    await navigateToLoopRoute();
+    await waitFor(() => {
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
+    });
+    await user.click(getByRole("button", { name: /Actions/ }));
+
+    await waitFor(() => {
+      const addressBtn = Array.from(document.querySelectorAll("button")).find(
+        (b) => b.textContent?.includes("Address Comments") && b.textContent?.includes("Submit comments"),
+      );
+      expect(addressBtn).toBeTruthy();
+    });
   });
 
   test("address comments from dashboard: navigate to details then submit", async () => {
@@ -110,22 +126,18 @@ describe("review comments scenario", () => {
     setupApi(loop);
     api.post("/api/loops/:id/address-comments", () => ({ success: true }));
 
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Pushed Loop")).toBeTruthy();
+      expect(getAllByText("Pushed Loop").length).toBeGreaterThan(0);
     });
 
-    // Click on the loop row to navigate to LoopDetails
-    await user.click(getByText("Pushed Loop"));
-
-    // Wait for loop details
+    await navigateToLoopRoute();
     await waitFor(() => {
-      expect(getByText("← Back")).toBeTruthy();
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
     });
 
-    // Go to Actions tab
-    await user.click(getByText("Actions"));
+    await user.click(getByRole("button", { name: /Actions/ }));
 
     // Find and click Address Comments button in the Actions tab
     await waitFor(() => {
@@ -175,17 +187,15 @@ describe("review comments scenario", () => {
     setupApi(loop);
     api.post("/api/loops/:id/address-comments", () => ({ success: true }));
 
-    window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
-    // Wait for loop details
+    await navigateToLoopRoute();
     await waitFor(() => {
-      expect(getByText("Pushed Loop")).toBeTruthy();
-      expect(getByText("← Back")).toBeTruthy();
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
+      expect(getAllByText("Pushed Loop").length).toBeGreaterThan(0);
     });
 
-    // Go to Actions tab
-    await user.click(getByText("Actions"));
+    await user.click(getByRole("button", { name: /Actions/ }));
 
     // Find and click Address Comments button
     await waitFor(() => {
@@ -221,52 +231,75 @@ describe("review comments scenario", () => {
     });
   });
 
-  test("merged addressable loop shows Addressable badge", async () => {
+  test("merged addressable loop exposes address-comments action in details", async () => {
     const loop = mergedAddressableLoop(2);
     setupApi(loop);
 
-    const { getByText } = renderWithUser(<App />);
+    const { getAllByText, getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Merged Loop")).toBeTruthy();
+      expect(getAllByText("Merged Loop").length).toBeGreaterThan(0);
     });
 
-    // Should be in Awaiting Feedback section
-    expect(getByText(/Awaiting Feedback \(1\)/)).toBeTruthy();
-    expect(getByText("Addressable")).toBeTruthy();
-    // Note: Address Comments button was removed from dashboard cards/rows in PR #125.
+    await navigateToLoopRoute();
+    await waitFor(() => {
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
+    });
+    await user.click(getByRole("button", { name: /Actions/ }));
+
+    await waitFor(() => {
+      const addressBtn = Array.from(document.querySelectorAll("button")).find(
+        (b) => b.textContent?.includes("Address Comments") && b.textContent?.includes("Submit comments"),
+      );
+      expect(addressBtn).toBeTruthy();
+    });
   });
 
-  test("review cycle counter is shown on loop row", async () => {
+  test("review cycle is reflected in the address-comments dialog", async () => {
     const loop = pushedAddressableLoop(3);
     setupApi(loop);
 
-    const { getByText } = renderWithUser(<App />);
+    const { getAllByText, getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Pushed Loop")).toBeTruthy();
+      expect(getAllByText("Pushed Loop").length).toBeGreaterThan(0);
     });
 
-    // Review cycle displayed on the row (LoopRow uses "RC:{n}" format)
-    expect(getByText(/RC:3/)).toBeTruthy();
+    await navigateToLoopRoute();
+    await waitFor(() => {
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
+    });
+    await user.click(getByRole("button", { name: /Actions/ }));
+
+    await waitFor(() => {
+      const addressBtn = Array.from(document.querySelectorAll("button")).find(
+        (b) => b.textContent?.includes("Address Comments") && b.textContent?.includes("Submit comments"),
+      );
+      expect(addressBtn).toBeTruthy();
+    });
+    const addressBtn = Array.from(document.querySelectorAll("button")).find(
+      (b) => b.textContent?.includes("Address Comments") && b.textContent?.includes("Submit comments"),
+    );
+    await user.click(addressBtn!);
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("Review Cycle 4");
+    });
   });
 
   test("submit comments is disabled when textarea is empty", async () => {
     const loop = pushedAddressableLoop(0);
     setupApi(loop);
 
-    // Navigate directly to loop details
-    window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
-    // Wait for loop details
+    await navigateToLoopRoute();
     await waitFor(() => {
-      expect(getByText("Pushed Loop")).toBeTruthy();
-      expect(getByText("← Back")).toBeTruthy();
+      expect(window.location.hash).toBe(`#/loop/${LOOP_ID}`);
+      expect(getAllByText("Pushed Loop").length).toBeGreaterThan(0);
     });
 
-    // Go to Actions tab
-    await user.click(getByText("Actions"));
+    await user.click(getByRole("button", { name: /Actions/ }));
 
     // Find and click Address Comments button
     await waitFor(() => {
