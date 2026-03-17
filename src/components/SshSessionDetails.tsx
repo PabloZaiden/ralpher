@@ -36,6 +36,7 @@ export interface SshSessionDetailsProps {
   sshSessionId: string;
   onBack?: () => void;
   showBackButton?: boolean;
+  headerOffsetClassName?: string;
   copyTextToClipboard?: (text: string) => Promise<void>;
 }
 
@@ -709,6 +710,7 @@ export function SshSessionDetails({
   sshSessionId,
   onBack,
   showBackButton = true,
+  headerOffsetClassName,
   copyTextToClipboard = writeTextToClipboard,
 }: SshSessionDetailsProps) {
   const toast = useToast();
@@ -1526,7 +1528,12 @@ export function SshSessionDetails({
   return (
     <div className="h-full min-h-0 flex flex-col bg-gray-50 dark:bg-neutral-900">
       <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-neutral-800">
-        <div className="ml-14 flex min-h-14 flex-wrap items-center justify-between gap-1.5 sm:ml-16 lg:ml-0">
+        <div
+          className={[
+            headerOffsetClassName ?? "ml-14 sm:ml-16 lg:ml-0",
+            "flex min-h-14 flex-wrap items-center justify-between gap-1.5",
+          ].join(" ")}
+        >
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
             {showBackButton && onBack && (
               <Button variant="ghost" size="xs" onClick={onBack}>← Back</Button>

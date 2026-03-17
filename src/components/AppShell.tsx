@@ -403,6 +403,7 @@ function ShellPanel({
   badges,
   variant = "card",
   bodyClassName,
+  headerOffsetClassName,
   children,
 }: {
   eyebrow?: string;
@@ -413,13 +414,19 @@ function ShellPanel({
   badges?: React.ReactNode;
   variant?: "card" | "compact";
   bodyClassName?: string;
+  headerOffsetClassName?: string;
   children: React.ReactNode;
 }) {
   if (variant === "compact") {
     return (
       <div className="flex h-full min-h-0 flex-col bg-gray-50 dark:bg-neutral-900">
         <div className="border-b border-gray-200 bg-white px-4 py-2 dark:border-gray-800 dark:bg-neutral-800 sm:px-6 lg:px-8">
-          <div className="ml-14 flex min-h-14 flex-wrap items-center gap-1.5 sm:ml-16 lg:ml-0">
+          <div
+            className={[
+              headerOffsetClassName ?? "ml-14 sm:ml-16 lg:ml-0",
+              "flex min-h-14 flex-wrap items-center gap-1.5",
+            ].join(" ")}
+          >
             <div className="flex min-w-[10rem] flex-1 flex-wrap items-center gap-1.5">
               <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
                 {title}
@@ -534,6 +541,7 @@ function OverviewView({
   standaloneSessionCount,
   servers,
   workspaceGroups,
+  headerOffsetClassName,
   onNavigate,
 }: {
   workspaces: Workspace[];
@@ -544,6 +552,7 @@ function OverviewView({
   standaloneSessionCount: number;
   servers: SshServer[];
   workspaceGroups: ReturnType<typeof useLoopGrouping>["workspaceGroups"];
+  headerOffsetClassName?: string;
   onNavigate: (route: ShellRoute) => void;
 }) {
   const recentLoops = useMemo(() => {
@@ -557,6 +566,7 @@ function OverviewView({
       eyebrow="Overview"
       title="Overview"
       variant="compact"
+      headerOffsetClassName={headerOffsetClassName}
     >
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Workspaces" value={workspaces.length} meta="Tracked repositories and hosts." />
@@ -655,6 +665,7 @@ function WorkspaceView({
   relatedLoops,
   relatedSessions,
   registeredSshServers,
+  headerOffsetClassName,
   onOpenSettings,
   onNavigate,
 }: {
@@ -662,6 +673,7 @@ function WorkspaceView({
   relatedLoops: ReturnType<typeof useLoops>["loops"];
   relatedSessions: ReturnType<typeof useSshSessions>["sessions"];
   registeredSshServers: readonly SshServer[];
+  headerOffsetClassName?: string;
   onOpenSettings: () => void;
   onNavigate: (route: ShellRoute) => void;
 }) {
@@ -690,6 +702,7 @@ function WorkspaceView({
       description={workspace.directory}
       descriptionClassName="hidden sm:inline font-mono"
       variant="compact"
+      headerOffsetClassName={headerOffsetClassName}
       actions={(
         <>
           <Button variant="secondary" size="sm" onClick={onOpenSettings}>
@@ -804,10 +817,12 @@ function WorkspaceView({
 function SshServerView({
   server,
   sessions,
+  headerOffsetClassName,
   onNavigate,
 }: {
   server: SshServer;
   sessions: SshServerSession[];
+  headerOffsetClassName?: string;
   onNavigate: (route: ShellRoute) => void;
 }) {
   return (
@@ -816,6 +831,7 @@ function SshServerView({
       title={server.config.name}
       description={`${server.config.username}@${server.config.address}`}
       variant="compact"
+      headerOffsetClassName={headerOffsetClassName}
       badges={(
         <Badge variant="default" size="sm">
           {sessions.length} session{sessions.length === 1 ? "" : "s"}
@@ -889,6 +905,7 @@ function DraftLoopComposer({
   registeredSshServers,
   workspaceError,
   workspacesLoading,
+  headerOffsetClassName,
   onRefresh,
   onDeleteDraft,
   onNavigate,
@@ -907,6 +924,7 @@ function DraftLoopComposer({
   registeredSshServers: readonly SshServer[];
   workspaceError: string | null;
   workspacesLoading: boolean;
+  headerOffsetClassName?: string;
   onRefresh: () => Promise<void>;
   onDeleteDraft: (id: string) => Promise<boolean>;
   onNavigate: (route: ShellRoute) => void;
@@ -1018,6 +1036,7 @@ function DraftLoopComposer({
       title={`Edit ${loop.config.name}`}
       description={selectedWorkspace ? selectedWorkspace.name : loop.config.directory}
       variant="compact"
+      headerOffsetClassName={headerOffsetClassName}
       badges={(
         <>
           <Badge variant="default" size="sm">Draft</Badge>
@@ -1136,6 +1155,7 @@ function SshSessionComposer({
   servers,
   initialWorkspaceId,
   initialServerId,
+  headerOffsetClassName,
   onCancel,
   onNavigate,
   onCreateWorkspaceSession,
@@ -1145,6 +1165,7 @@ function SshSessionComposer({
   servers: SshServer[];
   initialWorkspaceId?: string;
   initialServerId?: string;
+  headerOffsetClassName?: string;
   onCancel: () => void;
   onNavigate: (route: ShellRoute) => void;
   onCreateWorkspaceSession: ReturnType<typeof useSshSessions>["createSession"];
@@ -1210,6 +1231,7 @@ function SshSessionComposer({
       eyebrow="SSH session"
       title="Create an SSH session"
       variant="compact"
+      headerOffsetClassName={headerOffsetClassName}
       badges={(
         <>
           <Badge variant="default" size="sm">
@@ -1307,10 +1329,12 @@ function SshSessionComposer({
 }
 
 function SshServerComposer({
+  headerOffsetClassName,
   onCancel,
   onNavigate,
   onCreateServer,
 }: {
+  headerOffsetClassName?: string;
   onCancel: () => void;
   onNavigate: (route: ShellRoute) => void;
   onCreateServer: ReturnType<typeof useSshServers>["createServer"];
@@ -1355,6 +1379,7 @@ function SshServerComposer({
       eyebrow="SSH server"
       title="Register a standalone SSH server"
       variant="compact"
+      headerOffsetClassName={headerOffsetClassName}
       badges={(
         <Badge variant="info" size="sm">Standalone SSH</Badge>
       )}
@@ -1435,6 +1460,9 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const shellHeaderOffsetClassName = sidebarCollapsed
+    ? "ml-14 sm:ml-16 lg:ml-[4.5rem]"
+    : "ml-14 sm:ml-16 lg:ml-0";
   const [collapsedSections, setCollapsedSections] = useState<SidebarSectionCollapseState>(() => loadSidebarSectionCollapseState());
   const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState<Partial<Record<string, boolean>>>({});
   const [workspaceCreateMode, setWorkspaceCreateMode] = useState<"manual" | "automatic">("manual");
@@ -1814,6 +1842,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           description={composeWorkspace?.directory}
           descriptionClassName="hidden sm:inline font-mono"
           variant="compact"
+          headerOffsetClassName={shellHeaderOffsetClassName}
           badges={(
             <>
               <Badge variant="default" size="sm">{kind === "chat" ? "Chat" : "Loop"}</Badge>
@@ -1912,6 +1941,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           eyebrow="Workspace"
           title="Create a workspace"
           variant="compact"
+          headerOffsetClassName={shellHeaderOffsetClassName}
           badges={(
             <>
               <Badge variant={workspaceCreateMode === "automatic" ? "info" : "default"} size="sm">
@@ -2126,6 +2156,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           servers={servers}
           initialWorkspaceId={composeWorkspace?.id}
           initialServerId={composeServer?.config.id}
+          headerOffsetClassName={shellHeaderOffsetClassName}
           onCancel={() => navigateWithinShell(
             composeWorkspace
               ? { view: "workspace", workspaceId: composeWorkspace.id }
@@ -2142,6 +2173,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
 
     return (
       <SshServerComposer
+        headerOffsetClassName={shellHeaderOffsetClassName}
         onCancel={() => navigateWithinShell({ view: "home" })}
         onNavigate={navigateWithinShell}
         onCreateServer={createServer}
@@ -2182,6 +2214,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             registeredSshServers={servers}
             workspaceError={workspaceError}
             workspacesLoading={workspacesLoading}
+            headerOffsetClassName={shellHeaderOffsetClassName}
             onRefresh={refreshLoops}
             onDeleteDraft={purgeLoop}
             onNavigate={navigateWithinShell}
@@ -2194,6 +2227,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           loopId={route.loopId}
           onBack={handleLoopDetailsExit}
           showBackButton={false}
+          headerOffsetClassName={shellHeaderOffsetClassName}
           onSelectSshSession={(sshSessionId) => navigateWithinShell({ view: "ssh", sshSessionId })}
         />
       );
@@ -2205,6 +2239,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           loopId={route.chatId}
           onBack={handleLoopDetailsExit}
           showBackButton={false}
+          headerOffsetClassName={shellHeaderOffsetClassName}
           onSelectSshSession={(sshSessionId) => navigateWithinShell({ view: "ssh", sshSessionId })}
         />
       );
@@ -2220,6 +2255,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             void refreshSshServers();
           }}
           showBackButton={false}
+          headerOffsetClassName={shellHeaderOffsetClassName}
         />
       );
     }
@@ -2240,6 +2276,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           relatedLoops={relatedLoops}
           relatedSessions={relatedSessions}
           registeredSshServers={servers}
+          headerOffsetClassName={shellHeaderOffsetClassName}
           onOpenSettings={() => navigateWithinShell({ view: "workspace-settings", workspaceId: selectedWorkspace.id })}
           onNavigate={navigateWithinShell}
         />
@@ -2262,6 +2299,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           description={workspaceFromHook?.directory ?? selectedWorkspace.directory}
           descriptionClassName="hidden sm:inline font-mono"
           variant="compact"
+          headerOffsetClassName={shellHeaderOffsetClassName}
           actions={(
             <Button
               type="submit"
@@ -2333,6 +2371,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         <SshServerView
           server={selectedServer}
           sessions={sessionsByServerId[selectedServer.config.id] ?? []}
+          headerOffsetClassName={shellHeaderOffsetClassName}
           onNavigate={navigateWithinShell}
         />
       );
@@ -2348,6 +2387,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           eyebrow="App settings"
           title="Settings"
           variant="compact"
+          headerOffsetClassName={shellHeaderOffsetClassName}
         >
           <AppSettingsPanel
             onResetAll={dashboardData.resetAllSettings}
@@ -2372,6 +2412,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         standaloneSessionCount={standaloneSessions.length}
         servers={servers}
         workspaceGroups={workspaceGroups}
+        headerOffsetClassName={shellHeaderOffsetClassName}
         onNavigate={navigateWithinShell}
       />
     );
@@ -2398,38 +2439,40 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             : "lg:w-80 lg:translate-x-0 lg:opacity-100",
         ].join(" ")}
       >
-        <div className="flex min-h-10 items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-2 dark:border-gray-800 dark:bg-neutral-800">
-          <button
-            type="button"
-            onClick={() => navigateWithinShell({ view: "home" })}
-            className="text-xs font-semibold uppercase tracking-[0.24em] text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
-          >
-            Ralpher
-          </button>
-          <div className="flex items-center gap-2">
+        <div className="border-b border-gray-200 bg-white px-4 py-2 dark:border-gray-800 dark:bg-neutral-800">
+          <div className="flex min-h-14 items-center justify-between gap-3">
             <button
               type="button"
-              onClick={() => navigateWithinShell({ view: "settings" })}
-              aria-label="Open settings"
-              aria-current={route.view === "settings" ? "page" : undefined}
-              className={[
-                "inline-flex h-10 w-10 items-center justify-center rounded-xl border bg-white shadow-sm transition dark:bg-neutral-900",
-                route.view === "settings"
-                  ? "border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100"
-                  : "border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100",
-              ].join(" ")}
-              title="Settings"
+              onClick={() => navigateWithinShell({ view: "home" })}
+              className="text-xs font-semibold uppercase tracking-[0.24em] text-gray-500 transition hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
             >
-              <GearIcon size="h-5 w-5" />
+              Ralpher
             </button>
-            <button
-              type="button"
-              onClick={hideSidebar}
-              aria-label={sidebarOpen ? "Close sidebar" : "Hide sidebar"}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-neutral-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
-            >
-              <SidebarIcon size="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => navigateWithinShell({ view: "settings" })}
+                aria-label="Open settings"
+                aria-current={route.view === "settings" ? "page" : undefined}
+                className={[
+                  "inline-flex h-10 w-10 items-center justify-center rounded-xl border bg-white shadow-sm transition dark:bg-neutral-900",
+                  route.view === "settings"
+                    ? "border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100"
+                    : "border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100",
+                ].join(" ")}
+                title="Settings"
+              >
+                <GearIcon size="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                onClick={hideSidebar}
+                aria-label={sidebarOpen ? "Close sidebar" : "Hide sidebar"}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-neutral-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
+              >
+                <SidebarIcon size="h-5 w-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2592,6 +2635,12 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               })
             )}
           </ShellSection>
+
+          {dashboardData.version && (
+            <div className="px-1 text-[11px] leading-4 text-gray-400 dark:text-gray-500">
+              v{dashboardData.version}
+            </div>
+          )}
         </div>
       </aside>
 
