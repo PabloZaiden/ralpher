@@ -203,6 +203,29 @@ describe("LoopCard", () => {
       expect(getByText("feature-x-a1b2c3d")).toBeInTheDocument();
     });
 
+    test("wraps long loop names and branch names instead of truncating them", () => {
+      const longName = `Loop ${"with-a-very-long-title-".repeat(6)}`;
+      const longBranch = `feature/${"very-long-branch-segment-".repeat(6)}`;
+      const loop = createLoopWithStatus("running", {
+        config: { name: longName },
+        state: {
+          git: createGitState({ workingBranch: longBranch }),
+        },
+      });
+
+      const { getByText } = renderWithUser(<LoopCard loop={loop} />);
+
+      const title = getByText(longName);
+      expect(title.className).toContain("break-words");
+      expect(title.className).toContain("[overflow-wrap:anywhere]");
+      expect(title.className.includes("truncate")).toBe(false);
+
+      const branch = getByText(longBranch);
+      expect(branch.className).toContain("break-words");
+      expect(branch.className).toContain("[overflow-wrap:anywhere]");
+      expect(branch.className.includes("break-all")).toBe(false);
+    });
+
     test("shows commit count when commits exist", () => {
       const loop = createLoopWithStatus("completed", {
         state: {

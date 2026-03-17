@@ -58,7 +58,7 @@ export function SshServerSection({
       {loading ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">Loading standalone SSH servers...</p>
       ) : error ? (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className="break-words text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : servers.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">
           No standalone SSH servers yet. Add one to create saved remote sessions outside a workspace.
@@ -73,16 +73,16 @@ export function SshServerSection({
                 className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-neutral-800"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                      <h4 className="break-words text-sm font-semibold text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
                         {server.config.name}
                       </h4>
                       <Badge variant={hasStoredCredential(server.config.id) ? "success" : "warning"}>
                         {hasStoredCredential(server.config.id) ? "password saved" : "password needed"}
                       </Badge>
                     </div>
-                    <p className="mt-1 text-xs font-mono text-gray-500 dark:text-gray-400">
+                    <p className="mt-1 break-words text-xs font-mono text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere]">
                       {server.config.username}@{server.config.address}
                     </p>
                   </div>
@@ -114,21 +114,21 @@ export function SshServerSection({
                             onClick={() => onSelectSession(session.config.id)}
                             className="rounded-md border border-gray-200 bg-gray-50 p-3 text-left transition-colors hover:border-gray-300 hover:bg-white dark:border-gray-700 dark:bg-neutral-900/40 dark:hover:border-gray-600 dark:hover:bg-neutral-900"
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                            <div className="flex min-w-0 items-start gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="break-words text-sm font-medium text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
                                   {session.config.name}
                                 </p>
-                                <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                                <p className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere]">
                                   Mode: {getSshConnectionModeLabel(effectiveConnectionMode)}
                                 </p>
                                 {isPersistentSshSession(session) && (
-                                  <p className="mt-1 truncate text-xs font-mono text-gray-500 dark:text-gray-400">
+                                  <p className="mt-1 break-words text-xs font-mono text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere]">
                                     Persistent ID: {session.config.remoteSessionName}
                                   </p>
                                 )}
                               </div>
-                              <Badge variant={getBadgeVariant(session.state.status)}>
+                              <Badge variant={getBadgeVariant(session.state.status)} className="shrink-0">
                                 {session.state.status}
                               </Badge>
                             </div>

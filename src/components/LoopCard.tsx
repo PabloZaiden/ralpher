@@ -76,9 +76,9 @@ export function LoopCard({
 
       {/* Header */}
       <div className="mb-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-1 flex-1 min-w-0">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+        <div className="flex min-w-0 flex-wrap items-start gap-2">
+          <div className="flex min-w-0 flex-1 items-start gap-1">
+            <h3 className="min-w-0 flex-1 break-words text-base font-semibold text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere] sm:text-lg">
               {config.name}
             </h3>
             {onRename && (
@@ -95,7 +95,7 @@ export function LoopCard({
               </button>
             )}
           </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
             {isChatMode && (
               <Badge variant="default">
                 Chat
@@ -131,7 +131,7 @@ export function LoopCard({
       {!isDraft && state.git && (
         <div className="mb-3 sm:mb-4 text-xs sm:text-sm">
           <span className="text-gray-500 dark:text-gray-400">Branch:</span>
-          <span className="ml-2 font-mono text-gray-900 dark:text-gray-100 break-all">
+          <span className="ml-2 break-words font-mono text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
             {state.git.workingBranch}
           </span>
           {state.git.commits.length > 0 && (

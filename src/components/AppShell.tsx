@@ -640,17 +640,17 @@ function OverviewView({
                     key={server.config.id}
                     type="button"
                     onClick={() => onNavigate({ view: "ssh-server", serverId: server.config.id })}
-                    className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
+                    className="flex w-full min-w-0 items-start justify-between gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
                   >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="block break-words text-sm font-medium text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
                         {server.config.name}
                       </span>
-                      <span className="mt-1 block truncate text-xs text-gray-500 dark:text-gray-400">
+                      <span className="mt-1 block break-words text-xs text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere]">
                         {server.config.username}@{server.config.address}
                       </span>
                     </span>
-                    <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-neutral-800 dark:text-gray-300">
+                    <span className="shrink-0 rounded-full bg-gray-200 px-2 py-0.5 text-right text-xs font-semibold text-gray-600 dark:bg-neutral-800 dark:text-gray-300">
                       {sessionCount} session{sessionCount === 1 ? "" : "s"}
                     </span>
                   </button>
@@ -682,17 +682,19 @@ function OverviewView({
                       key={loop.config.id}
                       type="button"
                       onClick={() => onNavigate(route)}
-                      className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
+                      className="flex w-full min-w-0 items-start justify-between gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
                     >
-                      <span className="min-w-0">
-                        <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="block break-words text-sm font-medium text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
                           {loop.config.name}
                         </span>
-                        <span className="mt-1 block truncate text-xs text-gray-500 dark:text-gray-400">
+                        <span className="mt-1 block break-words text-xs text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere]">
                           {loop.config.directory}
                         </span>
                       </span>
-                      <Badge variant={getStatusBadgeVariant(loop.state.status)}>{label}</Badge>
+                      <Badge variant={getStatusBadgeVariant(loop.state.status)} className="shrink-0">
+                        {label}
+                      </Badge>
                     </button>
                   );
                 })

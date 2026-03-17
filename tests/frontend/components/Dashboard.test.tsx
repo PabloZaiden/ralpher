@@ -197,6 +197,102 @@ describe("ssh section", () => {
     });
   });
 
+  test("wraps long server and SSH session text instead of truncating it", async () => {
+    const longServerName = `Shared host ${"with-a-very-long-name-".repeat(5)}`;
+    const longAddress = `${"ssh-gateway-".repeat(6)}example.com`;
+    const longWorkspaceSessionName = `Workspace shell ${"for-a-very-long-directory-".repeat(4)}`;
+    const longWorkspaceDirectory = `/workspaces/${"deeply-nested-service-".repeat(6)}repo`;
+    const longStandaloneSessionName = `Deploy shell ${"with-a-very-long-label-".repeat(4)}`;
+    const longStandaloneRemoteId = `ralpher-${"persistent-session-id-".repeat(5)}`;
+
+    const workspaceSession = createSshSession({
+      config: {
+        id: "workspace-session-wrap-1",
+        name: longWorkspaceSessionName,
+        directory: longWorkspaceDirectory,
+        remoteSessionName: `ralpher-${"workspace-remote-id-".repeat(4)}`,
+      },
+      state: { status: "connected" },
+    });
+
+    api.get("/api/ssh-sessions", () => [workspaceSession]);
+    api.get("/api/ssh-servers", () => [{
+      config: {
+        id: "server-wrap-1",
+        name: longServerName,
+        address: longAddress,
+        username: "deploy",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      publicKey: {
+        algorithm: "RSA-OAEP-256",
+        publicKey: "-----BEGIN PUBLIC KEY-----\nTEST\n-----END PUBLIC KEY-----",
+        fingerprint: "fp-wrap-1",
+        version: 1,
+        createdAt: new Date().toISOString(),
+      },
+    }]);
+    api.get("/api/ssh-servers/:id/sessions", () => [{
+      config: {
+        id: "server-session-wrap-1",
+        sshServerId: "server-wrap-1",
+        name: longStandaloneSessionName,
+        connectionMode: "dtach",
+        remoteSessionName: longStandaloneRemoteId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      },
+      state: { status: "connected" },
+    }]);
+
+    const { getByRole, getByText, getAllByText, user } = renderWithUser(<Dashboard />);
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: /SSH \(2\)/ })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: /SSH \(2\)/ }));
+
+    await waitFor(() => {
+      expect(getByText(longServerName)).toBeTruthy();
+      expect(getByText(`deploy@${longAddress}`)).toBeTruthy();
+      expect(getByText(longWorkspaceSessionName)).toBeTruthy();
+      expect(getByText(longWorkspaceDirectory)).toBeTruthy();
+    });
+
+    const serverName = getByText(longServerName);
+    expect(serverName.className).toContain("break-words");
+    expect(serverName.className).toContain("[overflow-wrap:anywhere]");
+    expect(serverName.className.includes("truncate")).toBe(false);
+
+    const serverTarget = getByText(`deploy@${longAddress}`);
+    expect(serverTarget.className).toContain("break-words");
+    expect(serverTarget.className).toContain("[overflow-wrap:anywhere]");
+    expect(serverTarget.className.includes("truncate")).toBe(false);
+
+    const workspaceSessionName = getByText(longWorkspaceSessionName);
+    expect(workspaceSessionName.className).toContain("break-words");
+    expect(workspaceSessionName.className).toContain("[overflow-wrap:anywhere]");
+    expect(workspaceSessionName.className.includes("truncate")).toBe(false);
+
+    const workspaceDirectory = getByText(longWorkspaceDirectory);
+    expect(workspaceDirectory.className).toContain("break-words");
+    expect(workspaceDirectory.className).toContain("[overflow-wrap:anywhere]");
+    expect(workspaceDirectory.className.includes("truncate")).toBe(false);
+
+    const standaloneRemoteId = getAllByText((_content, element) =>
+      element?.textContent === `Persistent ID: ${longStandaloneRemoteId}`
+    )[0];
+    expect(standaloneRemoteId).toBeTruthy();
+    if (!(standaloneRemoteId instanceof HTMLElement)) {
+      throw new Error("Expected wrapped standalone persistent session ID");
+    }
+    expect(standaloneRemoteId.className).toContain("break-words");
+    expect(standaloneRemoteId.className).toContain("[overflow-wrap:anywhere]");
+    expect(standaloneRemoteId.className.includes("truncate")).toBe(false);
+  });
+
   test("can collapse the unified ssh section without hiding loops", async () => {
     const workspace = createWorkspace({ id: "ws-1", name: "Project" });
     const loop = createLoopWithStatus("running", {

@@ -149,6 +149,94 @@ describe("App shell", () => {
     });
   });
 
+  test("wraps long server map and recent activity text inside the shell overview cards", async () => {
+    const longServerName = `Server ${"super-long-hostname-".repeat(6)}`;
+    const longAddress = `${"edge-node-".repeat(6)}example.internal`;
+    const longLoopName = `Chat ${"very-long-conversation-title-".repeat(5)}`;
+    const longDirectory = `/workspaces/${"deeply-nested-project-".repeat(6)}repo`;
+
+    const server = createSshServer({
+      id: "server-wrap-1",
+      name: longServerName,
+      address: longAddress,
+      username: "deploy",
+    });
+    const workspace = createWorkspace({
+      id: "workspace-1",
+      name: "Wrap Lab",
+      directory: "/workspaces/wrap-lab",
+    });
+    const loop = createLoop({
+      config: {
+        id: "loop-wrap-1",
+        name: longLoopName,
+        directory: longDirectory,
+        workspaceId: workspace.id,
+      },
+      state: {
+        status: "running",
+        startedAt: isoNow(),
+        currentIteration: 1,
+      },
+    });
+
+    setupDefaultApi({
+      workspaces: [workspace],
+      loops: [loop],
+      sshServers: [server],
+      standaloneSessionsByServerId: {
+        [server.config.id]: [createStandaloneSession(server.config.id, { id: "standalone-wrap-1" })],
+      },
+    });
+
+    const { getAllByText } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getAllByText(longServerName).length).toBeGreaterThan(0);
+      expect(getAllByText(longLoopName).length).toBeGreaterThan(0);
+    });
+
+    const serverName = getAllByText(longServerName).find((element) =>
+      element instanceof HTMLElement && element.className.includes("break-words")
+    );
+    expect(serverName).toBeTruthy();
+    if (!(serverName instanceof HTMLElement)) {
+      throw new Error("Expected wrapped server name in the shell overview");
+    }
+    expect(serverName.className).toContain("[overflow-wrap:anywhere]");
+    expect(serverName.className.includes("truncate")).toBe(false);
+
+    const serverTarget = getAllByText(`deploy@${longAddress}`).find((element) =>
+      element instanceof HTMLElement && element.className.includes("break-words")
+    );
+    expect(serverTarget).toBeTruthy();
+    if (!(serverTarget instanceof HTMLElement)) {
+      throw new Error("Expected wrapped server target in the shell overview");
+    }
+    expect(serverTarget.className).toContain("[overflow-wrap:anywhere]");
+    expect(serverTarget.className.includes("truncate")).toBe(false);
+
+    const loopName = getAllByText(longLoopName).find((element) =>
+      element instanceof HTMLElement && element.className.includes("break-words")
+    );
+    expect(loopName).toBeTruthy();
+    if (!(loopName instanceof HTMLElement)) {
+      throw new Error("Expected wrapped loop name in recent activity");
+    }
+    expect(loopName.className).toContain("[overflow-wrap:anywhere]");
+    expect(loopName.className.includes("truncate")).toBe(false);
+
+    const loopDirectory = getAllByText(longDirectory).find((element) =>
+      element instanceof HTMLElement && element.className.includes("break-words")
+    );
+    expect(loopDirectory).toBeTruthy();
+    if (!(loopDirectory instanceof HTMLElement)) {
+      throw new Error("Expected wrapped loop directory in recent activity");
+    }
+    expect(loopDirectory.className).toContain("[overflow-wrap:anywhere]");
+    expect(loopDirectory.className.includes("truncate")).toBe(false);
+  });
+
   test("renders shell-native workspace composer from the hash route", async () => {
     const { getByRole } = renderWithUser(<App />, { route: "#/new/workspace" });
 
