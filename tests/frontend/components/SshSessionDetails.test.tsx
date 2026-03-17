@@ -6,6 +6,57 @@ import { act, renderWithUser, waitFor } from "../helpers/render";
 
 let clipboardWrites: string[] = [];
 let lastTerminalOptions: Record<string, unknown> | null = null;
+const originalDocumentFonts = "fonts" in document ? document.fonts : undefined;
+const expectedTerminalTheme = {
+  background: "#1e1e1e",
+  foreground: "#d4d4d4",
+  cursor: "#aeafad",
+  cursorAccent: "#1e1e1e",
+  selectionBackground: "#264f78",
+  selectionForeground: "#ffffff",
+  black: "#000000",
+  red: "#cd3131",
+  green: "#0dbc79",
+  yellow: "#e5e510",
+  blue: "#2472c8",
+  magenta: "#bc3fbc",
+  cyan: "#11a8cd",
+  white: "#e5e5e5",
+  brightBlack: "#666666",
+  brightRed: "#f14c4c",
+  brightGreen: "#23d18b",
+  brightYellow: "#f5f543",
+  brightBlue: "#3b8eea",
+  brightMagenta: "#d670d6",
+  brightCyan: "#29b8db",
+  brightWhite: "#ffffff",
+} as const;
+
+function restoreDocumentFonts() {
+  if (originalDocumentFonts === undefined) {
+    Reflect.deleteProperty(document, "fonts");
+    return;
+  }
+
+  Object.defineProperty(document, "fonts", {
+    configurable: true,
+    value: originalDocumentFonts,
+  });
+}
+
+function mockDocumentFonts(availableFontFamilies: readonly string[]) {
+  Object.defineProperty(document, "fonts", {
+    configurable: true,
+    value: {
+      load: async () => [],
+      ready: Promise.resolve(),
+      check: (fontDeclaration: string) =>
+        availableFontFamilies.some((fontFamily) =>
+          fontDeclaration.includes(`"${fontFamily}"`) || fontDeclaration.includes(fontFamily)
+        ),
+    },
+  });
+}
 
 class MockTerminal {
   cols = 80;
@@ -81,6 +132,14 @@ class MockTerminal {
   }
   writeln(data: string) {
     this.writes.push(`${data}\n`);
+  }
+  resize(cols: number, rows: number) {
+    this.cols = cols;
+    this.rows = rows;
+    this.resizeHandler?.({ cols, rows });
+  }
+  getViewportY() {
+    return 0;
   }
 
   onData(handler: (data: string) => void) {
@@ -158,9 +217,19 @@ class MockTerminal {
 }
 
 class MockFitAddon {
-  activate() {}
+  terminal: MockTerminal | null = null;
+
+  activate(terminal: MockTerminal) {
+    this.terminal = terminal;
+  }
   fit() {}
   observeResize() {}
+  proposeDimensions() {
+    if (!this.terminal) {
+      return undefined;
+    }
+    return { cols: this.terminal.cols, rows: this.terminal.rows };
+  }
 }
 
 let lastTerminal: MockTerminal | null = null;
@@ -199,12 +268,14 @@ describe("SshSessionDetails", () => {
     lastTerminal = null;
     lastTerminalOptions = null;
     clipboardWrites = [];
+    restoreDocumentFonts();
   });
 
   afterEach(() => {
     api.uninstall();
     ws.uninstall();
     globalThis.localStorage?.clear();
+    restoreDocumentFonts();
   });
 
   test("starts with compact collapsed bars and no redundant terminal action buttons", async () => {
@@ -255,20 +326,119 @@ describe("SshSessionDetails", () => {
 
     expect(lastTerminalOptions).toEqual({
       fontSize: 12,
-      fontFamily: "\"Ralpher Terminal Nerd Font\", \"Liga SFMono Nerd Font\", \"MesloLGS NF\", \"MonaspiceNe Nerd Font Mono\", \"MonaspiceXe Nerd Font Mono\", \"Iosevka Nerd Font\", \"RecMonoLinear Nerd Font Mono\", \"Terminess Nerd Font Mono\", \"FiraCode Nerd Font Mono\", \"CaskaydiaMono Nerd Font Mono\", \"CaskaydiaCove Nerd Font Mono\", \"JetBrainsMono Nerd Font Mono\", \"JetBrainsMono Nerd Font\", \"Hack Nerd Font Mono\", \"SauceCodePro Nerd Font Mono\", \"Symbols Nerd Font Mono\", \"Symbols Nerd Font\", \"SF Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", monospace",
-      theme: {
-        background: "#111827",
-        foreground: "#d1d5db",
-        cursor: "#f9fafb",
-        cursorAccent: "#111827",
-        selectionBackground: "#374151",
-        selectionForeground: "#f9fafb",
-        black: "#111827",
-        white: "#d1d5db",
-        brightBlack: "#4b5563",
-        brightWhite: "#f9fafb",
-      },
+      fontFamily: "SFMono-Regular, \"SF Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", monospace, \"Liga SFMono Nerd Font\", \"MesloLGS NF\", \"MonaspiceNe Nerd Font Mono\", \"MonaspiceXe Nerd Font Mono\", \"Iosevka Nerd Font\", \"RecMonoLinear Nerd Font Mono\", \"Terminess Nerd Font Mono\", \"FiraCode Nerd Font Mono\", \"CaskaydiaMono Nerd Font Mono\", \"CaskaydiaCove Nerd Font Mono\", \"JetBrainsMono Nerd Font Mono\", \"JetBrainsMono Nerd Font\", \"Hack Nerd Font Mono\", \"SauceCodePro Nerd Font Mono\", \"Symbols Nerd Font Mono\", \"Symbols Nerd Font\", \"Ralpher Terminal Nerd Font\"",
+      theme: expectedTerminalTheme,
     });
+  });
+
+  test("prefers local Nerd fonts over the bundled fallback font when available", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Local Font Preference" } }),
+    );
+    mockDocumentFonts(["Liga SFMono Nerd Font", "Ralpher Terminal Nerd Font"]);
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-local-fonts-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Local Font Preference")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    expect(lastTerminalOptions).toEqual({
+      fontSize: 12,
+      fontFamily: "SFMono-Regular, \"SF Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", monospace, \"Liga SFMono Nerd Font\", \"Ralpher Terminal Nerd Font\"",
+      theme: expectedTerminalTheme,
+    });
+  });
+
+  test("answers OSC 4/10/11 color queries without writing them into the terminal output", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH OSC Colors" } }),
+    );
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-osc-colors-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH OSC Colors")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.output",
+        data: "\u001b]11;?\u001b\\\u001b]4;0;?\u001b\\",
+      });
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.output",
+        data: "\u001b]4;2;?\u001b\\\u001b]10;?\u001b\\Thinking...\r\n",
+      });
+    });
+
+    expect(lastTerminal!.writes).toContain("Thinking...\r\n");
+    expect(lastTerminal!.writes.some((chunk) =>
+      chunk.includes("\u001b]11;?")
+      || chunk.includes("\u001b]10;?")
+      || chunk.includes("\u001b]4;0;?")
+      || chunk.includes("\u001b]4;2;?")
+    )).toBe(false);
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b]4;0;rgb:00/00/00\u001b\\",
+    }));
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b]4;2;rgb:0d/bc/79\u001b\\",
+    }));
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b]11;rgb:1e/1e/1e\u001b\\",
+    }));
+    expect(terminalConnection.sentMessages).toContain(JSON.stringify({
+      type: "terminal.input",
+      data: "\u001b]10;rgb:d4/d4/d4\u001b\\",
+    }));
+  });
+
+  test("falls back to raw output when an OSC color query exceeds the pending buffer limit", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH OSC Overflow" } }),
+    );
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-osc-overflow-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH OSC Overflow")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    const overflowingOscQuery = `\u001b]4;${"0;?".repeat(1_500)}`;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.output",
+        data: overflowingOscQuery,
+      });
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.output",
+        data: "still-rendered\r\n",
+      });
+    });
+
+    expect(lastTerminal!.writes).toContain(overflowingOscQuery);
+    expect(lastTerminal!.writes).toContain("still-rendered\r\n");
+    expect(
+      terminalConnection.sentMessages.filter((message) => message.includes("\"type\":\"terminal.input\"")),
+    ).toEqual([]);
   });
 
   test("renames a workspace SSH session from the details view", async () => {

@@ -14,4 +14,5 @@ export * from "./ssh-connection-target";
 export * from "./ssh-server-manager";
 export * from "./ssh-server-key-manager";
 export * from "./ssh-session-manager";
+export * from "./ssh-terminal-env";
 export * from "./provisioning-manager";
