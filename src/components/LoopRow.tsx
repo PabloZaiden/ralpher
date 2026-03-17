@@ -54,7 +54,7 @@ export function LoopRow({
       onClick={onClick}
     >
       <div className="px-4 py-3">
-        {/* Desktop layout: single row with all info */}
+        {/* Responsive layout: stack on small screens and wrap across rows on wider layouts as needed */}
         <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:gap-4">
           {/* Status indicator dot + Name + Rename */}
           <div className="flex min-w-0 flex-1 items-start gap-2">
