@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import type {
   CreateChatRequest,
   CreateLoopRequest,
@@ -11,6 +11,7 @@ import type {
 import { getDefaultServerSettings, getServerLabel } from "../types/settings";
 import type { ServerSettings } from "../types/settings";
 import type { CreateWorkspaceRequest } from "../types/workspace";
+import { createLogger } from "../lib/logger";
 import { appFetch } from "../lib/public-path";
 import {
   useDashboardData,
@@ -29,6 +30,91 @@ import { ServerSettingsForm } from "./ServerSettingsForm";
 import { SshSessionDetails } from "./SshSessionDetails";
 import { WorkspaceSelector } from "./WorkspaceSelector";
 import { Badge, Button, GearIcon, getStatusBadgeVariant } from "./common";
+
+const log = createLogger("AppShell");
+const SIDEBAR_SECTION_STORAGE_KEY = "ralpher.sidebarSectionCollapseState";
+
+type SidebarSectionId =
+  | "navigate"
+  | "create"
+  | "workspaces"
+  | "drafts"
+  | "loops"
+  | "chats"
+  | "workspace-ssh"
+  | "ssh-servers";
+
+type SidebarSectionCollapseState = Partial<Record<SidebarSectionId, boolean>>;
+
+const SIDEBAR_SECTION_IDS: SidebarSectionId[] = [
+  "navigate",
+  "create",
+  "workspaces",
+  "drafts",
+  "loops",
+  "chats",
+  "workspace-ssh",
+  "ssh-servers",
+];
+
+function getSidebarSectionStorage(): Storage | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    return window.localStorage;
+  } catch (error) {
+    log.warn("Sidebar section storage is unavailable", { error: String(error) });
+    return null;
+  }
+}
+
+function loadSidebarSectionCollapseState(): SidebarSectionCollapseState {
+  const storage = getSidebarSectionStorage();
+  if (!storage) {
+    return {};
+  }
+
+  const raw = storage.getItem(SIDEBAR_SECTION_STORAGE_KEY);
+  if (!raw) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return SIDEBAR_SECTION_IDS.reduce<SidebarSectionCollapseState>((state, sectionId) => {
+      if (typeof parsed[sectionId] === "boolean") {
+        state[sectionId] = parsed[sectionId] as boolean;
+      }
+      return state;
+    }, {});
+  } catch (error) {
+    log.warn("Removing invalid sidebar section state", { error: String(error) });
+    storage.removeItem(SIDEBAR_SECTION_STORAGE_KEY);
+    return {};
+  }
+}
+
+function saveSidebarSectionCollapseState(state: SidebarSectionCollapseState): void {
+  const storage = getSidebarSectionStorage();
+  if (!storage) {
+    return;
+  }
+
+  const persistedState = SIDEBAR_SECTION_IDS.reduce<SidebarSectionCollapseState>((result, sectionId) => {
+    if (typeof state[sectionId] === "boolean") {
+      result[sectionId] = state[sectionId];
+    }
+    return result;
+  }, {});
+
+  try {
+    storage.setItem(SIDEBAR_SECTION_STORAGE_KEY, JSON.stringify(persistedState));
+  } catch (error) {
+    log.warn("Failed to persist sidebar section state", { error: String(error) });
+  }
+}
 
 export type ShellRoute =
   | { view: "home" }
@@ -56,20 +142,39 @@ function ShellSection({
   count,
   actionLabel,
   onAction,
+  collapsed,
+  onToggle,
   children,
 }: {
   title: string;
   count?: number;
   actionLabel?: string;
   onAction?: () => void;
+  collapsed: boolean;
+  onToggle: () => void;
   children: React.ReactNode;
 }) {
+  const contentId = useId();
+  const toggleLabel = `${collapsed ? "Expand" : "Collapse"} ${title} section`;
+
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-2 px-1">
-        <div className="flex items-center gap-2">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
-            {title}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <h2 className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={!collapsed}
+              aria-controls={contentId}
+              aria-label={toggleLabel}
+              className="flex w-full min-w-0 items-center gap-2 rounded-lg px-1 py-1 text-left transition hover:bg-gray-100 dark:hover:bg-gray-800/60"
+            >
+              <span className="text-xs text-gray-500 dark:text-gray-400">{collapsed ? "\u25B6" : "\u25BC"}</span>
+              <span className="truncate text-xs font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+                {title}
+              </span>
+            </button>
           </h2>
           {typeof count === "number" && (
             <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-300">
@@ -87,7 +192,11 @@ function ShellSection({
           </button>
         )}
       </div>
-      <div className="space-y-1">{children}</div>
+      {!collapsed && (
+        <div id={contentId} className="space-y-1">
+          {children}
+        </div>
+      )}
     </section>
   );
 }
@@ -1116,6 +1225,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [collapsedSections, setCollapsedSections] = useState<SidebarSectionCollapseState>(() => loadSidebarSectionCollapseState());
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceDirectory, setWorkspaceDirectory] = useState("");
   const [workspaceServerSettings, setWorkspaceServerSettings] = useState<ServerSettings>(() => getDefaultServerSettings(dashboardData.remoteOnly));
@@ -1163,6 +1273,10 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     }
   }, [dashboardData.remoteOnly, route]);
 
+  useEffect(() => {
+    saveSidebarSectionCollapseState(collapsedSections);
+  }, [collapsedSections]);
+
   const shellLoading = loopsLoading || sshSessionsLoading || sshServersLoading || workspacesLoading;
   const shellErrors = [loopsError, sshSessionsError, sshServersError, workspaceError].filter(Boolean);
 
@@ -1170,6 +1284,17 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     setSidebarOpen(false);
     onNavigate(nextRoute);
   };
+
+  function isSectionCollapsed(sectionId: SidebarSectionId): boolean {
+    return collapsedSections[sectionId] ?? false;
+  }
+
+  function toggleSectionCollapsed(sectionId: SidebarSectionId) {
+    setCollapsedSections((current) => ({
+      ...current,
+      [sectionId]: !(current[sectionId] ?? false),
+    }));
+  }
 
   const currentTitle = useMemo(() => {
     switch (route.view) {
@@ -1595,7 +1720,11 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-3 py-4 dark-scrollbar">
-          <ShellSection title="Navigate">
+          <ShellSection
+            title="Navigate"
+            collapsed={isSectionCollapsed("navigate")}
+            onToggle={() => toggleSectionCollapsed("navigate")}
+          >
             <SectionItem
               active={route.view === "home"}
               title={sidebarCollapsed ? "Home" : "Overview"}
@@ -1610,7 +1739,13 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             />
           </ShellSection>
 
-          <ShellSection title="Create" actionLabel={sidebarCollapsed ? undefined : "Loop"} onAction={sidebarCollapsed ? undefined : () => navigateWithinShell({ view: "compose", kind: "loop" })}>
+          <ShellSection
+            title="Create"
+            actionLabel={sidebarCollapsed ? undefined : "Loop"}
+            onAction={sidebarCollapsed ? undefined : () => navigateWithinShell({ view: "compose", kind: "loop" })}
+            collapsed={isSectionCollapsed("create")}
+            onToggle={() => toggleSectionCollapsed("create")}
+          >
             <SectionItem
               active={route.view === "compose" && route.kind === "loop"}
               title={sidebarCollapsed ? "Loop" : "New Loop"}
@@ -1643,7 +1778,14 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             />
           </ShellSection>
 
-          <ShellSection title="Workspaces" count={workspaces.length} actionLabel="New" onAction={() => navigateWithinShell({ view: "compose", kind: "workspace" })}>
+          <ShellSection
+            title="Workspaces"
+            count={workspaces.length}
+            actionLabel="New"
+            onAction={() => navigateWithinShell({ view: "compose", kind: "workspace" })}
+            collapsed={isSectionCollapsed("workspaces")}
+            onToggle={() => toggleSectionCollapsed("workspaces")}
+          >
             {workspaces.length === 0 ? (
               <EmptySection message="No workspaces yet." />
             ) : (
@@ -1659,7 +1801,12 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             )}
           </ShellSection>
 
-          <ShellSection title="Drafts" count={draftLoopItems.length}>
+          <ShellSection
+            title="Drafts"
+            count={draftLoopItems.length}
+            collapsed={isSectionCollapsed("drafts")}
+            onToggle={() => toggleSectionCollapsed("drafts")}
+          >
             {draftLoopItems.length === 0 ? (
               <EmptySection message="No drafts yet." />
             ) : (
@@ -1676,7 +1823,14 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             )}
           </ShellSection>
 
-          <ShellSection title="Loops" count={activeLoopItems.length} actionLabel="New" onAction={() => navigateWithinShell({ view: "compose", kind: "loop" })}>
+          <ShellSection
+            title="Loops"
+            count={activeLoopItems.length}
+            actionLabel="New"
+            onAction={() => navigateWithinShell({ view: "compose", kind: "loop" })}
+            collapsed={isSectionCollapsed("loops")}
+            onToggle={() => toggleSectionCollapsed("loops")}
+          >
             {activeLoopItems.length === 0 ? (
               <EmptySection message="No loops yet." />
             ) : (
@@ -1693,7 +1847,14 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             )}
           </ShellSection>
 
-          <ShellSection title="Chats" count={chatItems.length} actionLabel="New" onAction={() => navigateWithinShell({ view: "compose", kind: "chat" })}>
+          <ShellSection
+            title="Chats"
+            count={chatItems.length}
+            actionLabel="New"
+            onAction={() => navigateWithinShell({ view: "compose", kind: "chat" })}
+            collapsed={isSectionCollapsed("chats")}
+            onToggle={() => toggleSectionCollapsed("chats")}
+          >
             {chatItems.length === 0 ? (
               <EmptySection message="No chats yet." />
             ) : (
@@ -1710,7 +1871,14 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             )}
           </ShellSection>
 
-          <ShellSection title="Workspace SSH" count={sessions.length} actionLabel="New" onAction={() => navigateWithinShell({ view: "compose", kind: "ssh-session" })}>
+          <ShellSection
+            title="Workspace SSH"
+            count={sessions.length}
+            actionLabel="New"
+            onAction={() => navigateWithinShell({ view: "compose", kind: "ssh-session" })}
+            collapsed={isSectionCollapsed("workspace-ssh")}
+            onToggle={() => toggleSectionCollapsed("workspace-ssh")}
+          >
             {sessions.length === 0 ? (
               <EmptySection message="No workspace SSH sessions yet." />
             ) : (
@@ -1727,7 +1895,14 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
             )}
           </ShellSection>
 
-          <ShellSection title="SSH servers" count={servers.length} actionLabel="New" onAction={() => navigateWithinShell({ view: "compose", kind: "ssh-server" })}>
+          <ShellSection
+            title="SSH servers"
+            count={servers.length}
+            actionLabel="New"
+            onAction={() => navigateWithinShell({ view: "compose", kind: "ssh-server" })}
+            collapsed={isSectionCollapsed("ssh-servers")}
+            onToggle={() => toggleSectionCollapsed("ssh-servers")}
+          >
             {servers.length === 0 ? (
               <EmptySection message="No standalone SSH servers registered." />
             ) : (

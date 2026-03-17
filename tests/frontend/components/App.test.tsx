@@ -228,6 +228,56 @@ describe("App shell", () => {
     });
   });
 
+  test("lets users collapse and expand sidebar sections", async () => {
+    const { getByRole, queryByRole, user } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "Collapse Create section" })).toBeTruthy();
+      expect(getByRole("button", { name: /Run a task-oriented Ralph loop/ })).toBeTruthy();
+    });
+
+    const collapseButton = getByRole("button", { name: "Collapse Create section" });
+    expect(collapseButton).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(collapseButton);
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "Expand Create section" })).toBeTruthy();
+      expect(queryByRole("button", { name: /Run a task-oriented Ralph loop/ })).toBeNull();
+    });
+
+    await user.click(getByRole("button", { name: "Expand Create section" }));
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "Collapse Create section" })).toBeTruthy();
+      expect(getByRole("button", { name: /Run a task-oriented Ralph loop/ })).toBeTruthy();
+    });
+  });
+
+  test("restores collapsed sidebar sections from browser storage", async () => {
+    const firstRender = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(firstRender.getByRole("button", { name: "Collapse Create section" })).toBeTruthy();
+    });
+
+    await firstRender.user.click(firstRender.getByRole("button", { name: "Collapse Create section" }));
+
+    await waitFor(() => {
+      expect(firstRender.getByRole("button", { name: "Expand Create section" })).toBeTruthy();
+      expect(firstRender.queryByRole("button", { name: /Run a task-oriented Ralph loop/ })).toBeNull();
+    });
+
+    firstRender.unmount();
+
+    const secondRender = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(secondRender.getByRole("button", { name: "Expand Create section" })).toBeTruthy();
+      expect(secondRender.queryByRole("button", { name: /Run a task-oriented Ralph loop/ })).toBeNull();
+    });
+  });
+
   test("settings button navigates to the shell settings view", async () => {
     const { getByLabelText, getByRole, getByText, user } = renderWithUser(<App />);
 
