@@ -448,10 +448,10 @@ export function CreateLoopForm({
   const formRef = useRef<HTMLFormElement>(null);
   
   // Check if form can be saved as a draft (basic fields only, model connectivity not required)
-  const canSaveDraft = !!selectedWorkspaceId && !!prompt.trim() && (isChatMode || !!name.trim());
+  const canSaveDraft = !isChatMode && !!selectedWorkspaceId && !!prompt.trim() && !!name.trim();
   
   // Check if form can be submitted to start a loop (also needs model to be enabled)
-  const canSubmit = canSaveDraft && selectedModelEnabled;
+  const canSubmit = !!selectedWorkspaceId && !!prompt.trim() && (isChatMode || !!name.trim()) && selectedModelEnabled;
 
   const canGenerateTitle = !isChatMode && !!selectedWorkspaceId && !!prompt.trim() && !isSubmitting && !generatingTitle;
   
@@ -965,7 +965,7 @@ export function CreateLoopForm({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
           <div className="flex flex-wrap items-center gap-2">
             {leadingActions}
-            {(!isEditing || isEditingDraft) && (
+            {!isChatMode && (!isEditing || isEditingDraft) && (
               <Button
                 type="button"
                 variant="secondary"
@@ -989,9 +989,11 @@ export function CreateLoopForm({
               Cancel
             </Button>
             <Button type="submit" loading={isSubmitting} disabled={isSubmitting || !canSubmit}>
-              {isEditing 
-                ? (planMode ? "Start Plan" : "Start Loop")
-                : (planMode ? "Create Plan" : "Create Loop")
+              {isChatMode
+                ? "Start Chat"
+                : isEditing
+                  ? (planMode ? "Start Plan" : "Start Loop")
+                  : (planMode ? "Create Plan" : "Create Loop")
               }
             </Button>
           </div>

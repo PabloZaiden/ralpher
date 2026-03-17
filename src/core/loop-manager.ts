@@ -1685,7 +1685,8 @@ Follow the standard loop execution flow:
 
   /**
    * Purge a loop (permanently delete files).
-   * Only allowed for loops in 'merged', 'pushed', or 'deleted' states.
+   * Drafts are removed immediately because they never started execution.
+   * Other loops must be in 'merged', 'pushed', or 'deleted' states.
    * Cleans up worktree, working branch, review branches, and marks as non-addressable before deletion.
    * This is the ONLY place worktrees are removed.
    */
@@ -1695,9 +1696,11 @@ Follow the standard loop execution flow:
       return { success: false, error: "Loop not found" };
     }
 
-    // Only allow purge for final states
-    if (loop.state.status !== "merged" && loop.state.status !== "pushed" && loop.state.status !== "deleted") {
-      return { success: false, error: `Cannot purge loop in status: ${loop.state.status}. Only merged, pushed, or deleted loops can be purged.` };
+    const isDraft = loop.state.status === "draft";
+
+    // Only allow purge for drafts or final states
+    if (!isDraft && loop.state.status !== "merged" && loop.state.status !== "pushed" && loop.state.status !== "deleted") {
+      return { success: false, error: `Cannot purge loop in status: ${loop.state.status}. Only draft, merged, pushed, or deleted loops can be purged.` };
     }
 
     try {
@@ -1712,52 +1715,53 @@ Follow the standard loop execution flow:
       return { success: false, error: `Failed to delete linked SSH session: ${String(error)}` };
     }
 
-    try {
-      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
-      const git = GitService.withExecutor(executor);
+    if (!isDraft) {
+      try {
+        const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+        const git = GitService.withExecutor(executor);
 
-      // Step 1: Remove the worktree and prune stale metadata (if it exists)
-      const worktreePath = loop.state.git?.worktreePath;
-      if (worktreePath) {
-        await git.ensureWorktreeRemoved(loop.config.directory, worktreePath, { force: true });
-        log.debug(`[LoopManager] purgeLoop: Removed worktree and pruned metadata for loop ${loopId}: ${worktreePath}`);
-      }
-
-      // Step 2: Move the main checkout off the working branch when no worktree is used.
-      if (!loop.config.useWorktree && loop.state.git?.workingBranch && loop.state.git.originalBranch) {
-        try {
-          await git.checkoutBranch(loop.config.directory, loop.state.git.originalBranch);
-        } catch (error) {
-          log.debug(`[LoopManager] purgeLoop: Could not switch back to original branch: ${String(error)}`);
+        // Step 1: Remove the worktree and prune stale metadata (if it exists)
+        const worktreePath = loop.state.git?.worktreePath;
+        if (worktreePath) {
+          await git.ensureWorktreeRemoved(loop.config.directory, worktreePath, { force: true });
+          log.debug(`[LoopManager] purgeLoop: Removed worktree and pruned metadata for loop ${loopId}: ${worktreePath}`);
         }
-      }
 
-      // Step 3: Delete the working branch (now safe since worktree is removed)
-      if (loop.state.git?.workingBranch) {
-        try {
-          await git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
-          log.debug(`[LoopManager] purgeLoop: Deleted working branch for loop ${loopId}`);
-        } catch (error) {
-          log.debug(`[LoopManager] purgeLoop: Could not delete working branch: ${String(error)}`);
-        }
-      }
-
-      // Step 4: Clean up review branches if review mode was active
-      if (loop.state.reviewMode?.reviewBranches && loop.state.reviewMode.reviewBranches.length > 0) {
-        for (const branchName of loop.state.reviewMode.reviewBranches) {
-          // Skip the working branch if it was already deleted above
-          if (branchName === loop.state.git?.workingBranch) continue;
+        // Step 2: Move the main checkout off the working branch when no worktree is used.
+        if (!loop.config.useWorktree && loop.state.git?.workingBranch && loop.state.git.originalBranch) {
           try {
-            await git.deleteBranch(loop.config.directory, branchName);
-            log.debug(`[LoopManager] purgeLoop: Cleaned up review branch: ${branchName}`);
+            await git.checkoutBranch(loop.config.directory, loop.state.git.originalBranch);
           } catch (error) {
-            log.debug(`[LoopManager] purgeLoop: Could not delete branch ${branchName}: ${String(error)}`);
+            log.debug(`[LoopManager] purgeLoop: Could not switch back to original branch: ${String(error)}`);
           }
         }
-      }
 
-    } catch (error) {
-      return { success: false, error: `Failed to clean up git state during purge: ${String(error)}` };
+        // Step 3: Delete the working branch (now safe since worktree is removed)
+        if (loop.state.git?.workingBranch) {
+          try {
+            await git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
+            log.debug(`[LoopManager] purgeLoop: Deleted working branch for loop ${loopId}`);
+          } catch (error) {
+            log.debug(`[LoopManager] purgeLoop: Could not delete working branch: ${String(error)}`);
+          }
+        }
+
+        // Step 4: Clean up review branches if review mode was active
+        if (loop.state.reviewMode?.reviewBranches && loop.state.reviewMode.reviewBranches.length > 0) {
+          for (const branchName of loop.state.reviewMode.reviewBranches) {
+            // Skip the working branch if it was already deleted above
+            if (branchName === loop.state.git?.workingBranch) continue;
+            try {
+              await git.deleteBranch(loop.config.directory, branchName);
+              log.debug(`[LoopManager] purgeLoop: Cleaned up review branch: ${branchName}`);
+            } catch (error) {
+              log.debug(`[LoopManager] purgeLoop: Could not delete branch ${branchName}: ${String(error)}`);
+            }
+          }
+        }
+      } catch (error) {
+        return { success: false, error: `Failed to clean up git state during purge: ${String(error)}` };
+      }
     }
 
     // Mark as non-addressable before deletion

@@ -53,7 +53,7 @@ export interface DashboardModalsProps {
   onCloseCreateModal: () => void;
   onCreateLoop: (request: CreateLoopRequest) => Promise<CreateLoopResult>;
   onCreateChat: (request: CreateChatRequest) => Promise<CreateChatResult>;
-  onDeleteLoop: (loopId: string) => Promise<boolean>;
+  onDeleteDraft: (loopId: string) => Promise<boolean>;
   onRefresh: () => Promise<void>;
 
   // Model/branch/workspace data for create form
@@ -156,7 +156,7 @@ export function DashboardModals(props: DashboardModalsProps) {
 
     setDeletingDraft(true);
     try {
-      const success = await props.onDeleteLoop(deleteDraftConfirmation.loopId);
+      const success = await props.onDeleteDraft(deleteDraftConfirmation.loopId);
       if (!success) {
         toast.error("Failed to delete draft");
         return;
@@ -297,13 +297,13 @@ export function DashboardModals(props: DashboardModalsProps) {
       >
         {isConfirmingDraftDelete ? (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/30">
-            <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">
-              Delete Draft?
-            </h3>
-            <p className="mt-2 text-sm text-red-700 dark:text-red-300">
-              Are you sure you want to delete "{deleteDraftConfirmation.loopName}"? The draft will be marked as deleted and can be purged later if needed.
-            </p>
-          </div>
+             <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">
+               Delete Draft?
+             </h3>
+             <p className="mt-2 text-sm text-red-700 dark:text-red-300">
+               Are you sure you want to permanently delete "{deleteDraftConfirmation.loopName}"?
+             </p>
+           </div>
         ) : (
           <CreateLoopForm
             key={isEditing ? editLoop!.config.id : `create-new-${props.createMode}`}

@@ -493,11 +493,6 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
       setUpdateBranchModal(false);
       return;
     }
-    if (result.syncStatus === "conflicts_being_resolved") {
-      toast.info("Conflicts detected — resolving automatically");
-    } else {
-      toast.success("Branch updated and pushed");
-    }
     setUpdateBranchModal(false);
   }
 
@@ -640,7 +635,6 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
         return;
       }
       setNewForwardPort("");
-      toast.success(`Forwarded ${forward.config.remoteHost}:${forward.config.remotePort}`);
     } finally {
       setCreatingForward(false);
     }
@@ -652,14 +646,12 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
       toast.error("Failed to delete port forward");
       return;
     }
-    toast.success("Port forward deleted");
   }
 
   async function handleCopyForwardUrl(forwardId: string) {
     const absoluteUrl = appAbsoluteUrl(`/loop/${loopId}/port/${forwardId}/`);
     try {
       await writeTextToClipboard(absoluteUrl);
-      toast.success("Forward URL copied");
     } catch (error) {
       toast.error(`Failed to copy URL: ${String(error)}`);
     }
@@ -719,7 +711,7 @@ export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSsh
       {/* Header - compact single line */}
       <header className="bg-white dark:bg-neutral-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 safe-area-top">
         <div className="px-4 sm:px-6 lg:px-8 py-2">
-          <div className="flex items-center gap-3">
+          <div className="flex min-h-10 items-center gap-3">
             {showBackButton && onBack && (
               <Button variant="ghost" size="sm" onClick={onBack}>
                 ← Back

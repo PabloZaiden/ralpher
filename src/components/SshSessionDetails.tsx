@@ -1523,7 +1523,6 @@ export function SshSessionDetails({
 
   async function handleRename(newName: string) {
     await updateSession({ name: newName });
-    toast.success("SSH session renamed");
   }
 
   if (loading && !session) {
@@ -1542,7 +1541,7 @@ export function SshSessionDetails({
   return (
     <div className="h-full min-h-0 flex flex-col bg-gray-50 dark:bg-neutral-900">
       <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-neutral-800">
-        <div className="flex flex-wrap items-center justify-between gap-1.5">
+        <div className="flex min-h-10 flex-wrap items-center justify-between gap-1.5">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
             {showBackButton && onBack && (
               <Button variant="ghost" size="xs" onClick={onBack}>← Back</Button>

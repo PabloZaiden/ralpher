@@ -37,7 +37,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
     refresh,
     createLoop,
     createChat,
-    deleteLoop,
+    purgeLoop,
     updateLoop,
     purgeArchivedWorkspaceLoops,
   } = useLoops();
@@ -150,7 +150,6 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
 
   async function handleCreateWorkspaceSshSession() {
     if (workspacesLoading) {
-      toast.info("Loading SSH workspaces...");
       return;
     }
     if (workspaceError) {
@@ -191,12 +190,8 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         return result;
       }
 
-      if (result.totalArchived === 0) {
-        toast.info("No archived loops found for this workspace");
-      } else if (result.failures.length > 0) {
+      if (result.failures.length > 0) {
         toast.error(`Purged ${result.purgedCount} of ${result.totalArchived} archived loops`);
-      } else {
-        toast.success(`Purged ${result.purgedCount} archived loops`);
       }
 
       return result;
@@ -315,7 +310,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         onCloseCreateModal={modals.handleCloseCreateModal}
         onCreateLoop={createLoop}
         onCreateChat={createChat}
-        onDeleteLoop={deleteLoop}
+        onDeleteDraft={purgeLoop}
         onRefresh={refresh}
         // Model/branch/workspace data
         models={dashboardData.models}
@@ -340,7 +335,6 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         onCloseSshSessionRenameModal={() => modals.setSshSessionRenameModal({ open: false, sessionId: null })}
         onRenameSshSession={async (sessionId, newName) => {
           await updateSession(sessionId, { name: newName });
-          toast.success("SSH session renamed");
         }}
         // App settings modal
         showServerSettingsModal={modals.showServerSettingsModal}
