@@ -583,7 +583,7 @@ function OverviewView({
         <SummaryCard
           label="SSH"
           value={workspaceSessionCount + standaloneSessionCount}
-          meta={`${servers.length} saved servers across workspace and standalone sessions.`}
+          meta={`${servers.length} saved standalone SSH servers.`}
         />
       </div>
 
