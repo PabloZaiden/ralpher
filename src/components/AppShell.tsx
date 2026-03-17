@@ -32,7 +32,7 @@ import { LoopDetails } from "./LoopDetails";
 import { ProvisioningJobView } from "./ProvisioningJobView";
 import { ServerSettingsForm } from "./ServerSettingsForm";
 import { SshSessionDetails } from "./SshSessionDetails";
-import { WorkspaceSettingsModal } from "./WorkspaceSettingsModal";
+import { WorkspaceSettingsForm } from "./WorkspaceSettingsModal";
 import { WorkspaceSelector } from "./WorkspaceSelector";
 import { Badge, Button, ConfirmModal, GearIcon, PASSWORD_INPUT_PROPS, SidebarIcon, getStatusBadgeVariant } from "./common";
 
@@ -177,6 +177,7 @@ export type ShellRoute =
   | { view: "chat"; chatId: string }
   | { view: "ssh"; sshSessionId: string }
   | { view: "workspace"; workspaceId: string }
+  | { view: "workspace-settings"; workspaceId: string }
   | { view: "ssh-server"; serverId: string }
   | {
       view: "compose";
@@ -1294,7 +1295,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
   const [workspaceServerSettingsValid, setWorkspaceServerSettingsValid] = useState(true);
   const [workspaceTesting, setWorkspaceTesting] = useState(false);
   const [workspaceCreateSubmitting, setWorkspaceCreateSubmitting] = useState(false);
-  const [showWorkspaceSettingsModal, setShowWorkspaceSettingsModal] = useState(false);
+  const [workspaceSettingsFormValid, setWorkspaceSettingsFormValid] = useState(false);
   const [workspaceArchivedLoopsPurging, setWorkspaceArchivedLoopsPurging] = useState(false);
   const [automaticServerId, setAutomaticServerId] = useState("");
   const [automaticRepoUrl, setAutomaticRepoUrl] = useState("");
@@ -1343,7 +1344,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     ? loopItems.find((loop) => loop.config.id === route.loopId) ?? null
     : null;
 
-  const selectedWorkspace = route.view === "workspace"
+  const selectedWorkspace = route.view === "workspace" || route.view === "workspace-settings"
     ? workspaces.find((workspace) => workspace.id === route.workspaceId) ?? null
     : null;
   const composeWorkspace = route.view === "compose" && route.scopeId
@@ -1355,12 +1356,14 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
   const selectedServer = route.view === "ssh-server"
     ? servers.find((server) => server.config.id === route.serverId) ?? null
     : null;
-  const workspaceSettingsWorkspaceId = showWorkspaceSettingsModal
-    ? selectedWorkspace?.id ?? null
+  const workspaceSettingsWorkspaceId = route.view === "workspace-settings"
+    ? route.workspaceId
     : null;
   const {
     workspace: workspaceFromHook,
     status: workspaceStatus,
+    loading: workspaceSettingsLoading,
+    error: workspaceSettingsError,
     saving: workspaceSettingsSaving,
     testing: workspaceSettingsTesting,
     resettingConnection: workspaceSettingsResetting,
@@ -1383,10 +1386,14 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
   }, [dashboardData.resetCreateModalState, route]);
 
   useEffect(() => {
-    if (route.view !== "workspace") {
-      setShowWorkspaceSettingsModal(false);
+    if (route.view !== "workspace-settings") {
+      setWorkspaceSettingsFormValid(false);
     }
   }, [route.view]);
+
+  useEffect(() => {
+    setWorkspaceSettingsFormValid(false);
+  }, [workspaceSettingsWorkspaceId]);
 
   useEffect(() => {
     if (route.view !== "compose" || route.kind !== "workspace") {
@@ -2009,9 +2016,75 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           relatedLoops={relatedLoops}
           relatedSessions={relatedSessions}
           registeredSshServers={servers}
-          onOpenSettings={() => setShowWorkspaceSettingsModal(true)}
+          onOpenSettings={() => navigateWithinShell({ view: "workspace-settings", workspaceId: selectedWorkspace.id })}
           onNavigate={navigateWithinShell}
         />
+      );
+    }
+
+    if (route.view === "workspace-settings") {
+      if (!selectedWorkspace) {
+        return (
+          <ShellPanel eyebrow="Workspace" title="Workspace not found" description="The selected workspace no longer exists.">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Use the sidebar or home button to continue.</p>
+          </ShellPanel>
+        );
+      }
+
+      return (
+        <ShellPanel
+          eyebrow="Workspace settings"
+          title="Workspace Settings"
+          description={workspaceFromHook?.directory ?? selectedWorkspace.directory}
+          actions={(
+            <Button
+              type="submit"
+              form="workspace-settings-shell-form"
+              loading={workspaceSettingsSaving}
+              disabled={!workspaceSettingsFormValid || workspaceSettingsLoading || !workspaceFromHook}
+            >
+              Save Changes
+            </Button>
+          )}
+        >
+          {workspaceSettingsError && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300">
+              {workspaceSettingsError}
+            </div>
+          )}
+
+          {workspaceSettingsLoading && !workspaceFromHook ? (
+            <div className="text-sm text-gray-500 dark:text-gray-400">Loading workspace settings…</div>
+          ) : workspaceFromHook ? (
+            <WorkspaceSettingsForm
+              workspace={workspaceFromHook}
+              status={workspaceStatus}
+              onSave={async (name, settings) => {
+                const success = await updateWorkspaceSettings(name, settings);
+                if (success) {
+                  await refreshWorkspaces();
+                }
+                return success;
+              }}
+              onTest={testWorkspaceConnection}
+              onResetConnection={resetWorkspaceConnection}
+              onPurgeArchivedLoops={workspaceSettingsWorkspaceId
+                ? async () => await handlePurgeArchivedLoops(workspaceSettingsWorkspaceId)
+                : undefined}
+              archivedLoopCount={selectedWorkspaceArchivedLoopCount}
+              saving={workspaceSettingsSaving}
+              testing={workspaceSettingsTesting}
+              resettingConnection={workspaceSettingsResetting}
+              purgingArchivedLoops={workspaceArchivedLoopsPurging}
+              remoteOnly={dashboardData.remoteOnly}
+              formId="workspace-settings-shell-form"
+              onSaved={() => navigateWithinShell({ view: "workspace", workspaceId: selectedWorkspace.id })}
+              onValidityChange={setWorkspaceSettingsFormValid}
+            />
+          ) : (
+            <div className="text-sm text-gray-500 dark:text-gray-400">Workspace settings are unavailable right now.</div>
+          )}
+        </ShellPanel>
       );
     }
 
@@ -2142,7 +2215,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               workspaces.map((workspace) => (
                 <SectionItem
                   key={workspace.id}
-                  active={route.view === "workspace" && route.workspaceId === workspace.id}
+                  active={(route.view === "workspace" || route.view === "workspace-settings") && route.workspaceId === workspace.id}
                   title={workspace.name}
                   subtitle={workspace.directory}
                   onClick={() => navigateWithinShell({ view: "workspace", workspaceId: workspace.id })}
@@ -2328,30 +2401,6 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           </main>
         </div>
       </div>
-      <WorkspaceSettingsModal
-        isOpen={showWorkspaceSettingsModal}
-        onClose={() => setShowWorkspaceSettingsModal(false)}
-        workspace={workspaceFromHook}
-        status={workspaceStatus}
-        onSave={async (name, settings) => {
-          const success = await updateWorkspaceSettings(name, settings);
-          if (success) {
-            await refreshWorkspaces();
-          }
-          return success;
-        }}
-        onTest={testWorkspaceConnection}
-        onResetConnection={resetWorkspaceConnection}
-        onPurgeArchivedLoops={workspaceSettingsWorkspaceId
-          ? async () => await handlePurgeArchivedLoops(workspaceSettingsWorkspaceId)
-          : undefined}
-        archivedLoopCount={selectedWorkspaceArchivedLoopCount}
-        saving={workspaceSettingsSaving}
-        testing={workspaceSettingsTesting}
-        resettingConnection={workspaceSettingsResetting}
-        purgingArchivedLoops={workspaceArchivedLoopsPurging}
-        remoteOnly={dashboardData.remoteOnly}
-      />
     </div>
   );
 }
