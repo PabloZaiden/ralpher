@@ -15,7 +15,10 @@ import {
   saveStandaloneSshServerPassword,
   updateSshServerApi,
 } from "./sshServerActions";
-import { getStoredSshServerCredential } from "../lib/ssh-browser-credentials";
+import {
+  clearStoredSshServerCredential,
+  getStoredSshServerCredential,
+} from "../lib/ssh-browser-credentials";
 
 export interface UseSshServersResult {
   servers: SshServer[];
@@ -95,6 +98,7 @@ export function useSshServers(): UseSshServersResult {
     try {
       setError(null);
       await deleteSshServerApi(id);
+      clearStoredSshServerCredential(id);
       setServers((prev) => prev.filter((server) => server.config.id !== id));
       setSessionsByServerId((prev) => {
         const next = { ...prev };

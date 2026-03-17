@@ -204,6 +204,40 @@ describe("App shell", () => {
     });
   });
 
+  test("lets users delete an SSH server from the shell detail route", async () => {
+    const server = createSshServer({ id: "server-1", name: "Deploy host" });
+    setupDefaultApi({ sshServers: [server] });
+    localStorage.setItem("ralpher.sshServerCredential.server-1", JSON.stringify({ encryptedCredential: "saved" }));
+    api.delete("/api/ssh-servers/:id", (req) => {
+      expect(req.params["id"]).toBe("server-1");
+      return { success: true };
+    });
+
+    const { getAllByRole, getByRole, getByText, queryByRole, user } = renderWithUser(<App />, { route: "#/server/server-1" });
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Deploy host" })).toBeTruthy();
+      expect(getByRole("button", { name: "Delete Server" })).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: "Delete Server" }));
+
+    await waitFor(() => {
+      expect(getByText('Delete "Deploy host"? This removes the saved SSH server metadata from Ralpher.')).toBeTruthy();
+    });
+
+    await user.click(getAllByRole("button", { name: "Delete Server" })[1]!);
+
+    await waitFor(() => {
+      expect(api.calls("/api/ssh-servers/:id", "DELETE")).toHaveLength(1);
+      expect(window.location.hash).toBe("#/");
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
+      expect(getByText('Deleted SSH server "Deploy host"')).toBeTruthy();
+      expect(localStorage.getItem("ralpher.sshServerCredential.server-1")).toBeNull();
+      expect(queryByRole("dialog")).toBeNull();
+    });
+  });
+
   test("navigates to a loop when a sidebar item is clicked", async () => {
     const workspace = createWorkspace({ id: "workspace-1", name: "Frontend", directory: "/workspaces/frontend" });
     const loop = createLoop({
