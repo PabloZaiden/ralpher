@@ -171,7 +171,7 @@ describe("error handling scenario", () => {
     const { getByRole, getByLabelText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
 
     const loopsNewButton = getSectionActionButton("Loops");

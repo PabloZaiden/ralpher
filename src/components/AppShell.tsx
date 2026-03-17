@@ -419,7 +419,7 @@ function ShellPanel({
 }) {
   if (variant === "compact") {
     return (
-      <div className="flex h-full min-h-0 flex-col bg-gray-50 dark:bg-neutral-900">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50 dark:bg-neutral-900">
         <div className="border-b border-gray-200 bg-white px-4 py-2 dark:border-gray-800 dark:bg-neutral-800 sm:px-6 lg:px-8">
           <div
             className={[
@@ -427,7 +427,7 @@ function ShellPanel({
               "flex min-h-14 flex-wrap items-center gap-1.5",
             ].join(" ")}
           >
-            <div className="flex min-w-[10rem] flex-1 flex-wrap items-center gap-1.5">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
               <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
                 {title}
               </h1>
@@ -447,7 +447,7 @@ function ShellPanel({
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-auto px-4 py-5 sm:px-6 lg:px-8 lg:py-6">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-5 pb-[calc(6rem+var(--safe-area-inset-bottom))] sm:px-6 sm:pb-5 lg:px-8 lg:py-6">
           <div className={bodyClassName ?? "space-y-6"}>
             {children}
           </div>
@@ -540,6 +540,7 @@ function OverviewView({
   workspaceSessionCount,
   standaloneSessionCount,
   servers,
+  sessionsByServerId,
   workspaceGroups,
   headerOffsetClassName,
   onNavigate,
@@ -551,6 +552,7 @@ function OverviewView({
   workspaceSessionCount: number;
   standaloneSessionCount: number;
   servers: SshServer[];
+  sessionsByServerId: Record<string, SshServerSession[]>;
   workspaceGroups: ReturnType<typeof useLoopGrouping>["workspaceGroups"];
   headerOffsetClassName?: string;
   onNavigate: (route: ShellRoute) => void;
@@ -560,11 +562,17 @@ function OverviewView({
       .sort((left, right) => right.config.createdAt.localeCompare(left.config.createdAt))
       .slice(0, 5);
   }, [loops]);
+  const serverMapItems = useMemo(() => {
+    return servers.map((server) => ({
+      server,
+      sessionCount: sessionsByServerId[server.config.id]?.length ?? 0,
+    }));
+  }, [servers, sessionsByServerId]);
 
   return (
     <ShellPanel
       eyebrow="Overview"
-      title="Overview"
+      title="Ralpher"
       variant="compact"
       headerOffsetClassName={headerOffsetClassName}
     >
@@ -575,52 +583,11 @@ function OverviewView({
         <SummaryCard
           label="SSH"
           value={workspaceSessionCount + standaloneSessionCount}
-          meta={`${servers.length} saved servers across workspace and standalone sessions.`}
+          meta={`${servers.length} saved standalone SSH servers.`}
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
-        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">Recent activity</h2>
-            <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-              Jump back into active loops or chats from the overview.
-            </p>
-          </div>
-          <div className="space-y-2">
-            {recentLoops.length === 0 ? (
-              <EmptySection message="Recent activity will appear here as you start work." />
-            ) : (
-              recentLoops.map((loop) => {
-                const route = loop.config.mode === "chat"
-                  ? { view: "chat", chatId: loop.config.id } as ShellRoute
-                  : { view: "loop", loopId: loop.config.id } as ShellRoute;
-                const label = loop.state.status === "planning"
-                  ? getPlanningStatusLabel(loop.state.planMode?.isPlanReady ?? false)
-                  : getStatusLabel(loop.state.status, loop.state.syncState);
-                return (
-                  <button
-                    key={loop.config.id}
-                    type="button"
-                    onClick={() => onNavigate(route)}
-                    className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {loop.config.name}
-                      </span>
-                      <span className="mt-1 block truncate text-xs text-gray-500 dark:text-gray-400">
-                        {loop.config.directory}
-                      </span>
-                    </span>
-                    <Badge variant={getStatusBadgeVariant(loop.state.status)}>{label}</Badge>
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-
+      <div className="space-y-6">
         <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
           <div>
             <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">Workspace map</h2>
@@ -653,6 +620,84 @@ function OverviewView({
                 </button>
               ))
             )}
+          </div>
+        </div>
+
+        <div className="grid gap-6 xl:grid-cols-[0.8fr,1.2fr]">
+          <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">Servers map</h2>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Jump into saved SSH servers to review standalone sessions and start new terminals.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {serverMapItems.length === 0 ? (
+                <EmptySection message="No SSH servers yet. Register one to see it here." />
+              ) : (
+                serverMapItems.map(({ server, sessionCount }) => (
+                  <button
+                    key={server.config.id}
+                    type="button"
+                    onClick={() => onNavigate({ view: "ssh-server", serverId: server.config.id })}
+                    className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                        {server.config.name}
+                      </span>
+                      <span className="mt-1 block truncate text-xs text-gray-500 dark:text-gray-400">
+                        {server.config.username}@{server.config.address}
+                      </span>
+                    </span>
+                    <span className="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-neutral-800 dark:text-gray-300">
+                      {sessionCount} session{sessionCount === 1 ? "" : "s"}
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">Recent activity</h2>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                Jump back into active loops or chats from the overview.
+              </p>
+            </div>
+            <div className="space-y-2">
+              {recentLoops.length === 0 ? (
+                <EmptySection message="Recent activity will appear here as you start work." />
+              ) : (
+                recentLoops.map((loop) => {
+                  const route = loop.config.mode === "chat"
+                    ? { view: "chat", chatId: loop.config.id } as ShellRoute
+                    : { view: "loop", loopId: loop.config.id } as ShellRoute;
+                  const label = loop.state.status === "planning"
+                    ? getPlanningStatusLabel(loop.state.planMode?.isPlanReady ?? false)
+                    : getStatusLabel(loop.state.status, loop.state.syncState);
+                  return (
+                    <button
+                      key={loop.config.id}
+                      type="button"
+                      onClick={() => onNavigate(route)}
+                      className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {loop.config.name}
+                        </span>
+                        <span className="mt-1 block truncate text-xs text-gray-500 dark:text-gray-400">
+                          {loop.config.directory}
+                        </span>
+                      </span>
+                      <Badge variant={getStatusBadgeVariant(loop.state.status)}>{label}</Badge>
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -705,8 +750,9 @@ function WorkspaceView({
       headerOffsetClassName={headerOffsetClassName}
       actions={(
         <>
-          <Button variant="secondary" size="sm" onClick={onOpenSettings}>
-            Workspace Settings
+          <Button variant="secondary" size="sm" onClick={onOpenSettings} aria-label="Open workspace settings">
+            <span className="sm:hidden">Settings</span>
+            <span className="hidden sm:inline">Workspace Settings</span>
           </Button>
           <ActionMenu items={createActionItems} ariaLabel={`Create items in workspace ${workspace.name}`} />
         </>
@@ -1232,16 +1278,6 @@ function SshSessionComposer({
       title="Create an SSH session"
       variant="compact"
       headerOffsetClassName={headerOffsetClassName}
-      badges={(
-        <>
-          <Badge variant="default" size="sm">
-            {targetType === "workspace" ? "Workspace" : "Standalone server"}
-          </Badge>
-          <Badge variant={connectionMode === "direct" ? "warning" : "info"} size="sm">
-            {getSshConnectionModeLabel(connectionMode)}
-          </Badge>
-        </>
-      )}
       actions={(
         <>
           <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={submitting}>
@@ -1843,12 +1879,6 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           descriptionClassName="hidden sm:inline font-mono"
           variant="compact"
           headerOffsetClassName={shellHeaderOffsetClassName}
-          badges={(
-            <>
-              <Badge variant="default" size="sm">{kind === "chat" ? "Chat" : "Loop"}</Badge>
-              {kind === "loop" && composeActionState?.planMode && <Badge variant="planning" size="sm">Plan mode</Badge>}
-            </>
-          )}
           actions={(
             <>
               {kind === "loop" && composeActionState && (!composeActionState.isEditing || composeActionState.isEditingDraft) && (
@@ -1857,10 +1887,16 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                   variant="secondary"
                   size="sm"
                   onClick={composeActionState.onSaveAsDraft}
+                  aria-label={composeActionState.isEditingDraft ? "Update Draft" : "Save as Draft"}
                   disabled={!composeActionState.canSaveDraft}
                   loading={composeActionState.isSubmitting}
                 >
-                  {composeActionState.isEditingDraft ? "Update Draft" : "Save as Draft"}
+                  {composeActionState.isEditingDraft ? "Update Draft" : (
+                    <>
+                      <span className="sm:hidden">Save Draft</span>
+                      <span className="hidden sm:inline">Save as Draft</span>
+                    </>
+                  )}
                 </Button>
               )}
               <Button
@@ -2308,7 +2344,8 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               loading={workspaceSettingsSaving}
               disabled={!workspaceSettingsFormValid || workspaceSettingsLoading || !workspaceFromHook}
             >
-              Save Changes
+              <span className="sm:hidden">Save</span>
+              <span className="hidden sm:inline">Save Changes</span>
             </Button>
           )}
         >
@@ -2411,6 +2448,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         workspaceSessionCount={sessions.length}
         standaloneSessionCount={standaloneSessions.length}
         servers={servers}
+        sessionsByServerId={sessionsByServerId}
         workspaceGroups={workspaceGroups}
         headerOffsetClassName={shellHeaderOffsetClassName}
         onNavigate={navigateWithinShell}
@@ -2419,7 +2457,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
   }
 
   return (
-    <div className="flex h-full min-h-screen bg-gray-100 text-gray-950 dark:bg-neutral-950 dark:text-gray-100">
+    <div className="flex h-full min-h-0 overflow-hidden bg-gray-100 text-gray-950 dark:bg-neutral-950 dark:text-gray-100">
       <div
         className={[
           "fixed inset-0 z-30 bg-neutral-950/50 transition lg:hidden",
@@ -2644,14 +2682,14 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         </div>
       </aside>
 
-      <div className="relative flex min-w-0 flex-1 flex-col">
+      <div className="relative flex min-w-0 min-h-0 flex-1 flex-col overflow-hidden">
         {shellErrors.length > 0 && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200 sm:px-6">
             {shellErrors.join(" · ")}
           </div>
         )}
 
-        <div className="relative min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="pointer-events-none absolute left-4 top-4 z-20 flex gap-3 sm:left-6 lg:left-8">
             <button
               type="button"
@@ -2672,7 +2710,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               </button>
             )}
           </div>
-          <main className="h-full overflow-auto">
+          <main className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
             {renderMainContent()}
           </main>
         </div>

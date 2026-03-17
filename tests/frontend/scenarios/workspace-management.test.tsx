@@ -88,7 +88,7 @@ describe("workspace management scenario", () => {
     const { getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
 
     const workspacesNewButton = getSectionActionButton("Workspaces");
@@ -141,7 +141,7 @@ describe("workspace management scenario", () => {
     const { getByRole, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
 
     const workspacesNewButton = getSectionActionButton("Workspaces");
@@ -248,7 +248,7 @@ describe("workspace management scenario", () => {
     const { getByRole, queryByLabelText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
 
     const workspacesNewButton = getSectionActionButton("Workspaces");
@@ -310,7 +310,7 @@ describe("workspace management scenario", () => {
     const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
 
     const workspacesNewButton = getSectionActionButton("Workspaces");
@@ -325,7 +325,7 @@ describe("workspace management scenario", () => {
 
     await waitFor(() => {
       expect(window.location.hash).toBe("#/");
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
   });
 

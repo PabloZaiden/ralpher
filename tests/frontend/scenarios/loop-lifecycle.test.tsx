@@ -242,7 +242,7 @@ describe("loop lifecycle scenario", () => {
 
     await waitFor(() => {
       expect(getByRole("button", { name: /ralpher/i })).toBeTruthy();
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
   });
 
@@ -322,7 +322,7 @@ describe("loop lifecycle scenario", () => {
 
     await waitFor(() => {
       expect(getByRole("button", { name: /ralpher/i })).toBeTruthy();
-      expect(getByRole("heading", { name: "Overview" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
   });
 });
