@@ -133,6 +133,14 @@ class MockTerminal {
   writeln(data: string) {
     this.writes.push(`${data}\n`);
   }
+  resize(cols: number, rows: number) {
+    this.cols = cols;
+    this.rows = rows;
+    this.resizeHandler?.({ cols, rows });
+  }
+  getViewportY() {
+    return 0;
+  }
 
   onData(handler: (data: string) => void) {
     this.dataHandler = handler;
@@ -209,9 +217,19 @@ class MockTerminal {
 }
 
 class MockFitAddon {
-  activate() {}
+  terminal: MockTerminal | null = null;
+
+  activate(terminal: MockTerminal) {
+    this.terminal = terminal;
+  }
   fit() {}
   observeResize() {}
+  proposeDimensions() {
+    if (!this.terminal) {
+      return undefined;
+    }
+    return { cols: this.terminal.cols, rows: this.terminal.rows };
+  }
 }
 
 let lastTerminal: MockTerminal | null = null;
@@ -308,7 +326,7 @@ describe("SshSessionDetails", () => {
 
     expect(lastTerminalOptions).toEqual({
       fontSize: 12,
-      fontFamily: "\"SFMono-Regular\", \"SF Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", monospace, \"Liga SFMono Nerd Font\", \"MesloLGS NF\", \"MonaspiceNe Nerd Font Mono\", \"MonaspiceXe Nerd Font Mono\", \"Iosevka Nerd Font\", \"RecMonoLinear Nerd Font Mono\", \"Terminess Nerd Font Mono\", \"FiraCode Nerd Font Mono\", \"CaskaydiaMono Nerd Font Mono\", \"CaskaydiaCove Nerd Font Mono\", \"JetBrainsMono Nerd Font Mono\", \"JetBrainsMono Nerd Font\", \"Hack Nerd Font Mono\", \"SauceCodePro Nerd Font Mono\", \"Symbols Nerd Font Mono\", \"Symbols Nerd Font\", \"Ralpher Terminal Nerd Font\"",
+      fontFamily: "SFMono-Regular, \"SF Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", monospace, \"Liga SFMono Nerd Font\", \"MesloLGS NF\", \"MonaspiceNe Nerd Font Mono\", \"MonaspiceXe Nerd Font Mono\", \"Iosevka Nerd Font\", \"RecMonoLinear Nerd Font Mono\", \"Terminess Nerd Font Mono\", \"FiraCode Nerd Font Mono\", \"CaskaydiaMono Nerd Font Mono\", \"CaskaydiaCove Nerd Font Mono\", \"JetBrainsMono Nerd Font Mono\", \"JetBrainsMono Nerd Font\", \"Hack Nerd Font Mono\", \"SauceCodePro Nerd Font Mono\", \"Symbols Nerd Font Mono\", \"Symbols Nerd Font\", \"Ralpher Terminal Nerd Font\"",
       theme: expectedTerminalTheme,
     });
   });
@@ -331,7 +349,7 @@ describe("SshSessionDetails", () => {
 
     expect(lastTerminalOptions).toEqual({
       fontSize: 12,
-      fontFamily: "\"SFMono-Regular\", \"SF Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", monospace, \"Liga SFMono Nerd Font\", \"Ralpher Terminal Nerd Font\"",
+      fontFamily: "SFMono-Regular, \"SF Mono\", Menlo, Monaco, Consolas, \"Liberation Mono\", monospace, \"Liga SFMono Nerd Font\", \"Ralpher Terminal Nerd Font\"",
       theme: expectedTerminalTheme,
     });
   });
@@ -386,6 +404,41 @@ describe("SshSessionDetails", () => {
       type: "terminal.input",
       data: "\u001b]10;rgb:d4/d4/d4\u001b\\",
     }));
+  });
+
+  test("falls back to raw output when an OSC color query exceeds the pending buffer limit", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH OSC Overflow" } }),
+    );
+
+    const { getByText } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-osc-overflow-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH OSC Overflow")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    const terminalConnection = ws.getConnections("/api/ssh-terminal")[0]!;
+    const overflowingOscQuery = `\u001b]4;${"0;?".repeat(1_500)}`;
+    await act(async () => {
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.output",
+        data: overflowingOscQuery,
+      });
+      ws.sendEventTo(terminalConnection, {
+        type: "terminal.output",
+        data: "still-rendered\r\n",
+      });
+    });
+
+    expect(lastTerminal!.writes).toContain(overflowingOscQuery);
+    expect(lastTerminal!.writes).toContain("still-rendered\r\n");
+    expect(
+      terminalConnection.sentMessages.filter((message) => message.includes("\"type\":\"terminal.input\"")),
+    ).toEqual([]);
   });
 
   test("renames a workspace SSH session from the details view", async () => {

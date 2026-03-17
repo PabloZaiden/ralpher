@@ -14,6 +14,7 @@ import {
   buildPersistentSessionReadyCommand,
   buildPersistentSessionResizeCommand,
 } from "./ssh-persistent-session";
+import { DEFAULT_SSH_COLOR_TERM, DEFAULT_SSH_TERM } from "./ssh-terminal-env";
 import { sshSessionManager } from "./ssh-session-manager";
 import { sshServerManager } from "./ssh-server-manager";
 import { createLogger } from "./logger";
@@ -28,8 +29,6 @@ import { getEffectiveSshConnectionMode } from "../utils";
 const log = createLogger("core:ssh-terminal-bridge");
 const SESSION_READY_POLL_INTERVAL_MS = 100;
 const DEFAULT_SESSION_READY_TIMEOUT_MS = 15_000;
-const DEFAULT_SSH_TERM = "xterm-256color";
-const DEFAULT_SSH_COLOR_TERM = "truecolor";
 const OSC_52_SEQUENCE_START = "\u001b]52;";
 const OSC_SEQUENCE_BELL = "\u0007";
 const OSC_SEQUENCE_STRING_TERMINATOR = "\u001b\\";

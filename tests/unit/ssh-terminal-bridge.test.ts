@@ -204,7 +204,7 @@ describe("SshTerminalBridge", () => {
     expect(command).toContain("client_tty_file='/tmp/ralpher-terminal-ssh-session-1.tty'");
     expect(command).toContain("session_tty_file='/tmp/ralpher-terminal-ssh-session-1.session.tty'");
     expect(command).toMatch(/cd .*\/workspaces\/example.*\|\| exit 1;/);
-    expect(command).toContain("COLORTERM='truecolor';");
+    expect(command).toMatch(/COLORTERM=.*truecolor.*;/);
     expect(command).toContain("export COLORTERM;");
     expect(command).toContain("dtach -N \"$session_socket\" -Ez bash -lc");
     expect(command).toContain("dtach -a \"$session_socket\" -E -z -r winch");
@@ -224,7 +224,9 @@ describe("SshTerminalBridge", () => {
 
   test("uses a fallback TERM when the server environment does not define one", async () => {
     const previousTerm = process.env["TERM"];
+    const previousColorTerm = process.env["COLORTERM"];
     delete process.env["TERM"];
+    delete process.env["COLORTERM"];
 
     try {
       const bridge = new SshTerminalBridge(session.config.id, {
@@ -244,12 +246,19 @@ describe("SshTerminalBridge", () => {
       } else {
         process.env["TERM"] = previousTerm;
       }
+      if (previousColorTerm === undefined) {
+        delete process.env["COLORTERM"];
+      } else {
+        process.env["COLORTERM"] = previousColorTerm;
+      }
     }
   });
 
   test("preserves an existing TERM when opening the SSH terminal", async () => {
     const previousTerm = process.env["TERM"];
+    const previousColorTerm = process.env["COLORTERM"];
     process.env["TERM"] = "screen-256color";
+    delete process.env["COLORTERM"];
 
     try {
       const bridge = new SshTerminalBridge(session.config.id, {
@@ -268,6 +277,11 @@ describe("SshTerminalBridge", () => {
         delete process.env["TERM"];
       } else {
         process.env["TERM"] = previousTerm;
+      }
+      if (previousColorTerm === undefined) {
+        delete process.env["COLORTERM"];
+      } else {
+        process.env["COLORTERM"] = previousColorTerm;
       }
     }
   });

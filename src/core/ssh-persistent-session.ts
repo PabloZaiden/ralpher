@@ -2,7 +2,8 @@
  * Shared helpers for persistent SSH sessions backed by dtach.
  */
 
-const DEFAULT_SSH_COLOR_TERM = "truecolor";
+import { DEFAULT_SSH_COLOR_TERM } from "./ssh-terminal-env";
+
 const DTACH_INSTALL_HINT = [
   "dtach is not available on the remote host.",
   "Ralpher switched this session to Direct SSH.",

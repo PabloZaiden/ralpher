@@ -146,6 +146,7 @@ const TERMINAL_OSC_QUERY_SEQUENCE_START = "\u001b]";
 const TERMINAL_OSC_STRING_TERMINATOR = "\u001b\\";
 const TERMINAL_OSC_BELL_TERMINATOR = "\u0007";
 const TERMINAL_OSC_C1_TERMINATOR = "\u009c";
+const MAX_PENDING_OSC_COLOR_QUERY_BYTES = 4 * 1024;
 const TERMINAL_MOUSE_BUTTON_MODE = 1000;
 const TERMINAL_MOUSE_DRAG_MODE = 1002;
 const TERMINAL_MOUSE_ANY_MOTION_MODE = 1003;
@@ -950,22 +951,27 @@ export function SshSessionDetails({
 
   const writeTerminalOutput = useCallback((chunk: string) => {
     const parsed = parseTerminalOscColorQueries(`${pendingOscColorQueryRef.current}${chunk}`);
-    pendingOscColorQueryRef.current = parsed.remainder;
+    const nextVisibleOutput = parsed.remainder.length > MAX_PENDING_OSC_COLOR_QUERY_BYTES
+      ? `${parsed.visibleOutput}${parsed.remainder}`
+      : parsed.visibleOutput;
+    pendingOscColorQueryRef.current = parsed.remainder.length > MAX_PENDING_OSC_COLOR_QUERY_BYTES
+      ? ""
+      : parsed.remainder;
 
     for (const reply of parsed.replies) {
       void sendTerminalInput(reply, { focusTerminal: false, notifyOnFailure: false });
     }
 
-    if (!parsed.visibleOutput) {
+    if (!nextVisibleOutput) {
       return;
     }
 
     if (!terminalRef.current) {
-      pendingOutputRef.current.push(parsed.visibleOutput);
+      pendingOutputRef.current.push(nextVisibleOutput);
       return;
     }
 
-    terminalRef.current.write(parsed.visibleOutput);
+    terminalRef.current.write(nextVisibleOutput);
   }, [sendTerminalInput]);
 
   const flushPendingOutput = useCallback(() => {
