@@ -45,8 +45,8 @@ export function LoopCard({
     <Card
       clickable={!!onClick}
       onClick={onClick}
-      className={`relative h-full ${isActive ? "ring-2 ring-blue-500" : ""} ${isPlanning ? planningRingClass : ""}`}
-      bodyClassName="flex h-full flex-col"
+      className={`relative flex h-full flex-col ${isActive ? "ring-2 ring-blue-500" : ""} ${isPlanning ? planningRingClass : ""}`}
+      bodyClassName="flex min-h-0 flex-1 flex-col"
     >
       {/* Status indicator */}
       {isActive && !isPlanning && (
