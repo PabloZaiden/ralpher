@@ -49,7 +49,8 @@ function getStatusVariant(status: string) {
 
 export interface SshSessionDetailsProps {
   sshSessionId: string;
-  onBack: () => void;
+  onBack?: () => void;
+  showBackButton?: boolean;
   copyTextToClipboard?: (text: string) => Promise<void>;
 }
 
@@ -722,6 +723,7 @@ function isStandaloneCredentialTokenError(message: string): boolean {
 export function SshSessionDetails({
   sshSessionId,
   onBack,
+  showBackButton = true,
   copyTextToClipboard = writeTextToClipboard,
 }: SshSessionDetailsProps) {
   const toast = useToast();
@@ -1474,7 +1476,7 @@ export function SshSessionDetails({
       return;
     }
     setShowDeleteConfirm(false);
-    onBack();
+    onBack?.();
   }
 
   async function handleStandalonePasswordSubmit() {
@@ -1498,7 +1500,7 @@ export function SshSessionDetails({
           setShowPasswordPrompt(false);
           setPendingStandaloneAction(null);
           setShowDeleteConfirm(false);
-          onBack();
+          onBack?.();
         }
         return;
       }
@@ -1531,7 +1533,7 @@ export function SshSessionDetails({
   if (!session) {
     return (
       <div className="p-6">
-        <Button variant="ghost" onClick={onBack}>← Back</Button>
+        {showBackButton && onBack && <Button variant="ghost" onClick={onBack}>← Back</Button>}
         <p className="mt-4 text-red-600 dark:text-red-400">{error || "SSH session not found."}</p>
       </div>
     );
@@ -1542,7 +1544,9 @@ export function SshSessionDetails({
       <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-gray-800">
         <div className="flex flex-wrap items-center justify-between gap-1.5">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-            <Button variant="ghost" size="xs" onClick={onBack}>← Back</Button>
+            {showBackButton && onBack && (
+              <Button variant="ghost" size="xs" onClick={onBack}>← Back</Button>
+            )}
             <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
               {session.config.name}
             </h1>

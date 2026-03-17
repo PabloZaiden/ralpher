@@ -309,6 +309,21 @@ describe("SshSessionDetails", () => {
     });
   });
 
+  test("hides the back button when embedded in the shell", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "SSH Embedded Layout" } }),
+    );
+
+    const { getByText, queryByRole } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-embedded-1" showBackButton={false} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("SSH Embedded Layout")).toBeTruthy();
+      expect(queryByRole("button", { name: /Back/ })).toBeNull();
+    });
+  });
+
   test("initializes the terminal with the configured ghostty-web font size and without xterm-specific rendering tweaks", async () => {
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "SSH Terminal Rendering" } }),

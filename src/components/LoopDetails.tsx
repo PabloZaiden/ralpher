@@ -38,6 +38,8 @@ export interface LoopDetailsProps {
   loopId: string;
   /** Callback to go back to dashboard */
   onBack?: () => void;
+  /** Whether to render the back button in shell layouts */
+  showBackButton?: boolean;
   /** Navigate to the SSH session details view */
   onSelectSshSession?: (sshSessionId: string) => void;
 }
@@ -106,7 +108,7 @@ function DiffPatchViewer({ patch }: { patch: string }) {
   );
 }
 
-export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsProps) {
+export function LoopDetails({ loopId, onBack, showBackButton = true, onSelectSshSession }: LoopDetailsProps) {
   const {
     loop,
     loading,
@@ -679,9 +681,11 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
         <div className="w-full">
-          <Button variant="ghost" onClick={onBack}>
-            ← Back
-          </Button>
+          {showBackButton && onBack && (
+            <Button variant="ghost" onClick={onBack}>
+              ← Back
+            </Button>
+          )}
           <div className="mt-8 text-center">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
               Not found
@@ -716,9 +720,11 @@ export function LoopDetails({ loopId, onBack, onSelectSshSession }: LoopDetailsP
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0 safe-area-top">
         <div className="px-4 sm:px-6 lg:px-8 py-2">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={onBack}>
-              ← Back
-            </Button>
+            {showBackButton && onBack && (
+              <Button variant="ghost" size="sm" onClick={onBack}>
+                ← Back
+              </Button>
+            )}
             <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate">
               {config.name}
             </h1>

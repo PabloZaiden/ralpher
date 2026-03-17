@@ -44,6 +44,8 @@ export interface CreateLoopFormProps {
   onSubmit: (request: CreateLoopFormSubmitRequest) => Promise<boolean>;
   /** Callback when form is cancelled */
   onCancel: () => void;
+  /** Whether to call onCancel after a successful submit */
+  closeOnSuccess?: boolean;
   /** Whether form is submitting */
   loading?: boolean;
   /** Available models */
@@ -107,6 +109,7 @@ export type CreateLoopFormSubmitRequest = CreateLoopRequest | CreateChatRequest;
 export function CreateLoopForm({
   onSubmit,
   onCancel,
+  closeOnSuccess = true,
   loading = false,
   models = [],
   modelsLoading = false,
@@ -400,8 +403,7 @@ export function CreateLoopForm({
 
     try {
       const success = await onSubmit(request);
-      if (success) {
-        // Close the modal on successful submission
+      if (success && closeOnSuccess) {
         onCancel();
       }
     } catch (error) {

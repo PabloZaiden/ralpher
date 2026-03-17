@@ -207,6 +207,17 @@ describe("header display", () => {
     expect(backCalled).toBe(true);
   });
 
+  test("hides the back button when embedded in the shell", async () => {
+    setupDefaultApi();
+    const { queryByRole } = renderWithUser(
+      <LoopDetails loopId={LOOP_ID} showBackButton={false} />,
+    );
+
+    await waitFor(() => {
+      expect(queryByRole("button", { name: /Back/ })).toBeNull();
+    });
+  });
+
   test("renders rename button", async () => {
     setupDefaultApi();
     const { container } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);

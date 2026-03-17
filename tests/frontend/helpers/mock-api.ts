@@ -111,6 +111,7 @@ export function createMockApi(): MockApiInstance {
   const routes: RouteConfig[] = [];
   const callHistory: CallRecord[] = [];
   let originalFetch: typeof globalThis.fetch | null = null;
+  let originalWindowFetch: typeof window.fetch | null = null;
 
   function addRoute(method: HttpMethod, pattern: string, handler: RouteHandler, statusCode = 200): void {
     const { regex, paramNames } = patternToRegex(pattern);
@@ -233,13 +234,23 @@ export function createMockApi(): MockApiInstance {
       if (!originalFetch) {
         originalFetch = globalThis.fetch;
       }
+      if (typeof window !== "undefined" && !originalWindowFetch) {
+        originalWindowFetch = window.fetch;
+      }
       globalThis.fetch = mockFetch as typeof globalThis.fetch;
+      if (typeof window !== "undefined") {
+        window.fetch = mockFetch as typeof window.fetch;
+      }
     },
 
     uninstall: () => {
       if (originalFetch) {
         globalThis.fetch = originalFetch;
         originalFetch = null;
+      }
+      if (typeof window !== "undefined" && originalWindowFetch) {
+        window.fetch = originalWindowFetch;
+        originalWindowFetch = null;
       }
     },
   };

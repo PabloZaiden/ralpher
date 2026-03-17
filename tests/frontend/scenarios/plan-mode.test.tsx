@@ -60,6 +60,7 @@ function setupApi(loop: ReturnType<typeof createLoopWithStatus>, planContent = "
   }));
   api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
   api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+  api.get("/api/loops/:id/port-forwards", () => []);
   api.get("/api/preferences/markdown-rendering", () => ({ enabled: false }));
 }
 
@@ -85,10 +86,10 @@ describe("plan mode scenario", () => {
     setupApi(loop);
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText } = renderWithUser(<App />);
+    const { getAllByText, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Plan Loop")).toBeTruthy();
+      expect(getAllByText("Plan Loop").length).toBeGreaterThan(0);
     });
 
     // Unified tab UI should show all tabs including Plan
@@ -105,10 +106,10 @@ describe("plan mode scenario", () => {
     setupApi(loop, "## Step 1\nDo something\n\n## Step 2\nDo more");
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Plan Loop")).toBeTruthy();
+      expect(getAllByText("Plan Loop").length).toBeGreaterThan(0);
     });
 
     // Plan content should be visible (rendered as raw text since markdown rendering is disabled)
@@ -138,10 +139,10 @@ describe("plan mode scenario", () => {
     setupApi(loop, "## Partial plan");
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Plan Loop")).toBeTruthy();
+      expect(getAllByText("Plan Loop").length).toBeGreaterThan(0);
     });
 
     // Wait for plan content to appear
@@ -178,10 +179,10 @@ describe("plan mode scenario", () => {
     api.get("/api/loops/:id", () => afterFeedbackLoop);
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Plan Loop")).toBeTruthy();
+      expect(getAllByText("Plan Loop").length).toBeGreaterThan(0);
     });
 
     // Wait for plan content to load
@@ -216,10 +217,10 @@ describe("plan mode scenario", () => {
     api.post("/api/loops/:id/plan/accept", () => ({ success: true, mode: "start_loop" }), 200);
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Plan Loop")).toBeTruthy();
+      expect(getAllByText("Plan Loop").length).toBeGreaterThan(0);
     });
 
     await waitFor(() => {
@@ -265,10 +266,10 @@ describe("plan mode scenario", () => {
     api.get("/api/ssh-sessions/:id/output", () => ({ output: "", seq: 0 }));
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Plan Loop")).toBeTruthy();
+      expect(getAllByText("Plan Loop").length).toBeGreaterThan(0);
     });
 
     await waitFor(() => {
@@ -298,10 +299,10 @@ describe("plan mode scenario", () => {
     api.post("/api/loops/:id/plan/discard", () => ({ success: true }));
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText, user } = renderWithUser(<App />);
+    const { getAllByText, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Plan Loop")).toBeTruthy();
+      expect(getAllByText("Plan Loop").length).toBeGreaterThan(0);
     });
 
     await waitFor(() => {
@@ -351,10 +352,10 @@ describe("plan mode scenario", () => {
     setupApi(loop, "## Refined Plan");
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText } = renderWithUser(<App />);
+    const { getAllByText, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Plan Loop")).toBeTruthy();
+      expect(getAllByText("Plan Loop").length).toBeGreaterThan(0);
     });
 
     // Should show feedback rounds
@@ -368,10 +369,10 @@ describe("plan mode scenario", () => {
     setupApi(loop, ""); // No plan content
 
     window.location.hash = `/loop/${LOOP_ID}`;
-    const { getByText } = renderWithUser(<App />);
+    const { getAllByText, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Plan Loop")).toBeTruthy();
+      expect(getAllByText("Plan Loop").length).toBeGreaterThan(0);
     });
 
     // Should show waiting message
