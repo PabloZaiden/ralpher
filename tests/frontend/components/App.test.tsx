@@ -3,7 +3,7 @@ import { App } from "@/App";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor, act } from "../helpers/render";
-import { createLoop, createSshSession, createWorkspace } from "../helpers/factories";
+import { createLoop, createLoopWithStatus, createSshSession, createWorkspace } from "../helpers/factories";
 
 const api = createMockApi();
 const ws = createMockWebSocket();
@@ -180,6 +180,62 @@ describe("App shell", () => {
       expect(getAllByText("Shell Loop").length).toBeGreaterThan(0);
     });
     expect(queryByRole("button", { name: /Back/ })).toBeNull();
+  });
+
+  test("remounts loop details on route switches so stale finalize UI is cleared", async () => {
+    const firstLoop = createLoopWithStatus("completed", {
+      config: { id: "loop-1", name: "Loop One", workspaceId: "workspace-1" },
+      state: { id: "loop-1" },
+    });
+    const secondLoop = createLoopWithStatus("completed", {
+      config: { id: "loop-2", name: "Loop Two", workspaceId: "workspace-1" },
+      state: { id: "loop-2" },
+    });
+    setupDefaultApi({ loops: [firstLoop, secondLoop] });
+
+    const { getAllByText, getByRole, queryByText, user } = renderWithUser(<App />, { route: "#/loop/loop-1" });
+
+    await waitFor(() => {
+      expect(getAllByText("Loop One").length).toBeGreaterThan(0);
+      const renameButton = document.querySelector('button[aria-label="Rename loop"]');
+      expect(renameButton).toBeTruthy();
+    });
+
+    await user.click(getByRole("button", { name: /Actions/ }));
+
+    await waitFor(() => {
+      const finalizeButton = Array.from(document.querySelectorAll("button")).find(
+        (button) => button.textContent?.includes("Accept") && button.textContent?.includes("merge or push"),
+      );
+      expect(finalizeButton).toBeTruthy();
+    });
+
+    const finalizeButton = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Accept") && button.textContent?.includes("merge or push"),
+    );
+    await user.click(finalizeButton!);
+
+    await waitFor(() => {
+      expect(queryByText("Finalize Loop")).toBeTruthy();
+    });
+
+    await act(async () => {
+      window.location.hash = "#/loop/loop-2";
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+
+    await waitFor(() => {
+      expect(getAllByText("Loop Two").length).toBeGreaterThan(0);
+      expect(queryByText("Finalize Loop")).toBeNull();
+    });
+
+    await waitFor(() => {
+      const openLoopConnections = ws.connections().filter(
+        (connection) => connection.isOpen && !!connection.queryParams["loopId"],
+      );
+      expect(openLoopConnections).toHaveLength(1);
+      expect(openLoopConnections[0]!.queryParams["loopId"]).toBe("loop-2");
+    });
   });
 
   test("renders workspace and SSH server detail views from dedicated shell routes", async () => {
