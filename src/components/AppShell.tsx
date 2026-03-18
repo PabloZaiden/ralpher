@@ -22,7 +22,6 @@ import {
   useSshServers,
   useSshSessions,
   useToast,
-  useWindowFocusRecovery,
   useWorkspaceServerSettings,
   useWorkspaces,
 } from "../hooks";
@@ -1723,15 +1722,6 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
       void refreshWorkspaces();
     }
   }, [provisioning.snapshot?.job.config.id, provisioning.snapshot?.job.state.status, refreshWorkspaces]);
-
-  useWindowFocusRecovery({
-    onRecover: async () => {
-      await Promise.all([
-        refreshWorkspaces(),
-        refreshSshServers(),
-      ]);
-    },
-  });
 
   useEffect(() => {
     if (!initialSidebarSectionState.invalidReason) {

@@ -21,8 +21,6 @@ export { useDashboardModals, type ModalState, type UncommittedModalState, type U
 export { useDashboardData, type UseDashboardDataResult } from "./useDashboardData";
 export { useViewModePreference, type UseViewModePreferenceResult, type DashboardViewMode } from "./useViewModePreference";
 export { useProvisioningJob, type UseProvisioningJobResult, type StartProvisioningJobRequest } from "./useProvisioningJob";
-export { useWindowFocusRecovery, type UseWindowFocusRecoveryOptions, type WindowFocusRecoveryTrigger } from "./useWindowFocusRecovery";
-
 // Shared loop action API functions
 export {
   acceptLoopApi,

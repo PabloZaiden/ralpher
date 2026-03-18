@@ -171,7 +171,6 @@ export function useLoops(): UseLoopsResult {
   // WebSocket connection for real-time updates
   useGlobalEvents<LoopEvent>({
     onEvent: handleEvent,
-    onFocusRecovery: refresh,
   });
 
   // Create a new loop (loops are always started immediately by the API)
