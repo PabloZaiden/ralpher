@@ -71,9 +71,16 @@ export function useDashboardData(): UseDashboardDataResult {
   const [currentBranch, setCurrentBranch] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("");
   const modelsRequestIdRef = useRef(0);
+  const modelsAbortControllerRef = useRef<AbortController | null>(null);
   const branchesRequestIdRef = useRef(0);
   const defaultBranchRequestIdRef = useRef(0);
   const planningRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      modelsAbortControllerRef.current?.abort();
+    };
+  }, []);
 
   // Fetch app config on mount
   useEffect(() => {
@@ -156,33 +163,44 @@ export function useDashboardData(): UseDashboardDataResult {
   // Fetch models when directory changes
   const fetchModels = useCallback(async (directory: string, workspaceId: string | null) => {
     const requestId = ++modelsRequestIdRef.current;
+    modelsAbortControllerRef.current?.abort();
+
     if (!directory || !workspaceId) {
       setModels([]);
       setModelsLoading(false);
       return;
     }
 
+    const controller = new AbortController();
+    modelsAbortControllerRef.current = controller;
+
     setModelsLoading(true);
     try {
-      const response = await appFetch(`/api/models?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`);
-      if (requestId !== modelsRequestIdRef.current) {
+      const response = await appFetch(
+        `/api/models?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`,
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted || requestId !== modelsRequestIdRef.current) {
         return;
       }
       if (response.ok) {
         const data = await response.json() as ModelInfo[];
-        if (requestId !== modelsRequestIdRef.current) {
+        if (controller.signal.aborted || requestId !== modelsRequestIdRef.current) {
           return;
         }
         setModels(data);
       } else {
         setModels([]);
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
       if (requestId === modelsRequestIdRef.current) {
         setModels([]);
       }
     } finally {
-      if (requestId === modelsRequestIdRef.current) {
+      if (!controller.signal.aborted && requestId === modelsRequestIdRef.current) {
         setModelsLoading(false);
       }
     }
