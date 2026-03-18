@@ -956,13 +956,13 @@ describe("edit draft flow", () => {
     await waitFor(() => {
       expect(getByText("Edit Draft Loop")).toBeTruthy();
       expect(getByRole("button", { name: "Cancel" })).toBeTruthy();
-      expect(getByRole("button", { name: "Delete Draft" })).toBeTruthy();
-      expect(getByRole("button", { name: "Update Draft" })).toBeTruthy();
+      expect(getByRole("button", { name: "Delete" })).toBeTruthy();
+      expect(getByRole("button", { name: "Update" })).toBeTruthy();
     });
 
     const cancelButton = getByRole("button", { name: "Cancel" });
-    const deleteDraftButton = getByRole("button", { name: "Delete Draft" });
-    const updateDraftButton = getByRole("button", { name: "Update Draft" });
+    const deleteDraftButton = getByRole("button", { name: "Delete" });
+    const updateDraftButton = getByRole("button", { name: "Update" });
 
     expect(cancelButton.compareDocumentPosition(deleteDraftButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
     expect(deleteDraftButton.compareDocumentPosition(updateDraftButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
