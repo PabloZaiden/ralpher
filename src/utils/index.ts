@@ -5,6 +5,7 @@
 export {
   getStatusLabel,
   canAccept,
+  canMarkMerged,
   isFinalState,
   isLoopActive,
   isLoopRunning,

@@ -24,6 +24,7 @@ import {
   getStatusLabel,
   getPlanningStatusLabel,
   canAccept,
+  canMarkMerged,
   isFinalState,
   isLoopActive,
   canSendTerminalFollowUp,
@@ -1715,7 +1716,7 @@ export function LoopDetails({
                                 <span className="text-gray-400 dark:text-gray-500">→</span>
                               </button>
                             )}
-                            {state.git && state.status !== "deleted" && (
+                            {canMarkMerged(state.status, Boolean(state.git)) && (
                               <button
                                 onClick={() => setMarkMergedModal(true)}
                                 className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left"

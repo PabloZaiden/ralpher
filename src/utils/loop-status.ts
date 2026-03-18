@@ -77,6 +77,16 @@ export function isFinalState(status: LoopStatus): boolean {
 }
 
 /**
+ * Check if the UI should offer the "mark as merged" action.
+ * This is only useful for git-backed loops that are not already deleted or merged.
+ */
+export function canMarkMerged(status: LoopStatus, hasGit: boolean): boolean {
+  const result = hasGit && status !== "deleted" && status !== "merged";
+  log.trace("canMarkMerged check", { status, hasGit, result });
+  return result;
+}
+
+/**
  * Check if a loop is actively running.
  * Used to determine if pending prompts can be set.
  */

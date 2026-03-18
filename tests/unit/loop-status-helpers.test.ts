@@ -7,6 +7,7 @@ import { describe, test, expect } from "bun:test";
 import {
   getStatusLabel,
   canAccept,
+  canMarkMerged,
   isFinalState,
   isLoopActive,
   isLoopRunning,
@@ -156,6 +157,28 @@ describe("canAccept", () => {
     for (const status of nonAcceptable) {
       expect(canAccept(status)).toBe(false);
     }
+  });
+});
+
+// ============================================================================
+// canMarkMerged
+// ============================================================================
+
+describe("canMarkMerged", () => {
+  test("returns true for pushed git-backed loops", () => {
+    expect(canMarkMerged("pushed", true)).toBe(true);
+  });
+
+  test("returns false for already merged loops", () => {
+    expect(canMarkMerged("merged", true)).toBe(false);
+  });
+
+  test("returns false for deleted loops", () => {
+    expect(canMarkMerged("deleted", true)).toBe(false);
+  });
+
+  test("returns false when git metadata is unavailable", () => {
+    expect(canMarkMerged("pushed", false)).toBe(false);
   });
 });
 

@@ -750,6 +750,34 @@ describe("actions tab content", () => {
     });
   });
 
+  test("merged loop hides the mark as merged action", async () => {
+    const loop = createLoopWithStatus("merged", {
+      config: { id: LOOP_ID, name: "Merged Loop" },
+    });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+
+    const { getByText, queryByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByText("Merged Loop")).toBeTruthy();
+    });
+
+    await user.click(getByText("Actions"));
+
+    await waitFor(() => {
+      expect(getByText("Purge Loop")).toBeTruthy();
+    });
+    expect(queryByText("Mark as Merged")).toBeNull();
+    expect(queryByText("Keep this loop as merged after the branch landed elsewhere")).toBeNull();
+  });
+
   test("pushed loop disables go to PR when backend reports gh is unavailable", async () => {
     const loop = createLoopWithStatus("pushed", {
       config: { id: LOOP_ID, name: "Pushed Loop" },
