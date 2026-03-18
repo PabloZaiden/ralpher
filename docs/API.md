@@ -772,6 +772,48 @@ Get the contents of `.planning/status.md` from the loop's worktree directory.
 | 404 | `not_found` | Loop not found |
 | 400 | `no_worktree` | Loop has no worktree path |
 
+#### GET /api/loops/:id/pull-request
+
+Get pull-request navigation metadata for a loop.
+
+Returns an existing GitHub pull-request URL, a compare URL for creating a pull request, or a disabled state when Ralpher cannot determine a safe destination.
+
+**Response (existing pull request)**
+
+```json
+{
+  "enabled": true,
+  "destinationType": "existing_pr",
+  "url": "https://github.com/example/repo/pull/123"
+}
+```
+
+**Response (create pull request)**
+
+```json
+{
+  "enabled": true,
+  "destinationType": "create_pr",
+  "url": "https://github.com/example/repo/compare/main...feature-branch?expand=1"
+}
+```
+
+**Response (disabled)**
+
+```json
+{
+  "enabled": false,
+  "destinationType": "disabled",
+  "disabledReason": "GitHub CLI is not available in the loop environment."
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+
 #### GET /api/loops/:id/comments
 
 Get all review comments for a loop.
@@ -1001,6 +1043,45 @@ Get the review history for a loop, including past review cycles.
 
 | Status | Error | Description |
 |--------|-------|-------------|
+| 404 | `not_found` | Loop not found |
+
+#### POST /api/loops/:id/follow-up
+
+Start a new follow-up cycle from a restartable terminal state.
+
+For pushed or merged loops, this starts a review-feedback cycle. For other restartable loop or chat states, it queues the message and restarts the work on the existing loop.
+
+**Request Body**
+
+```json
+{
+  "message": "Please address the latest review feedback and keep the existing branch history clean.",
+  "model": {
+    "providerID": "anthropic",
+    "modelID": "claude-sonnet-4-20250514"
+  }
+}
+```
+
+The `model` override is optional and applies to the restarted follow-up work.
+
+**Response**
+
+```json
+{
+  "success": true
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `validation_error` | Message is empty or invalid |
+| 400 | `provider_not_found` | The selected provider does not exist for the workspace |
+| 400 | `model_not_found` | The selected model does not exist on the provider |
+| 400 | `model_not_enabled` | The selected model provider is not connected |
+| 400 | `invalid_state` | The loop cannot accept follow-up work in its current state |
 | 404 | `not_found` | Loop not found |
 
 ---
@@ -1517,6 +1598,37 @@ Delete a workspace.
 |--------|-------|-------------|
 | 404 | `workspace_not_found` | Workspace not found |
 | 400 | `delete_failed` | Cannot delete workspace |
+
+#### POST /api/workspaces/:id/archived-loops/purge
+
+Purge all archived loops for a workspace.
+
+Only loops in archived states for the target workspace are processed. The response includes both successful purges and per-loop failures.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "workspaceId": "ws-abc123",
+  "totalArchived": 3,
+  "purgedCount": 2,
+  "purgedLoopIds": ["loop-1", "loop-2"],
+  "failures": [
+    {
+      "loopId": "loop-3",
+      "error": "Cannot purge loop in current state"
+    }
+  ]
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `workspace_not_found` | Workspace not found |
+| 500 | `purge_archived_failed` | Failed to purge archived loops for the workspace |
 
 #### GET /api/workspaces/by-directory
 
@@ -2176,6 +2288,135 @@ Delete a standalone SSH server session.
   "success": true
 }
 ```
+
+---
+
+### Provisioning
+
+Provisioning jobs create or reuse a remote workspace by cloning a repository onto a registered standalone SSH server, preparing the environment, and creating the resulting workspace in Ralpher.
+
+#### POST /api/provisioning-jobs
+
+Create a provisioning job.
+
+**Request Body**
+
+```json
+{
+  "name": "ralpher-demo",
+  "sshServerId": "ssh-server-uuid",
+  "repoUrl": "https://github.com/example/repo.git",
+  "basePath": "/workspaces",
+  "provider": "copilot",
+  "credentialToken": "token-uuid"
+}
+```
+
+`provider` defaults to `"copilot"` when omitted. `credentialToken` is optional and is used when the target SSH server requires an exchanged credential.
+
+**Response**
+
+Returns the created provisioning job snapshot with status `201 Created`.
+
+```json
+{
+  "job": {
+    "config": {
+      "id": "prov-uuid",
+      "name": "ralpher-demo",
+      "sshServerId": "ssh-server-uuid",
+      "repoUrl": "https://github.com/example/repo.git",
+      "basePath": "/workspaces",
+      "provider": "copilot",
+      "createdAt": "2026-01-20T10:00:00.000Z"
+    },
+    "state": {
+      "status": "pending",
+      "updatedAt": "2026-01-20T10:00:00.000Z"
+    }
+  },
+  "logs": []
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 400 | `validation_error` | Missing or invalid request fields |
+| 400 | `invalid_credential_token` | Credential token is missing, expired, or invalid for the target SSH server |
+| 404 | `not_found` | SSH server not found |
+| 500 | `provisioning_error` | Failed to start provisioning |
+
+#### GET /api/provisioning-jobs/:id
+
+Get the current provisioning job snapshot.
+
+**Response**
+
+Returns the provisioning job snapshot, including `job`, `logs`, and `workspace` when a workspace has already been created or reused.
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Provisioning job not found |
+| 500 | `provisioning_error` | Failed to read provisioning job state |
+
+#### DELETE /api/provisioning-jobs/:id
+
+Cancel a provisioning job.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "job": {
+    "config": {
+      "id": "prov-uuid"
+    },
+    "state": {
+      "status": "cancelled"
+    }
+  }
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Provisioning job not found |
+| 500 | `provisioning_error` | Failed to cancel the provisioning job |
+
+#### GET /api/provisioning-jobs/:id/logs
+
+Get the collected log entries for a provisioning job.
+
+**Response**
+
+```json
+{
+  "success": true,
+  "logs": [
+    {
+      "id": "log-1",
+      "source": "system",
+      "text": "Cloning repository...",
+      "timestamp": "2026-01-20T10:00:01.000Z",
+      "step": "clone_repo"
+    }
+  ]
+}
+```
+
+**Errors**
+
+| Status | Error | Description |
+|--------|-------|-------------|
+| 404 | `not_found` | Provisioning job not found |
+| 500 | `provisioning_error` | Failed to read provisioning logs |
 
 ---
 
