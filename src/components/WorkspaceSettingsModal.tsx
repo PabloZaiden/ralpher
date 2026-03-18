@@ -28,11 +28,11 @@ export interface WorkspaceSettingsModalProps {
   onTest: (settings: ServerSettings) => Promise<{ success: boolean; error?: string }>;
   /** Callback to reset connection for this workspace */
   onResetConnection?: () => Promise<boolean>;
-  /** Callback to purge all archived loops for the workspace */
+  /** Callback to purge the workspace loops covered by the terminal-state settings action */
   onPurgeArchivedLoops?: () => Promise<PurgeArchivedLoopsResult>;
   /** Callback to delete the workspace */
   onDeleteWorkspace?: () => Promise<{ success: boolean; error?: string }>;
-  /** Number of archived loops for the selected workspace */
+  /** Number of purgeable loops shown in the terminal-state section */
   archivedLoopCount?: number;
   /** Total number of loops/chats still assigned to the selected workspace */
   workspaceLoopCount?: number;
@@ -42,7 +42,7 @@ export interface WorkspaceSettingsModalProps {
   testing?: boolean;
   /** Whether resetting connection is in progress */
   resettingConnection?: boolean;
-  /** Whether purging archived loops is in progress */
+  /** Whether the terminal-state purge action is in progress */
   purgingArchivedLoops?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
   remoteOnly?: boolean;
@@ -62,11 +62,11 @@ export interface WorkspaceSettingsFormProps {
   onTest: (settings: ServerSettings) => Promise<{ success: boolean; error?: string }>;
   /** Callback to reset connection for this workspace */
   onResetConnection?: () => Promise<boolean>;
-  /** Callback to purge all archived loops for the workspace */
+  /** Callback to purge the workspace loops covered by the terminal-state settings action */
   onPurgeArchivedLoops?: () => Promise<PurgeArchivedLoopsResult>;
   /** Callback to delete the workspace */
   onDeleteWorkspace?: () => Promise<{ success: boolean; error?: string }>;
-  /** Number of archived loops for the selected workspace */
+  /** Number of purgeable loops shown in the terminal-state section */
   archivedLoopCount?: number;
   /** Total number of loops/chats still assigned to the selected workspace */
   workspaceLoopCount?: number;
@@ -76,7 +76,7 @@ export interface WorkspaceSettingsFormProps {
   testing?: boolean;
   /** Whether resetting connection is in progress */
   resettingConnection?: boolean;
-  /** Whether purging archived loops is in progress */
+  /** Whether the terminal-state purge action is in progress */
   purgingArchivedLoops?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
   remoteOnly?: boolean;
@@ -100,12 +100,12 @@ export function WorkspaceSettingsForm({
   onResetConnection,
   onPurgeArchivedLoops,
   onDeleteWorkspace,
-  archivedLoopCount = 0,
+  archivedLoopCount: purgeableLoopCount = 0,
   workspaceLoopCount = 0,
   saving = false,
   testing = false,
   resettingConnection = false,
-  purgingArchivedLoops = false,
+  purgingArchivedLoops: purgingPurgeableLoops = false,
   remoteOnly = false,
   showConnectionStatus = true,
   formId = "workspace-settings-form",
@@ -222,7 +222,7 @@ export function WorkspaceSettingsForm({
       const result = await onPurgeArchivedLoops();
       if (!result.success) {
         setShowPurgeArchivedConfirm(false);
-        setPurgeArchivedError("Failed to purge archived loops.");
+      setPurgeArchivedError("Failed to purge terminal-state loops.");
         return;
       }
 
@@ -230,7 +230,7 @@ export function WorkspaceSettingsForm({
       setShowPurgeArchivedConfirm(false);
     } catch (error) {
       setShowPurgeArchivedConfirm(false);
-      setPurgeArchivedError(`Failed to purge archived loops: ${String(error)}`);
+      setPurgeArchivedError(`Failed to purge terminal-state loops: ${String(error)}`);
     }
   }
 
@@ -457,20 +457,20 @@ export function WorkspaceSettingsForm({
           </div>
         )}
 
-        {/* Archived loops purge */}
+        {/* Terminal-state loop purge */}
         {workspace && onPurgeArchivedLoops && (
           <div className="border-t border-gray-200 dark:border-gray-700 pt-6 mt-6">
             <div className="p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20">
               <div className="flex items-center justify-between gap-3 mb-2">
                 <h3 className="text-sm font-medium text-red-800 dark:text-red-200">
-                  Archived Loops
+                  Loops in a Terminal State
                 </h3>
-                <Badge variant={archivedLoopCount > 0 ? "warning" : "default"} size="sm">
-                  {archivedLoopCount} archived
+                <Badge variant={purgeableLoopCount > 0 ? "warning" : "default"} size="sm">
+                  {purgeableLoopCount} purgeable
                 </Badge>
               </div>
               <p className="text-sm text-red-700 dark:text-red-300 mb-4">
-                Permanently delete all archived loops for this workspace. This removes their loop data and cannot be undone.
+                Permanently delete loops in a terminal state for this workspace once they are no longer awaiting feedback. This currently applies to merged, pushed, and deleted loops. This removes their loop data and cannot be undone.
               </p>
 
               {purgeArchivedError && (
@@ -491,10 +491,10 @@ export function WorkspaceSettingsForm({
                       : "text-green-700 dark:text-green-300"
                   }`}>
                     {purgeArchivedResult.totalArchived === 0
-                      ? "No archived loops were found for this workspace."
+                      ? "No loops in a terminal state were found for this workspace."
                       : purgeArchivedResult.failures.length > 0
-                        ? `Purged ${purgeArchivedResult.purgedCount} of ${purgeArchivedResult.totalArchived} archived loops.`
-                        : `Purged ${purgeArchivedResult.purgedCount} archived loops.`}
+                        ? `Purged ${purgeArchivedResult.purgedCount} of ${purgeArchivedResult.totalArchived} terminal-state loops.`
+                        : `Purged ${purgeArchivedResult.purgedCount} terminal-state loops.`}
                   </p>
                   {purgeArchivedResult.failures.length > 0 && (
                     <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">
@@ -509,11 +509,11 @@ export function WorkspaceSettingsForm({
                 variant="danger"
                 size="sm"
                 onClick={() => setShowPurgeArchivedConfirm(true)}
-                disabled={purgingArchivedLoops || archivedLoopCount === 0}
-                loading={purgingArchivedLoops}
+                disabled={purgingPurgeableLoops || purgeableLoopCount === 0}
+                loading={purgingPurgeableLoops}
               >
                 <TrashIcon className="w-4 h-4 mr-2" />
-                Purge Archived Loops
+                Purge Terminal-State Loops
               </Button>
             </div>
           </div>
@@ -551,10 +551,10 @@ export function WorkspaceSettingsForm({
         isOpen={showPurgeArchivedConfirm}
         onClose={() => setShowPurgeArchivedConfirm(false)}
         onConfirm={handlePurgeArchivedLoops}
-        title="Purge Archived Loops"
-        message={`Are you sure you want to permanently delete all ${archivedLoopCount} archived loops for "${workspace?.name ?? "this workspace"}"? This cannot be undone.`}
+        title="Purge Terminal-State Loops"
+        message={`Are you sure you want to permanently delete all ${purgeableLoopCount} loops in a terminal state for "${workspace?.name ?? "this workspace"}"? This currently applies to merged, pushed, and deleted loops and cannot be undone.`}
         confirmLabel="Purge All"
-        loading={purgingArchivedLoops}
+        loading={purgingPurgeableLoops}
         variant="danger"
       />
 
