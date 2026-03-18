@@ -6,7 +6,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 import { backendManager } from "../../src/core/backend-manager";
-import type { CommandExecutor, CommandResult } from "../../src/core/command-executor";
+import type { CommandExecutor, CommandOptions, CommandResult } from "../../src/core/command-executor";
 import { initializeDatabase, closeDatabase } from "../../src/persistence/database";
 import { saveSshSession } from "../../src/persistence/ssh-sessions";
 import { createWorkspace } from "../../src/persistence/workspaces";
@@ -47,10 +47,16 @@ class MockChildProcess extends EventEmitter {
 }
 
 class ExecutorStub implements CommandExecutor {
-  constructor(private readonly execImpl: (command: string, args: string[]) => Promise<CommandResult>) {}
+  constructor(
+    private readonly execImpl: (
+      command: string,
+      args: string[],
+      options?: CommandOptions,
+    ) => Promise<CommandResult>,
+  ) {}
 
-  async exec(command: string, args: string[]): Promise<CommandResult> {
-    return await this.execImpl(command, args);
+  async exec(command: string, args: string[], options?: CommandOptions): Promise<CommandResult> {
+    return await this.execImpl(command, args, options);
   }
 
   async fileExists(): Promise<boolean> {
@@ -150,7 +156,7 @@ describe("SshTerminalBridge", () => {
   let tempDir: string;
   let workspace: Workspace;
   let session: SshSession;
-  let execImpl: (command: string, args: string[]) => Promise<CommandResult>;
+  let execImpl: (command: string, args: string[], options?: CommandOptions) => Promise<CommandResult>;
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), "ralpher-ssh-bridge-unit-"));
@@ -311,6 +317,55 @@ describe("SshTerminalBridge", () => {
 
     expect(currentProc?.killedSignals).toEqual(["SIGTERM"]);
     expect(onErrorCalls.some((message) => message.includes("persistent session probe failed"))).toBe(true);
+  });
+
+  test("allows readiness probes to use the remaining session timeout budget", async () => {
+    const readyProbeTimeouts: number[] = [];
+    execImpl = async (command: string, args: string[], options?: CommandOptions) => {
+      if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
+        return {
+          success: true,
+          stdout: "dtach - version 0.9\n",
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      if (command === "bash" && args[0] === "-lc" && args[1]?.includes("session_socket=")) {
+        readyProbeTimeouts.push(options?.timeout ?? 0);
+        if ((options?.timeout ?? 0) >= 1_500) {
+          return {
+            success: true,
+            stdout: "",
+            stderr: "",
+            exitCode: 0,
+          };
+        }
+        return {
+          success: false,
+          stdout: "",
+          stderr: `Command timed out after ${options?.timeout ?? 0}ms`,
+          exitCode: 124,
+        };
+      }
+      return {
+        success: true,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+      };
+    };
+
+    const bridge = new SshTerminalBridge(session.config.id, {
+      onOutput: () => {},
+      readyTimeoutMs: 2_000,
+    });
+
+    await bridge.connect();
+
+    expect(readyProbeTimeouts.length).toBeGreaterThan(0);
+    expect(readyProbeTimeouts[0]).toBeGreaterThanOrEqual(1_500);
+
+    await bridge.dispose();
   });
 
   test("dispose waits for close and allows reconnecting the same bridge instance", async () => {

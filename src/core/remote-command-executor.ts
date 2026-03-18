@@ -215,7 +215,7 @@ export class CommandExecutorImpl implements CommandExecutor {
           ? await this.execSsh(command, args, cwd, timeout, env, signal, onStdoutChunk, onStderrChunk)
           : await this.execLocal(command, args, cwd, timeout, env, signal, onStdoutChunk, onStderrChunk);
 
-        if (!result.success) {
+        if (!result.success && options?.logFailures !== false) {
           log.error(`${LOG_PREFIX} Command failed: ${cmdStr}`);
           log.error(`${LOG_PREFIX}   exitCode: ${result.exitCode}`);
           if (result.stderr) {
