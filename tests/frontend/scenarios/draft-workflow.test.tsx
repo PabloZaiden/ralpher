@@ -129,9 +129,9 @@ describe("draft workflow scenario", () => {
     });
 
     const cancelButton = getByRole("button", { name: "Cancel" });
-    const deleteDraftButton = getByRole("button", { name: "Delete Draft" });
-    const updateDraftButton = getByRole("button", { name: "Update Draft" });
-    const startLoopButton = getByRole("button", { name: "Start Loop" });
+    const deleteDraftButton = getByRole("button", { name: "Delete" });
+    const updateDraftButton = getByRole("button", { name: "Update" });
+    const startLoopButton = getByRole("button", { name: "Start" });
 
     expect(cancelButton.compareDocumentPosition(deleteDraftButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
     expect(deleteDraftButton.compareDocumentPosition(updateDraftButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
@@ -147,7 +147,7 @@ describe("draft workflow scenario", () => {
 
     await waitFor(() => {
       expect(getByRole("heading", { name: "Edit My Draft" })).toBeTruthy();
-      expect(getByRole("button", { name: "Start Plan" })).toBeTruthy();
+      expect(getByRole("button", { name: "Start" })).toBeTruthy();
     });
 
     const headerTitleGroup = getByRole("heading", { name: "Edit My Draft" }).parentElement as HTMLElement;
@@ -168,7 +168,7 @@ describe("draft workflow scenario", () => {
     const { getByRole, user } = renderWithUser(<App />, { route: "#/loop/draft-1" });
 
     await waitFor(() => {
-      expect(getByRole("button", { name: "Start Loop" })).toBeTruthy();
+      expect(getByRole("button", { name: "Start" })).toBeTruthy();
     });
     const workspaceSelect = document.querySelector("select#workspace") as HTMLSelectElement;
     expect(workspaceSelect).toBeTruthy();
@@ -182,10 +182,10 @@ describe("draft workflow scenario", () => {
     expect(modelSelect).toBeTruthy();
     await user.selectOptions(modelSelect, "anthropic:claude-sonnet-4-20250514:");
     await waitFor(() => {
-      expect((getByRole("button", { name: "Start Loop" }) as HTMLButtonElement).disabled).toBe(false);
+      expect((getByRole("button", { name: "Start" }) as HTMLButtonElement).disabled).toBe(false);
     });
 
-    await user.click(getByRole("button", { name: "Start Loop" }));
+    await user.click(getByRole("button", { name: "Start" }));
 
     await waitFor(() => {
       const calls = api.calls("/api/loops/:id/draft/start", "POST");
@@ -205,7 +205,7 @@ describe("draft workflow scenario", () => {
       expect(getByRole("heading", { name: "Edit My Draft" })).toBeTruthy();
     });
 
-    await user.click(getByRole("button", { name: "Delete Draft" }));
+    await user.click(getByRole("button", { name: "Delete" }));
 
     await waitFor(() => {
       expect(getByText('Are you sure you want to delete "My Draft"?')).toBeTruthy();

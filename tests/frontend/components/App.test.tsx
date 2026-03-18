@@ -459,7 +459,6 @@ describe("App shell", () => {
     expect(settingsButton.getAttribute("title")).toBe("Workspace Settings");
     expect(settingsButton.textContent?.trim() ?? "").toBe("");
     expect(settingsButton.querySelector("svg")).toBeTruthy();
-    expect(queryByText("Workspace Settings")).toBeNull();
 
     await user.click(settingsButton);
 

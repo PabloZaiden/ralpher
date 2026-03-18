@@ -39,6 +39,20 @@ export interface CreateLoopFormActionState {
   onSaveAsDraft: () => void;
 }
 
+export function getComposeDraftActionLabel(isEditingDraft: boolean): string {
+  return isEditingDraft ? "Update" : "Save as Draft";
+}
+
+export function getComposeSubmitActionLabel({
+  isChatMode,
+  isEditing,
+}: {
+  isChatMode: boolean;
+  isEditing: boolean;
+}): string {
+  return isChatMode || isEditing ? "Start" : "Create";
+}
+
 export interface CreateLoopFormProps {
   /** Callback when form is submitted. Returns true if successful, false otherwise. */
   onSubmit: (request: CreateLoopFormSubmitRequest) => Promise<boolean>;
@@ -84,7 +98,7 @@ export interface CreateLoopFormProps {
     planModeAutoReply?: boolean;
     workspaceId?: string;
   } | null;
-  /** Whether editing a draft loop (to show Update Draft button) */
+  /** Whether editing a draft loop (to show the Update button) */
   isEditingDraft?: boolean;
   /** Available workspaces */
   workspaces?: Workspace[];
@@ -1009,16 +1023,14 @@ export function CreateLoopForm({
                 disabled={isSubmitting || !canSaveDraft}
                 loading={isSubmitting}
               >
-                {isEditingDraft ? "Update Draft" : "Save as Draft"}
+                {getComposeDraftActionLabel(isEditingDraft)}
               </Button>
             )}
             <Button type="submit" loading={isSubmitting} disabled={isSubmitting || !canSubmit}>
-              {isChatMode
-                ? "Start Chat"
-                : isEditing
-                  ? (planMode ? "Start Plan" : "Start Loop")
-                  : (planMode ? "Create Plan" : "Create Loop")
-              }
+              {getComposeSubmitActionLabel({
+                isChatMode,
+                isEditing,
+              })}
             </Button>
           </div>
         </div>

@@ -28,7 +28,13 @@ import {
 } from "../hooks";
 import { getLoopStatusLabel, getStatusLabel, shouldShowInRecentActivity } from "../utils";
 import { AppSettingsPanel } from "./AppSettingsModal";
-import { CreateLoopForm, type CreateLoopFormActionState, type CreateLoopFormSubmitRequest } from "./CreateLoopForm";
+import {
+  CreateLoopForm,
+  getComposeDraftActionLabel,
+  getComposeSubmitActionLabel,
+  type CreateLoopFormActionState,
+  type CreateLoopFormSubmitRequest,
+} from "./CreateLoopForm";
 import { LoopDetails } from "./LoopDetails";
 import { ProvisioningJobView } from "./ProvisioningJobView";
 import { ServerSettingsForm } from "./ServerSettingsForm";
@@ -1156,7 +1162,7 @@ function DraftLoopComposer({
             onClick={() => setDeleteConfirmOpen(true)}
             disabled={deleteSubmitting || actionState?.isSubmitting}
           >
-            Delete Draft
+            Delete
           </Button>
           <Button
             type="button"
@@ -1166,7 +1172,7 @@ function DraftLoopComposer({
             disabled={deleteSubmitting || !actionState?.canSaveDraft}
             loading={actionState?.isSubmitting ?? false}
           >
-            Update Draft
+            {getComposeDraftActionLabel(true)}
           </Button>
           <Button
             type="button"
@@ -1175,7 +1181,10 @@ function DraftLoopComposer({
             disabled={deleteSubmitting || !actionState?.canSubmit}
             loading={actionState?.isSubmitting ?? false}
           >
-            {actionState?.planMode ? "Start Plan" : "Start Loop"}
+            {getComposeSubmitActionLabel({
+              isChatMode: false,
+              isEditing: true,
+            })}
           </Button>
         </>
       )}
@@ -1963,16 +1972,11 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                   variant="secondary"
                   size="sm"
                   onClick={composeActionState.onSaveAsDraft}
-                  aria-label={composeActionState.isEditingDraft ? "Update Draft" : "Save as Draft"}
+                  aria-label={getComposeDraftActionLabel(composeActionState.isEditingDraft)}
                   disabled={!composeActionState.canSaveDraft}
                   loading={composeActionState.isSubmitting}
                 >
-                  {composeActionState.isEditingDraft ? "Update Draft" : (
-                    <>
-                      <span className="sm:hidden">Save Draft</span>
-                      <span className="hidden sm:inline">Save as Draft</span>
-                    </>
-                  )}
+                  {getComposeDraftActionLabel(composeActionState.isEditingDraft)}
                 </Button>
               )}
               {composeActionState && (
@@ -1983,11 +1987,10 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                   disabled={!composeActionState.canSubmit}
                   loading={composeActionState.isSubmitting}
                 >
-                  {kind === "chat"
-                    ? "Start Chat"
-                    : composeActionState.isEditing
-                      ? (composeActionState.planMode ? "Start Plan" : "Start Loop")
-                      : (composeActionState.planMode ? "Create Plan" : "Create Loop")}
+                  {getComposeSubmitActionLabel({
+                    isChatMode: kind === "chat",
+                    isEditing: composeActionState.isEditing,
+                  })}
                 </Button>
               )}
             </>
