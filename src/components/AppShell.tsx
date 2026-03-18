@@ -1128,15 +1128,8 @@ function DraftLoopComposer({
     <ShellPanel
       eyebrow="Draft loop"
       title={`Edit ${loop.config.name}`}
-      description={selectedWorkspace ? selectedWorkspace.name : loop.config.directory}
       variant="compact"
       headerOffsetClassName={headerOffsetClassName}
-      badges={(
-        <>
-          <Badge variant="default" size="sm">Draft</Badge>
-          {actionState?.planMode && <Badge variant="planning" size="sm">Plan mode</Badge>}
-        </>
-      )}
       actions={(
         <>
           <Button
