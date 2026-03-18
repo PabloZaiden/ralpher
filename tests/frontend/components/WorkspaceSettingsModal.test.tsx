@@ -334,14 +334,14 @@ describe("WorkspaceSettingsModal AGENTS.md optimization", () => {
   });
 });
 
-describe("WorkspaceSettingsModal archived loop purge", () => {
-  test("shows archived loop count and opens confirmation modal", async () => {
+describe("WorkspaceSettingsModal terminal-state loop purge", () => {
+  test("shows purgeable terminal-state loop count and opens confirmation modal", async () => {
     api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
 
     const { getByText, user } = renderWithUser(
       <WorkspaceSettingsModal
         {...defaultProps()}
-        archivedLoopCount={3}
+        purgeableLoopCount={3}
         onPurgeArchivedLoops={mock(() => Promise.resolve({
           success: true,
           workspaceId: "ws-test-1",
@@ -380,7 +380,7 @@ describe("WorkspaceSettingsModal archived loop purge", () => {
     const { getByText, user } = renderWithUser(
       <WorkspaceSettingsModal
         {...defaultProps()}
-        archivedLoopCount={2}
+        purgeableLoopCount={2}
         onPurgeArchivedLoops={onPurgeArchivedLoops}
       />
     );
@@ -412,7 +412,7 @@ describe("WorkspaceSettingsModal archived loop purge", () => {
     const { getByText, queryByText, user } = renderWithUser(
       <WorkspaceSettingsModal
         {...defaultProps()}
-        archivedLoopCount={2}
+        purgeableLoopCount={2}
         onPurgeArchivedLoops={onPurgeArchivedLoops}
       />
     );
@@ -438,7 +438,7 @@ describe("WorkspaceSettingsModal archived loop purge", () => {
     const { getByText, queryByText, user } = renderWithUser(
       <WorkspaceSettingsModal
         {...defaultProps()}
-        archivedLoopCount={2}
+        purgeableLoopCount={2}
         onPurgeArchivedLoops={onPurgeArchivedLoops}
       />
     );
@@ -463,7 +463,7 @@ describe("WorkspaceSettingsModal archived loop purge", () => {
     const { getByText } = renderWithUser(
       <WorkspaceSettingsModal
         {...defaultProps()}
-        archivedLoopCount={0}
+        purgeableLoopCount={0}
         onPurgeArchivedLoops={mock(() => Promise.resolve({
           success: true,
           workspaceId: "ws-test-1",

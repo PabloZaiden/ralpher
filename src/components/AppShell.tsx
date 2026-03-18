@@ -2438,12 +2438,12 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
               onDeleteWorkspace={workspaceSettingsWorkspaceId
                 ? async () => await deleteWorkspace(workspaceSettingsWorkspaceId)
                 : undefined}
-              archivedLoopCount={selectedWorkspaceArchivedLoopCount}
+              purgeableLoopCount={selectedWorkspaceArchivedLoopCount}
               workspaceLoopCount={selectedWorkspaceLoopCount}
               saving={workspaceSettingsSaving}
               testing={workspaceSettingsTesting}
               resettingConnection={workspaceSettingsResetting}
-              purgingArchivedLoops={workspaceArchivedLoopsPurging}
+              purgingPurgeableLoops={workspaceArchivedLoopsPurging}
               remoteOnly={dashboardData.remoteOnly}
               showConnectionStatus={false}
               formId="workspace-settings-shell-form"

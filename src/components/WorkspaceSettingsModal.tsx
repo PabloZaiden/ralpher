@@ -33,7 +33,7 @@ export interface WorkspaceSettingsModalProps {
   /** Callback to delete the workspace */
   onDeleteWorkspace?: () => Promise<{ success: boolean; error?: string }>;
   /** Number of purgeable loops shown in the terminal-state section */
-  archivedLoopCount?: number;
+  purgeableLoopCount?: number;
   /** Total number of loops/chats still assigned to the selected workspace */
   workspaceLoopCount?: number;
   /** Whether saving is in progress */
@@ -43,7 +43,7 @@ export interface WorkspaceSettingsModalProps {
   /** Whether resetting connection is in progress */
   resettingConnection?: boolean;
   /** Whether the terminal-state purge action is in progress */
-  purgingArchivedLoops?: boolean;
+  purgingPurgeableLoops?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
   remoteOnly?: boolean;
 }
@@ -67,7 +67,7 @@ export interface WorkspaceSettingsFormProps {
   /** Callback to delete the workspace */
   onDeleteWorkspace?: () => Promise<{ success: boolean; error?: string }>;
   /** Number of purgeable loops shown in the terminal-state section */
-  archivedLoopCount?: number;
+  purgeableLoopCount?: number;
   /** Total number of loops/chats still assigned to the selected workspace */
   workspaceLoopCount?: number;
   /** Whether saving is in progress */
@@ -77,7 +77,7 @@ export interface WorkspaceSettingsFormProps {
   /** Whether resetting connection is in progress */
   resettingConnection?: boolean;
   /** Whether the terminal-state purge action is in progress */
-  purgingArchivedLoops?: boolean;
+  purgingPurgeableLoops?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
   remoteOnly?: boolean;
   /** Whether to render the inline connection status summary */
@@ -100,12 +100,12 @@ export function WorkspaceSettingsForm({
   onResetConnection,
   onPurgeArchivedLoops,
   onDeleteWorkspace,
-  archivedLoopCount: purgeableLoopCount = 0,
+  purgeableLoopCount = 0,
   workspaceLoopCount = 0,
   saving = false,
   testing = false,
   resettingConnection = false,
-  purgingArchivedLoops: purgingPurgeableLoops = false,
+  purgingPurgeableLoops = false,
   remoteOnly = false,
   showConnectionStatus = true,
   formId = "workspace-settings-form",
@@ -222,7 +222,7 @@ export function WorkspaceSettingsForm({
       const result = await onPurgeArchivedLoops();
       if (!result.success) {
         setShowPurgeArchivedConfirm(false);
-      setPurgeArchivedError("Failed to purge terminal-state loops.");
+        setPurgeArchivedError("Failed to purge terminal-state loops.");
         return;
       }
 
