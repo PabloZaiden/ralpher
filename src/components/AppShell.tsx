@@ -1591,12 +1591,10 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     return new Map(servers.map((server) => [server.config.id, server]));
   }, [servers]);
   const loopItems = useMemo(() => loops.filter((loop) => loop.config.mode !== "chat"), [loops]);
-  const draftLoopItems = useMemo(() => loopItems.filter((loop) => loop.state.status === "draft"), [loopItems]);
   const activeLoopItems = useMemo(() => loopItems.filter((loop) => loop.state.status !== "draft"), [loopItems]);
   const chatItems = useMemo(() => loops.filter((loop) => loop.config.mode === "chat"), [loops]);
   const standaloneSessions = useMemo(() => Object.values(sessionsByServerId).flat(), [sessionsByServerId]);
-  const draftGroups = useMemo(() => groupSidebarItemsByWorkspace(draftLoopItems, workspaces), [draftLoopItems, workspaces]);
-  const activeLoopGroups = useMemo(() => groupSidebarItemsByWorkspace(activeLoopItems, workspaces), [activeLoopItems, workspaces]);
+  const loopGroups = useMemo(() => groupSidebarItemsByWorkspace(loopItems, workspaces), [loopItems, workspaces]);
   const chatGroups = useMemo(() => groupSidebarItemsByWorkspace(chatItems, workspaces), [chatItems, workspaces]);
   const allShellSessions = useMemo(() => {
     return [
@@ -2622,45 +2620,18 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
 
           <ShellSection
             title="Loops"
-            count={activeLoopItems.length}
+            count={loopItems.length}
             actionLabel="New"
             onAction={() => navigateWithinShell({ view: "compose", kind: "loop" })}
             collapsed={isSectionCollapsed("loops")}
             onToggle={() => toggleSectionCollapsed("loops")}
           >
-            {activeLoopItems.length === 0 ? (
+            {loopItems.length === 0 ? (
               <EmptySection message="No loops yet." />
             ) : (
               <WorkspaceGroupedSectionItems
                 sectionId="loops"
-                groups={activeLoopGroups}
-                collapsedGroups={collapsedWorkspaceGroups}
-                onToggleGroup={toggleWorkspaceGroupCollapsed}
-                renderItem={(loop) => (
-                  <SectionItem
-                    key={loop.config.id}
-                    active={route.view === "loop" && route.loopId === loop.config.id}
-                    title={loop.config.name}
-                    badge={getLoopStatusLabel(loop)}
-                    onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
-                  />
-                )}
-              />
-            )}
-          </ShellSection>
-
-          <ShellSection
-            title="Drafts"
-            count={draftLoopItems.length}
-            collapsed={isSectionCollapsed("drafts")}
-            onToggle={() => toggleSectionCollapsed("drafts")}
-          >
-            {draftLoopItems.length === 0 ? (
-              <EmptySection message="No drafts yet." />
-            ) : (
-              <WorkspaceGroupedSectionItems
-                sectionId="drafts"
-                groups={draftGroups}
+                groups={loopGroups}
                 collapsedGroups={collapsedWorkspaceGroups}
                 onToggleGroup={toggleWorkspaceGroupCollapsed}
                 renderItem={(loop) => (
