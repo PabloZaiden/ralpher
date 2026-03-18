@@ -410,12 +410,12 @@ export function DashboardModals(props: DashboardModalsProps) {
           }
           return await props.onDeleteWorkspace(props.workspaceSettingsModal.workspaceId);
         }}
-        archivedLoopCount={props.archivedLoopCount}
+        purgeableLoopCount={props.archivedLoopCount}
         workspaceLoopCount={props.workspaceLoopCount}
         saving={props.workspaceSettingsSaving}
         testing={props.workspaceSettingsTesting}
         resettingConnection={props.workspaceSettingsResetting}
-        purgingArchivedLoops={props.workspaceArchivedLoopsPurging}
+        purgingPurgeableLoops={props.workspaceArchivedLoopsPurging}
         remoteOnly={props.remoteOnly}
       />
 
