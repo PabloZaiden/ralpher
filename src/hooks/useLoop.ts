@@ -638,7 +638,7 @@ export function useLoop(loopId: string): UseLoopResult {
       setError(String(err));
       return false;
     }
-  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]);
 
   // Mark a loop as merged and sync with remote
   const markMerged = useCallback(async (): Promise<boolean> => {
