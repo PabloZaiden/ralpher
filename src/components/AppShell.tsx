@@ -52,7 +52,6 @@ const SIDEBAR_SECTION_STORAGE_KEY = "ralpher.sidebarSectionCollapseState";
 
 type SidebarSectionId =
   | "workspaces"
-  | "drafts"
   | "loops"
   | "chats"
   | "workspace-ssh"
@@ -63,7 +62,6 @@ type SidebarSectionCollapseState = Partial<Record<SidebarSectionId, boolean>>;
 const SIDEBAR_SECTION_IDS: SidebarSectionId[] = [
   "workspaces",
   "loops",
-  "drafts",
   "chats",
   "workspace-ssh",
   "ssh-servers",
@@ -164,13 +162,25 @@ function loadSidebarSectionCollapseState(): SidebarSectionCollapseState {
   }
 
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return SIDEBAR_SECTION_IDS.reduce<SidebarSectionCollapseState>((state, sectionId) => {
-      if (typeof parsed[sectionId] === "boolean") {
-        state[sectionId] = parsed[sectionId] as boolean;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Invalid sidebar section state payload");
+    }
+
+    const parsedState = parsed as Record<string, unknown>;
+    const sanitizedState = SIDEBAR_SECTION_IDS.reduce<SidebarSectionCollapseState>((state, sectionId) => {
+      if (typeof parsedState[sectionId] === "boolean") {
+        state[sectionId] = parsedState[sectionId] as boolean;
       }
       return state;
     }, {});
+    const needsCleanup = Object.keys(parsedState).some((key) => !SIDEBAR_SECTION_IDS.includes(key as SidebarSectionId));
+
+    if (needsCleanup) {
+      saveSidebarSectionCollapseState(sanitizedState);
+    }
+
+    return sanitizedState;
   } catch (error) {
     log.warn("Removing invalid sidebar section state", { error: String(error) });
     storage.removeItem(SIDEBAR_SECTION_STORAGE_KEY);
@@ -369,9 +379,6 @@ function WorkspaceGroupedSectionItems({
               <span className="text-[11px] text-gray-500 dark:text-gray-400">{collapsed ? "\u25B6" : "\u25BC"}</span>
               <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
                 {group.title}
-              </span>
-              <span className="rounded-full bg-gray-200 px-2 py-0.5 text-[10px] font-semibold text-gray-600 dark:bg-neutral-800 dark:text-gray-300">
-                {group.items.length}
               </span>
             </button>
             {!collapsed && (
@@ -1578,12 +1585,10 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     return new Map(servers.map((server) => [server.config.id, server]));
   }, [servers]);
   const loopItems = useMemo(() => loops.filter((loop) => loop.config.mode !== "chat"), [loops]);
-  const draftLoopItems = useMemo(() => loopItems.filter((loop) => loop.state.status === "draft"), [loopItems]);
   const activeLoopItems = useMemo(() => loopItems.filter((loop) => loop.state.status !== "draft"), [loopItems]);
   const chatItems = useMemo(() => loops.filter((loop) => loop.config.mode === "chat"), [loops]);
   const standaloneSessions = useMemo(() => Object.values(sessionsByServerId).flat(), [sessionsByServerId]);
-  const draftGroups = useMemo(() => groupSidebarItemsByWorkspace(draftLoopItems, workspaces), [draftLoopItems, workspaces]);
-  const activeLoopGroups = useMemo(() => groupSidebarItemsByWorkspace(activeLoopItems, workspaces), [activeLoopItems, workspaces]);
+  const loopGroups = useMemo(() => groupSidebarItemsByWorkspace(loopItems, workspaces), [loopItems, workspaces]);
   const chatGroups = useMemo(() => groupSidebarItemsByWorkspace(chatItems, workspaces), [chatItems, workspaces]);
   const allShellSessions = useMemo(() => {
     return [
@@ -2601,45 +2606,18 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
 
           <ShellSection
             title="Loops"
-            count={activeLoopItems.length}
+            count={loopItems.length}
             actionLabel="New"
             onAction={() => navigateWithinShell({ view: "compose", kind: "loop" })}
             collapsed={isSectionCollapsed("loops")}
             onToggle={() => toggleSectionCollapsed("loops")}
           >
-            {activeLoopItems.length === 0 ? (
+            {loopItems.length === 0 ? (
               <EmptySection message="No loops yet." />
             ) : (
               <WorkspaceGroupedSectionItems
                 sectionId="loops"
-                groups={activeLoopGroups}
-                collapsedGroups={collapsedWorkspaceGroups}
-                onToggleGroup={toggleWorkspaceGroupCollapsed}
-                renderItem={(loop) => (
-                  <SectionItem
-                    key={loop.config.id}
-                    active={route.view === "loop" && route.loopId === loop.config.id}
-                    title={loop.config.name}
-                    badge={getStatusLabel(loop.state.status, loop.state.syncState)}
-                    onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
-                  />
-                )}
-              />
-            )}
-          </ShellSection>
-
-          <ShellSection
-            title="Drafts"
-            count={draftLoopItems.length}
-            collapsed={isSectionCollapsed("drafts")}
-            onToggle={() => toggleSectionCollapsed("drafts")}
-          >
-            {draftLoopItems.length === 0 ? (
-              <EmptySection message="No drafts yet." />
-            ) : (
-              <WorkspaceGroupedSectionItems
-                sectionId="drafts"
-                groups={draftGroups}
+                groups={loopGroups}
                 collapsedGroups={collapsedWorkspaceGroups}
                 onToggleGroup={toggleWorkspaceGroupCollapsed}
                 renderItem={(loop) => (

@@ -1,7 +1,7 @@
 /**
  * E2E Scenario: Draft Workflow
  *
- * Tests the shell-native draft workflow: listing drafts, opening the inline editor,
+ * Tests the shell-native draft workflow: listing draft loops in the sidebar, opening the inline editor,
  * updating, starting, deleting, and creating a draft.
  */
 
@@ -71,28 +71,31 @@ beforeEach(() => {
   api.install();
   ws.reset();
   ws.install();
+  window.localStorage.clear();
   window.location.hash = "";
 });
 
 afterEach(() => {
   api.uninstall();
   ws.uninstall();
+  window.localStorage.clear();
   window.location.hash = "";
 });
 
 describe("draft workflow scenario", () => {
-  test("draft loop appears in Drafts section with Draft badge", async () => {
+  test("draft loop appears in Loops section with Draft badge", async () => {
     setupBaseApi();
     api.get("/api/loops", () => [draftLoop()]);
     api.get("/api/workspaces", () => [WORKSPACE]);
 
-    const { getByText, getAllByText } = renderWithUser(<App />);
+    const { getByRole, getAllByText, queryByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Drafts")).toBeTruthy();
+      expect(getByRole("button", { name: "Collapse Loops section" })).toBeTruthy();
       expect(getAllByText("My Draft").length).toBeGreaterThan(0);
     });
 
+    expect(queryByText("Drafts")).toBeNull();
     expect(getAllByText("Draft").length).toBeGreaterThan(0);
   });
 
