@@ -3,9 +3,9 @@
  */
 
 import { Buffer } from "node:buffer";
-import { timingSafeEqual } from "node:crypto";
-import { serve } from "bun";
-import type { BasicAuthConfig } from "../core/server-config";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { serve, type Server } from "bun";
+import type { BasicAuthConfig, BunDevelopmentConfig } from "../core/server-config";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -20,12 +20,9 @@ type RouteLikeMethods = Record<string, (...args: never[]) => MaybePromise<Respon
 type RouteLikeValue = RouteLikeMethods | RouteLikeHandler;
 
 function secureEquals(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false;
-  }
-  return timingSafeEqual(leftBuffer, rightBuffer);
+  const leftDigest = createHash("sha256").update(left, "utf8").digest();
+  const rightDigest = createHash("sha256").update(right, "utf8").digest();
+  return timingSafeEqual(leftDigest, rightDigest);
 }
 
 function parseBasicAuthHeader(headerValue: string | null): { username: string; password: string } | null {
@@ -75,8 +72,9 @@ export function isRequestAuthorized(req: Request, config: BasicAuthConfig): bool
     return false;
   }
 
-  return secureEquals(credentials.username, config.username)
-    && secureEquals(credentials.password, config.password);
+  const usernameMatches = secureEquals(credentials.username, config.username);
+  const passwordMatches = secureEquals(credentials.password, config.password);
+  return usernameMatches && passwordMatches;
 }
 
 function authenticateRequest(req: Request, config: BasicAuthConfig): Response | undefined {
@@ -157,8 +155,22 @@ export function wrapRoutesWithBasicAuth<TRoutes extends Record<string, RouteLike
   return wrappedRoutes;
 }
 
-export function createAuthenticatedStaticRoute(
+export function createStaticAssetServer(
   indexBundle: Bun.HTMLBundle,
+  development: BunDevelopmentConfig = false,
+): Server<undefined> {
+  return serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    development,
+    routes: {
+      "/*": indexBundle,
+    },
+  });
+}
+
+export function createAuthenticatedStaticRoute(
+  staticServer: Server<undefined>,
   config: BasicAuthConfig,
 ): RouteLikeHandler<[Request]> {
   if (!config.enabled) {
@@ -166,17 +178,6 @@ export function createAuthenticatedStaticRoute(
       status: 500,
     });
   }
-
-  // Bun's HTMLBundle can be mounted directly as a route value, but route handlers cannot
-  // return HTMLBundle instances. A loopback-only server keeps the bundled SPA behavior intact
-  // while letting the public server challenge every request first.
-  const staticServer = serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    routes: {
-      "/*": indexBundle,
-    },
-  });
 
   return async (req: Request): Promise<Response> => {
     const challenge = authenticateRequest(req, config);

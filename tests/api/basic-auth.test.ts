@@ -8,6 +8,7 @@ import { afterAll, describe, expect, test } from "bun:test";
 import index from "../../src/index.html";
 import {
   createAuthenticatedStaticRoute,
+  createStaticAssetServer,
   isRequestAuthorized,
   wrapRouteHandler,
   wrapRouteMethods,
@@ -60,6 +61,14 @@ describe("isRequestAuthorized", () => {
     });
 
     expect(isRequestAuthorized(request, authConfig)).toBe(true);
+  });
+
+  test("rejects incorrect credentials even when lengths differ", () => {
+    const request = new Request("http://example.test", {
+      headers: { authorization: getBasicAuthHeader("no", "much-longer-secret") },
+    });
+
+    expect(isRequestAuthorized(request, authConfig)).toBe(false);
   });
 });
 
@@ -135,8 +144,10 @@ describe("wrapRouteHandler", () => {
 
 describe("createAuthenticatedStaticRoute", () => {
   test("protects the SPA fallback and bundled assets", async () => {
+    const staticAssetServer = createStaticAssetServer(index);
+    startedServers.push(staticAssetServer);
     const server = startServer({
-      "/*": createAuthenticatedStaticRoute(index, authConfig),
+      "/*": createAuthenticatedStaticRoute(staticAssetServer, authConfig),
     });
 
     const unauthenticatedPage = await fetch(server.url.toString());

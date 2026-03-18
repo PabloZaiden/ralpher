@@ -3,7 +3,11 @@
  */
 
 import { afterEach, describe, expect, test } from "bun:test";
-import { getServerRuntimeConfig, getServerStartupMessages } from "../../src/core/server-config";
+import {
+  getServerDevelopmentConfig,
+  getServerRuntimeConfig,
+  getServerStartupMessages,
+} from "../../src/core/server-config";
 
 const originalHost = process.env["RALPHER_HOST"];
 const originalPort = process.env["RALPHER_PORT"];
@@ -64,6 +68,12 @@ describe("getServerRuntimeConfig", () => {
     });
   });
 
+  test("falls back to the default port when RALPHER_PORT is blank after trimming", () => {
+    process.env["RALPHER_PORT"] = "   ";
+
+    expect(getServerRuntimeConfig().port).toBe(3000);
+  });
+
   test("disables auth when password becomes empty after trimming", () => {
     process.env["RALPHER_PASSWORD"] = "   ";
     process.env["RALPHER_USERNAME"] = " custom ";
@@ -74,6 +84,39 @@ describe("getServerRuntimeConfig", () => {
       password: "",
       usernameSource: "RALPHER_USERNAME",
     });
+  });
+
+  test("throws a clear error for non-numeric ports", () => {
+    process.env["RALPHER_PORT"] = "abc";
+
+    expect(() => getServerRuntimeConfig()).toThrow(
+      "RALPHER_PORT must be an integer between 0 and 65535; received \"abc\".",
+    );
+  });
+
+  test("throws a clear error for out-of-range ports", () => {
+    process.env["RALPHER_PORT"] = "70000";
+
+    expect(() => getServerRuntimeConfig()).toThrow(
+      "RALPHER_PORT must be an integer between 0 and 65535; received \"70000\".",
+    );
+  });
+});
+
+describe("getServerDevelopmentConfig", () => {
+  test("enables Bun development helpers outside production", () => {
+    expect(getServerDevelopmentConfig("development")).toEqual({
+      hmr: true,
+      console: true,
+    });
+    expect(getServerDevelopmentConfig(undefined)).toEqual({
+      hmr: true,
+      console: true,
+    });
+  });
+
+  test("disables Bun development helpers in production", () => {
+    expect(getServerDevelopmentConfig("production")).toBe(false);
   });
 });
 
@@ -109,4 +152,3 @@ describe("getServerStartupMessages", () => {
     expect(messages[1]).toContain("\"admin\"");
   });
 });
-

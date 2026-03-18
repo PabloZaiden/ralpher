@@ -8,6 +8,7 @@
 const DEFAULT_HOST = "0.0.0.0";
 const DEFAULT_PORT = 3000;
 const DEFAULT_BASIC_AUTH_USERNAME = "ralpher";
+const MAX_PORT = 65535;
 
 export interface BasicAuthConfig {
   enabled: boolean;
@@ -23,15 +24,38 @@ export interface ServerRuntimeConfig {
   basicAuth: BasicAuthConfig;
 }
 
+export type BunDevelopmentConfig = false | {
+  hmr: true;
+  console: true;
+};
+
 function getTrimmedEnv(name: string): string {
   return process.env[name]?.trim() ?? "";
+}
+
+function parsePort(value: string | undefined): number {
+  const trimmedValue = value?.trim() ?? "";
+  if (!trimmedValue) {
+    return DEFAULT_PORT;
+  }
+
+  if (!/^\d+$/.test(trimmedValue)) {
+    throw new Error(`RALPHER_PORT must be an integer between 0 and ${String(MAX_PORT)}; received "${trimmedValue}".`);
+  }
+
+  const port = Number(trimmedValue);
+  if (!Number.isInteger(port) || port < 0 || port > MAX_PORT) {
+    throw new Error(`RALPHER_PORT must be an integer between 0 and ${String(MAX_PORT)}; received "${trimmedValue}".`);
+  }
+
+  return port;
 }
 
 export function getServerRuntimeConfig(): ServerRuntimeConfig {
   const hostFromEnv = getTrimmedEnv("RALPHER_HOST");
   const usernameFromEnv = getTrimmedEnv("RALPHER_USERNAME");
   const trimmedPassword = getTrimmedEnv("RALPHER_PASSWORD");
-  const port = parseInt(process.env["RALPHER_PORT"] ?? String(DEFAULT_PORT), 10);
+  const port = parsePort(process.env["RALPHER_PORT"]);
 
   return {
     host: hostFromEnv || DEFAULT_HOST,
@@ -43,6 +67,19 @@ export function getServerRuntimeConfig(): ServerRuntimeConfig {
       password: trimmedPassword,
       usernameSource: usernameFromEnv ? "RALPHER_USERNAME" : "default",
     },
+  };
+}
+
+export function getServerDevelopmentConfig(
+  nodeEnv: string | undefined = process.env["NODE_ENV"],
+): BunDevelopmentConfig {
+  if (nodeEnv === "production") {
+    return false;
+  }
+
+  return {
+    hmr: true,
+    console: true,
   };
 }
 
@@ -67,4 +104,3 @@ export function getServerStartupMessages(config: ServerRuntimeConfig): string[] 
     `Basic auth is disabled because RALPHER_PASSWORD was not set or became empty after trimming. Set RALPHER_PASSWORD to enable auth, and optionally set RALPHER_USERNAME to override the default username "${DEFAULT_BASIC_AUTH_USERNAME}".`,
   ];
 }
-

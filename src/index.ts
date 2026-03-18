@@ -8,6 +8,7 @@ import index from "./index.html";
 import { apiRoutes } from "./api";
 import {
   createAuthenticatedStaticRoute,
+  createStaticAssetServer,
   wrapRoutesWithBasicAuth,
   wrapRouteHandler,
 } from "./api/basic-auth";
@@ -15,9 +16,37 @@ import { portForwardProxyRoutes } from "./api/port-forwards";
 import { ensureDataDirectories } from "./persistence/database";
 import { backendManager } from "./core/backend-manager";
 import { websocketHandlers, type WebSocketData } from "./api/websocket";
-import { getServerRuntimeConfig, getServerStartupMessages } from "./core/server-config";
+import {
+  getServerDevelopmentConfig,
+  getServerRuntimeConfig,
+  getServerStartupMessages,
+} from "./core/server-config";
 import { log, setLogLevel, isLogLevelFromEnv } from "./core/logger";
 import { getLogLevelPreference } from "./persistence/preferences";
+
+type StoppableServer = {
+  stop(closeActiveConnections?: boolean): void;
+};
+
+function registerServerShutdown(servers: StoppableServer[]): void {
+  let alreadyStopped = false;
+
+  const stopServers = () => {
+    if (alreadyStopped) {
+      return;
+    }
+
+    alreadyStopped = true;
+    for (const server of servers) {
+      server.stop(true);
+    }
+  };
+
+  process.once("SIGINT", stopServers);
+  process.once("SIGTERM", stopServers);
+}
+
+let staticAssetServer: Server<undefined> | undefined;
 
 try {
   // Ensure data directories exist on startup
@@ -36,15 +65,12 @@ try {
   await backendManager.initialize();
 
   const runtimeConfig = getServerRuntimeConfig();
-  const development = !runtimeConfig.basicAuth.enabled && process.env["NODE_ENV"] !== "production" && {
-    // Enable browser hot reloading in development
-    hmr: true,
-
-    // Echo console logs from the browser to the server
-    console: true,
-  };
-  const staticRoute = runtimeConfig.basicAuth.enabled
-    ? createAuthenticatedStaticRoute(index, runtimeConfig.basicAuth)
+  const development = getServerDevelopmentConfig();
+  staticAssetServer = runtimeConfig.basicAuth.enabled
+    ? createStaticAssetServer(index, development)
+    : undefined;
+  const staticRoute = staticAssetServer
+    ? createAuthenticatedStaticRoute(staticAssetServer, runtimeConfig.basicAuth)
     : index;
   const protectedApiRoutes = wrapRoutesWithBasicAuth(apiRoutes, runtimeConfig.basicAuth);
   const protectedPortForwardRoutes = wrapRoutesWithBasicAuth(
@@ -130,11 +156,16 @@ try {
     development,
   });
 
+  registerServerShutdown(staticAssetServer ? [server, staticAssetServer] : [server]);
+
   for (const message of getServerStartupMessages(runtimeConfig)) {
     log.info(message);
   }
   log.info(`Ralpher server running at ${server.url}`);
 } catch (error) {
+  if (typeof staticAssetServer !== "undefined") {
+    staticAssetServer.stop(true);
+  }
   // Use console.error as a last resort since the logger may not be initialized
   console.error(`Fatal error during startup: ${String(error)}`);
   process.exit(1);
