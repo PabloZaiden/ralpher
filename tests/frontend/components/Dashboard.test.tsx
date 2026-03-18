@@ -505,6 +505,7 @@ describe("standalone ssh servers section", () => {
     await user.click(getByRole("button", { name: /SSH \(1\)/ }));
 
     await waitFor(() => {
+      expect(getByRole("button", { name: "Delete Server" })).toBeTruthy();
       expect(getByRole("button", { name: "New Session" })).toBeTruthy();
     });
 
@@ -927,6 +928,46 @@ describe("multiple status groups in same workspace", () => {
 // ─── Edit draft flow ────────────────────────────────────────────────────────
 // Edit button was removed from dashboard cards. Drafts are edited by clicking
 // the card itself, which triggers onEditDraft via LoopGrid.
+
+describe("edit draft flow", () => {
+  test("keeps Cancel before draft actions in the edit draft modal", async () => {
+    const workspace = createWorkspace({ id: "ws-1", name: "Project", directory: "/workspaces/project" });
+    const draftLoop = createLoopWithStatus("draft", {
+      config: {
+        id: "draft-1",
+        name: "Draft Task",
+        workspaceId: "ws-1",
+        directory: "/workspaces/project",
+        prompt: "Build a feature",
+      },
+    });
+
+    api.get("/api/loops", () => [draftLoop]);
+    api.get("/api/workspaces", () => [workspace]);
+
+    const { getByRole, getByText, user } = renderWithUser(<Dashboard />);
+
+    await waitFor(() => {
+      expect(getByText("Draft Task")).toBeTruthy();
+    });
+
+    await user.click(getByText("Draft Task"));
+
+    await waitFor(() => {
+      expect(getByText("Edit Draft Loop")).toBeTruthy();
+      expect(getByRole("button", { name: "Cancel" })).toBeTruthy();
+      expect(getByRole("button", { name: "Delete Draft" })).toBeTruthy();
+      expect(getByRole("button", { name: "Update Draft" })).toBeTruthy();
+    });
+
+    const cancelButton = getByRole("button", { name: "Cancel" });
+    const deleteDraftButton = getByRole("button", { name: "Delete Draft" });
+    const updateDraftButton = getByRole("button", { name: "Update Draft" });
+
+    expect(cancelButton.compareDocumentPosition(deleteDraftButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+    expect(deleteDraftButton.compareDocumentPosition(updateDraftButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+  });
+});
 
 // ─── Workspace settings modal ───────────────────────────────────────────────
 

@@ -235,6 +235,14 @@ export function DashboardModals(props: DashboardModalsProps) {
             </>
           ) : (
             <>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={props.formActionState.onCancel}
+                disabled={props.formActionState.isSubmitting}
+              >
+                Cancel
+              </Button>
               {props.formActionState.isEditingDraft && (
                 <Button
                   type="button"
@@ -245,14 +253,6 @@ export function DashboardModals(props: DashboardModalsProps) {
                   Delete Draft
                 </Button>
               )}
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={props.formActionState.onCancel}
-                disabled={props.formActionState.isSubmitting}
-              >
-                Cancel
-              </Button>
               {!isChatMode && (!props.formActionState.isEditing || props.formActionState.isEditingDraft) && (
                 <Button
                   type="button"

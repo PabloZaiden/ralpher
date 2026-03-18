@@ -24,7 +24,6 @@ export interface SshServerSectionProps {
   error: string | null;
   hasStoredCredential: (serverId: string) => boolean;
   onOpenCreateServer: () => void;
-  onOpenEditServer: (server: SshServer) => void;
   onDeleteServer: (serverId: string) => Promise<void>;
   onCreateSession: (server: SshServer) => void;
   onSelectSession: (sessionId: string) => void;
