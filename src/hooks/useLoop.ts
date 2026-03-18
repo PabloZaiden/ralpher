@@ -149,15 +149,66 @@ export function useLoop(loopId: string): UseLoopResult {
   const abortControllerRef = useRef<AbortController | null>(null);
   // Track whether initial data has been loaded (used to decide whether to hydrate from API response)
   const initialLoadDoneRef = useRef(false);
+  const activeLoopIdRef = useRef(loopId);
+  const refreshRequestIdRef = useRef(0);
+  const hasMountedRef = useRef(false);
+  activeLoopIdRef.current = loopId;
+
+  const isActiveLoop = useCallback((expectedLoopId: string): boolean => {
+    return activeLoopIdRef.current === expectedLoopId;
+  }, []);
+
+  const ignoreStaleLoopAction = useCallback(<T,>(
+    actionName: string,
+    expectedLoopId: string,
+    fallback: T,
+  ): T | null => {
+    if (isActiveLoop(expectedLoopId)) {
+      return null;
+    }
+    log.debug("Ignoring stale loop action", {
+      actionName,
+      expectedLoopId,
+      activeLoopId: activeLoopIdRef.current,
+    });
+    return fallback;
+  }, [isActiveLoop]);
+
+  const ignoreStaleLoopError = useCallback(<T,>(
+    actionName: string,
+    expectedLoopId: string,
+    fallback: T,
+    error: unknown,
+  ): T | null => {
+    if (isActiveLoop(expectedLoopId)) {
+      return null;
+    }
+    log.debug("Ignoring stale loop action error", {
+      actionName,
+      expectedLoopId,
+      activeLoopId: activeLoopIdRef.current,
+      error: String(error),
+    });
+    return fallback;
+  }, [isActiveLoop]);
 
   // WebSocket connection for real-time updates
-  const { events, status: connectionStatus } = useLoopEvents<LoopEvent>(loopId, {
+  const { events, status: connectionStatus, clearEvents } = useLoopEvents<LoopEvent>(loopId, {
     onEvent: handleEvent,
   });
 
   // Handle events
   function handleEvent(event: LoopEvent) {
-    log.trace("Received event", { loopId, type: event.type });
+    if (!isActiveLoop(event.loopId)) {
+      log.trace("Ignoring event for inactive loop", {
+        type: event.type,
+        eventLoopId: event.loopId,
+        activeLoopId: activeLoopIdRef.current,
+      });
+      return;
+    }
+
+    log.trace("Received event", { loopId: event.loopId, type: event.type });
     switch (event.type) {
       case "loop.log":
         // Update existing log entry or add new one
@@ -270,7 +321,10 @@ export function useLoop(loopId: string): UseLoopResult {
 
   // Fetch loop data
   const refresh = useCallback(async () => {
-    log.debug("Refreshing loop data", { loopId });
+    const requestLoopId = loopId;
+    const requestId = refreshRequestIdRef.current + 1;
+    refreshRequestIdRef.current = requestId;
+    log.debug("Refreshing loop data", { loopId: requestLoopId });
     
     // Cancel any in-flight request
     abortControllerRef.current?.abort();
@@ -284,15 +338,19 @@ export function useLoop(loopId: string): UseLoopResult {
       if (isInitialLoad) {
         setLoading(true);
       }
-      setError(null);
-      const response = await appFetch(`/api/loops/${loopId}`, { signal: controller.signal });
+      if (isActiveLoop(requestLoopId)) {
+        setError(null);
+      }
+      const response = await appFetch(`/api/loops/${requestLoopId}`, { signal: controller.signal });
       
       // Check if request was aborted during fetch
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !isActiveLoop(requestLoopId) || refreshRequestIdRef.current !== requestId) {
+        return;
+      }
       
       if (!response.ok) {
         if (response.status === 404) {
-          log.debug("Loop not found", { loopId });
+          log.debug("Loop not found", { loopId: requestLoopId });
           setLoop(null);
           setError("Loop not found");
           return;
@@ -300,8 +358,11 @@ export function useLoop(loopId: string): UseLoopResult {
         throw new Error(`Failed to fetch loop: ${response.statusText}`);
       }
       const data = (await response.json()) as Loop;
+      if (controller.signal.aborted || !isActiveLoop(requestLoopId) || refreshRequestIdRef.current !== requestId) {
+        return;
+      }
       setLoop(data);
-      log.debug("Loop data refreshed", { loopId, status: data.state.status });
+      log.debug("Loop data refreshed", { loopId: requestLoopId, status: data.state.status });
       
       // Hydrate persisted data only on the first successful load.
       // Using a ref avoids adding state array lengths to the dependency array,
@@ -354,21 +415,32 @@ export function useLoop(loopId: string): UseLoopResult {
     } catch (err) {
       // Ignore abort errors — they are expected during cleanup
       if (err instanceof DOMException && err.name === "AbortError") return;
-      log.error("Failed to refresh loop", { loopId, error: String(err) });
+      if (!isActiveLoop(requestLoopId) || refreshRequestIdRef.current !== requestId) {
+        return;
+      }
+      log.error("Failed to refresh loop", { loopId: requestLoopId, error: String(err) });
       setError(String(err));
     } finally {
-      if (isInitialLoad) {
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
+      if (isInitialLoad && isActiveLoop(requestLoopId) && refreshRequestIdRef.current === requestId) {
         setLoading(false);
       }
     }
-  }, [loopId]);
+  }, [isActiveLoop, loopId]);
 
   // Update the loop
   const update = useCallback(
     async (request: UpdateLoopRequest): Promise<boolean> => {
-      log.debug("Updating loop", { loopId, hasNameUpdate: request.name !== undefined });
+      const actionLoopId = loopId;
+      const staleAction = ignoreStaleLoopAction("update", actionLoopId, false);
+      if (staleAction !== null) {
+        return staleAction;
+      }
+      log.debug("Updating loop", { loopId: actionLoopId, hasNameUpdate: request.name !== undefined });
       try {
-        const response = await appFetch(`/api/loops/${loopId}`, {
+        const response = await appFetch(`/api/loops/${actionLoopId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(request),
@@ -378,161 +450,285 @@ export function useLoop(loopId: string): UseLoopResult {
           throw new Error(errorData.message || "Failed to update loop");
         }
         const data = (await response.json()) as Loop;
+        if (!isActiveLoop(actionLoopId)) {
+          return false;
+        }
         setLoop(data);
-        log.debug("Loop updated successfully", { loopId });
+        log.debug("Loop updated successfully", { loopId: actionLoopId });
         return true;
       } catch (err) {
-        log.error("Failed to update loop", { loopId, error: String(err) });
+        const staleError = ignoreStaleLoopError("update", actionLoopId, false, err);
+        if (staleError !== null) {
+          return staleError;
+        }
+        log.error("Failed to update loop", { loopId: actionLoopId, error: String(err) });
         setError(String(err));
         return false;
       }
     },
-    [loopId]
+    [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId]
   );
 
   // Delete the loop
   const remove = useCallback(async (): Promise<boolean> => {
-    log.debug("Deleting loop", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("remove", actionLoopId, false);
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Deleting loop", { loopId: actionLoopId });
     try {
-      await deleteLoopApi(loopId);
+      await deleteLoopApi(actionLoopId);
+      if (!isActiveLoop(actionLoopId)) {
+        return false;
+      }
       setLoop(null);
-      log.info("Loop deleted", { loopId });
+      log.info("Loop deleted", { loopId: actionLoopId });
       return true;
     } catch (err) {
-      log.error("Failed to delete loop", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("remove", actionLoopId, false, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to delete loop", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return false;
     }
-  }, [loopId]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId]);
 
   // Accept the loop's changes
   const accept = useCallback(async (): Promise<AcceptLoopResult> => {
-    log.debug("Accepting loop", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("accept", actionLoopId, { success: false });
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Accepting loop", { loopId: actionLoopId });
     try {
-      const result = await acceptLoopApi(loopId);
+      const result = await acceptLoopApi(actionLoopId);
       await refresh();
-      log.info("Loop accepted", { loopId, mergeCommit: result.mergeCommit });
+      if (!isActiveLoop(actionLoopId)) {
+        return { success: false };
+      }
+      log.info("Loop accepted", { loopId: actionLoopId, mergeCommit: result.mergeCommit });
       return result;
     } catch (err) {
-      log.error("Failed to accept loop", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("accept", actionLoopId, { success: false }, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to accept loop", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return { success: false };
     }
-  }, [loopId, refresh]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]);
 
   // Push the loop's branch to remote
   const push = useCallback(async (): Promise<PushLoopResult> => {
-    log.debug("Pushing loop", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("push", actionLoopId, { success: false });
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Pushing loop", { loopId: actionLoopId });
     try {
-      const result = await pushLoopApi(loopId);
+      const result = await pushLoopApi(actionLoopId);
       await refresh();
-      log.info("Loop pushed", { loopId, remoteBranch: result.remoteBranch });
+      if (!isActiveLoop(actionLoopId)) {
+        return { success: false };
+      }
+      log.info("Loop pushed", { loopId: actionLoopId, remoteBranch: result.remoteBranch });
       return result;
     } catch (err) {
-      log.error("Failed to push loop", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("push", actionLoopId, { success: false }, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to push loop", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return { success: false };
     }
-  }, [loopId, refresh]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]);
 
   // Update a pushed loop's branch by syncing with the base branch and re-pushing
   const updateBranch = useCallback(async (): Promise<PushLoopResult> => {
-    log.debug("Updating branch", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("updateBranch", actionLoopId, { success: false });
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Updating branch", { loopId: actionLoopId });
     try {
-      const result = await updateBranchApi(loopId);
+      const result = await updateBranchApi(actionLoopId);
       await refresh();
-      log.info("Branch updated", { loopId, remoteBranch: result.remoteBranch, syncStatus: result.syncStatus });
+      if (!isActiveLoop(actionLoopId)) {
+        return { success: false };
+      }
+      log.info("Branch updated", {
+        loopId: actionLoopId,
+        remoteBranch: result.remoteBranch,
+        syncStatus: result.syncStatus,
+      });
       return result;
     } catch (err) {
-      log.error("Failed to update branch", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("updateBranch", actionLoopId, { success: false }, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to update branch", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return { success: false };
     }
-  }, [loopId, refresh]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]);
 
   // Discard the loop's changes
   const discard = useCallback(async (): Promise<boolean> => {
-    log.debug("Discarding loop", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("discard", actionLoopId, false);
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Discarding loop", { loopId: actionLoopId });
     try {
-      await discardLoopApi(loopId);
+      await discardLoopApi(actionLoopId);
       await refresh();
-      log.info("Loop discarded", { loopId });
+      if (!isActiveLoop(actionLoopId)) {
+        return false;
+      }
+      log.info("Loop discarded", { loopId: actionLoopId });
       return true;
     } catch (err) {
-      log.error("Failed to discard loop", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("discard", actionLoopId, false, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to discard loop", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return false;
     }
-  }, [loopId, refresh]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]);
 
   // Purge the loop (permanently delete)
   const purge = useCallback(async (): Promise<boolean> => {
-    log.debug("Purging loop", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("purge", actionLoopId, false);
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Purging loop", { loopId: actionLoopId });
     try {
-      await purgeLoopApi(loopId);
+      await purgeLoopApi(actionLoopId);
+      if (!isActiveLoop(actionLoopId)) {
+        return false;
+      }
       setLoop(null);
-      log.info("Loop purged", { loopId });
+      log.info("Loop purged", { loopId: actionLoopId });
       return true;
     } catch (err) {
-      log.error("Failed to purge loop", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("purge", actionLoopId, false, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to purge loop", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return false;
     }
-  }, [loopId]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId]);
 
   // Mark a loop as merged and sync with remote
   const markMerged = useCallback(async (): Promise<boolean> => {
-    log.debug("Marking loop as merged", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("markMerged", actionLoopId, false);
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Marking loop as merged", { loopId: actionLoopId });
     try {
-      await markMergedApi(loopId);
+      await markMergedApi(actionLoopId);
+      if (!isActiveLoop(actionLoopId)) {
+        return false;
+      }
       setLoop(null);
-      log.info("Loop marked as merged", { loopId });
+      log.info("Loop marked as merged", { loopId: actionLoopId });
       return true;
     } catch (err) {
-      log.error("Failed to mark loop as merged", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("markMerged", actionLoopId, false, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to mark loop as merged", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return false;
     }
-  }, [loopId]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId]);
 
   // Set a pending prompt for the next iteration
   const setPendingPrompt = useCallback(
     async (prompt: string): Promise<boolean> => {
-      log.debug("Setting pending prompt", { loopId, promptLength: prompt.length });
+      const actionLoopId = loopId;
+      const staleAction = ignoreStaleLoopAction("setPendingPrompt", actionLoopId, false);
+      if (staleAction !== null) {
+        return staleAction;
+      }
+      log.debug("Setting pending prompt", { loopId: actionLoopId, promptLength: prompt.length });
       try {
-        await setPendingPromptApi(loopId, prompt);
+        await setPendingPromptApi(actionLoopId, prompt);
         await refresh();
-        log.debug("Pending prompt set", { loopId });
+        if (!isActiveLoop(actionLoopId)) {
+          return false;
+        }
+        log.debug("Pending prompt set", { loopId: actionLoopId });
         return true;
       } catch (err) {
-        log.error("Failed to set pending prompt", { loopId, error: String(err) });
+        const staleError = ignoreStaleLoopError("setPendingPrompt", actionLoopId, false, err);
+        if (staleError !== null) {
+          return staleError;
+        }
+        log.error("Failed to set pending prompt", { loopId: actionLoopId, error: String(err) });
         setError(String(err));
         return false;
       }
     },
-    [loopId, refresh]
+    [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]
   );
 
   // Clear the pending prompt
   const clearPendingPrompt = useCallback(async (): Promise<boolean> => {
-    log.debug("Clearing pending prompt", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("clearPendingPrompt", actionLoopId, false);
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Clearing pending prompt", { loopId: actionLoopId });
     try {
-      await clearPendingPromptApi(loopId);
+      await clearPendingPromptApi(actionLoopId);
       await refresh();
-      log.debug("Pending prompt cleared", { loopId });
+      if (!isActiveLoop(actionLoopId)) {
+        return false;
+      }
+      log.debug("Pending prompt cleared", { loopId: actionLoopId });
       return true;
     } catch (err) {
-      log.error("Failed to clear pending prompt", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("clearPendingPrompt", actionLoopId, false, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to clear pending prompt", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return false;
     }
-  }, [loopId, refresh]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]);
 
   // Get the git diff
   const getDiff = useCallback(async (): Promise<FileDiff[]> => {
-    log.debug("Getting diff", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("getDiff", actionLoopId, [] as FileDiff[]);
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Getting diff", { loopId: actionLoopId });
     try {
-      const response = await appFetch(`/api/loops/${loopId}/diff`);
+      const response = await appFetch(`/api/loops/${actionLoopId}/diff`);
       if (!response.ok) {
         // 400 "no_git_branch" is expected when loop is in planning mode or hasn't started yet
         if (response.status === 400) {
@@ -541,227 +737,416 @@ export function useLoop(loopId: string): UseLoopResult {
         throw new Error(`Failed to get diff: ${response.statusText}`);
       }
       const diff = (await response.json()) as FileDiff[];
-      log.debug("Diff retrieved", { loopId, fileCount: diff.length });
+      if (!isActiveLoop(actionLoopId)) {
+        return [];
+      }
+      log.debug("Diff retrieved", { loopId: actionLoopId, fileCount: diff.length });
       return diff;
     } catch (err) {
-      log.error("Failed to get diff", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("getDiff", actionLoopId, [] as FileDiff[], err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to get diff", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return [];
     }
-  }, [loopId]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId]);
 
   // Get the plan.md content
   const getPlan = useCallback(async (): Promise<FileContentResponse> => {
-    log.debug("Getting plan", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("getPlan", actionLoopId, {
+      content: "",
+      exists: false,
+    });
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Getting plan", { loopId: actionLoopId });
     try {
-      const response = await appFetch(`/api/loops/${loopId}/plan`);
+      const response = await appFetch(`/api/loops/${actionLoopId}/plan`);
       if (!response.ok) {
         throw new Error(`Failed to get plan: ${response.statusText}`);
       }
-      return (await response.json()) as FileContentResponse;
+      const result = (await response.json()) as FileContentResponse;
+      if (!isActiveLoop(actionLoopId)) {
+        return { content: "", exists: false };
+      }
+      return result;
     } catch (err) {
-      log.error("Failed to get plan", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("getPlan", actionLoopId, {
+        content: "",
+        exists: false,
+      }, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to get plan", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return { content: "", exists: false };
     }
-  }, [loopId]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId]);
 
   // Get the status.md content
   const getStatusFile = useCallback(async (): Promise<FileContentResponse> => {
-    log.debug("Getting status file", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("getStatusFile", actionLoopId, {
+      content: "",
+      exists: false,
+    });
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Getting status file", { loopId: actionLoopId });
     try {
-      const response = await appFetch(`/api/loops/${loopId}/status-file`);
+      const response = await appFetch(`/api/loops/${actionLoopId}/status-file`);
       if (!response.ok) {
         throw new Error(`Failed to get status file: ${response.statusText}`);
       }
-      return (await response.json()) as FileContentResponse;
+      const result = (await response.json()) as FileContentResponse;
+      if (!isActiveLoop(actionLoopId)) {
+        return { content: "", exists: false };
+      }
+      return result;
     } catch (err) {
-      log.error("Failed to get status file", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("getStatusFile", actionLoopId, {
+        content: "",
+        exists: false,
+      }, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to get status file", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return { content: "", exists: false };
     }
-  }, [loopId]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId]);
 
   // Get PR navigation metadata for pushed loops
   const getPullRequestDestination = useCallback(async (): Promise<PullRequestDestinationResponse> => {
-    log.debug("Getting pull request destination", { loopId });
+    const actionLoopId = loopId;
+    const fallback: PullRequestDestinationResponse = {
+      enabled: false,
+      destinationType: "disabled",
+      disabledReason: "Failed to load pull request information.",
+    };
+    const staleAction = ignoreStaleLoopAction("getPullRequestDestination", actionLoopId, fallback);
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Getting pull request destination", { loopId: actionLoopId });
     try {
-      const response = await appFetch(`/api/loops/${loopId}/pull-request`);
+      const response = await appFetch(`/api/loops/${actionLoopId}/pull-request`);
       if (!response.ok) {
         throw new Error(`Failed to get pull request destination: ${response.statusText}`);
       }
-      return (await response.json()) as PullRequestDestinationResponse;
+      const result = (await response.json()) as PullRequestDestinationResponse;
+      if (!isActiveLoop(actionLoopId)) {
+        return fallback;
+      }
+      return result;
     } catch (err) {
-      log.error("Failed to get pull request destination", { loopId, error: String(err) });
-      return {
-        enabled: false,
-        destinationType: "disabled",
-        disabledReason: "Failed to load pull request information.",
-      };
+      const staleError = ignoreStaleLoopError("getPullRequestDestination", actionLoopId, fallback, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to get pull request destination", { loopId: actionLoopId, error: String(err) });
+      return fallback;
     }
-  }, [loopId]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId]);
 
   // Send feedback to refine the plan
   const sendPlanFeedback = useCallback(
     async (feedback: string): Promise<boolean> => {
-      log.debug("Sending plan feedback", { loopId, feedbackLength: feedback.length });
+      const actionLoopId = loopId;
+      const staleAction = ignoreStaleLoopAction("sendPlanFeedback", actionLoopId, false);
+      if (staleAction !== null) {
+        return staleAction;
+      }
+      log.debug("Sending plan feedback", { loopId: actionLoopId, feedbackLength: feedback.length });
       try {
-        await sendPlanFeedbackApi(loopId, feedback);
+        await sendPlanFeedbackApi(actionLoopId, feedback);
         await refresh();
-        log.debug("Plan feedback sent", { loopId });
+        if (!isActiveLoop(actionLoopId)) {
+          return false;
+        }
+        log.debug("Plan feedback sent", { loopId: actionLoopId });
         return true;
       } catch (err) {
-        log.error("Failed to send plan feedback", { loopId, error: String(err) });
+        const staleError = ignoreStaleLoopError("sendPlanFeedback", actionLoopId, false, err);
+        if (staleError !== null) {
+          return staleError;
+        }
+        log.error("Failed to send plan feedback", { loopId: actionLoopId, error: String(err) });
         setError(String(err));
         return false;
       }
     },
-    [loopId, refresh]
+    [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]
   );
 
   const answerPlanQuestion = useCallback(
     async (answers: string[][]): Promise<boolean> => {
-      log.debug("Answering plan question", { loopId, answerGroups: answers.length });
+      const actionLoopId = loopId;
+      const staleAction = ignoreStaleLoopAction("answerPlanQuestion", actionLoopId, false);
+      if (staleAction !== null) {
+        return staleAction;
+      }
+      log.debug("Answering plan question", { loopId: actionLoopId, answerGroups: answers.length });
       try {
-        await answerPlanQuestionApi(loopId, answers);
+        await answerPlanQuestionApi(actionLoopId, answers);
         await refresh();
-        log.debug("Plan question answered", { loopId });
+        if (!isActiveLoop(actionLoopId)) {
+          return false;
+        }
+        log.debug("Plan question answered", { loopId: actionLoopId });
         return true;
       } catch (err) {
-        log.error("Failed to answer plan question", { loopId, error: String(err) });
+        const staleError = ignoreStaleLoopError("answerPlanQuestion", actionLoopId, false, err);
+        if (staleError !== null) {
+          return staleError;
+        }
+        log.error("Failed to answer plan question", { loopId: actionLoopId, error: String(err) });
         setError(String(err));
         return false;
       }
     },
-    [loopId, refresh],
+    [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh],
   );
 
   // Accept the plan and start the loop execution
   const acceptPlan = useCallback(
     async (mode: "start_loop" | "open_ssh" = "start_loop"): Promise<AcceptPlanResult> => {
-      log.debug("Accepting plan", { loopId, mode });
+      const actionLoopId = loopId;
+      const staleAction = ignoreStaleLoopAction<AcceptPlanResult>("acceptPlan", actionLoopId, {
+        success: false,
+      });
+      if (staleAction !== null) {
+        return staleAction;
+      }
+      log.debug("Accepting plan", { loopId: actionLoopId, mode });
       try {
-        const result = await acceptPlanApi(loopId, mode);
+        const result = await acceptPlanApi(actionLoopId, mode);
         await refresh();
+        if (!isActiveLoop(actionLoopId)) {
+          return { success: false };
+        }
         if (result.success) {
-          log.info("Plan accepted", { loopId, mode: result.mode });
+          log.info("Plan accepted", { loopId: actionLoopId, mode: result.mode });
         }
         return result;
       } catch (err) {
-        log.error("Failed to accept plan", { loopId, mode, error: String(err) });
+        const staleError = ignoreStaleLoopError<AcceptPlanResult>("acceptPlan", actionLoopId, {
+          success: false,
+        }, err);
+        if (staleError !== null) {
+          return staleError;
+        }
+        log.error("Failed to accept plan", { loopId: actionLoopId, mode, error: String(err) });
         setError(String(err));
         return { success: false };
       }
     },
-    [loopId, refresh],
+    [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh],
   );
 
   // Discard the plan and delete the loop
   const discardPlan = useCallback(async (): Promise<boolean> => {
-    log.debug("Discarding plan", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("discardPlan", actionLoopId, false);
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Discarding plan", { loopId: actionLoopId });
     try {
-      await discardPlanApi(loopId);
+      await discardPlanApi(actionLoopId);
+      if (!isActiveLoop(actionLoopId)) {
+        return false;
+      }
       setLoop(null);
-      log.info("Plan discarded", { loopId });
+      log.info("Plan discarded", { loopId: actionLoopId });
       return true;
     } catch (err) {
-      log.error("Failed to discard plan", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("discardPlan", actionLoopId, false, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to discard plan", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return false;
     }
-  }, [loopId]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId]);
 
   // Address reviewer comments
   const addressReviewComments = useCallback(
     async (comments: string): Promise<AddressCommentsResult> => {
-      log.debug("Addressing review comments", { loopId, commentsLength: comments.length });
+      const actionLoopId = loopId;
+      const staleAction = ignoreStaleLoopAction("addressReviewComments", actionLoopId, { success: false });
+      if (staleAction !== null) {
+        return staleAction;
+      }
+      log.debug("Addressing review comments", { loopId: actionLoopId, commentsLength: comments.length });
       try {
-        const result = await addressReviewCommentsApi(loopId, comments);
+        const result = await addressReviewCommentsApi(actionLoopId, comments);
         await refresh();
-        log.info("Review comments addressed", { loopId, reviewCycle: result.reviewCycle });
+        if (!isActiveLoop(actionLoopId)) {
+          return { success: false };
+        }
+        log.info("Review comments addressed", { loopId: actionLoopId, reviewCycle: result.reviewCycle });
         return result;
       } catch (err) {
-        log.error("Failed to address review comments", { loopId, error: String(err) });
+        const staleError = ignoreStaleLoopError("addressReviewComments", actionLoopId, { success: false }, err);
+        if (staleError !== null) {
+          return staleError;
+        }
+        log.error("Failed to address review comments", { loopId: actionLoopId, error: String(err) });
         setError(String(err));
         return { success: false };
       }
     },
-    [loopId, refresh]
+    [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]
   );
 
   // Set pending message and/or model
   const setPending = useCallback(
     async (options: { message?: string; model?: { providerID: string; modelID: string } }): Promise<SetPendingResult> => {
-      log.debug("Setting pending", { loopId, hasMessage: options.message !== undefined, hasModel: options.model !== undefined });
+      const actionLoopId = loopId;
+      const staleAction = ignoreStaleLoopAction("setPending", actionLoopId, { success: false });
+      if (staleAction !== null) {
+        return staleAction;
+      }
+      log.debug("Setting pending", {
+        loopId: actionLoopId,
+        hasMessage: options.message !== undefined,
+        hasModel: options.model !== undefined,
+      });
       try {
-        const result = await setPendingApi(loopId, options);
+        const result = await setPendingApi(actionLoopId, options);
         await refresh();
-        log.debug("Pending values set", { loopId });
+        if (!isActiveLoop(actionLoopId)) {
+          return { success: false };
+        }
+        log.debug("Pending values set", { loopId: actionLoopId });
         return result;
       } catch (err) {
-        log.error("Failed to set pending", { loopId, error: String(err) });
+        const staleError = ignoreStaleLoopError("setPending", actionLoopId, { success: false }, err);
+        if (staleError !== null) {
+          return staleError;
+        }
+        log.error("Failed to set pending", { loopId: actionLoopId, error: String(err) });
         setError(String(err));
         return { success: false };
       }
     },
-    [loopId, refresh]
+    [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]
   );
 
   // Clear all pending values
   const clearPending = useCallback(async (): Promise<boolean> => {
-    log.debug("Clearing pending values", { loopId });
+    const actionLoopId = loopId;
+    const staleAction = ignoreStaleLoopAction("clearPending", actionLoopId, false);
+    if (staleAction !== null) {
+      return staleAction;
+    }
+    log.debug("Clearing pending values", { loopId: actionLoopId });
     try {
-      await clearPendingApi(loopId);
+      await clearPendingApi(actionLoopId);
       await refresh();
-      log.debug("Pending values cleared", { loopId });
+      if (!isActiveLoop(actionLoopId)) {
+        return false;
+      }
+      log.debug("Pending values cleared", { loopId: actionLoopId });
       return true;
     } catch (err) {
-      log.error("Failed to clear pending", { loopId, error: String(err) });
+      const staleError = ignoreStaleLoopError("clearPending", actionLoopId, false, err);
+      if (staleError !== null) {
+        return staleError;
+      }
+      log.error("Failed to clear pending", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return false;
     }
-  }, [loopId, refresh]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]);
 
   // Send a message to a chat
   const sendChatMessage = useCallback(
     async (message: string, model?: { providerID: string; modelID: string }): Promise<boolean> => {
-      log.debug("Sending chat message", { loopId, messageLength: message.length });
+      const actionLoopId = loopId;
+      const staleAction = ignoreStaleLoopAction("sendChatMessage", actionLoopId, false);
+      if (staleAction !== null) {
+        return staleAction;
+      }
+      log.debug("Sending chat message", { loopId: actionLoopId, messageLength: message.length });
       try {
-        await sendChatMessageApi(loopId, message, model);
+        await sendChatMessageApi(actionLoopId, message, model);
         await refresh();
-        log.debug("Chat message sent", { loopId });
+        if (!isActiveLoop(actionLoopId)) {
+          return false;
+        }
+        log.debug("Chat message sent", { loopId: actionLoopId });
         return true;
       } catch (err) {
-        log.error("Failed to send chat message", { loopId, error: String(err) });
+        const staleError = ignoreStaleLoopError("sendChatMessage", actionLoopId, false, err);
+        if (staleError !== null) {
+          return staleError;
+        }
+        log.error("Failed to send chat message", { loopId: actionLoopId, error: String(err) });
         setError(String(err));
         return false;
       }
     },
-    [loopId, refresh]
+    [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]
   );
 
   const connectViaSsh = useCallback(async (): Promise<SshSession | null> => {
-    log.debug("Connecting loop SSH session", { loopId });
+    const actionLoopId = loopId;
+    if (!isActiveLoop(actionLoopId)) {
+      log.debug("Ignoring stale loop action", {
+        actionName: "connectViaSsh",
+        expectedLoopId: actionLoopId,
+        activeLoopId: activeLoopIdRef.current,
+      });
+      return null;
+    }
+    log.debug("Connecting loop SSH session", { loopId: actionLoopId });
     try {
-      return await getOrCreateLoopSshSessionApi(loopId);
+      const session = await getOrCreateLoopSshSessionApi(actionLoopId);
+      if (!isActiveLoop(actionLoopId)) {
+        return null;
+      }
+      return session;
     } catch (err) {
-      log.error("Failed to connect loop SSH session", { loopId, error: String(err) });
+      if (!isActiveLoop(actionLoopId)) {
+        log.debug("Ignoring stale loop action error", {
+          actionName: "connectViaSsh",
+          expectedLoopId: actionLoopId,
+          activeLoopId: activeLoopIdRef.current,
+          error: String(err),
+        });
+        return null;
+      }
+      log.error("Failed to connect loop SSH session", { loopId: actionLoopId, error: String(err) });
       setError(String(err));
       return null;
     }
-  }, [loopId]);
+  }, [isActiveLoop, loopId]);
 
   // Whether this loop is in chat mode
   const isChatMode = loop?.config.mode === "chat";
 
-  // Initial fetch
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
   // Reset state when loopId changes (switching between loops)
   // This prevents stale data from appearing briefly when switching loops
   useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    refreshRequestIdRef.current += 1;
+    setLoading(true);
+    setError(null);
     setLoop(null);
     setMessages([]);
     setToolCalls([]);
@@ -769,9 +1154,15 @@ export function useLoop(loopId: string): UseLoopResult {
     setLogs([]);
     setTodos([]);
     setGitChangeCounter(0);
+    clearEvents();
     // Reset initial load tracking so the new loop hydrates from API
     initialLoadDoneRef.current = false;
-  }, [loopId]);
+  }, [clearEvents, loopId]);
+
+  // Initial fetch
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
 
   // Cleanup: Release memory and cancel in-flight requests when component unmounts
   // Critical for preventing memory leaks when closing LoopDetails
@@ -792,6 +1183,8 @@ export function useLoop(loopId: string): UseLoopResult {
       setLogs([]);
       setTodos([]);
       setGitChangeCounter(0);
+      refreshRequestIdRef.current += 1;
+      clearEvents();
       // WebSocket cleanup is automatically handled by useLoopEvents hook
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
