@@ -1077,19 +1077,18 @@ describe("mark merged modal", () => {
 
     await waitFor(() => {
       const mergeBtn = Array.from(document.querySelectorAll("button")).find(
-        (b) => b.textContent?.includes("Mark as Merged") && b.textContent?.includes("Switch to base"),
+        (b) => b.textContent?.includes("Mark as Merged") && b.textContent?.includes("Keep this loop as merged"),
       );
       expect(mergeBtn).toBeTruthy();
     });
 
     const mergeBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Mark as Merged") && b.textContent?.includes("Switch to base"),
+      (b) => b.textContent?.includes("Mark as Merged") && b.textContent?.includes("Keep this loop as merged"),
     );
     await user.click(mergeBtn!);
 
     await waitFor(() => {
-      // MarkMergedModal description about switching branches
-      expect(getByText(/switch your repository back to the original branch/i)).toBeTruthy();
+      expect(getByText(/keep the loop as merged/i)).toBeTruthy();
     });
   });
 });

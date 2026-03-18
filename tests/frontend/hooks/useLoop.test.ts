@@ -804,9 +804,13 @@ describe("purge", () => {
 // ─── Actions: markMerged ─────────────────────────────────────────────────────
 
 describe("markMerged", () => {
-  test("calls markMergedApi and sets loop to null", async () => {
-    setupLoop();
-    api.post("/api/loops/:id/mark-merged", () => ({ success: true }));
+  test("calls markMergedApi and refreshes the loop as merged", async () => {
+    let currentLoop = createLoop({ config: { id: LOOP_ID }, state: { id: LOOP_ID, status: "pushed" } });
+    api.get("/api/loops/:id", () => currentLoop);
+    api.post("/api/loops/:id/mark-merged", () => {
+      currentLoop = createLoop({ config: { id: LOOP_ID }, state: { id: LOOP_ID, status: "merged" } });
+      return { success: true };
+    });
 
     const { result } = renderHook(() => useLoop(LOOP_ID));
     await waitForLoad(result);
@@ -817,7 +821,7 @@ describe("markMerged", () => {
     });
 
     expect(success).toBe(true);
-    expect(result.current.loop).toBeNull();
+    expect(result.current.loop?.state.status).toBe("merged");
   });
 });
 

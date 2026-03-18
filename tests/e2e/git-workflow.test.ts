@@ -326,12 +326,12 @@ describe("Git Workflow", () => {
       const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
       expect(currentBranch).toBe(originalBranch);
 
-      // Verify loop status is now deleted
+      // Verify loop status is now merged
       const finalLoop = await ctx.manager.getLoop(loop.config.id);
-      expect(finalLoop!.state.status).toBe("deleted");
+      expect(finalLoop!.state.status).toBe("merged");
 
       // Verify event was emitted
-      expect(countEvents(ctx.events, "loop.deleted")).toBeGreaterThanOrEqual(1);
+      expect(countEvents(ctx.events, "loop.merged")).toBeGreaterThanOrEqual(1);
     });
 
     test("works for pushed loops", async () => {
@@ -369,9 +369,9 @@ describe("Git Workflow", () => {
       const currentBranch = await ctx.git.getCurrentBranch(ctx.workDir);
       expect(currentBranch).toBe(originalBranch);
 
-      // Verify loop status is deleted
+      // Verify loop status is merged
       const finalLoop = await ctx.manager.getLoop(loop.config.id);
-      expect(finalLoop!.state.status).toBe("deleted");
+      expect(finalLoop!.state.status).toBe("merged");
     });
 
     test("returns error when loop is not in final state", async () => {

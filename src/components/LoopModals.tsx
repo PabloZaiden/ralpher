@@ -139,7 +139,7 @@ export function MarkMergedModal({
       onClose={onClose}
       onConfirm={handleConfirm}
       title="Mark as Merged"
-      message="This action will switch your repository back to the original branch, pull the latest changes from remote, and delete the loop's working branch. Use this when the branch was merged externally (e.g., via a GitHub PR). Any local uncommitted changes on the working branch will be discarded."
+      message="Use this when the branch was merged externally (for example via a GitHub pull request) and you want Ralph to keep the loop as merged. The loop will stay visible as merged/archived, and follow-up review actions will be disabled."
       confirmLabel="Mark as Merged"
       loading={loading}
       variant="primary"

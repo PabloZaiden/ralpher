@@ -57,7 +57,7 @@ const TRANSITION_TABLE: Record<LoopStatus, ReadonlySet<LoopStatus>> = {
   // completed: successfully finished
   // → merged: accepted (merged into original branch)
   // → pushed: pushed to remote
-  // → deleted: discarded or marked as merged externally
+  // → deleted: discarded
   // → resolving_conflicts: push encountered merge conflicts
   // → idle: review comments restarting the loop
   // → stopped: jumpstart (engine.start accepts stopped)
@@ -80,7 +80,7 @@ const TRANSITION_TABLE: Record<LoopStatus, ReadonlySet<LoopStatus>> = {
   // max_iterations: hit the iteration limit
   // → merged: accepted
   // → pushed: pushed to remote
-  // → deleted: discarded or marked as merged externally
+  // → deleted: discarded
   // → resolving_conflicts: push encountered conflicts
   // → stopped: jumpstart
   // → planning: jumpstart in planning mode
@@ -97,16 +97,17 @@ const TRANSITION_TABLE: Record<LoopStatus, ReadonlySet<LoopStatus>> = {
   resolving_conflicts: new Set(["starting", "stopped", "failed", "pushed", "completed", "max_iterations", "deleted"]),
 
   // merged: changes merged into original branch (final state, can receive reviews)
-  // → deleted: delete/mark as merged externally
+  // → deleted: delete
   // → idle: review comments restarting the loop
   merged: new Set(["deleted", "idle"]),
 
   // pushed: branch pushed to remote (final state, can receive reviews)
-  // → deleted: delete/mark as merged externally
+  // → merged: branch merged externally
+  // → deleted: delete
   // → idle: review comments restarting the loop
   // → resolving_conflicts: re-push encountered conflicts
   // → pushed: re-push after branch update (updateBranch)
-  pushed: new Set(["deleted", "idle", "resolving_conflicts", "pushed"]),
+  pushed: new Set(["merged", "deleted", "idle", "resolving_conflicts", "pushed"]),
 
   // deleted: soft-deleted, can be revived into a fresh feedback cycle before purge
   deleted: new Set(["stopped", "planning"]),

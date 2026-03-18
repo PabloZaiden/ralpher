@@ -507,10 +507,7 @@ export function LoopDetails({
 
   // Handle mark as merged
   async function handleMarkMerged() {
-    const success = await markMerged();
-    if (success) {
-      onBack?.();
-    }
+    await markMerged();
     setMarkMergedModal(false);
   }
 
@@ -1742,7 +1739,7 @@ export function LoopDetails({
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Mark as Merged</div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">Switch to base branch, pull changes, and clean up</div>
+                                  <div className="text-xs text-gray-500 dark:text-gray-400">Keep this loop as merged after the branch landed elsewhere</div>
                                 </div>
                                 <span className="text-gray-400 dark:text-gray-500">→</span>
                               </button>

@@ -86,10 +86,10 @@ export interface ToolCallData {
  * in the loop lifecycle.
  * 
  * Event categories:
- * - **Lifecycle events**: created, started, completed, stopped, session_aborted, error, deleted
+ * - **Lifecycle events**: created, started, completed, stopped, session_aborted, error, deleted, merged
  * - **Iteration events**: iteration.start, iteration.end
  * - **Activity events**: message, tool_call, progress, log, git.commit
- * - **Completion events**: accepted (merged), discarded, pushed
+ * - **Completion events**: accepted (merged locally), merged (detected externally), discarded, pushed
  * - **Sync events**: sync.started, sync.clean, sync.conflicts
  * - **Plan mode events**: plan.ready, plan.feedback, plan.accepted, plan.discarded
  * - **State events**: todo.updated
@@ -110,6 +110,7 @@ export type LoopEvent =
   | LoopSessionAbortedEvent
   | LoopErrorEvent
   | LoopDeletedEvent
+  | LoopMergedEvent
   | LoopAcceptedEvent
   | LoopDiscardedEvent
   | LoopPushedEvent
@@ -360,6 +361,18 @@ export interface LoopErrorEvent {
 export interface LoopDeletedEvent {
   type: "loop.deleted";
   /** ID of the deleted loop */
+  loopId: string;
+  /** ISO 8601 timestamp */
+  timestamp: string;
+}
+
+/**
+ * Emitted when a loop is marked as merged after the merge happened externally
+ * (for example via a pull request on GitHub).
+ */
+export interface LoopMergedEvent {
+  type: "loop.merged";
+  /** ID of the loop that was merged */
   loopId: string;
   /** ISO 8601 timestamp */
   timestamp: string;

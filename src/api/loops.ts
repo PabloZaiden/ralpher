@@ -939,17 +939,17 @@ export const loopsControlRoutes = {
 
   "/api/loops/:id/mark-merged": {
     /**
-     * POST /api/loops/:id/mark-merged - Mark an externally merged loop as deleted.
+     * POST /api/loops/:id/mark-merged - Mark an externally merged loop as merged.
      * 
-     * Transitions the loop to `deleted` status, clears reviewMode.addressable,
+     * Transitions the loop to `merged` status, clears reviewMode.addressable,
      * and disconnects the backend. Because loops may run in dedicated worktrees,
      * cleanup is deferred to the normal purge/discard flow instead of assuming
      * immediate branch teardown here.
      * 
      * This is useful when a loop's branch was merged externally (e.g., via GitHub PR)
-     * and the user wants to clean up the loop.
+     * and the user wants to sync the loop's status with that merged result.
      * 
-     * Only works for loops in final states (pushed, merged, completed, max_iterations, deleted).
+     * Only works for loops in final states (pushed, merged, completed, max_iterations).
      * 
      * @returns Success response
      */

@@ -99,6 +99,7 @@ export function useLoops(): UseLoopsResult {
       case "loop.stopped":
       case "loop.completed":
       case "loop.ssh_handoff":
+      case "loop.merged":
       case "loop.accepted":
       case "loop.pushed":
       case "loop.discarded":

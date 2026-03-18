@@ -140,11 +140,11 @@ describe("MarkMergedModal", () => {
     expect(getByRole("heading", { name: "Mark as Merged" })).toBeInTheDocument();
   });
 
-  test("renders confirmation message about branch handling", () => {
+  test("renders confirmation message about preserving merged visibility", () => {
     const { getByText } = renderWithUser(
       <MarkMergedModal {...defaultProps()} />
     );
-    expect(getByText(/switch your repository back to the original branch/)).toBeInTheDocument();
+    expect(getByText(/keep the loop as merged/i)).toBeInTheDocument();
   });
 
   test("renders Mark as Merged and Cancel buttons", () => {

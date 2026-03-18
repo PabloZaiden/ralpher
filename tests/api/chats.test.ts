@@ -732,10 +732,10 @@ describe("Chat API Integration", () => {
         const mergedBody = await mergedResponse.json();
         expect(mergedBody.success).toBe(true);
 
-        // Verify status is deleted
+        // Verify status is merged
         const getResponse = await fetch(`${baseUrl}/api/loops/${chatId}`);
         const getBody = await getResponse.json();
-        expect(getBody.state.status).toBe("deleted");
+        expect(getBody.state.status).toBe("merged");
       } finally {
         await rm(uniqueWorkDir, { recursive: true, force: true });
       }

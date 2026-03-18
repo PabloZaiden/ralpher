@@ -1284,7 +1284,7 @@ Updated line 3`;
       expect(body.message).toContain("No git branch");
     });
 
-    test("marks a completed loop as merged and sets status to deleted", async () => {
+    test("marks a completed loop as merged and preserves merged status", async () => {
       // Create and complete a loop
       const createResponse = await fetch(`${baseUrl}/api/loops`, {
         method: "POST",
@@ -1313,11 +1313,11 @@ Updated line 3`;
       const body = await response.json();
       expect(body.success).toBe(true);
 
-      // Verify loop status is now deleted
+      // Verify loop status is now merged
       const getResponse = await fetch(`${baseUrl}/api/loops/${loopId}`);
       expect(getResponse.status).toBe(200);
       const getBody = await getResponse.json();
-      expect(getBody.state.status).toBe("deleted");
+      expect(getBody.state.status).toBe("merged");
     });
   });
 

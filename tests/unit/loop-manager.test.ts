@@ -551,10 +551,9 @@ describe("LoopManager", () => {
 
     // Note: Success case for markMerged requires real git operations and is tested
     // in e2e/git-workflow.test.ts which verifies:
-    // - Loop status becomes "deleted"
-    // - Working branch is deleted
-    // - Repository switches to original branch
-    // - loop.deleted event is emitted
+    // - Loop status becomes "merged"
+    // - Repository stays on the original branch
+    // - loop.merged event is emitted
   });
 
   describe("isRunning", () => {

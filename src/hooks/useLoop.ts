@@ -287,6 +287,7 @@ export function useLoop(loopId: string): UseLoopResult {
       case "loop.stopped":
       case "loop.completed":
       case "loop.ssh_handoff":
+      case "loop.merged":
       case "loop.accepted":
       case "loop.pushed":
       case "loop.discarded":
@@ -498,7 +499,7 @@ export function useLoop(loopId: string): UseLoopResult {
       setError(String(err));
       return false;
     }
-  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId]);
+  }, [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]);
 
   // Accept the loop's changes
   const accept = useCallback(async (): Promise<AcceptLoopResult> => {
@@ -649,10 +650,10 @@ export function useLoop(loopId: string): UseLoopResult {
     log.debug("Marking loop as merged", { loopId: actionLoopId });
     try {
       await markMergedApi(actionLoopId);
+      await refresh();
       if (!isActiveLoop(actionLoopId)) {
         return false;
       }
-      setLoop(null);
       log.info("Loop marked as merged", { loopId: actionLoopId });
       return true;
     } catch (err) {
