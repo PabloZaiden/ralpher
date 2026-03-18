@@ -185,10 +185,10 @@ describe("error handling scenario", () => {
     const wsSelect = document.querySelector("select#workspace") as HTMLSelectElement;
     await user.selectOptions(wsSelect, "ws-1");
 
-    // Wait for form ready (planMode defaults to true, so button text is "Create Plan")
+    // Wait for form ready and the generic Create action to appear.
     await waitFor(() => {
       const btn = Array.from(document.querySelectorAll("button")).find(
-        (b) => b.textContent?.includes("Create Plan"),
+        (b) => b.textContent?.includes("Create"),
       );
       expect(btn).toBeTruthy();
     });
@@ -202,7 +202,7 @@ describe("error handling scenario", () => {
 
     // Submit
     const submitBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Create Plan"),
+      (b) => b.textContent?.includes("Create"),
     );
     await user.click(submitBtn!);
 
