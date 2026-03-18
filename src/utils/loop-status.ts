@@ -139,6 +139,16 @@ export function isArchivedLoop(status: LoopStatus, reviewModeAddressable: boolea
 }
 
 /**
+ * Check if a loop should appear in the shell overview's Recent activity list.
+ * Recent activity is reserved for in-progress or otherwise non-terminal work.
+ */
+export function shouldShowInRecentActivity(status: LoopStatus): boolean {
+  const result = !(canJumpstart(status) || isFinalState(status));
+  log.trace("shouldShowInRecentActivity check", { status, result });
+  return result;
+}
+
+/**
  * Get the appropriate status label for a planning loop based on plan readiness.
  * Returns "Plan Ready" when the plan is ready for human review,
  * or "Planning" when the AI is still generating/revising the plan.

@@ -14,6 +14,7 @@ import {
   canSendTerminalFollowUp,
   isAwaitingFeedback,
   isArchivedLoop,
+  shouldShowInRecentActivity,
   getLoopStatusLabel,
   getPlanningStatusLabel,
   isLoopPlanReady,
@@ -377,6 +378,44 @@ describe("isArchivedLoop", () => {
     ];
     for (const status of nonArchived) {
       expect(isArchivedLoop(status, false)).toBe(false);
+    }
+  });
+});
+
+// ============================================================================
+// shouldShowInRecentActivity
+// ============================================================================
+
+describe("shouldShowInRecentActivity", () => {
+  test("returns true for non-terminal overview statuses", () => {
+    const visibleStatuses: LoopStatus[] = [
+      "idle",
+      "draft",
+      "planning",
+      "starting",
+      "running",
+      "waiting",
+      "resolving_conflicts",
+    ];
+
+    for (const status of visibleStatuses) {
+      expect(shouldShowInRecentActivity(status)).toBe(true);
+    }
+  });
+
+  test("returns false for terminal overview statuses", () => {
+    const hiddenStatuses: LoopStatus[] = [
+      "completed",
+      "stopped",
+      "failed",
+      "max_iterations",
+      "merged",
+      "pushed",
+      "deleted",
+    ];
+
+    for (const status of hiddenStatuses) {
+      expect(shouldShowInRecentActivity(status)).toBe(false);
     }
   });
 });

@@ -8,7 +8,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockApi } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
-import { renderWithUser, waitFor } from "../helpers/render";
+import { renderWithUser, waitFor, within } from "../helpers/render";
 import {
   createLoopWithStatus,
   createWorkspace,
@@ -104,7 +104,7 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops", () => [runningLoop, completedLoop, draftLoop]);
     api.get("/api/workspaces", () => [WORKSPACE_A, WORKSPACE_B]);
 
-    const { getAllByText, getByRole, getByText } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByTestId, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getAllByText("Project Alpha").length).toBeGreaterThan(0);
@@ -113,13 +113,15 @@ describe("dashboard management scenario", () => {
     expect(getAllByText("Project Beta").length).toBeGreaterThan(0);
     expect(getByText("Server maps")).toBeTruthy();
     expect(getByText("Workspaces map")).toBeTruthy();
-    expect(getAllByText("Running Task").length).toBeGreaterThan(0);
-    expect(getAllByText("Done Task").length).toBeGreaterThan(0);
-    expect(getAllByText("Draft Task").length).toBeGreaterThan(0);
 
     const recentActivityHeading = getByRole("heading", { name: "Recent activity" });
     const serverMapsHeading = getByRole("heading", { name: "Server maps" });
     const workspacesMapHeading = getByRole("heading", { name: "Workspaces map" });
+    const recentActivityCard = getByTestId("recent-activity-card");
+
+    expect(within(recentActivityCard).getByText("Running Task")).toBeTruthy();
+    expect(within(recentActivityCard).getByText("Draft Task")).toBeTruthy();
+    expect(within(recentActivityCard).queryByText("Done Task")).toBeNull();
 
     expect(recentActivityHeading.compareDocumentPosition(serverMapsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(serverMapsHeading.compareDocumentPosition(workspacesMapHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -224,6 +226,46 @@ describe("dashboard management scenario", () => {
     await waitFor(() => {
       expect(getAllByText("Pushed Loop").length).toBeGreaterThan(0);
     });
+  });
+
+  test("recent activity omits terminal-state loops while keeping active loops visible", async () => {
+    setupBaseApi();
+
+    const runningLoop = createLoopWithStatus("running", {
+      config: { id: "loop-run-visible", name: "Visible Running", directory: "/workspaces/alpha", workspaceId: "ws-a" },
+    });
+    const planningLoop = createLoopWithStatus("planning", {
+      config: { id: "loop-plan-visible", name: "Visible Planning", directory: "/workspaces/alpha", workspaceId: "ws-a" },
+    });
+    const completedLoop = createLoopWithStatus("completed", {
+      config: { id: "loop-completed-hidden", name: "Hidden Completed", directory: "/workspaces/alpha", workspaceId: "ws-a" },
+    });
+    const failedLoop = createLoopWithStatus("failed", {
+      config: { id: "loop-failed-hidden", name: "Hidden Failed", directory: "/workspaces/alpha", workspaceId: "ws-a" },
+    });
+    const pushedLoop = createLoopWithStatus("pushed", {
+      config: { id: "loop-pushed-hidden", name: "Hidden Pushed", directory: "/workspaces/alpha", workspaceId: "ws-a" },
+    });
+
+    api.get("/api/loops", () => [runningLoop, planningLoop, completedLoop, failedLoop, pushedLoop]);
+    api.get("/api/workspaces", () => [WORKSPACE_A]);
+
+    const { getByRole, getByTestId } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Recent activity" })).toBeTruthy();
+    });
+
+    const recentActivityCard = getByTestId("recent-activity-card");
+
+    await waitFor(() => {
+      expect(within(recentActivityCard).getByText("Visible Running")).toBeTruthy();
+      expect(within(recentActivityCard).getByText("Visible Planning")).toBeTruthy();
+    });
+
+    expect(within(recentActivityCard).queryByText("Hidden Completed")).toBeNull();
+    expect(within(recentActivityCard).queryByText("Hidden Failed")).toBeNull();
+    expect(within(recentActivityCard).queryByText("Hidden Pushed")).toBeNull();
   });
 
   test("overview omits removed shell summary cards", async () => {
