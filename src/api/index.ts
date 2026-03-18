@@ -12,7 +12,11 @@
  * - git: Git repository information
  * - workspaces: Workspace CRUD operations
  * - agents-md: AGENTS.md optimization for Ralpher
+ * - ssh-servers: Standalone SSH server registry, credentials, and ad-hoc sessions
+ * - ssh-sessions: Workspace-backed persistent SSH sessions
+ * - provisioning: Remote workspace provisioning jobs
  * - websocket: Real-time event streaming (handled separately)
+ * - port-forwards: Browser-facing proxy routes handled separately in src/index.ts
  * 
  * @module api
  */
@@ -32,7 +36,7 @@ import { provisioningRoutes } from "./provisioning";
  * All API routes combined.
  * 
  * Spread this object into Bun's serve() routes option to register all endpoints.
- * The WebSocket endpoint is handled separately in src/index.ts.
+ * The WebSocket endpoint and browser-facing port-forward proxy routes are handled separately in src/index.ts.
  * 
  * @example
  * ```typescript

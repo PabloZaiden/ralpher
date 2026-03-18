@@ -55,7 +55,7 @@ interface TranslateEventContext {
   reasoningTextLength: Map<string, number>;
   /** Map of part IDs to their type (text, reasoning, tool, etc.) for delta routing */
   partTypes: Map<string, string>;
-  /** Optional client-like object used by translateEvent() tests */
+  /** Client-like object used for session debug queries during event translation */
   client: any;
   /** Directory for session queries */
   directory: string;
