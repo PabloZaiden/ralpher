@@ -334,14 +334,14 @@ describe("WorkspaceSettingsModal AGENTS.md optimization", () => {
   });
 });
 
-describe("WorkspaceSettingsModal archived loop purge", () => {
-  test("shows archived loop count and opens confirmation modal", async () => {
+describe("WorkspaceSettingsModal terminal-state loop purge", () => {
+  test("shows purgeable terminal-state loop count and opens confirmation modal", async () => {
     api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
 
     const { getByText, user } = renderWithUser(
       <WorkspaceSettingsModal
         {...defaultProps()}
-        archivedLoopCount={3}
+        purgeableLoopCount={3}
         onPurgeArchivedLoops={mock(() => Promise.resolve({
           success: true,
           workspaceId: "ws-test-1",
@@ -354,14 +354,15 @@ describe("WorkspaceSettingsModal archived loop purge", () => {
     );
 
     await waitFor(() => {
-      expect(getByText("Archived Loops")).toBeInTheDocument();
-      expect(getByText("3 archived")).toBeInTheDocument();
+      expect(getByText("Loops in a Terminal State")).toBeInTheDocument();
+      expect(getByText("3 purgeable")).toBeInTheDocument();
+      expect(getByText("Permanently delete loops in a terminal state for this workspace once they are no longer awaiting feedback. This currently applies to merged, pushed, and deleted loops. This removes their loop data and cannot be undone.")).toBeInTheDocument();
     });
 
-    await user.click(getByText("Purge Archived Loops"));
+    await user.click(getByText("Purge Terminal-State Loops"));
 
     await waitFor(() => {
-      expect(getByText('Are you sure you want to permanently delete all 3 archived loops for "Test Workspace"? This cannot be undone.')).toBeInTheDocument();
+      expect(getByText('Are you sure you want to permanently delete all 3 loops in a terminal state for "Test Workspace"? This currently applies to merged, pushed, and deleted loops and cannot be undone.')).toBeInTheDocument();
     });
   });
 
@@ -379,21 +380,21 @@ describe("WorkspaceSettingsModal archived loop purge", () => {
     const { getByText, user } = renderWithUser(
       <WorkspaceSettingsModal
         {...defaultProps()}
-        archivedLoopCount={2}
+        purgeableLoopCount={2}
         onPurgeArchivedLoops={onPurgeArchivedLoops}
       />
     );
 
     await waitFor(() => {
-      expect(getByText("Purge Archived Loops")).toBeInTheDocument();
+      expect(getByText("Purge Terminal-State Loops")).toBeInTheDocument();
     });
 
-    await user.click(getByText("Purge Archived Loops"));
+    await user.click(getByText("Purge Terminal-State Loops"));
     await user.click(getByText("Purge All"));
 
     await waitFor(() => {
       expect(onPurgeArchivedLoops).toHaveBeenCalled();
-      expect(getByText("Purged 2 archived loops.")).toBeInTheDocument();
+      expect(getByText("Purged 2 terminal-state loops.")).toBeInTheDocument();
     });
   });
 
@@ -411,22 +412,22 @@ describe("WorkspaceSettingsModal archived loop purge", () => {
     const { getByText, queryByText, user } = renderWithUser(
       <WorkspaceSettingsModal
         {...defaultProps()}
-        archivedLoopCount={2}
+        purgeableLoopCount={2}
         onPurgeArchivedLoops={onPurgeArchivedLoops}
       />
     );
 
     await waitFor(() => {
-      expect(getByText("Purge Archived Loops")).toBeInTheDocument();
+      expect(getByText("Purge Terminal-State Loops")).toBeInTheDocument();
     });
 
-    await user.click(getByText("Purge Archived Loops"));
+    await user.click(getByText("Purge Terminal-State Loops"));
     await user.click(getByText("Purge All"));
 
     await waitFor(() => {
       expect(onPurgeArchivedLoops).toHaveBeenCalled();
-      expect(queryByText('Are you sure you want to permanently delete all 2 archived loops for "Test Workspace"? This cannot be undone.')).not.toBeInTheDocument();
-      expect(getByText("Failed to purge archived loops.")).toBeInTheDocument();
+      expect(queryByText('Are you sure you want to permanently delete all 2 loops in a terminal state for "Test Workspace"? This currently applies to merged, pushed, and deleted loops and cannot be undone.')).not.toBeInTheDocument();
+      expect(getByText("Failed to purge terminal-state loops.")).toBeInTheDocument();
     });
   });
 
@@ -437,32 +438,32 @@ describe("WorkspaceSettingsModal archived loop purge", () => {
     const { getByText, queryByText, user } = renderWithUser(
       <WorkspaceSettingsModal
         {...defaultProps()}
-        archivedLoopCount={2}
+        purgeableLoopCount={2}
         onPurgeArchivedLoops={onPurgeArchivedLoops}
       />
     );
 
     await waitFor(() => {
-      expect(getByText("Purge Archived Loops")).toBeInTheDocument();
+      expect(getByText("Purge Terminal-State Loops")).toBeInTheDocument();
     });
 
-    await user.click(getByText("Purge Archived Loops"));
+    await user.click(getByText("Purge Terminal-State Loops"));
     await user.click(getByText("Purge All"));
 
     await waitFor(() => {
       expect(onPurgeArchivedLoops).toHaveBeenCalled();
-      expect(queryByText('Are you sure you want to permanently delete all 2 archived loops for "Test Workspace"? This cannot be undone.')).not.toBeInTheDocument();
-      expect(getByText("Failed to purge archived loops: Error: Remote cleanup failed")).toBeInTheDocument();
+      expect(queryByText('Are you sure you want to permanently delete all 2 loops in a terminal state for "Test Workspace"? This currently applies to merged, pushed, and deleted loops and cannot be undone.')).not.toBeInTheDocument();
+      expect(getByText("Failed to purge terminal-state loops: Error: Remote cleanup failed")).toBeInTheDocument();
     });
   });
 
-  test("disables purge button when there are no archived loops", async () => {
+  test("disables purge button when there are no purgeable terminal-state loops", async () => {
     api.get("/api/workspaces/:id/agents-md", () => agentsMdStatus());
 
     const { getByText } = renderWithUser(
       <WorkspaceSettingsModal
         {...defaultProps()}
-        archivedLoopCount={0}
+        purgeableLoopCount={0}
         onPurgeArchivedLoops={mock(() => Promise.resolve({
           success: true,
           workspaceId: "ws-test-1",
@@ -475,7 +476,7 @@ describe("WorkspaceSettingsModal archived loop purge", () => {
     );
 
     await waitFor(() => {
-      const purgeButton = getByText("Purge Archived Loops").closest("button");
+      const purgeButton = getByText("Purge Terminal-State Loops").closest("button");
       expect(purgeButton).toBeDisabled();
     });
   });

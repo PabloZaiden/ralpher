@@ -194,12 +194,12 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
       const result = await purgeArchivedWorkspaceLoops(workspaceId);
 
       if (!result.success) {
-        toast.error("Failed to purge archived loops");
+        toast.error("Failed to purge terminal-state loops");
         return result;
       }
 
       if (result.failures.length > 0) {
-        toast.error(`Purged ${result.purgedCount} of ${result.totalArchived} archived loops`);
+        toast.error(`Purged ${result.purgedCount} of ${result.totalArchived} terminal-state loops`);
       }
 
       return result;
