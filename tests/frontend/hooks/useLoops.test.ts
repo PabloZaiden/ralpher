@@ -187,6 +187,35 @@ describe("WebSocket events", () => {
     });
   });
 
+  test("loop.merged triggers a single-loop refresh", async () => {
+    const loop = createLoop({ config: { id: "loop-1" }, state: { id: "loop-1", status: "pushed" } });
+    const mergedLoop = createLoop({ config: { id: "loop-1" }, state: { id: "loop-1", status: "merged" } });
+    setupLoopsList([loop]);
+    api.get("/api/loops/:id", () => mergedLoop);
+
+    const { result } = renderHook(() => useLoops());
+
+    await waitFor(() => {
+      expect(result.current.loops).toHaveLength(1);
+    });
+
+    await waitFor(() => {
+      expect(ws.connections().length).toBeGreaterThan(0);
+    });
+
+    act(() => {
+      ws.sendEvent({
+        type: "loop.merged",
+        loopId: "loop-1",
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.loops[0]!.state.status).toBe("merged");
+    });
+  });
+
   test("loop.completed triggers a single-loop refresh", async () => {
     const loop = createLoop({ config: { id: "loop-1" }, state: { id: "loop-1", status: "running" } });
     const completedLoop = createLoop({ config: { id: "loop-1" }, state: { id: "loop-1", status: "completed" } });

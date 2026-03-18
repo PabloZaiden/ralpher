@@ -1789,12 +1789,11 @@ Follow the standard loop execution flow:
 
   /**
    * Handle an externally merged loop (e.g., merged via PR on GitHub).
-   * Transitions the loop to `deleted` status, clears reviewMode.addressable,
-   * and disconnects the backend. Despite the name, this does NOT set status
-   * to "merged" — it performs final cleanup by marking the loop as deleted.
-   * The worktree and branch are preserved until purgeLoop() is called.
+   * Transitions the loop to `merged` status, clears reviewMode.addressable,
+   * and disconnects the backend. The worktree and branch are preserved until
+   * purgeLoop() is called.
    *
-   * Only works for loops in final states: pushed, merged, completed, max_iterations, deleted.
+   * Only works for loops in final states: pushed, merged, completed, max_iterations.
    */
   async markMerged(loopId: string): Promise<{ success: boolean; error?: string }> {
     // Use getLoop to get the most up-to-date status (in-memory or from persistence)
@@ -1804,7 +1803,7 @@ Follow the standard loop execution flow:
     }
 
     // Only allow for loops in final states
-    const allowedStatuses = ["pushed", "merged", "completed", "max_iterations", "deleted"];
+    const allowedStatuses = ["pushed", "merged", "completed", "max_iterations"];
     if (!allowedStatuses.includes(loop.state.status)) {
       return { 
         success: false, 
@@ -1829,12 +1828,15 @@ Follow the standard loop execution flow:
       // No need to reset, checkout, or delete branches - the worktree isolates everything.
       // Branch and worktree cleanup happens in purgeLoop().
 
-      // Update status to 'deleted' (final cleanup state)
-      // Also clear reviewMode.addressable so the loop cannot be addressed again
-      assertValidTransition(loop.state.status, "deleted", "markMerged");
+      const nextStatus = "merged" as const;
+      if (loop.state.status !== nextStatus) {
+        assertValidTransition(loop.state.status, nextStatus, "markMerged");
+      }
+
+      // Keep merged loops visible as merged, but stop offering follow-up review actions.
       const updatedState = {
         ...loop.state,
-        status: "deleted" as const,
+        status: nextStatus,
         reviewMode: loop.state.reviewMode
           ? { ...loop.state.reviewMode, addressable: false }
           : undefined,
@@ -1847,9 +1849,10 @@ Follow the standard loop execution flow:
       // Remove engine from in-memory map if present
       this.engines.delete(loopId);
 
-      // Emit deleted event for consistency
+      // Emit a dedicated merge event so clients refresh the loop instead of
+      // treating it as a soft-delete.
       this.emitter.emit({
-        type: "loop.deleted",
+        type: "loop.merged",
         loopId,
         timestamp: createTimestamp(),
       });

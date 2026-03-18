@@ -327,11 +327,9 @@ export async function deleteLoopPortForwardApi(loopId: string, forwardId: string
 /**
  * Mark a loop as merged and sync with remote via the API.
  *
- * Switches the repository back to the original branch, pulls latest changes
- * from the remote, deletes the working branch, and marks the loop as deleted.
- *
  * This is useful when a loop's branch was merged externally (e.g., via GitHub PR)
- * and the user wants to sync their local environment with the merged changes.
+ * and the user wants to preserve the loop as merged instead of treating it
+ * like a deleted loop.
  */
 export async function markMergedApi(loopId: string): Promise<boolean> {
   return apiAction(`/api/loops/${loopId}/mark-merged`, "POST", "Mark loop as merged");

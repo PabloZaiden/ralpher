@@ -16,7 +16,7 @@
  * - loop.created, loop.started, loop.completed, loop.ssh_handoff, loop.stopped, loop.error
  * - loop.iteration.start, loop.iteration.end
  * - loop.message, loop.tool_call, loop.progress, loop.log
- * - loop.git.commit, loop.deleted, loop.accepted, loop.pushed, loop.discarded
+ * - loop.git.commit, loop.deleted, loop.merged, loop.accepted, loop.pushed, loop.discarded
  * - loop.plan.ready, loop.plan.feedback, loop.plan.accepted, loop.plan.discarded
  * - loop.todo.updated, loop.pending.updated
  * - ssh_session.created, ssh_session.updated, ssh_session.deleted, ssh_session.status

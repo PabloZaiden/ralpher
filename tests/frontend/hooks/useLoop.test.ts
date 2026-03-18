@@ -804,9 +804,13 @@ describe("purge", () => {
 // ─── Actions: markMerged ─────────────────────────────────────────────────────
 
 describe("markMerged", () => {
-  test("calls markMergedApi and sets loop to null", async () => {
-    setupLoop();
-    api.post("/api/loops/:id/mark-merged", () => ({ success: true }));
+  test("calls markMergedApi and refreshes the loop as merged", async () => {
+    let currentLoop = createLoop({ config: { id: LOOP_ID }, state: { id: LOOP_ID, status: "pushed" } });
+    api.get("/api/loops/:id", () => currentLoop);
+    api.post("/api/loops/:id/mark-merged", () => {
+      currentLoop = createLoop({ config: { id: LOOP_ID }, state: { id: LOOP_ID, status: "merged" } });
+      return { success: true };
+    });
 
     const { result } = renderHook(() => useLoop(LOOP_ID));
     await waitForLoad(result);
@@ -817,7 +821,58 @@ describe("markMerged", () => {
     });
 
     expect(success).toBe(true);
-    expect(result.current.loop).toBeNull();
+    expect(result.current.loop?.state.status).toBe("merged");
+  });
+
+  test("marks the current loop as merged after switching loops", async () => {
+    const secondLoopId = "test-loop-2";
+    const loopsById: Record<string, Loop> = {
+      [LOOP_ID]: createLoop({ config: { id: LOOP_ID }, state: { id: LOOP_ID, status: "pushed" } }),
+      [secondLoopId]: createLoop({
+        config: { id: secondLoopId },
+        state: { id: secondLoopId, status: "pushed" },
+      }),
+    };
+    api.get("/api/loops/:id", (req) => {
+      const loop = loopsById[req.params["id"]!];
+      if (!loop) {
+        throw new MockApiError(404, { message: "Loop not found" });
+      }
+      return loop;
+    });
+    api.post("/api/loops/:id/mark-merged", (req) => {
+      const loopId = req.params["id"]!;
+      loopsById[loopId] = createLoop({
+        config: { id: loopId },
+        state: { id: loopId, status: "merged" },
+      });
+      return { success: true };
+    });
+
+    const { result, rerender } = renderHook(
+      ({ loopId }) => useLoop(loopId),
+      { initialProps: { loopId: LOOP_ID } },
+    );
+    await waitForLoad(result);
+
+    rerender({ loopId: secondLoopId });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.loop?.config.id).toBe(secondLoopId);
+    });
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.markMerged();
+    });
+
+    const calls = api.calls("/api/loops/:id/mark-merged", "POST");
+    expect(success).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.params["id"]).toBe(secondLoopId);
+    expect(result.current.loop?.config.id).toBe(secondLoopId);
+    expect(result.current.loop?.state.status).toBe("merged");
   });
 });
 

@@ -51,7 +51,7 @@ const EXPECTED_TRANSITIONS: Record<LoopStatus, LoopStatus[]> = {
   max_iterations: ["merged", "pushed", "deleted", "resolving_conflicts", "stopped", "planning"],
   resolving_conflicts: ["starting", "stopped", "failed", "pushed", "completed", "max_iterations", "deleted"],
   merged: ["deleted", "idle"],
-  pushed: ["deleted", "idle", "resolving_conflicts", "pushed"],
+  pushed: ["merged", "deleted", "idle", "resolving_conflicts", "pushed"],
   deleted: ["stopped", "planning"],
 };
 
