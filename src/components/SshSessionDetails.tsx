@@ -795,14 +795,18 @@ export function SshSessionDetails({
       return null;
     }
     return (
-      <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden text-xs text-gray-500 dark:text-gray-400">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 text-xs text-gray-500 dark:text-gray-400">
         <Badge variant={effectiveConnectionMode === "direct" ? "info" : "default"} className="shrink-0">
           {getSshConnectionModeLabel(effectiveConnectionMode ?? session.config.connectionMode)}
         </Badge>
         {hasPersistentSession ? (
-          <span className="min-w-0 truncate font-mono">{session.config.remoteSessionName}</span>
+          <span className="min-w-0 break-words font-mono text-right [overflow-wrap:anywhere]">
+            {session.config.remoteSessionName}
+          </span>
         ) : (
-          <span className="min-w-0 truncate">fresh shell on reconnect</span>
+          <span className="min-w-0 break-words text-right [overflow-wrap:anywhere]">
+            fresh shell on reconnect
+          </span>
         )}
         {session.state.notice && (
           <Badge variant="warning" className="shrink-0">
@@ -819,7 +823,7 @@ export function SshSessionDetails({
   }, [session]);
   const touchControlsSummary = useMemo(() => {
     return (
-      <div className="flex min-w-0 items-center justify-end gap-2 overflow-hidden">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
         {hasActiveTerminalModifiers(terminalModifiers) ? (
           <Badge variant="info" className="shrink-0">
             Next: {activeModifierLabel}
@@ -829,7 +833,7 @@ export function SshSessionDetails({
             Modifiers off
           </Badge>
         )}
-        <span className="hidden min-w-0 truncate text-xs text-gray-500 dark:text-gray-400 sm:block">
+        <span className="hidden min-w-0 break-words text-xs text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere] sm:block">
           Touch keys
         </span>
       </div>
@@ -1538,7 +1542,7 @@ export function SshSessionDetails({
             {showBackButton && onBack && (
               <Button variant="ghost" size="xs" onClick={onBack}>← Back</Button>
             )}
-            <h1 className="min-w-0 truncate text-base font-semibold text-gray-900 dark:text-gray-100">
+            <h1 className="min-w-0 break-words text-base font-semibold text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
               {session.config.name}
             </h1>
             <Badge variant={socketStatus === "open" ? "success" : socketStatus === "connecting" ? "info" : "warning"}>
@@ -1585,7 +1589,7 @@ export function SshSessionDetails({
               <dt className="text-gray-500 dark:text-gray-400">
                 {isStandaloneSession(session) ? "Server" : "Workspace ID"}
               </dt>
-              <dd className={isStandaloneSession(session) ? "break-words text-gray-900 dark:text-gray-100" : "break-all font-mono text-gray-900 dark:text-gray-100"}>
+              <dd className={isStandaloneSession(session) ? "break-words text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]" : "break-words font-mono text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]"}>
                 {isStandaloneSession(session) ? standaloneServerName : session.config.workspaceId}
               </dd>
             </div>
@@ -1593,14 +1597,14 @@ export function SshSessionDetails({
               <dt className="text-gray-500 dark:text-gray-400">
                 {isStandaloneSession(session) ? "Address" : "Directory"}
               </dt>
-              <dd className="break-all font-mono text-gray-900 dark:text-gray-100">
+              <dd className="break-words font-mono text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
                 {isStandaloneSession(session) ? standaloneServerTarget : session.config.directory}
               </dd>
             </div>
             {hasPersistentSession ? (
               <div className="min-w-0">
                 <dt className="text-gray-500 dark:text-gray-400">Persistent session ID</dt>
-                <dd className="break-all font-mono text-gray-900 dark:text-gray-100">{session.config.remoteSessionName}</dd>
+                <dd className="break-words font-mono text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">{session.config.remoteSessionName}</dd>
               </div>
             ) : (
               <div className="min-w-0">

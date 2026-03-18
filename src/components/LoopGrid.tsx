@@ -210,11 +210,11 @@ export function LoopGrid({
             {workspaceGroups
               .filter(g => g.loops.length === 0)
               .map(({ workspace }) => (
-                <div key={workspace.id} className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-neutral-800 rounded-md">
+                <div key={workspace.id} className="flex min-w-0 items-start gap-2 rounded-md bg-gray-100 px-3 py-2 dark:bg-neutral-800">
                   <div className="min-w-0">
-                    <div className="text-sm text-gray-700 dark:text-gray-300 truncate">{workspace.name}</div>
+                    <div className="break-words text-sm text-gray-700 dark:text-gray-300 [overflow-wrap:anywhere]">{workspace.name}</div>
                     <div
-                      className="text-xs text-gray-500 dark:text-gray-400 truncate"
+                      className="break-words text-xs text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere]"
                       title={getServerLabel(workspace.serverSettings, registeredSshServers)}
                     >
                       {getServerLabel(workspace.serverSettings, registeredSshServers)}
@@ -284,11 +284,11 @@ function WorkspaceHeader({
 }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-4 pb-2 border-b border-gray-200 dark:border-gray-700">
-      <div className="flex items-center gap-2 min-w-0">
+      <div className="flex min-w-0 items-start gap-2">
         <svg className="w-5 h-5 text-gray-500 dark:text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
         </svg>
-        <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 truncate">
+        <h2 className="break-words text-xl font-bold text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
           {workspace.name}
         </h2>
         <button
@@ -300,12 +300,12 @@ function WorkspaceHeader({
           <WorkspaceGearIcon />
         </button>
       </div>
-      <div className="flex items-center gap-2 min-w-0 sm:flex-1">
-        <span className="text-sm text-gray-500 dark:text-gray-400 truncate" title={workspace.directory}>
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:flex-1">
+        <span className="min-w-0 break-words text-sm text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere]" title={workspace.directory}>
           {workspace.directory}
         </span>
         <span
-          className="text-xs text-gray-400 dark:text-gray-500 truncate"
+          className="min-w-0 break-words text-xs text-gray-400 dark:text-gray-500 [overflow-wrap:anywhere]"
           title={getServerLabel(workspace.serverSettings, registeredSshServers)}
         >
           {getServerLabel(workspace.serverSettings, registeredSshServers)}

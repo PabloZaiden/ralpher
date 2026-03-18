@@ -41,7 +41,7 @@ export function SshSessionSection({
       {loading ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">Loading SSH sessions...</p>
       ) : error ? (
-        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <p className="break-words text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : sessions.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">
           No SSH sessions yet. Create one to start a saved remote terminal.
@@ -62,16 +62,16 @@ export function SshSessionSection({
                   aria-label={`Open SSH session ${session.config.name}`}
                 />
                 <div className="pointer-events-none relative z-10 p-4">
-                  <div className="flex items-start justify-between gap-3 pr-8">
-                    <div className="min-w-0">
-                      <h3 className="truncate font-medium text-gray-900 dark:text-gray-100">
+                  <div className="flex min-w-0 items-start gap-3 pr-8">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="break-words font-medium text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
                         {session.config.name}
                       </h3>
-                      <p className="mt-1 truncate text-xs font-mono text-gray-500 dark:text-gray-400">
+                      <p className="mt-1 break-words text-xs font-mono text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere]">
                         {session.config.directory}
                       </p>
                     </div>
-                    <Badge variant={getBadgeVariant(session.state.status)}>
+                    <Badge variant={getBadgeVariant(session.state.status)} className="shrink-0">
                       {session.state.status}
                     </Badge>
                   </div>
@@ -90,11 +90,11 @@ export function SshSessionSection({
                   <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
                     Last connected: {session.state.lastConnectedAt ?? "Never"}
                   </p>
-                  <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                  <p className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere]">
                     Mode: {getSshConnectionModeLabel(effectiveConnectionMode)}
                   </p>
                   {isPersistentSshSession(session) && (
-                    <p className="mt-1 truncate text-xs text-gray-500 dark:text-gray-400">
+                    <p className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere]">
                       Persistent ID: {session.config.remoteSessionName}
                     </p>
                   )}

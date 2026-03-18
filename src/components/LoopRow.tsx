@@ -54,10 +54,10 @@ export function LoopRow({
       onClick={onClick}
     >
       <div className="px-4 py-3">
-        {/* Desktop layout: single row with all info */}
-        <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+        {/* Responsive layout: stack on small screens and wrap across rows on wider layouts as needed */}
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:gap-4">
           {/* Status indicator dot + Name + Rename */}
-          <div className="flex items-center gap-2 sm:min-w-0 sm:flex-1">
+          <div className="flex min-w-0 flex-1 items-start gap-2">
             {/* Status dot */}
             {isActive && !isPlanning && (
               <span className="relative flex h-2.5 w-2.5 flex-shrink-0">
@@ -81,7 +81,7 @@ export function LoopRow({
             )}
 
             {/* Name - no truncation */}
-            <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100">
+            <h3 className="min-w-0 flex-1 break-words text-sm font-semibold text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere] sm:text-base">
               {config.name}
             </h3>
             {onRename && (
@@ -100,7 +100,7 @@ export function LoopRow({
           </div>
 
           {/* Badges */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex max-w-full flex-wrap items-center gap-1.5">
             {isChatMode && (
               <Badge variant="default">
                 Chat
@@ -123,7 +123,7 @@ export function LoopRow({
 
           {/* Meta info - iterations, last activity */}
           {!isDraft && (
-            <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">
+            <div className="flex max-w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
               <span title="Iterations">
                 <span className="font-medium text-gray-700 dark:text-gray-300">
                   {state.currentIteration}
