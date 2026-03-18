@@ -71,14 +71,12 @@ beforeEach(() => {
   api.install();
   ws.reset();
   ws.install();
-  window.localStorage.clear();
   window.location.hash = "";
 });
 
 afterEach(() => {
   api.uninstall();
   ws.uninstall();
-  window.localStorage.clear();
   window.location.hash = "";
 });
 

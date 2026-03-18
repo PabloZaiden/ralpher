@@ -59,6 +59,11 @@ type SidebarSectionId =
 
 type SidebarSectionCollapseState = Partial<Record<SidebarSectionId, boolean>>;
 
+interface SidebarSectionCollapseStateLoadResult {
+  state: SidebarSectionCollapseState;
+  invalidReason: string | null;
+}
+
 const SIDEBAR_SECTION_IDS: SidebarSectionId[] = [
   "workspaces",
   "loops",
@@ -150,15 +155,21 @@ function getSidebarSectionStorage(): Storage | null {
   }
 }
 
-function loadSidebarSectionCollapseState(): SidebarSectionCollapseState {
+function loadSidebarSectionCollapseState(): SidebarSectionCollapseStateLoadResult {
   const storage = getSidebarSectionStorage();
   if (!storage) {
-    return {};
+    return {
+      state: {},
+      invalidReason: null,
+    };
   }
 
   const raw = storage.getItem(SIDEBAR_SECTION_STORAGE_KEY);
   if (!raw) {
-    return {};
+    return {
+      state: {},
+      invalidReason: null,
+    };
   }
 
   try {
@@ -174,17 +185,15 @@ function loadSidebarSectionCollapseState(): SidebarSectionCollapseState {
       }
       return state;
     }, {});
-    const needsCleanup = Object.keys(parsedState).some((key) => !SIDEBAR_SECTION_IDS.includes(key as SidebarSectionId));
-
-    if (needsCleanup) {
-      saveSidebarSectionCollapseState(sanitizedState);
-    }
-
-    return sanitizedState;
+    return {
+      state: sanitizedState,
+      invalidReason: null,
+    };
   } catch (error) {
-    log.warn("Removing invalid sidebar section state", { error: String(error) });
-    storage.removeItem(SIDEBAR_SECTION_STORAGE_KEY);
-    return {};
+    return {
+      state: {},
+      invalidReason: String(error),
+    };
   }
 }
 
@@ -1555,7 +1564,8 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
   const shellHeaderOffsetClassName = sidebarCollapsed
     ? "ml-14 sm:ml-16 lg:ml-[4.5rem]"
     : "ml-14 sm:ml-16 lg:ml-0";
-  const [collapsedSections, setCollapsedSections] = useState<SidebarSectionCollapseState>(() => loadSidebarSectionCollapseState());
+  const initialSidebarSectionState = useMemo(() => loadSidebarSectionCollapseState(), []);
+  const [collapsedSections, setCollapsedSections] = useState<SidebarSectionCollapseState>(initialSidebarSectionState.state);
   const [collapsedWorkspaceGroups, setCollapsedWorkspaceGroups] = useState<Partial<Record<string, boolean>>>({});
   const [workspaceCreateMode, setWorkspaceCreateMode] = useState<"manual" | "automatic">("manual");
   const [workspaceName, setWorkspaceName] = useState("");
@@ -1718,6 +1728,14 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
       void refreshWorkspaces();
     }
   }, [provisioning.snapshot?.job.config.id, provisioning.snapshot?.job.state.status, refreshWorkspaces]);
+
+  useEffect(() => {
+    if (!initialSidebarSectionState.invalidReason) {
+      return;
+    }
+
+    log.warn("Removing invalid sidebar section state", { error: initialSidebarSectionState.invalidReason });
+  }, [initialSidebarSectionState.invalidReason]);
 
   useEffect(() => {
     saveSidebarSectionCollapseState(collapsedSections);

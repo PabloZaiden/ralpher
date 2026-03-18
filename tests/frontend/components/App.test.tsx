@@ -128,7 +128,6 @@ beforeEach(() => {
   api.install();
   ws.reset();
   ws.install();
-  window.localStorage.clear();
   window.location.hash = "";
   setupDefaultApi();
 });
@@ -136,7 +135,6 @@ beforeEach(() => {
 afterEach(() => {
   api.uninstall();
   ws.uninstall();
-  window.localStorage.clear();
   window.location.hash = "";
 });
 
