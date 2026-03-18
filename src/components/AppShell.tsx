@@ -598,9 +598,7 @@ function OverviewView({
                 const route: ShellRoute = loop.config.mode === "chat"
                   ? { view: "chat", chatId: loop.config.id }
                   : { view: "loop", loopId: loop.config.id };
-                const label = loop.state.status === "planning"
-                  ? getPlanningStatusLabel(loop.state.planMode?.isPlanReady ?? false)
-                  : getStatusLabel(loop.state.status, loop.state.syncState);
+                const label = getLoopStatusLabel(loop);
                 return (
                   <button
                     key={loop.config.id}
