@@ -117,7 +117,7 @@ describe("draft workflow scenario", () => {
     });
   });
 
-  test("inline draft editor shows Start Loop and Update Draft actions", async () => {
+  test("inline draft editor orders draft actions from cancel to start", async () => {
     setupBaseApi();
     api.get("/api/loops", () => [draftLoop()]);
     api.get("/api/workspaces", () => [WORKSPACE]);
@@ -128,8 +128,14 @@ describe("draft workflow scenario", () => {
       expect(getByRole("heading", { name: "Edit My Draft" })).toBeTruthy();
     });
 
-    expect(getByRole("button", { name: "Start Loop" })).toBeTruthy();
-    expect(getByRole("button", { name: "Update Draft" })).toBeTruthy();
+    const cancelButton = getByRole("button", { name: "Cancel" });
+    const deleteDraftButton = getByRole("button", { name: "Delete Draft" });
+    const updateDraftButton = getByRole("button", { name: "Update Draft" });
+    const startLoopButton = getByRole("button", { name: "Start Loop" });
+
+    expect(cancelButton.compareDocumentPosition(deleteDraftButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+    expect(deleteDraftButton.compareDocumentPosition(updateDraftButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+    expect(updateDraftButton.compareDocumentPosition(startLoopButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
   });
 
   test("starting a draft loop calls the draft/start API", async () => {

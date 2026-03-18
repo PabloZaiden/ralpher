@@ -1130,21 +1130,21 @@ function DraftLoopComposer({
         <>
           <Button
             type="button"
-            variant="danger"
-            size="sm"
-            onClick={() => setDeleteConfirmOpen(true)}
-            disabled={deleteSubmitting || actionState?.isSubmitting}
-          >
-            Delete Draft
-          </Button>
-          <Button
-            type="button"
             variant="ghost"
             size="sm"
             onClick={actionState?.onCancel ?? handleCancel}
             disabled={deleteSubmitting || actionState?.isSubmitting}
           >
             Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            size="sm"
+            onClick={() => setDeleteConfirmOpen(true)}
+            disabled={deleteSubmitting || actionState?.isSubmitting}
+          >
+            Delete Draft
           </Button>
           <Button
             type="button"
