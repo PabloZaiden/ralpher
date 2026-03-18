@@ -11,18 +11,36 @@
 
 ---
 
-![Ralpher Dashboard](assets/screenshots/desktop/logs.jpg)
+![Ralpher Dashboard](assets/screenshots/desktop/home.jpg)
 
-*Real-time log streaming as the AI works*
+*Dashboard overview with active loops, workspaces, and quick actions*
 
 <details>
 <summary><strong>More Screenshots</strong></summary>
 
 ### Desktop
 
+![Home View](assets/screenshots/desktop/home.jpg)
+
+*Dashboard overview with active loops, workspaces, and quick actions*
+
+---
+
+![Create Loop](assets/screenshots/desktop/create-loop.jpg)
+
+*Create a new loop with prompt, model, and execution settings*
+
+---
+
 ![Status View](assets/screenshots/desktop/status.jpg)
 
 *Loop status overview with iteration progress*
+
+---
+
+![Logs View](assets/screenshots/desktop/logs.jpg)
+
+*Real-time log streaming as the AI works*
 
 ---
 
@@ -38,70 +56,21 @@
 
 ---
 
+![Actions View (Pre-Loop)](assets/screenshots/desktop/actions-pre-loop.jpg)
+
+*Configure and review loop actions before starting execution*
+
+---
+
 ![Actions View](assets/screenshots/desktop/actions.jpg)
 
 *Loop actions: stop, accept, push, delete*
 
-### Mobile
-
-![Mobile Dashboard](assets/screenshots/mobile/dashboard.jpg)
-
-*Dashboard with all active loops*
-
 ---
 
-![New Loop](assets/screenshots/mobile/new-loop.jpg)
+![SSH Sessions](assets/screenshots/desktop/ssh.jpg)
 
-*Create a new loop with prompt and settings*
-
----
-
-![Mobile Status](assets/screenshots/mobile/status.jpg)
-
-*Loop status on mobile*
-
----
-
-![Mobile Logs](assets/screenshots/mobile/logs.jpg)
-
-*Live logs on mobile*
-
----
-
-![Mobile Diff](assets/screenshots/mobile/diff.jpg)
-
-*Code diff on mobile*
-
----
-
-![Mobile Plan](assets/screenshots/mobile/plan.jpg)
-
-*Planning documents on mobile*
-
----
-
-![Mobile Actions](assets/screenshots/mobile/actions.jpg)
-
-*Loop actions on mobile*
-
----
-
-![Mobile Review](assets/screenshots/mobile/review.jpg)
-
-*Review history and comments*
-
----
-
-![Mobile Feedback](assets/screenshots/mobile/feedback.jpg)
-
-*Address reviewer feedback*
-
----
-
-![Server Settings](assets/screenshots/mobile/server-settings.jpg)
-
-*Server configuration settings*
-
+*Open persistent SSH sessions alongside loop execution*
 </details>
 
 ---
