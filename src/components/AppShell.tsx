@@ -910,18 +910,18 @@ function SshServerView({
         <>
           <Button
             size="sm"
-            onClick={() => onNavigate({ view: "compose", kind: "ssh-session", scopeId: server.config.id })}
-            disabled={deleteSubmitting}
-          >
-            New Session
-          </Button>
-          <Button
-            size="sm"
             variant="danger"
             onClick={() => setDeleteConfirmOpen(true)}
             disabled={deleteSubmitting}
           >
             Delete Server
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => onNavigate({ view: "compose", kind: "ssh-session", scopeId: server.config.id })}
+            disabled={deleteSubmitting}
+          >
+            New Session
           </Button>
         </>
       )}
@@ -1930,6 +1930,15 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           headerOffsetClassName={shellHeaderOffsetClassName}
           actions={(
             <>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={composeActionState?.onCancel ?? handleComposeCancel}
+                disabled={composeActionState?.isSubmitting}
+              >
+                Cancel
+              </Button>
               {kind === "loop" && composeActionState && (!composeActionState.isEditing || composeActionState.isEditingDraft) && (
                 <Button
                   type="button"
@@ -1948,15 +1957,6 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                   )}
                 </Button>
               )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={composeActionState?.onCancel ?? handleComposeCancel}
-                disabled={composeActionState?.isSubmitting}
-              >
-                Cancel
-              </Button>
               {composeActionState && (
                 <Button
                   type="button"

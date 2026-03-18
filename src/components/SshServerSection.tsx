@@ -37,7 +37,6 @@ export function SshServerSection({
   error,
   hasStoredCredential,
   onOpenCreateServer,
-  onOpenEditServer,
   onDeleteServer,
   onCreateSession,
   onSelectSession,
@@ -87,14 +86,11 @@ export function SshServerSection({
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => onOpenEditServer(server)}>
-                      Edit
+                    <Button size="sm" variant="danger" onClick={() => void onDeleteServer(server.config.id)}>
+                      Delete Server
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => onCreateSession(server)}>
                       New Session
-                    </Button>
-                    <Button size="sm" variant="danger" onClick={() => void onDeleteServer(server.config.id)}>
-                      Delete
                     </Button>
                   </div>
                 </div>

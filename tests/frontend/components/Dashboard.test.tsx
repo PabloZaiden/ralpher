@@ -494,7 +494,7 @@ describe("standalone ssh servers section", () => {
     }));
 
     const onSelectSshSession: string[] = [];
-    const { getByRole, user } = renderWithUser(
+    const { getByRole, queryByRole, user } = renderWithUser(
       <Dashboard onSelectSshSession={(sessionId) => onSelectSshSession.push(sessionId)} />,
     );
 
@@ -508,7 +508,12 @@ describe("standalone ssh servers section", () => {
       expect(getByRole("button", { name: "New Session" })).toBeTruthy();
     });
 
-    await user.click(getByRole("button", { name: "New Session" }));
+    const deleteButton = getByRole("button", { name: "Delete Server" });
+    const newSessionButton = getByRole("button", { name: "New Session" });
+    expect(deleteButton.compareDocumentPosition(newSessionButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+    expect(queryByRole("button", { name: "Edit" })).toBeNull();
+
+    await user.click(newSessionButton);
 
     await waitFor(() => {
       expect(onSelectSshSession).toEqual(["server-session-1"]);
