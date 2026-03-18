@@ -41,65 +41,23 @@ export interface ModelValidationResult {
 }
 
 /**
- * Parse supported model IDs from `copilot --help` output.
+ * Normalize ACP-discovered Copilot models to the API contract used by the UI.
  */
-function parseCopilotModelChoices(helpText: string): string[] {
-  const modelFlagIndex = helpText.indexOf("--model <model>");
-  if (modelFlagIndex < 0) {
-    return [];
-  }
-
-  const afterModelFlag = helpText.slice(modelFlagIndex + 1);
-  const nextOptionOffset = afterModelFlag.search(/\n\s{2,}--[a-z0-9-]+/i);
-  const endIndex = nextOptionOffset >= 0
-    ? modelFlagIndex + 1 + nextOptionOffset
-    : helpText.length;
-  const modelSection = helpText.slice(modelFlagIndex, endIndex);
-
-  const modelIds = Array.from(modelSection.matchAll(/"([^"]+)"/g))
-    .map((match) => match[1]?.trim() ?? "")
-    .filter((modelId) => modelId.length > 0);
-
-  return Array.from(new Set(modelIds));
-}
-
-/**
- * Build ModelInfo rows for Copilot CLI-discovered models.
- */
-function mapCopilotModelInfo(modelIds: string[]): ModelInfo[] {
-  return modelIds.map((modelId) => ({
-    providerID: "copilot",
-    providerName: "Copilot",
-    modelID: modelId,
-    modelName: modelId,
-    connected: true,
-  }));
-}
-
-/**
- * Discover models through the execution channel using the Copilot CLI.
- */
-async function getCopilotModelsViaExecution(
-  workspaceId: string,
-  directory: string,
-): Promise<ModelInfo[]> {
-  const executor = await backendManager.getCommandExecutorAsync(workspaceId, directory);
-  const result = await executor.exec("copilot", ["--help"], { cwd: directory });
-
-  if (!result.success) {
-    throw new Error(
-      `Failed to query Copilot models via copilot --help: ${result.stderr || result.stdout || `exit code ${result.exitCode}`}`,
-    );
-  }
-
-  const modelIds = parseCopilotModelChoices(`${result.stdout}\n${result.stderr}`);
-  if (modelIds.length === 0) {
-    throw new Error(
-      "Could not parse model choices from copilot --help output",
-    );
-  }
-
-  return mapCopilotModelInfo(modelIds);
+function normalizeCopilotModelInfo(models: ModelInfo[]): ModelInfo[] {
+  const seen = new Set<string>();
+  return models
+    .map((model) => ({
+      ...model,
+      providerID: "copilot",
+      providerName: "Copilot",
+    }))
+    .filter((model) => {
+      if (seen.has(model.modelID)) {
+        return false;
+      }
+      seen.add(model.modelID);
+      return true;
+    });
 }
 
 /**
@@ -150,10 +108,11 @@ async function getModelsForWorkspace(
   }
 
   const settings = workspace.serverSettings;
+  const models = await getAgentBackendModels(workspaceId, directory, settings);
   if (settings.agent.provider === "copilot") {
-    return await getCopilotModelsViaExecution(workspaceId, directory);
+    return normalizeCopilotModelInfo(models);
   }
-  return await getAgentBackendModels(workspaceId, directory, settings);
+  return models;
 }
 
 /**
@@ -162,9 +121,7 @@ async function getModelsForWorkspace(
  * This function fetches the available models for a workspace and checks
  * if the specified model exists and its provider is connected.
  * 
- * Discovery is provider-aware:
- * - `copilot`: model list comes from Copilot CLI via execution channel
- * - other providers: model list comes from the configured agent backend
+ * Discovery is provider-aware through the configured ACP backend.
  * 
  * @param workspaceId - The workspace ID to check models for
  * @param directory - The working directory path

@@ -232,11 +232,8 @@ class BackendManager {
   /**
    * Static capabilities exposed to the status endpoint.
    */
-  private getAgentCapabilities(settings: ServerSettings): string[] {
-    if (settings.agent.provider === "opencode") {
-      return ["createSession", "sendPromptAsync", "abortSession", "queueActivePrompt", "subscribeToEvents", "models"];
-    }
-    return ["createSession", "sendPromptAsync", "abortSession", "queueActivePrompt", "subscribeToEvents"];
+  private getAgentCapabilities(_settings: ServerSettings): string[] {
+    return ["createSession", "sendPromptAsync", "abortSession", "queueActivePrompt", "subscribeToEvents", "models"];
   }
 
   /**

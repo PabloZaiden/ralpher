@@ -8,22 +8,14 @@ import { tmpdir } from "os";
 import { join } from "path";
 import type { CommandOptions, CommandResult } from "../../src/core/command-executor";
 import { TestCommandExecutor } from "../mocks/mock-executor";
+import { MockAcpBackend } from "../mocks/mock-backend";
 
 let testDataDir: string;
 
-class CopilotHelpExecutor extends TestCommandExecutor {
-  constructor(private readonly helpOutput: string) {
-    super();
-  }
-
+class FailOnCopilotExecutionExecutor extends TestCommandExecutor {
   override async exec(command: string, args: string[], options?: CommandOptions): Promise<CommandResult> {
-    if (command === "copilot" && args.length === 1 && args[0] === "--help") {
-      return {
-        success: true,
-        stdout: this.helpOutput,
-        stderr: "",
-        exitCode: 0,
-      };
+    if (command === "copilot") {
+      throw new Error(`Unexpected direct copilot execution: ${command} ${args.join(" ")}`);
     }
     return await super.exec(command, args, options);
   }
@@ -34,27 +26,10 @@ describe("GET /api/models provider routing", () => {
     testDataDir = await mkdtemp(join(tmpdir(), "ralpher-model-routing-test-"));
     process.env["RALPHER_DATA_DIR"] = testDataDir;
 
-    const { ensureDataDirectories } = await import("../../src/persistence/database");
-    await ensureDataDirectories();
-
     const { backendManager } = await import("../../src/core/backend-manager");
-    const { MockAcpBackend } = await import("../mocks/mock-backend");
-
-    // Register a backend with a distinct model to ensure Copilot routing does not use it.
-    backendManager.setBackendForTesting(
-      new MockAcpBackend({
-        models: [
-          {
-            providerID: "opencode-provider",
-            providerName: "OpenCode Provider",
-            modelID: "opencode-test-model",
-            modelName: "OpenCode Test Model",
-            connected: true,
-          },
-        ],
-      }),
-    );
-    backendManager.setExecutorFactoryForTesting(() => new TestCommandExecutor());
+    const { ensureDataDirectories } = await import("../../src/persistence/database");
+    backendManager.resetForTesting();
+    await ensureDataDirectories();
   });
 
   afterEach(async () => {
@@ -68,16 +43,36 @@ describe("GET /api/models provider routing", () => {
     await rm(testDataDir, { recursive: true, force: true });
   });
 
-  test("uses Copilot CLI model list for copilot workspaces", async () => {
+  test("uses ACP backend model list for copilot workspaces", async () => {
     const workDir = await mkdtemp(join(tmpdir(), "ralpher-model-routing-workdir-"));
-    const copilotHelpText = `Usage: copilot [options] [command]
-  --model <model>                     Set the AI model to use (choices:
-                                      "gpt-5.3-codex", "claude-sonnet-4.6",
-                                      "gpt-4.1")
-  --no-alt-screen                     Disable the terminal alternate screen`;
     try {
       const { backendManager } = await import("../../src/core/backend-manager");
-      backendManager.setExecutorFactoryForTesting(() => new CopilotHelpExecutor(copilotHelpText));
+      backendManager.setBackendForTesting(new MockAcpBackend({
+        models: [
+          {
+            providerID: "openai",
+            providerName: "OpenAI",
+            modelID: "gpt-5.3-codex",
+            modelName: "GPT-5.3-Codex",
+            connected: true,
+          },
+          {
+            providerID: "anthropic",
+            providerName: "Anthropic",
+            modelID: "claude-sonnet-4.6",
+            modelName: "Claude Sonnet 4.6",
+            connected: true,
+          },
+          {
+            providerID: "openai",
+            providerName: "OpenAI",
+            modelID: "gpt-4.1",
+            modelName: "GPT-4.1",
+            connected: true,
+          },
+        ],
+      }));
+      backendManager.setExecutorFactoryForTesting(() => new FailOnCopilotExecutionExecutor());
 
       const { createWorkspace } = await import("../../src/persistence/workspaces");
       await createWorkspace({
@@ -102,12 +97,16 @@ describe("GET /api/models provider routing", () => {
       );
 
       expect(response.status).toBe(200);
-      const models = await response.json() as Array<{ providerID: string; modelID: string }>;
+      const models = await response.json() as Array<{
+        providerID: string;
+        providerName: string;
+        modelID: string;
+      }>;
       const modelIds = models.map((model) => model.modelID).sort();
 
       expect(modelIds).toEqual(["claude-sonnet-4.6", "gpt-4.1", "gpt-5.3-codex"]);
       expect(models.every((model) => model.providerID === "copilot")).toBe(true);
-      expect(models.find((model) => model.modelID === "opencode-test-model")).toBeUndefined();
+      expect(models.every((model) => model.providerName === "Copilot")).toBe(true);
     } finally {
       await rm(workDir, { recursive: true, force: true });
     }
