@@ -3,7 +3,12 @@
  */
 
 import { test, expect, describe } from "bun:test";
-import { Badge, getStatusBadgeVariant } from "@/components/common/Badge";
+import {
+  Badge,
+  getLoopStatusBadgeVariant,
+  getSshSessionStatusBadgeVariant,
+  getStatusBadgeVariant,
+} from "@/components/common/Badge";
 import { renderWithUser } from "../../helpers/render";
 
 describe("Badge", () => {
@@ -194,5 +199,41 @@ describe("getStatusBadgeVariant", () => {
   test("maps unknown status to default", () => {
     expect(getStatusBadgeVariant("unknown")).toBe("default");
     expect(getStatusBadgeVariant("")).toBe("default");
+  });
+});
+
+describe("getLoopStatusBadgeVariant", () => {
+  test("maps plan-ready planning loops to plan_ready", () => {
+    expect(getLoopStatusBadgeVariant("planning", true)).toBe("plan_ready");
+  });
+
+  test("maps non-ready planning loops to planning", () => {
+    expect(getLoopStatusBadgeVariant("planning", false)).toBe("planning");
+  });
+
+  test("falls back to the base status mapping for non-planning states", () => {
+    expect(getLoopStatusBadgeVariant("running", true)).toBe("running");
+  });
+});
+
+describe("getSshSessionStatusBadgeVariant", () => {
+  test("maps connected to success", () => {
+    expect(getSshSessionStatusBadgeVariant("connected")).toBe("success");
+  });
+
+  test("maps connecting to info", () => {
+    expect(getSshSessionStatusBadgeVariant("connecting")).toBe("info");
+  });
+
+  test("maps failed to error", () => {
+    expect(getSshSessionStatusBadgeVariant("failed")).toBe("error");
+  });
+
+  test("maps disconnected to warning", () => {
+    expect(getSshSessionStatusBadgeVariant("disconnected")).toBe("warning");
+  });
+
+  test("maps ready to default", () => {
+    expect(getSshSessionStatusBadgeVariant("ready")).toBe("default");
   });
 });
