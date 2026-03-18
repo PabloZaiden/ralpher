@@ -252,6 +252,9 @@ export function LoopDetails({
         }
         if (response.ok) {
           const data = await response.json() as ModelInfo[];
+          if (controller.signal.aborted) {
+            return;
+          }
           setModels(data);
         }
       } catch (error) {

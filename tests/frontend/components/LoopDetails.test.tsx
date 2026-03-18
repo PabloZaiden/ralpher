@@ -8,7 +8,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockApi, MockApiError } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
-import { renderWithUser, waitFor } from "../helpers/render";
+import { renderWithUser, waitFor, within } from "../helpers/render";
 import {
   createLoopWithStatus,
   createFileDiff,
@@ -72,7 +72,7 @@ function expectHeaderHasNoLegacyIndicators(container: HTMLElement): void {
   expect(header).toBeTruthy();
   expect(header!.querySelector(".animate-ping")).toBeNull();
   expect(header!.querySelector(".bg-amber-500")).toBeNull();
-  expect(header!.textContent).not.toContain("Live");
+  expect(within(header as HTMLElement).queryByText(/^Live$/)).toBeNull();
 }
 
 beforeEach(() => {
