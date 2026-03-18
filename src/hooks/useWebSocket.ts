@@ -55,6 +55,7 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptRef = useRef(0);
   const isManualDisconnectRef = useRef(false);
+  const activeConnectionIdRef = useRef(0);
 
   // Use refs for callbacks to avoid re-triggering effects
   const onEventRef = useRef(onEvent);
@@ -80,36 +81,43 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
     onStatusChangeRef.current?.(newStatus);
   }, []);
 
+  const clearReconnectTimeout = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+  }, []);
+
+  const closeCurrentSocket = useCallback((advanceConnectionId: boolean) => {
+    if (advanceConnectionId) {
+      activeConnectionIdRef.current += 1;
+    }
+    const currentSocket = wsRef.current;
+    wsRef.current = null;
+    if (currentSocket) {
+      currentSocket.close();
+    }
+  }, []);
+
   // Disconnect from WebSocket
   const disconnect = useCallback(() => {
     isManualDisconnectRef.current = true;
-
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-      updateStatus("closed");
-    }
-  }, [updateStatus]);
+    clearReconnectTimeout();
+    closeCurrentSocket(true);
+    updateStatus("closed");
+  }, [clearReconnectTimeout, closeCurrentSocket, updateStatus]);
 
   // Connect to WebSocket
   const connect = useCallback(() => {
+    const connectionId = activeConnectionIdRef.current + 1;
+    activeConnectionIdRef.current = connectionId;
     isManualDisconnectRef.current = false;
 
     // Clear any pending reconnect
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
+    clearReconnectTimeout();
 
     // Close existing connection
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
+    closeCurrentSocket(false);
 
     updateStatus("connecting");
 
@@ -119,11 +127,17 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (activeConnectionIdRef.current !== connectionId || wsRef.current !== ws) {
+        return;
+      }
       reconnectAttemptRef.current = 0; // Reset reconnect attempts on successful connection
       updateStatus("open");
     };
 
     ws.onmessage = (event) => {
+      if (activeConnectionIdRef.current !== connectionId || wsRef.current !== ws) {
+        return;
+      }
       try {
         const data = JSON.parse(event.data) as T & { type?: string };
 
@@ -146,10 +160,16 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
     };
 
     ws.onerror = () => {
+      if (activeConnectionIdRef.current !== connectionId || wsRef.current !== ws) {
+        return;
+      }
       // Error will be followed by close, let close handler manage status
     };
 
     ws.onclose = () => {
+      if (activeConnectionIdRef.current !== connectionId || wsRef.current !== ws) {
+        return;
+      }
       wsRef.current = null;
 
       // Don't reconnect if manually disconnected
@@ -165,17 +185,20 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
       reconnectAttemptRef.current++;
 
       reconnectTimeoutRef.current = setTimeout(() => {
+        if (activeConnectionIdRef.current !== connectionId) {
+          return;
+        }
         connect();
       }, backoffMs);
     };
-  }, [url, updateStatus]);
+  }, [clearReconnectTimeout, closeCurrentSocket, url, updateStatus]);
 
   // Clear events
   const clearEvents = useCallback(() => {
     setEvents([]);
   }, []);
 
-  // Auto-connect on mount, reconnect when URL changes
+  // Auto-connect when enabled and keep the stable callback deps aligned with the current socket lifecycle.
   useEffect(() => {
     if (autoConnect) {
       connect();
@@ -184,16 +207,10 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
     // Cleanup on unmount or URL change
     return () => {
       isManualDisconnectRef.current = true;
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = null;
-      }
-      if (wsRef.current) {
-        wsRef.current.close();
-        wsRef.current = null;
-      }
+      clearReconnectTimeout();
+      closeCurrentSocket(true);
     };
-  }, [url, autoConnect]); // Only depend on url and autoConnect
+  }, [autoConnect, clearReconnectTimeout, closeCurrentSocket, connect, url]);
 
   return {
     events,

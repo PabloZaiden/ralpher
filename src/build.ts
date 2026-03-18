@@ -7,6 +7,7 @@ const workDir = import.meta.dir + '/..';
 // create a temp directory for output in the os temp directory
 const outDir = await Bun.$`mktemp -d`.text().then(s => s.trim());
 const finalOutDir = `${workDir}/dist`;
+const originalCwd = process.cwd();
 
 // Parse --target argument (e.g., --target=linux-x64)
 const targetArg = process.argv.find(arg => arg.startsWith('--target='));
@@ -27,18 +28,27 @@ try {
     log.info(`Target: ${target}`);
   }
 
-  const result = await Bun.build({
-    entrypoints: [ `${workDir}/src/index.ts`],
-    compile: target 
-      ? { outfile, target } 
-      : { outfile },
-    plugins: [twPlugin],
-    minify: true,
-    sourcemap: true,
-    define: {
-      'process.env.NODE_ENV': JSON.stringify('production'),
-    },
-  });
+  // Bun's compile step currently resolves the rename target relative to the
+  // current working directory on this filesystem, so build from the temp output
+  // directory to keep the final rename in the correct location.
+  process.chdir(outDir);
+  let result: Awaited<ReturnType<typeof Bun.build>>;
+  try {
+    result = await Bun.build({
+      entrypoints: [ `${workDir}/src/index.ts`],
+      compile: target 
+        ? { outfile, target } 
+        : { outfile },
+      plugins: [twPlugin],
+      minify: true,
+      sourcemap: true,
+      define: {
+        'process.env.NODE_ENV': JSON.stringify('production'),
+      },
+    });
+  } finally {
+    process.chdir(originalCwd);
+  }
 
   if (!result.success) {
     log.error('Build failed:');
@@ -64,6 +74,7 @@ try {
     log.info('Build completed:', outfile);
   }
 } finally {
+  process.chdir(originalCwd);
   log.info('Cleaning up temporary files...');
   await Bun.$`rm -rf ${outDir}`.quiet();
 }
