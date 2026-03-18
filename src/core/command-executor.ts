@@ -22,6 +22,8 @@ export interface CommandOptions {
   cwd?: string;
   /** Timeout in milliseconds */
   timeout?: number;
+  /** Whether failed commands should be logged by the executor */
+  logFailures?: boolean;
   /** Environment variable overrides for the command */
   env?: Record<string, string>;
   /** Abort signal for cancelling the running process */

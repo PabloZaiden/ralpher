@@ -1,5 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 
+import { log } from "../../src/core/logger";
 import { buildSshRemoteShellCommand, CommandExecutorImpl } from "../../src/core/remote-command-executor";
 
 describe("CommandExecutorImpl SSH spawn cwd", () => {
@@ -253,6 +254,57 @@ describe("CommandExecutorImpl SSH spawn cwd", () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+    }
+  });
+
+  test("logs failed commands by default", async () => {
+    const originalSpawn = Bun.spawn;
+    const errorSpy = spyOn(log, "error").mockImplementation(() => undefined);
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = (() => {
+      throw new Error("mock spawn failure");
+    }) as unknown as typeof Bun.spawn;
+
+    try {
+      const executor = new CommandExecutorImpl({
+        directory: "/tmp",
+      });
+
+      const result = await executor.exec("git", ["status"]);
+
+      expect(result.success).toBe(false);
+      expect(errorSpy).toHaveBeenCalledTimes(3);
+      expect(errorSpy).toHaveBeenCalledWith("[CommandExecutor] Command failed: git status");
+      expect(errorSpy).toHaveBeenCalledWith("[CommandExecutor]   exitCode: 1");
+      expect(errorSpy).toHaveBeenCalledWith("[CommandExecutor]   stderr: Error: mock spawn failure");
+    } finally {
+      errorSpy.mockRestore();
+      (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
+    }
+  });
+
+  test("suppresses failed command logs when logFailures is false", async () => {
+    const originalSpawn = Bun.spawn;
+    const errorSpy = spyOn(log, "error").mockImplementation(() => undefined);
+
+    (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = (() => {
+      throw new Error("mock spawn failure");
+    }) as unknown as typeof Bun.spawn;
+
+    try {
+      const executor = new CommandExecutorImpl({
+        directory: "/tmp",
+      });
+
+      const result = await executor.exec("git", ["status"], {
+        logFailures: false,
+      });
+
+      expect(result.success).toBe(false);
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
       (Bun as unknown as { spawn: typeof Bun.spawn }).spawn = originalSpawn;
     }
   });
