@@ -8,6 +8,11 @@ import type { Loop, LoopConfig, LoopStatus } from "../types";
 import { createLogger } from "../lib/logger";
 
 const log = createLogger("LoopStatus");
+const MARK_MERGED_UI_ELIGIBLE_STATUSES: ReadonlySet<LoopStatus> = new Set([
+  "completed",
+  "max_iterations",
+  "pushed",
+]);
 
 /**
  * Get a human-readable label for a loop status.
@@ -78,10 +83,11 @@ export function isFinalState(status: LoopStatus): boolean {
 
 /**
  * Check if the UI should offer the "mark as merged" action.
- * This is only useful for git-backed loops that are not already deleted or merged.
+ * This mirrors the subset of backend-accepted statuses where the action is still useful.
+ * Already merged loops remain backend-valid for idempotency, but the UI hides the action.
  */
 export function canMarkMerged(status: LoopStatus, hasGit: boolean): boolean {
-  const result = hasGit && status !== "deleted" && status !== "merged";
+  const result = hasGit && MARK_MERGED_UI_ELIGIBLE_STATUSES.has(status);
   log.trace("canMarkMerged check", { status, hasGit, result });
   return result;
 }
