@@ -11,6 +11,7 @@ import { createMockWebSocket } from "../helpers/mock-websocket";
 import { renderWithUser, waitFor } from "../helpers/render";
 import {
   createLoopWithStatus,
+  createSshSession,
   createWorkspace,
   createModelInfo,
 } from "../helpers/factories";
@@ -372,5 +373,59 @@ describe("workspace management scenario", () => {
     expect(getByText("Loops and chats")).toBeTruthy();
     expect(getByText("SSH sessions")).toBeTruthy();
     expect(getAllByText("In Workspace").length).toBeGreaterThan(0);
+  });
+
+  test("workspace detail rows keep long loop and session names shrinkable on mobile", async () => {
+    setupBaseApi();
+
+    const longLoopName = "Loop name that is intentionally extremely long to verify mobile truncation stays inside the workspace detail card";
+    const longSessionName = "SSH session name that is intentionally extremely long to verify mobile truncation stays inside the workspace detail card";
+    const loop = createLoopWithStatus("running", {
+      config: { id: "ws-loop-long", name: longLoopName, directory: "/workspaces/existing", workspaceId: "ws-1" },
+    });
+    const session = createSshSession({
+      config: {
+        id: "ws-session-long",
+        name: longSessionName,
+        workspaceId: "ws-1",
+      },
+      state: { status: "connected" },
+    });
+
+    api.get("/api/loops", () => [loop]);
+    api.get("/api/ssh-sessions", () => [session]);
+    api.get("/api/workspaces", () => [WORKSPACE]);
+    api.get("/api/workspaces/:id", () => WORKSPACE);
+
+    const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getAllByText("Existing Project").length).toBeGreaterThan(0);
+    });
+
+    await user.click(getAllByText("Existing Project")[0]!);
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Existing Project" })).toBeTruthy();
+    });
+
+    const loopsCard = getByText("Loops and chats").parentElement;
+    const sshSessionsCard = getByText("SSH sessions").parentElement;
+    expect(loopsCard?.className).toContain("min-w-0");
+    expect(sshSessionsCard?.className).toContain("min-w-0");
+
+    const loopRow = Array.from(loopsCard?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes(longLoopName)
+    );
+    const sessionRow = Array.from(sshSessionsCard?.querySelectorAll("button") ?? []).find((button) =>
+      button.textContent?.includes(longSessionName)
+    );
+
+    expect(loopRow?.className).toContain("min-w-0");
+    expect(loopRow?.querySelector("span.flex-1")?.className).toContain("min-w-0");
+    expect(loopRow?.querySelector("span.shrink-0")).toBeTruthy();
+
+    expect(sessionRow?.className).toContain("min-w-0");
+    expect(sessionRow?.querySelector("span.flex-1")?.className).toContain("min-w-0");
+    expect(sessionRow?.querySelector("span.shrink-0")).toBeTruthy();
   });
 });

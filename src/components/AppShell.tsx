@@ -780,8 +780,8 @@ function WorkspaceView({
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-2">
+        <div className="min-w-0 space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
           <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">Loops and chats</h2>
           <div className="space-y-2">
             {relatedLoops.length === 0 ? (
@@ -796,9 +796,9 @@ function WorkspaceView({
                     key={loop.config.id}
                     type="button"
                     onClick={() => onNavigate(route)}
-                    className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
+                    className="flex min-w-0 w-full items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
                   >
-                    <span className="min-w-0">
+                    <span className="flex min-w-0 flex-1 flex-col">
                       <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
                         {loop.config.name}
                       </span>
@@ -806,7 +806,7 @@ function WorkspaceView({
                         {loop.config.mode === "chat" ? "Chat" : "Loop"}
                       </span>
                     </span>
-                    <Badge variant={getStatusBadgeVariant(loop.state.status)}>
+                    <Badge className="ml-auto shrink-0" variant={getStatusBadgeVariant(loop.state.status)}>
                       {getLoopStatusLabel(loop)}
                     </Badge>
                   </button>
@@ -816,7 +816,7 @@ function WorkspaceView({
           </div>
         </div>
 
-        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
+        <div className="min-w-0 space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
           <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">SSH sessions</h2>
           <div className="space-y-2">
             {relatedSessions.length === 0 ? (
@@ -831,9 +831,9 @@ function WorkspaceView({
                   key={session.config.id}
                   type="button"
                   onClick={() => onNavigate({ view: "ssh", sshSessionId: session.config.id })}
-                  className="flex w-full items-center justify-between rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
+                  className="flex min-w-0 w-full items-center gap-3 rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition hover:border-gray-300 hover:bg-gray-100 dark:border-gray-800 dark:bg-neutral-900 dark:hover:border-gray-700 dark:hover:bg-neutral-800"
                 >
-                  <span className="min-w-0">
+                  <span className="flex min-w-0 flex-1 flex-col">
                     <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
                       {session.config.name}
                     </span>
@@ -842,6 +842,7 @@ function WorkspaceView({
                     </span>
                   </span>
                   <Badge
+                    className="ml-auto shrink-0"
                     variant={
                       session.state.status === "connected"
                         ? "success"
