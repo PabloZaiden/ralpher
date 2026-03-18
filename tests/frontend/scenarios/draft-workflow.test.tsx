@@ -235,7 +235,7 @@ describe("draft workflow scenario", () => {
     const { getByRole, getByLabelText, user } = renderWithUser(<App />, { route: "#/new/loop" });
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Start a new loop" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Start new LOOP" })).toBeTruthy();
     });
 
     await waitFor(() => {

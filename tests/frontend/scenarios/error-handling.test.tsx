@@ -178,7 +178,7 @@ describe("error handling scenario", () => {
     expect(loopsNewButton).toBeTruthy();
     await user.click(loopsNewButton!);
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Start a new loop" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Start new LOOP" })).toBeTruthy();
     });
 
     // Select workspace

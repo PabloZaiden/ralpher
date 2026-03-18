@@ -93,7 +93,7 @@ describe("create loop scenario", () => {
     const { getByRole } = renderWithUser(<App />, { route: "#/new/loop" });
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Start a new loop" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Start new LOOP" })).toBeTruthy();
     });
 
     expect(document.querySelector("select#workspace")).toBeTruthy();
@@ -215,7 +215,7 @@ describe("create loop scenario", () => {
     const { getByRole, user } = renderWithUser(<App />, { route: "#/new/loop" });
 
     await waitFor(() => {
-      expect(getByRole("heading", { name: "Start a new loop" })).toBeTruthy();
+      expect(getByRole("heading", { name: "Start new LOOP" })).toBeTruthy();
     });
 
     const cancelButtons = document.querySelectorAll("button");

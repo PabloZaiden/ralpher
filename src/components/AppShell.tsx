@@ -1950,7 +1950,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
           eyebrow={kind === "chat" ? "Chat" : "Loop"}
           title={kind === "chat"
             ? composeWorkspace ? `Start a new chat in ${composeWorkspace.name}` : "Start a new chat"
-            : composeWorkspace ? `Start a new loop in ${composeWorkspace.name}` : "Start a new loop"}
+            : composeWorkspace ? `Start a new loop in ${composeWorkspace.name}` : "Start new LOOP"}
           description={composeWorkspace?.directory}
           descriptionClassName="hidden sm:inline font-mono"
           variant="compact"
