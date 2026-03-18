@@ -595,9 +595,9 @@ function OverviewView({
               <EmptySection message="Recent activity will appear here as you start work." />
             ) : (
               recentLoops.map((loop) => {
-                const route = loop.config.mode === "chat"
-                  ? { view: "chat", chatId: loop.config.id } as ShellRoute
-                  : { view: "loop", loopId: loop.config.id } as ShellRoute;
+                const route: ShellRoute = loop.config.mode === "chat"
+                  ? { view: "chat", chatId: loop.config.id }
+                  : { view: "loop", loopId: loop.config.id };
                 const label = loop.state.status === "planning"
                   ? getPlanningStatusLabel(loop.state.planMode?.isPlanReady ?? false)
                   : getStatusLabel(loop.state.status, loop.state.syncState);
@@ -779,9 +779,9 @@ function WorkspaceView({
               <EmptySection message="No loops or chats in this workspace yet." />
             ) : (
               relatedLoops.map((loop) => {
-                const route = loop.config.mode === "chat"
-                  ? { view: "chat", chatId: loop.config.id } as ShellRoute
-                  : { view: "loop", loopId: loop.config.id } as ShellRoute;
+                const route: ShellRoute = loop.config.mode === "chat"
+                  ? { view: "chat", chatId: loop.config.id }
+                  : { view: "loop", loopId: loop.config.id };
                 return (
                   <button
                     key={loop.config.id}
@@ -1572,7 +1572,6 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     return new Map(servers.map((server) => [server.config.id, server]));
   }, [servers]);
   const loopItems = useMemo(() => loops.filter((loop) => loop.config.mode !== "chat"), [loops]);
-  const activeLoopItems = useMemo(() => loopItems.filter((loop) => loop.state.status !== "draft"), [loopItems]);
   const chatItems = useMemo(() => loops.filter((loop) => loop.config.mode === "chat"), [loops]);
   const standaloneSessions = useMemo(() => Object.values(sessionsByServerId).flat(), [sessionsByServerId]);
   const loopGroups = useMemo(() => groupSidebarItemsByWorkspace(loopItems, workspaces), [loopItems, workspaces]);
