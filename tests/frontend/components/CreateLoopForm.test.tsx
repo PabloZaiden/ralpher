@@ -157,7 +157,7 @@ describe("CreateLoopForm", () => {
         <CreateLoopForm {...defaultProps()} />
       );
       expect(getByRole("button", { name: "Cancel" })).toBeInTheDocument();
-      expect(getByRole("button", { name: "Create Plan" })).toBeInTheDocument();
+      expect(getByRole("button", { name: "Create" })).toBeInTheDocument();
     });
 
     test("does not render action buttons when renderActions is provided", () => {
@@ -165,7 +165,7 @@ describe("CreateLoopForm", () => {
         <CreateLoopForm {...defaultProps({ renderActions: mock(() => {}) })} />
       );
       expect(queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
-      expect(queryByRole("button", { name: "Create Plan" })).not.toBeInTheDocument();
+      expect(queryByRole("button", { name: "Create" })).not.toBeInTheDocument();
     });
   });
 
@@ -395,7 +395,7 @@ describe("CreateLoopForm", () => {
       expect((getByRole("checkbox", { name: /Auto-reply plan questions/i }) as HTMLInputElement).checked).toBe(true);
     });
 
-    test("toggling plan mode changes submit button text", async () => {
+    test("toggling plan mode keeps the generic Create label in create mode", async () => {
       const { getByRole, user } = renderWithUser(
         <CreateLoopForm
           {...defaultProps({
@@ -405,12 +405,11 @@ describe("CreateLoopForm", () => {
         />
       );
 
-      // Default is "Create Plan"
-      expect(getByRole("button", { name: "Create Plan" })).toBeInTheDocument();
+      expect(getByRole("button", { name: "Create" })).toBeInTheDocument();
 
       // Toggle off
       await user.click(getByRole("checkbox", { name: /Plan Mode/ }));
-      expect(getByRole("button", { name: "Create Loop" })).toBeInTheDocument();
+      expect(getByRole("button", { name: "Create" })).toBeInTheDocument();
     });
 
     test("submits planModeAutoReply=false when the checkbox is unchecked", async () => {
@@ -439,7 +438,7 @@ describe("CreateLoopForm", () => {
       });
 
       await user.click(getByRole("checkbox", { name: /Auto-reply plan questions/i }));
-      await user.click(getByRole("button", { name: "Create Plan" }));
+      await user.click(getByRole("button", { name: "Create" }));
 
       await waitFor(() => {
         expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -572,7 +571,7 @@ describe("CreateLoopForm", () => {
           })}
         />
       );
-      expect(getByRole("button", { name: "Create Plan" })).toBeDisabled();
+      expect(getByRole("button", { name: "Create" })).toBeDisabled();
     });
 
     test("submit button is disabled when model is not selected", async () => {
@@ -604,7 +603,7 @@ describe("CreateLoopForm", () => {
       modelSelect.dispatchEvent(new Event("change", { bubbles: true }));
 
       await waitFor(() => {
-        expect(getByRole("button", { name: "Create Plan" })).toBeDisabled();
+        expect(getByRole("button", { name: "Create" })).toBeDisabled();
       });
     });
 
@@ -640,7 +639,7 @@ describe("CreateLoopForm", () => {
       });
 
       // Submit
-      await user.click(getByRole("button", { name: "Create Plan" }));
+      await user.click(getByRole("button", { name: "Create" }));
 
       await waitFor(() => {
         expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -690,7 +689,7 @@ describe("CreateLoopForm", () => {
       });
 
       // Submit
-      await user.click(getByRole("button", { name: "Create Plan" }));
+      await user.click(getByRole("button", { name: "Create" }));
 
       await waitFor(() => {
         expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -759,7 +758,7 @@ describe("CreateLoopForm", () => {
 
       const cancelButton = getByRole("button", { name: "Cancel" });
       const saveDraftButton = getByRole("button", { name: "Save as Draft" });
-      const createButton = getByRole("button", { name: /Create (Plan|Loop)/ });
+      const createButton = getByRole("button", { name: "Create" });
 
       expect(cancelButton.compareDocumentPosition(saveDraftButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
       expect(saveDraftButton.compareDocumentPosition(createButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
@@ -831,7 +830,7 @@ describe("CreateLoopForm", () => {
       });
 
       await user.click(getByRole("checkbox", { name: /Use Worktree/ }));
-      await user.click(getByRole("button", { name: "Create Plan" }));
+      await user.click(getByRole("button", { name: "Create" }));
 
       await waitFor(() => {
         expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -917,7 +916,7 @@ describe("CreateLoopForm", () => {
       expect(useWorktree.checked).toBe(false);
     });
 
-    test("shows 'Start Loop' button in edit mode without plan mode", () => {
+    test("shows the generic Start button in edit mode without plan mode", () => {
       const { getByRole } = renderWithUser(
         <CreateLoopForm
           {...defaultProps({
@@ -934,10 +933,10 @@ describe("CreateLoopForm", () => {
           })}
         />
       );
-      expect(getByRole("button", { name: "Start Loop" })).toBeInTheDocument();
+      expect(getByRole("button", { name: "Start" })).toBeInTheDocument();
     });
 
-    test("shows 'Start Plan' button in edit mode with plan mode", () => {
+    test("shows the generic Start button in edit mode with plan mode", () => {
       const { getByRole } = renderWithUser(
         <CreateLoopForm
           {...defaultProps({
@@ -954,10 +953,10 @@ describe("CreateLoopForm", () => {
           })}
         />
       );
-      expect(getByRole("button", { name: "Start Plan" })).toBeInTheDocument();
+      expect(getByRole("button", { name: "Start" })).toBeInTheDocument();
     });
 
-    test("shows 'Update Draft' button when editing a draft", () => {
+    test("shows the Update button when editing a draft", () => {
       const { getByRole } = renderWithUser(
         <CreateLoopForm
           {...defaultProps({
@@ -974,7 +973,7 @@ describe("CreateLoopForm", () => {
           })}
         />
       );
-      expect(getByRole("button", { name: "Update Draft" })).toBeInTheDocument();
+      expect(getByRole("button", { name: "Update" })).toBeInTheDocument();
     });
 
     test("pre-populates advanced options from initialLoopData", async () => {
@@ -1048,7 +1047,7 @@ describe("CreateLoopForm", () => {
       const { getByRole } = renderWithUser(
         <CreateLoopForm {...defaultProps({ loading: true })} />
       );
-      expect(getByRole("button", { name: "Create Plan" })).toBeDisabled();
+      expect(getByRole("button", { name: "Create" })).toBeDisabled();
     });
   });
 
