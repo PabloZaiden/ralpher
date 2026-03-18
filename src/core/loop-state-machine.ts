@@ -108,8 +108,8 @@ const TRANSITION_TABLE: Record<LoopStatus, ReadonlySet<LoopStatus>> = {
   // → pushed: re-push after branch update (updateBranch)
   pushed: new Set(["deleted", "idle", "resolving_conflicts", "pushed"]),
 
-  // deleted: terminal state, awaiting purge
-  deleted: new Set([]),
+  // deleted: soft-deleted, can be revived into a fresh feedback cycle before purge
+  deleted: new Set(["stopped", "planning"]),
 };
 
 /**

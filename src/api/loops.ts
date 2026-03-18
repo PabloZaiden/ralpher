@@ -60,6 +60,7 @@ import {
   AnswerPlanQuestionRequestSchema,
   AddressCommentsRequestSchema,
   CreateChatRequestSchema,
+  FollowUpRequestSchema,
   SendChatMessageRequestSchema,
   CreatePortForwardRequestSchema,
 } from "../types/schemas";
@@ -160,6 +161,35 @@ function mapLoopPortForwardError(error: unknown): Response {
     return errorResponse("invalid_port_forward_configuration", message, 400);
   }
   return errorResponse("port_forward_error", message, 500);
+}
+
+async function validateEnabledModelForLoop(
+  loopId: string,
+  model: { providerID: string; modelID: string } | undefined,
+): Promise<Response | null> {
+  if (!model?.providerID || !model?.modelID) {
+    return null;
+  }
+
+  const loop = await loopManager.getLoop(loopId);
+  if (!loop) {
+    return errorResponse("not_found", "Loop not found", 404);
+  }
+
+  const modelValidation = await isModelEnabled(
+    loop.config.workspaceId,
+    loop.config.directory,
+    model.providerID,
+    model.modelID,
+  );
+  if (!modelValidation.enabled) {
+    return errorResponse(
+      modelValidation.errorCode ?? "model_not_enabled",
+      modelValidation.error ?? "The selected model is not available",
+    );
+  }
+
+  return null;
 }
 
 function startErrorResponse(
@@ -1044,22 +1074,9 @@ export const loopsControlRoutes = {
 
       // Validate model is enabled before allowing the change
       if (body.model !== undefined) {
-        const loop = await loopManager.getLoop(req.params.id);
-        if (!loop) {
-          return errorResponse("not_found", "Loop not found", 404);
-        }
-
-        const modelValidation = await isModelEnabled(
-          loop.config.workspaceId,
-          loop.config.directory,
-          body.model.providerID,
-          body.model.modelID
-        );
-        if (!modelValidation.enabled) {
-          return errorResponse(
-            modelValidation.errorCode ?? "model_not_enabled",
-            modelValidation.error ?? "The selected model is not available"
-          );
+        const modelError = await validateEnabledModelForLoop(req.params.id, body.model);
+        if (modelError) {
+          return modelError;
         }
       }
 
@@ -1112,6 +1129,39 @@ export const loopsControlRoutes = {
           return errorResponse("not_running", result.error, 409);
         }
         return errorResponse("clear_pending_failed", result.error ?? "Unknown error", 400);
+      }
+
+      return successResponse();
+    },
+  },
+
+  "/api/loops/:id/follow-up": {
+    /**
+     * POST /api/loops/:id/follow-up - Start a new feedback cycle from a restartable terminal state.
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      const validation = await parseAndValidate(FollowUpRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
+      }
+      const body = validation.data;
+
+      if (body.model !== undefined) {
+        const modelError = await validateEnabledModelForLoop(req.params.id, body.model);
+        if (modelError) {
+          return modelError;
+        }
+      }
+
+      const result = await loopManager.sendFollowUp(req.params.id, {
+        message: body.message.trim(),
+        model: body.model,
+      });
+      if (!result.success) {
+        if (result.error?.includes("not found")) {
+          return errorResponse("not_found", "Loop not found", 404);
+        }
+        return errorResponse("invalid_state", result.error ?? "Loop cannot accept a terminal follow-up", 400);
       }
 
       return successResponse();
@@ -1732,22 +1782,9 @@ export const loopsChatRoutes = {
 
       // Validate model is enabled if provided
       if (body.model?.providerID && body.model?.modelID) {
-        const loop = await loopManager.getLoop(req.params.id);
-        if (!loop) {
-          return errorResponse("not_found", "Loop not found", 404);
-        }
-
-        const modelValidation = await isModelEnabled(
-          loop.config.workspaceId,
-          loop.config.directory,
-          body.model.providerID,
-          body.model.modelID
-        );
-        if (!modelValidation.enabled) {
-          return errorResponse(
-            modelValidation.errorCode ?? "model_not_enabled",
-            modelValidation.error ?? "The selected model is not available"
-          );
+        const modelError = await validateEnabledModelForLoop(req.params.id, body.model);
+        if (modelError) {
+          return modelError;
         }
       }
 

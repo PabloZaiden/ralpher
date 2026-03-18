@@ -37,6 +37,12 @@ export interface LoopActionBarProps {
   onClearPending: () => Promise<boolean>;
   /** Whether the action bar is disabled */
   disabled?: boolean;
+  /** Require a message before submitting */
+  requireMessage?: boolean;
+  /** Override the submit button label */
+  submitLabel?: string;
+  /** Override the helper text below the composer */
+  helperText?: string;
 }
 
 export function LoopActionBar({
@@ -50,6 +56,9 @@ export function LoopActionBar({
   onQueuePending,
   onClearPending,
   disabled = false,
+  requireMessage = false,
+  submitLabel,
+  helperText,
 }: LoopActionBarProps) {
   const [message, setMessage] = useState("");
   const [selectedModel, setSelectedModel] = useState<string>("");
@@ -74,6 +83,7 @@ export function LoopActionBar({
 
   // Check if user has local changes (not yet submitted)
   const hasLocalChanges = message.trim().length > 0 || selectedModel !== "";
+  const canSubmit = hasLocalChanges && (!requireMessage || message.trim().length > 0);
 
   // Check if the selected model is enabled (connected)
   const selectedModelEnabled = selectedModel ? isModelEnabled(models, selectedModel) : true;
@@ -82,7 +92,7 @@ export function LoopActionBar({
   const handleSubmit = useCallback(async (e: FormEvent) => {
     e.preventDefault();
     
-    if (!hasLocalChanges || disabled || isSubmitting) return;
+    if (!canSubmit || disabled || isSubmitting) return;
     
     // Validate model is enabled if selected
     if (selectedModel && !selectedModelEnabled) return;
@@ -120,7 +130,7 @@ export function LoopActionBar({
     } finally {
       setIsSubmitting(false);
     }
-  }, [hasLocalChanges, disabled, isSubmitting, message, selectedModel, selectedModelEnabled, onQueuePending]);
+  }, [canSubmit, disabled, isSubmitting, message, selectedModel, selectedModelEnabled, onQueuePending]);
 
   // Handle clear pending
   const handleClear = useCallback(async () => {
@@ -200,11 +210,11 @@ export function LoopActionBar({
           <Button
             type="submit"
             size="sm"
-            disabled={disabled || isSubmitting || !hasLocalChanges || (selectedModel !== "" && !selectedModelEnabled)}
+            disabled={disabled || isSubmitting || !canSubmit || (selectedModel !== "" && !selectedModelEnabled)}
             loading={isSubmitting}
             className="flex-shrink-0 h-9"
           >
-            {isPlanning ? "Send Feedback" : isChatMode ? "Send" : "Queue"}
+            {submitLabel ?? (isPlanning ? "Send Feedback" : isChatMode ? "Send" : "Queue")}
           </Button>
         </div>
 
@@ -216,11 +226,11 @@ export function LoopActionBar({
         )}
 
         <p className="hidden sm:block mt-2 text-xs text-gray-500 dark:text-gray-400">
-          {isPlanning
+          {helperText ?? (isPlanning
             ? "Feedback will interrupt current generation and start a new plan revision."
             : isChatMode
             ? "Message will be sent immediately. Model change takes effect on next message."
-            : "Message will be sent after current step completes. Model change takes effect on next prompt."}
+            : "Message will be sent after current step completes. Model change takes effect on next prompt.")}
         </p>
       </form>
     </div>

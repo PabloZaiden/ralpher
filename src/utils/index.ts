@@ -9,6 +9,7 @@ export {
   isLoopActive,
   isLoopRunning,
   canJumpstart,
+  canSendTerminalFollowUp,
   isAwaitingFeedback,
   isArchivedLoop,
   getPlanningStatusLabel,

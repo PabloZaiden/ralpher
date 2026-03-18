@@ -349,7 +349,7 @@ describe("Chat Workflow E2E", () => {
       ).rejects.toThrow(/not found/);
     });
 
-    test("rejects sendChatMessage to a stopped chat", async () => {
+    test("restarts a stopped chat when sending a follow-up message", async () => {
       const loop = await ctx.manager.createChat({
         ...testModelFields,
         directory: ctx.workDir,
@@ -362,9 +362,8 @@ describe("Chat Workflow E2E", () => {
       // Stop the chat
       await ctx.manager.stopLoop(loop.config.id);
 
-      await expect(
-        ctx.manager.sendChatMessage(loop.config.id, "Should fail"),
-      ).rejects.toThrow(/Cannot (send chat message|recover chat engine)/);
+      await ctx.manager.sendChatMessage(loop.config.id, "Please continue");
+      await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"]);
     });
 
     test("handles backend error during chat turn gracefully", async () => {

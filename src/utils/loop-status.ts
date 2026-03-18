@@ -106,6 +106,16 @@ export function canJumpstart(status: LoopStatus): boolean {
 }
 
 /**
+ * Check if a loop can start a new follow-up cycle from a user-perceived terminal state.
+ * This includes jumpstartable execution states, addressable review states, and deleted loops.
+ */
+export function canSendTerminalFollowUp(status: LoopStatus, reviewModeAddressable: boolean | undefined): boolean {
+  const result = canJumpstart(status) || isAwaitingFeedback(status, reviewModeAddressable) || status === "deleted";
+  log.trace("canSendTerminalFollowUp check", { status, reviewModeAddressable, result });
+  return result;
+}
+
+/**
  * Check if a loop is awaiting feedback (pushed/merged but still addressable).
  * These loops are in a final state but can still receive reviewer comments.
  */

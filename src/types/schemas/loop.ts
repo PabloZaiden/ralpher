@@ -211,3 +211,13 @@ export const SendChatMessageRequestSchema = z.object({
   }),
   model: ModelConfigSchema.optional(),
 });
+
+/**
+ * Schema for sending a terminal-state follow-up - POST /api/loops/:id/follow-up
+ */
+export const FollowUpRequestSchema = z.object({
+  message: z.string().refine((val) => val.trim().length > 0, {
+    message: "message cannot be empty",
+  }),
+  model: ModelConfigSchema.optional(),
+});

@@ -26,7 +26,7 @@ import {
   canAccept,
   isFinalState,
   isLoopActive,
-  canJumpstart,
+  canSendTerminalFollowUp,
   getEntityLabel,
 } from "../utils";
 import { writeTextToClipboard } from "../utils";
@@ -137,6 +137,7 @@ export function LoopDetails({
     setPending,
     clearPending,
     sendChatMessage,
+    sendFollowUp,
     getDiff,
     getPlan,
     getStatusFile,
@@ -703,6 +704,7 @@ export function LoopDetails({
   const isActive = isLoopActive(state.status);
   const labels = getEntityLabel(config.mode);
   const isPlanning = state.status === "planning" && !isChatMode;
+  const canTerminalFollowUp = canSendTerminalFollowUp(state.status, state.reviewMode?.addressable);
   const isPlanReady = loop.state.planMode?.isPlanReady ?? false;
   const feedbackRounds = loop.state.planMode?.feedbackRounds ?? 0;
   // Planning-active: AI is generating/revising the plan (not yet ready for review)
@@ -1799,8 +1801,8 @@ export function LoopDetails({
         </div>
       </main>
 
-      {/* LoopActionBar for mid-loop messaging (active loops, jumpstartable loops, and planning mode) */}
-      {(isActive || isPlanning || canJumpstart(state.status)) && (
+      {/* LoopActionBar for active messaging plus terminal-state restarts */}
+      {(isActive || isPlanning || canTerminalFollowUp) && (
         <LoopActionBar
           mode={config.mode}
           isPlanning={isPlanning}
@@ -1809,12 +1811,23 @@ export function LoopDetails({
           pendingPrompt={state.pendingPrompt}
           models={models}
           modelsLoading={modelsLoading}
+          requireMessage={canTerminalFollowUp}
+          submitLabel={canTerminalFollowUp ? (isChatMode ? "Send" : "Restart") : undefined}
+          helperText={canTerminalFollowUp
+            ? "Message will start a new feedback cycle immediately. Model change takes effect on that cycle."
+            : undefined}
           onQueuePending={async (options) => {
             if (isPlanning) {
               // In planning mode, send feedback on the plan
               if (options.message) {
                 await sendPlanFeedback(options.message);
                 return true;
+              }
+              return false;
+            }
+            if (canTerminalFollowUp) {
+              if (options.message) {
+                return await sendFollowUp(options.message, options.model);
               }
               return false;
             }

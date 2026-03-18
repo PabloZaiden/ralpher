@@ -257,6 +257,138 @@ describe("Review Mode", () => {
     });
   });
 
+  describe("sendFollowUp", () => {
+    test("restarts a pushed loop on the existing review branch", async () => {
+      const ctx = await setupTestContext({
+        initGit: true,
+        initialFiles: {
+          "test.txt": "Initial content",
+        },
+      });
+
+      try {
+        const remoteDir = join(ctx.dataDir, `remote-${Date.now()}.git`);
+        await Bun.$`git init --bare ${remoteDir}`.quiet();
+        await Bun.$`git -C ${ctx.workDir} remote add origin ${remoteDir}`.quiet();
+        const currentBranch = (await Bun.$`git -C ${ctx.workDir} branch --show-current`.text()).trim();
+        await Bun.$`git -C ${ctx.workDir} push origin ${currentBranch}`.quiet();
+
+        const loop = await ctx.manager.createLoop({
+          ...testModelFields,
+          directory: ctx.workDir,
+          prompt: "Make changes",
+          name: "Test Loop",
+          planMode: false,
+          workspaceId: testWorkspaceId,
+        });
+
+        await ctx.manager.startLoop(loop.config.id);
+        await waitForEvent(ctx.events, "loop.completed");
+        const pushResult = await ctx.manager.pushLoop(loop.config.id);
+        expect(pushResult.success).toBe(true);
+
+        const pushedLoop = await ctx.manager.getLoop(loop.config.id);
+        const workingBranch = pushedLoop!.state.git!.workingBranch;
+
+        const followUpResult = await ctx.manager.sendFollowUp(loop.config.id, {
+          message: "Please make another pass",
+        });
+
+        expect(followUpResult.success).toBe(true);
+        expect(followUpResult.reviewCycle).toBe(1);
+        expect(followUpResult.branch).toBe(workingBranch);
+
+        await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"]);
+      } finally {
+        await teardownTestContext(ctx);
+      }
+    });
+
+    test("restarts a merged loop on a new review branch", async () => {
+      const ctx = await setupTestContext({
+        initGit: true,
+        initialFiles: {
+          "test.txt": "Initial content",
+        },
+      });
+
+      try {
+        const loop = await ctx.manager.createLoop({
+          ...testModelFields,
+          directory: ctx.workDir,
+          prompt: "Make changes",
+          name: "Test Loop",
+          planMode: false,
+          workspaceId: testWorkspaceId,
+        });
+
+        await ctx.manager.startLoop(loop.config.id);
+        await waitForEvent(ctx.events, "loop.completed");
+        const accepted = await ctx.manager.acceptLoop(loop.config.id);
+        expect(accepted.success).toBe(true);
+
+        const mergedLoop = await ctx.manager.getLoop(loop.config.id);
+        const originalBranch = mergedLoop!.state.git!.workingBranch;
+
+        const followUpResult = await ctx.manager.sendFollowUp(loop.config.id, {
+          message: "Please refine the merged result",
+        });
+
+        expect(followUpResult.success).toBe(true);
+        expect(followUpResult.reviewCycle).toBe(1);
+        expect(followUpResult.branch).toBeDefined();
+        expect(followUpResult.branch).not.toBe(originalBranch);
+
+        await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"]);
+      } finally {
+        await teardownTestContext(ctx);
+      }
+    });
+
+    test("revives a deleted loop with the same loop id", async () => {
+      const ctx = await setupTestContext({
+        initGit: true,
+        initialFiles: {
+          "test.txt": "Initial content",
+        },
+      });
+
+      try {
+        const loop = await ctx.manager.createLoop({
+          ...testModelFields,
+          directory: ctx.workDir,
+          prompt: "Make changes",
+          name: "Test Loop",
+          planMode: false,
+          workspaceId: testWorkspaceId,
+        });
+
+        await ctx.manager.startLoop(loop.config.id);
+        await waitForEvent(ctx.events, "loop.completed");
+
+        const deleted = await ctx.manager.deleteLoop(loop.config.id);
+        expect(deleted).toBe(true);
+
+        const deletedLoop = await ctx.manager.getLoop(loop.config.id);
+        expect(deletedLoop!.state.status).toBe("deleted");
+
+        const followUpResult = await ctx.manager.sendFollowUp(loop.config.id, {
+          message: "Please try again",
+        });
+
+        expect(followUpResult.success).toBe(true);
+
+        const restartedLoop = await ctx.manager.getLoop(loop.config.id);
+        expect(restartedLoop!.config.id).toBe(loop.config.id);
+        expect(restartedLoop!.state.status).not.toBe("deleted");
+
+        await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"]);
+      } finally {
+        await teardownTestContext(ctx);
+      }
+    });
+  });
+
   describe("getReviewHistory", () => {
     test("returns review history for a loop with review mode", async () => {
       const ctx = await setupTestContext({

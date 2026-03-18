@@ -803,4 +803,77 @@ describe("Chat API Integration", () => {
       }
     });
   });
+
+  describe("POST /api/loops/:id/follow-up", () => {
+    test("restarts a stopped chat", async () => {
+      const createResponse = await fetch(`${baseUrl}/api/loops/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Hello",
+          model: testModel,
+          useWorktree: true,
+        }),
+      });
+      expect(createResponse.status).toBe(201);
+      const chatBody = await createResponse.json();
+      const chatId = chatBody.config.id;
+
+      await waitForCompletion(chatId);
+
+      await loopManager.stopLoop(chatId);
+
+      const followUpResponse = await fetch(`${baseUrl}/api/loops/${chatId}/follow-up`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Please continue",
+        }),
+      });
+
+      expect(followUpResponse.status).toBe(200);
+      const followUpBody = await followUpResponse.json();
+      expect(followUpBody.success).toBe(true);
+
+      await waitForCompletion(chatId);
+    });
+
+    test("revives a deleted chat before purge", async () => {
+      const createResponse = await fetch(`${baseUrl}/api/loops/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: testWorkspaceId,
+          prompt: "Hello",
+          model: testModel,
+          useWorktree: true,
+        }),
+      });
+      expect(createResponse.status).toBe(201);
+      const chatBody = await createResponse.json();
+      const chatId = chatBody.config.id;
+
+      await waitForCompletion(chatId);
+
+      const deleteResponse = await fetch(`${baseUrl}/api/loops/${chatId}`, {
+        method: "DELETE",
+      });
+      expect(deleteResponse.status).toBe(200);
+
+      const followUpResponse = await fetch(`${baseUrl}/api/loops/${chatId}/follow-up`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Please revive this chat",
+        }),
+      });
+
+      expect(followUpResponse.status).toBe(200);
+      const followUpBody = await followUpResponse.json();
+      expect(followUpBody.success).toBe(true);
+
+      await waitForCompletion(chatId);
+    });
+  });
 });

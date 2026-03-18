@@ -11,6 +11,7 @@ import {
   isLoopActive,
   isLoopRunning,
   canJumpstart,
+  canSendTerminalFollowUp,
   isAwaitingFeedback,
   isArchivedLoop,
   getPlanningStatusLabel,
@@ -269,6 +270,41 @@ describe("canJumpstart", () => {
     for (const status of nonJumpstartable) {
       expect(canJumpstart(status)).toBe(false);
     }
+  });
+});
+
+// ============================================================================
+// canSendTerminalFollowUp
+// ============================================================================
+
+describe("canSendTerminalFollowUp", () => {
+  test("returns true for jumpstartable statuses", () => {
+    for (const status of ["completed", "stopped", "failed", "max_iterations"] satisfies LoopStatus[]) {
+      expect(canSendTerminalFollowUp(status, false)).toBe(true);
+    }
+  });
+
+  test("returns true for addressable pushed and merged loops", () => {
+    expect(canSendTerminalFollowUp("pushed", true)).toBe(true);
+    expect(canSendTerminalFollowUp("merged", true)).toBe(true);
+  });
+
+  test("returns true for deleted loops", () => {
+    expect(canSendTerminalFollowUp("deleted", false)).toBe(true);
+  });
+
+  test("returns false for non-restartable statuses", () => {
+    const nonRestartable: LoopStatus[] = [
+      "idle", "draft", "planning", "starting", "running", "waiting", "resolving_conflicts",
+    ];
+    for (const status of nonRestartable) {
+      expect(canSendTerminalFollowUp(status, false)).toBe(false);
+    }
+  });
+
+  test("returns false for non-addressable pushed and merged loops", () => {
+    expect(canSendTerminalFollowUp("pushed", false)).toBe(false);
+    expect(canSendTerminalFollowUp("merged", false)).toBe(false);
   });
 });
 
