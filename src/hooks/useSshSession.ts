@@ -120,6 +120,9 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
       : `/api/ws?sshSessionId=${encodeURIComponent(sessionId)}`,
     autoConnect: sessionKind !== null,
     onEvent: handleEvent,
+    onFocusRecovery: async () => {
+      await refreshInternal(false);
+    },
   });
 
   const updateSession = useCallback(async (request: UpdateSshSessionRequest): Promise<AnySshSession> => {

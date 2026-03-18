@@ -86,6 +86,7 @@ export function useSshSessions(): UseSshSessionsResult {
 
   useGlobalEvents<SshSessionEvent>({
     onEvent: handleEvent,
+    onFocusRecovery: refresh,
   });
 
   const createSession = useCallback(async (request: CreateSshSessionRequest): Promise<SshSession> => {

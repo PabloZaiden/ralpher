@@ -195,11 +195,6 @@ export function useLoop(loopId: string): UseLoopResult {
     return fallback;
   }, [isActiveLoop]);
 
-  // WebSocket connection for real-time updates
-  const { events, status: connectionStatus, clearEvents } = useLoopEvents<LoopEvent>(loopId, {
-    onEvent: handleEvent,
-  });
-
   // Handle events
   function handleEvent(event: LoopEvent) {
     if (!isActiveLoop(event.loopId)) {
@@ -432,6 +427,12 @@ export function useLoop(loopId: string): UseLoopResult {
       }
     }
   }, [isActiveLoop, loopId]);
+
+  // WebSocket connection for real-time updates
+  const { events, status: connectionStatus, clearEvents } = useLoopEvents<LoopEvent>(loopId, {
+    onEvent: handleEvent,
+    onFocusRecovery: refresh,
+  });
 
   // Update the loop
   const update = useCallback(

@@ -75,6 +75,7 @@ export function useLoopPortForwards(loopId: string): UseLoopPortForwardsResult {
 
   useGlobalEvents<SshSessionEvent>({
     onEvent: handleEvent,
+    onFocusRecovery: refresh,
   });
 
   useEffect(() => {

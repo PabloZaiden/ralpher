@@ -86,6 +86,41 @@ describe("initial fetch", () => {
 // ─── WebSocket events ────────────────────────────────────────────────────────
 
 describe("WebSocket events", () => {
+  test("focus recovery reconnects and refreshes stale loop state", async () => {
+    const loop1 = createLoop({ config: { id: "loop-1" } });
+    const loop2 = createLoop({ config: { id: "loop-2" } });
+
+    let callCount = 0;
+    api.get("/api/loops", () => {
+      callCount++;
+      return callCount === 1 ? [loop1] : [loop1, loop2];
+    });
+
+    const { result } = renderHook(() => useLoops());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.loops).toHaveLength(1);
+      expect(ws.connections().length).toBeGreaterThan(0);
+    });
+
+    const initialConnection = ws.getGlobalConnection();
+    if (!initialConnection) {
+      throw new Error("Expected global websocket connection");
+    }
+
+    act(() => {
+      initialConnection.instance.close(1006, "lost");
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await waitFor(() => {
+      expect(result.current.loops).toHaveLength(2);
+      expect(api.calls("/api/loops", "GET")).toHaveLength(2);
+      expect(ws.connections()).toHaveLength(2);
+    });
+  });
+
   test("loop.created triggers a full refresh", async () => {
     const loop1 = createLoop({ config: { id: "loop-1" } });
     const loop2 = createLoop({ config: { id: "loop-2" } });

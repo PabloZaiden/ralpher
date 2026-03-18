@@ -83,11 +83,6 @@ export function useLoops(): UseLoopsResult {
   // AbortController for cancelling in-flight fetch requests on unmount
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // WebSocket connection for real-time updates
-  useGlobalEvents<LoopEvent>({
-    onEvent: handleEvent,
-  });
-
   // Handle events to update loops state
   function handleEvent(event: LoopEvent) {
     switch (event.type) {
@@ -171,6 +166,12 @@ export function useLoops(): UseLoopsResult {
       log.error("Failed to refresh loop:", err);
     }
   }, []);
+
+  // WebSocket connection for real-time updates
+  useGlobalEvents<LoopEvent>({
+    onEvent: handleEvent,
+    onFocusRecovery: refresh,
+  });
 
   // Create a new loop (loops are always started immediately by the API)
   const createLoop = useCallback(async (request: CreateLoopRequest): Promise<CreateLoopResult> => {
