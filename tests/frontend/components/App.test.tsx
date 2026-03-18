@@ -449,7 +449,7 @@ describe("App shell", () => {
       capabilities: [],
     }));
 
-    const { getByRole, queryByText, user } = renderWithUser(<App />, { route: "#/workspace/workspace-1" });
+    const { getByRole, user } = renderWithUser(<App />, { route: "#/workspace/workspace-1" });
 
     await waitFor(() => {
       expect(getByRole("heading", { name: "Frontend" })).toBeTruthy();
