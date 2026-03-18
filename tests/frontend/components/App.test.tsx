@@ -484,6 +484,53 @@ describe("App shell", () => {
     });
   });
 
+  test("cleans stale drafts sidebar state from browser storage", async () => {
+    window.localStorage.setItem("ralpher.sidebarSectionCollapseState", JSON.stringify({
+      workspaces: true,
+      drafts: true,
+      loops: false,
+    }));
+
+    const { getByRole } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "Expand Workspaces section" })).toBeTruthy();
+    });
+
+    const persistedState = JSON.parse(window.localStorage.getItem("ralpher.sidebarSectionCollapseState") ?? "{}") as Record<string, boolean>;
+    expect(persistedState["workspaces"]).toBe(true);
+    expect(persistedState["loops"]).toBe(false);
+    expect("drafts" in persistedState).toBe(false);
+  });
+
+  test("shows draft loops under Loops and removes workspace subgroup counts", async () => {
+    const workspace = createWorkspace({ id: "workspace-1", name: "Frontend", directory: "/workspaces/frontend" });
+    const draftLoop = createLoopWithStatus("draft", {
+      config: { id: "loop-draft", name: "Sprint Draft", workspaceId: workspace.id },
+    });
+    const runningLoop = createLoopWithStatus("running", {
+      config: { id: "loop-running", name: "Shipping Loop", workspaceId: workspace.id },
+    });
+    setupDefaultApi({ workspaces: [workspace], loops: [draftLoop, runningLoop] });
+
+    const { getAllByText, getByRole, queryByText } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "Collapse Loops section" })).toBeTruthy();
+      expect(getAllByText("Sprint Draft").length).toBeGreaterThan(0);
+      expect(getAllByText("Shipping Loop").length).toBeGreaterThan(0);
+    });
+
+    expect(queryByText("Drafts")).toBeNull();
+    expect(getAllByText("Draft").length).toBeGreaterThan(0);
+
+    const workspaceButton = Array.from(document.querySelectorAll("button[aria-expanded]")).find((button) =>
+      button.textContent?.includes("Frontend")
+    );
+    expect(workspaceButton).toBeTruthy();
+    expect(workspaceButton?.textContent).not.toContain("2");
+  });
+
   test("hides and reopens the sidebar with header icon controls", async () => {
     const originalMatchMedia = window.matchMedia;
     window.matchMedia = createMatchMediaMock(true);
