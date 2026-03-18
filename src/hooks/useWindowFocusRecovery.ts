@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
+import { log } from "../lib/logger";
 
 export type WindowFocusRecoveryTrigger = "focus" | "visibilitychange";
 
@@ -36,11 +37,19 @@ export function useWindowFocusRecovery({
     }
     lastRecoveryAtRef.current = now;
 
-    const recoveryPromise = Promise.resolve(onRecoverRef.current(trigger)).finally(() => {
-      if (inFlightRef.current === recoveryPromise) {
-        inFlightRef.current = null;
-      }
-    });
+    const recoveryPromise = Promise.resolve()
+      .then(() => onRecoverRef.current(trigger))
+      .catch((error: unknown) => {
+        log.error("Window focus recovery failed", {
+          trigger,
+          error: String(error),
+        });
+      })
+      .finally(() => {
+        if (inFlightRef.current === recoveryPromise) {
+          inFlightRef.current = null;
+        }
+      });
     inFlightRef.current = recoveryPromise;
   }, [cooldownMs, enabled]);
 
