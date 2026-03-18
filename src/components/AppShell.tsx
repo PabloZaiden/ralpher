@@ -564,7 +564,7 @@ function OverviewView({
   onNavigate: (route: ShellRoute) => void;
 }) {
   const recentLoops = useMemo(() => {
-    return [...loops]
+    return loops
       .filter((loop) => shouldShowInRecentActivity(loop.state.status))
       .sort((left, right) => right.config.createdAt.localeCompare(left.config.createdAt))
       .slice(0, 5);
@@ -584,7 +584,10 @@ function OverviewView({
       headerOffsetClassName={headerOffsetClassName}
     >
       <div className="space-y-6">
-        <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">
+        <div
+          data-testid="recent-activity-card"
+          className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50"
+        >
           <div>
             <h2 className="text-lg font-semibold text-gray-950 dark:text-gray-100">Recent activity</h2>
             <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">

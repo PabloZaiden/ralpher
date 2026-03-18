@@ -104,7 +104,7 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops", () => [runningLoop, completedLoop, draftLoop]);
     api.get("/api/workspaces", () => [WORKSPACE_A, WORKSPACE_B]);
 
-    const { getAllByText, getByRole, getByText } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByTestId, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getAllByText("Project Alpha").length).toBeGreaterThan(0);
@@ -117,11 +117,7 @@ describe("dashboard management scenario", () => {
     const recentActivityHeading = getByRole("heading", { name: "Recent activity" });
     const serverMapsHeading = getByRole("heading", { name: "Server maps" });
     const workspacesMapHeading = getByRole("heading", { name: "Workspaces map" });
-    const recentActivityCard = recentActivityHeading.parentElement?.parentElement;
-
-    if (!recentActivityCard) {
-      throw new Error("Expected Recent activity card container");
-    }
+    const recentActivityCard = getByTestId("recent-activity-card");
 
     expect(within(recentActivityCard).getByText("Running Task")).toBeTruthy();
     expect(within(recentActivityCard).getByText("Draft Task")).toBeTruthy();
@@ -254,18 +250,13 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops", () => [runningLoop, planningLoop, completedLoop, failedLoop, pushedLoop]);
     api.get("/api/workspaces", () => [WORKSPACE_A]);
 
-    const { getByRole } = renderWithUser(<App />);
+    const { getByRole, getByTestId } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getByRole("heading", { name: "Recent activity" })).toBeTruthy();
     });
 
-    const recentActivityHeading = getByRole("heading", { name: "Recent activity" });
-    const recentActivityCard = recentActivityHeading.parentElement?.parentElement;
-
-    if (!recentActivityCard) {
-      throw new Error("Expected Recent activity card container");
-    }
+    const recentActivityCard = getByTestId("recent-activity-card");
 
     await waitFor(() => {
       expect(within(recentActivityCard).getByText("Visible Running")).toBeTruthy();

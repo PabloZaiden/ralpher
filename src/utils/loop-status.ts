@@ -143,15 +143,7 @@ export function isArchivedLoop(status: LoopStatus, reviewModeAddressable: boolea
  * Recent activity is reserved for in-progress or otherwise non-terminal work.
  */
 export function shouldShowInRecentActivity(status: LoopStatus): boolean {
-  const result = !(
-    status === "completed" ||
-    status === "stopped" ||
-    status === "failed" ||
-    status === "max_iterations" ||
-    status === "merged" ||
-    status === "pushed" ||
-    status === "deleted"
-  );
+  const result = !(canJumpstart(status) || isFinalState(status));
   log.trace("shouldShowInRecentActivity check", { status, result });
   return result;
 }
