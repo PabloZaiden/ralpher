@@ -1075,6 +1075,27 @@ describe("setPending / clearPending", () => {
   });
 });
 
+describe("sendFollowUp", () => {
+  test("calls API and refreshes", async () => {
+    setupLoop();
+    api.post("/api/loops/:id/follow-up", () => ({ success: true }));
+
+    const { result } = renderHook(() => useLoop(LOOP_ID));
+    await waitForLoad(result);
+
+    let success = false;
+    await act(async () => {
+      success = await result.current.sendFollowUp("Please restart this", {
+        providerID: "anthropic",
+        modelID: "claude-sonnet-4-20250514",
+      });
+    });
+
+    expect(success).toBe(true);
+    expect(api.calls("/api/loops/:id/follow-up", "POST")).toHaveLength(1);
+  });
+});
+
 // ─── Connection status ───────────────────────────────────────────────────────
 
 describe("connectionStatus", () => {

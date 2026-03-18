@@ -35,6 +35,7 @@ import {
   discardPlanApi,
   addressReviewCommentsApi,
   updateBranchApi,
+  sendFollowUpApi,
   sendChatMessageApi,
   getOrCreateLoopSshSessionApi,
     type AcceptLoopResult,
@@ -126,6 +127,8 @@ export interface UseLoopResult {
   clearPending: () => Promise<boolean>;
   /** Send a message to a chat (only works for chat-mode loops) */
   sendChatMessage: (message: string, model?: { providerID: string; modelID: string }) => Promise<boolean>;
+  /** Start a new feedback cycle from a restartable terminal state */
+  sendFollowUp: (message: string, model?: { providerID: string; modelID: string }) => Promise<boolean>;
   /** Get or create the loop's linked SSH session */
   connectViaSsh: () => Promise<SshSession | null>;
 }
@@ -1099,6 +1102,35 @@ export function useLoop(loopId: string): UseLoopResult {
     [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh]
   );
 
+  const sendFollowUp = useCallback(
+    async (message: string, model?: { providerID: string; modelID: string }): Promise<boolean> => {
+      const actionLoopId = loopId;
+      const staleAction = ignoreStaleLoopAction("sendFollowUp", actionLoopId, false);
+      if (staleAction !== null) {
+        return staleAction;
+      }
+      log.debug("Sending terminal follow-up", { loopId: actionLoopId, messageLength: message.length });
+      try {
+        await sendFollowUpApi(actionLoopId, message, model);
+        await refresh();
+        if (!isActiveLoop(actionLoopId)) {
+          return false;
+        }
+        log.debug("Terminal follow-up sent", { loopId: actionLoopId });
+        return true;
+      } catch (err) {
+        const staleError = ignoreStaleLoopError("sendFollowUp", actionLoopId, false, err);
+        if (staleError !== null) {
+          return staleError;
+        }
+        log.error("Failed to send terminal follow-up", { loopId: actionLoopId, error: String(err) });
+        setError(String(err));
+        return false;
+      }
+    },
+    [ignoreStaleLoopAction, ignoreStaleLoopError, isActiveLoop, loopId, refresh],
+  );
+
   const connectViaSsh = useCallback(async (): Promise<SshSession | null> => {
     const actionLoopId = loopId;
     if (!isActiveLoop(actionLoopId)) {
@@ -1226,6 +1258,7 @@ export function useLoop(loopId: string): UseLoopResult {
     setPending,
     clearPending,
     sendChatMessage,
+    sendFollowUp,
     connectViaSsh,
   };
 }

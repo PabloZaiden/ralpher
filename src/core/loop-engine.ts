@@ -745,7 +745,7 @@ export class LoopEngine {
     // Transition to running via the jumpstart path: completed → stopped → starting → running
     // The engine's start() method expects idle/stopped/planning/resolving_conflicts
     const currentStatus = this.loop.state.status;
-    if (currentStatus === "completed" || currentStatus === "max_iterations") {
+    if (currentStatus === "completed" || currentStatus === "max_iterations" || currentStatus === "failed") {
       // Jumpstart: transition through stopped so engine.start() can accept it
       this.updateState({ status: "stopped" });
     }

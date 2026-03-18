@@ -26,6 +26,7 @@ import {
   setPendingApi,
   clearPendingApi,
   addressReviewCommentsApi,
+  sendFollowUpApi,
 } from "@/hooks/loopActions";
 import { createSshSession } from "../helpers/factories";
 
@@ -254,6 +255,30 @@ describe("loop SSH session APIs", () => {
 
     await expect(getOrCreateLoopSshSessionApi(LOOP_ID)).rejects.toThrow(
       "SSH sessions require a workspace configured with ssh transport",
+    );
+  });
+});
+
+describe("sendFollowUpApi", () => {
+  test("calls POST /api/loops/:id/follow-up and returns true", async () => {
+    api.post(`/api/loops/${LOOP_ID}/follow-up`, () => ({ success: true }));
+
+    const result = await sendFollowUpApi(LOOP_ID, "Please restart this", {
+      providerID: "anthropic",
+      modelID: "claude-sonnet-4-20250514",
+    });
+
+    expect(result).toBe(true);
+    expect(api.calls(`/api/loops/${LOOP_ID}/follow-up`, "POST")).toHaveLength(1);
+  });
+
+  test("throws error with message from error response", async () => {
+    api.post(`/api/loops/${LOOP_ID}/follow-up`, () => {
+      throw new MockApiError(400, { message: "Loop cannot accept a terminal follow-up" });
+    });
+
+    await expect(sendFollowUpApi(LOOP_ID, "Please restart this")).rejects.toThrow(
+      "Loop cannot accept a terminal follow-up",
     );
   });
 });

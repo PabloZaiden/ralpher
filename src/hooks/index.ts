@@ -44,6 +44,7 @@ export {
   acceptPlanApi,
   discardPlanApi,
   addressReviewCommentsApi,
+  sendFollowUpApi,
   setPendingApi,
   clearPendingApi,
   type CreatePortForwardRequest,

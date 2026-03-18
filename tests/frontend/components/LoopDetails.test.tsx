@@ -56,6 +56,7 @@ function setupDefaultApi(loopOverrides?: Parameters<typeof createLoopWithStatus>
   api.post("/api/loops/:id/mark-merged", () => ({ success: true }));
   api.post("/api/loops/:id/address-comments", () => ({ success: true }));
   api.post("/api/loops/:id/pending", () => ({ success: true }));
+  api.post("/api/loops/:id/follow-up", () => ({ success: true }));
   api.delete("/api/loops/:id/pending", () => ({ success: true }));
   api.put("/api/loops/:id", () => loop);
   api.post("/api/loops/:id/plan/feedback", () => ({ success: true }));
@@ -1402,7 +1403,7 @@ describe("loop action bar", () => {
     });
   });
 
-  test("does not show action bar for final-state loops", async () => {
+  test("does not show action bar for non-addressable final-state loops", async () => {
     const loop = createLoopWithStatus("merged", {
       config: { id: LOOP_ID, name: "Merged Loop" },
     });
@@ -1421,9 +1422,45 @@ describe("loop action bar", () => {
       expect(getByText("Merged Loop")).toBeTruthy();
     });
 
-    // The action bar should not be present for merged loops (final state, not jumpstartable)
+    // The action bar should not be present for merged loops that are no longer addressable.
     const input = container.querySelector("input[type='text']");
     expect(input).toBeNull();
+  });
+
+  test("shows restart composer for addressable merged loops and submits follow-up", async () => {
+    const loop = createLoopWithStatus("merged", {
+      config: { id: LOOP_ID, name: "Merged Loop" },
+      state: {
+        reviewMode: {
+          addressable: true,
+          completionAction: "merge",
+          reviewCycles: 0,
+          reviewBranches: ["merged-loop-a1b2c3d"],
+        },
+      },
+    });
+    api.get("/api/loops/:id", () => loop);
+    api.get("/api/loops/:id/diff", () => []);
+    api.get("/api/loops/:id/plan", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/status-file", () => ({ exists: false, content: "" }));
+    api.get("/api/loops/:id/comments", () => ({ success: true, comments: [] }));
+    api.get("/api/models", () => []);
+    api.get("/api/preferences/markdown-rendering", () => ({ enabled: true }));
+    api.get("/api/preferences/log-level", () => ({ level: "info" }));
+    api.post("/api/loops/:id/follow-up", () => ({ success: true }));
+
+    const { getByRole, getByPlaceholderText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+
+    await waitFor(() => {
+      expect(getByRole("button", { name: "Restart" })).toBeTruthy();
+    });
+
+    await user.type(getByPlaceholderText("Send a message to steer the agent..."), "Please revise this");
+    await user.click(getByRole("button", { name: "Restart" }));
+
+    await waitFor(() => {
+      expect(api.calls("/api/loops/:id/follow-up", "POST")).toHaveLength(1);
+    });
   });
 });
 

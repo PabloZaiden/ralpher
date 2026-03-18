@@ -27,6 +27,7 @@ export {
   SetPendingRequestSchema,
   StartDraftRequestSchema,
   SendChatMessageRequestSchema,
+  FollowUpRequestSchema,
   CreateChatRequestSchema,
 } from "./loop";
 

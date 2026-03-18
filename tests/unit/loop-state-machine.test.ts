@@ -52,7 +52,7 @@ const EXPECTED_TRANSITIONS: Record<LoopStatus, LoopStatus[]> = {
   resolving_conflicts: ["starting", "stopped", "failed", "pushed", "completed", "max_iterations", "deleted"],
   merged: ["deleted", "idle"],
   pushed: ["deleted", "idle", "resolving_conflicts", "pushed"],
-  deleted: [],
+  deleted: ["stopped", "planning"],
 };
 
 describe("loop-state-machine", () => {
@@ -114,9 +114,11 @@ describe("loop-state-machine", () => {
       expect(transitions.size).toBe(4);
     });
 
-    test("returns empty set for deleted (terminal)", () => {
+    test("returns restart transitions for deleted", () => {
       const transitions = getValidTransitions("deleted");
-      expect(transitions.size).toBe(0);
+      expect(transitions.has("stopped")).toBe(true);
+      expect(transitions.has("planning")).toBe(true);
+      expect(transitions.size).toBe(2);
     });
 
     test("returns all expected transitions for each status", () => {
@@ -131,11 +133,11 @@ describe("loop-state-machine", () => {
   });
 
   describe("isTerminalStatus", () => {
-    test("deleted is terminal", () => {
-      expect(isTerminalStatus("deleted")).toBe(true);
+    test("deleted is no longer terminal because it can be revived before purge", () => {
+      expect(isTerminalStatus("deleted")).toBe(false);
     });
 
-    test("non-deleted statuses are not terminal", () => {
+    test("other non-terminal statuses remain non-terminal", () => {
       const nonTerminal = ALL_STATUSES.filter((s) => s !== "deleted");
       for (const status of nonTerminal) {
         expect(isTerminalStatus(status)).toBe(false);

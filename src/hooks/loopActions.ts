@@ -476,6 +476,22 @@ export async function addressReviewCommentsApi(
   };
 }
 
+/**
+ * Start a new feedback cycle from a restartable terminal state.
+ */
+export async function sendFollowUpApi(
+  loopId: string,
+  message: string,
+  model?: { providerID: string; modelID: string },
+): Promise<boolean> {
+  return apiActionWithBody(
+    `/api/loops/${loopId}/follow-up`,
+    "POST",
+    { message, model },
+    "Send follow-up",
+  );
+}
+
 // ─── Chat API functions ───────────────────────────────────────────────────────
 
 /**

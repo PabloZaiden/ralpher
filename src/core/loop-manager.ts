@@ -117,6 +117,14 @@ export interface AcceptLoopResult {
   error?: string;
 }
 
+export interface SendFollowUpResult {
+  success: boolean;
+  error?: string;
+  reviewCycle?: number;
+  branch?: string;
+  commentIds?: string[];
+}
+
 /**
  * Result of pushing a loop branch.
  */
@@ -332,7 +340,7 @@ export class LoopManager {
     }
 
     // Verify chat is in a state where messages can be sent
-    const validStates = ["completed", "running", "max_iterations"];
+    const validStates = ["completed", "running", "max_iterations", "stopped", "failed"];
     if (!validStates.includes(engine.state.status)) {
       throw new Error(`Cannot send chat message in status: ${engine.state.status}`);
     }
@@ -2081,10 +2089,79 @@ Follow the standard loop execution flow:
   }
 
   /**
+   * Send a new follow-up message from a restartable terminal state.
+   * Dispatches to the correct restart strategy based on status and mode.
+   */
+  async sendFollowUp(loopId: string, options: { message: string; model?: ModelConfig }): Promise<SendFollowUpResult> {
+    const message = options.message.trim();
+    if (message === "") {
+      return { success: false, error: "Follow-up message cannot be empty" };
+    }
+    if (options.model && (!options.model.providerID || !options.model.modelID)) {
+      return { success: false, error: "Invalid model config: providerID and modelID are required" };
+    }
+
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      return { success: false, error: "Loop not found" };
+    }
+
+    if (loop.state.status === "pushed" || loop.state.status === "merged") {
+      return this.startFeedbackCycle(loopId, {
+        prompt: message,
+        model: options.model,
+      });
+    }
+
+    if (loop.state.status === "deleted") {
+      if (loop.config.mode === "chat") {
+        const canRecoverChatContext = await this.canReuseExistingBranch(loop);
+        if (!canRecoverChatContext) {
+          return this.jumpstartLoop(loopId, {
+            message,
+            model: options.model,
+          });
+        }
+
+        const reviveResult = await this.reviveDeletedLoop(loopId);
+        if (!reviveResult.success) {
+          return reviveResult;
+        }
+
+        try {
+          await this.sendChatMessage(loopId, message, options.model);
+          return { success: true };
+        } catch (error) {
+          return { success: false, error: String(error) };
+        }
+      }
+
+      return this.jumpstartLoop(loopId, {
+        message,
+        model: options.model,
+      });
+    }
+
+    if (loop.config.mode === "chat") {
+      try {
+        await this.sendChatMessage(loopId, message, options.model);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: String(error) };
+      }
+    }
+
+    return this.jumpstartLoop(loopId, {
+      message,
+      model: options.model,
+    });
+  }
+
+  /**
    * Jumpstart a loop that has stopped running.
    * Sets the pending prompt/model and restarts the loop.
    * 
-   * Works for loops in: completed, stopped, failed, max_iterations states.
+   * Works for loops in: completed, stopped, failed, max_iterations, and deleted states.
    * 
    * Branch handling:
    * - If the loop was NOT merged/accepted: continues on the existing working branch
@@ -2097,7 +2174,7 @@ Follow the standard loop execution flow:
     }
 
     // Check if loop can be jumpstarted
-    const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations", "planning"];
+    const jumpstartableStates = ["completed", "stopped", "failed", "max_iterations", "planning", "deleted"];
     if (!jumpstartableStates.includes(loop.state.status)) {
       return { success: false, error: `Loop cannot be jumpstarted from status: ${loop.state.status}` };
     }
@@ -2147,11 +2224,11 @@ Follow the standard loop execution flow:
 
     // Determine if we should continue on existing branch or create new one
     // If the loop has an existing working branch, continue on it (don't create a new branch)
-    const hasExistingBranch = !!loop.state.git?.workingBranch;
+    const canReuseExistingBranch = await this.canReuseExistingBranch(loop);
     
     // For planning mode loops, we need to use startPlanMode, not startLoop
     if (wasInPlanningMode) {
-      if (hasExistingBranch) {
+      if (canReuseExistingBranch) {
         // Continue on existing branch for planning loop
         return this.jumpstartOnExistingBranch(loopId, loop, true);
       } else {
@@ -2166,8 +2243,8 @@ Follow the standard loop execution flow:
         }
       }
     }
-    
-    if (hasExistingBranch) {
+
+    if (canReuseExistingBranch) {
       // Continue on the existing working branch (similar to addressReviewComments for pushed loops)
       return this.jumpstartOnExistingBranch(loopId, loop);
     } else {
@@ -2181,6 +2258,48 @@ Follow the standard loop execution flow:
         return { success: false, error: `Failed to jumpstart loop: ${String(startError)}` };
       }
     }
+  }
+
+  private async canReuseExistingBranch(loop: Loop): Promise<boolean> {
+    if (!loop.state.git?.workingBranch) {
+      return false;
+    }
+
+    if (!loop.config.useWorktree) {
+      return true;
+    }
+
+    const worktreePath = loop.state.git.worktreePath;
+    if (!worktreePath) {
+      return false;
+    }
+
+    const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+    const git = GitService.withExecutor(executor);
+    return git.worktreeExists(loop.config.directory, worktreePath);
+  }
+
+  private async reviveDeletedLoop(loopId: string): Promise<{ success: boolean; error?: string }> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      return { success: false, error: "Loop not found" };
+    }
+    if (loop.state.status !== "deleted") {
+      return { success: false, error: `Loop is not deleted (status: ${loop.state.status})` };
+    }
+
+    const targetStatus = loop.state.planMode?.active ? "planning" as const : "stopped" as const;
+    assertValidTransition(loop.state.status, targetStatus, "reviveDeletedLoop");
+    loop.state.status = targetStatus;
+    loop.state.completedAt = undefined;
+    loop.state.error = undefined;
+    loop.state.syncState = undefined;
+    if (loop.state.planMode) {
+      loop.state.planMode.isPlanReady = false;
+    }
+
+    await saveLoop(loop);
+    return { success: true };
   }
 
   /**
@@ -2245,81 +2364,98 @@ Follow the standard loop execution flow:
     loopId: string,
     comments: string
   ): Promise<{ success: boolean; error?: string; reviewCycle?: number; branch?: string; commentIds?: string[] }> {
-    const loop = await loadLoop(loopId);
-    if (!loop) {
-      return { success: false, error: "Loop not found" };
-    }
-
-    // Check if loop is addressable
-    if (!loop.state.reviewMode?.addressable) {
-      return { success: false, error: "Loop is not addressable. Only pushed or merged loops can receive reviewer comments." };
-    }
-
-    // Check if loop is in pushed or merged status
-    if (loop.state.status !== "pushed" && loop.state.status !== "merged") {
-      return { success: false, error: `Cannot address comments on loop with status: ${loop.state.status}` };
-    }
-
-    // Check if loop is already running
-    if (this.engines.has(loopId)) {
-      return { success: false, error: "Loop is already running" };
-    }
-
     // Validate comments
     if (!comments || comments.trim() === "") {
       return { success: false, error: "Comments cannot be empty" };
     }
 
+    return this.startFeedbackCycle(loopId, {
+      prompt: this.constructReviewPrompt(comments.trim()),
+      reviewCommentText: comments.trim(),
+    });
+  }
+
+  private async startFeedbackCycle(
+    loopId: string,
+    options: {
+      prompt: string;
+      model?: ModelConfig;
+      reviewCommentText?: string;
+    },
+  ): Promise<SendFollowUpResult> {
+    const loop = await loadLoop(loopId);
+    if (!loop) {
+      return { success: false, error: "Loop not found" };
+    }
+
+    if (!loop.state.reviewMode?.addressable) {
+      return { success: false, error: "Loop is not addressable. Only pushed or merged loops can receive follow-up feedback." };
+    }
+
+    if (loop.state.status !== "pushed" && loop.state.status !== "merged") {
+      return { success: false, error: `Cannot send follow-up on loop with status: ${loop.state.status}` };
+    }
+
+    if (this.engines.has(loopId)) {
+      return { success: false, error: "Loop is already running" };
+    }
+
     try {
       const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
       const git = GitService.withExecutor(executor);
-
-      // Get a dedicated backend for this loop's review cycle.
-      // For pushed loops, the worktree already exists.
-      // For merged loops, a new worktree is created below before the engine starts.
       const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
-
-      // Calculate the next review cycle number
       const nextReviewCycle = loop.state.reviewMode.reviewCycles + 1;
-      
-      // Prepare comment data for later insertion (after validation and state updates)
-      const commentId = crypto.randomUUID();
+      const reviewComment = options.reviewCommentText
+        ? {
+            id: crypto.randomUUID(),
+            text: options.reviewCommentText,
+          }
+        : undefined;
 
-      // Handle based on completion action
       if (loop.state.reviewMode.completionAction === "push") {
-        // PUSHED LOOP: Resume on the same branch
         if (!loop.state.git?.workingBranch) {
           return { success: false, error: "No working branch found for pushed loop" };
         }
 
-        // With worktrees, the branch is already checked out in the worktree.
-        // No checkout needed.
-
-        // Increment review cycles
         loop.state.reviewMode.reviewCycles += 1;
 
-        return this.transitionToReviewAndStart(
-          loopId, loop, backend, git, comments, "pushed",
-          commentId, nextReviewCycle, loop.state.git.workingBranch
-        );
-
-      } else {
-        // MERGED LOOP: Create a new review branch with its own worktree
-        if (!loop.state.git?.originalBranch) {
-          return { success: false, error: "No original branch found for merged loop" };
-        }
-
-        // Increment review cycles
-        loop.state.reviewMode.reviewCycles += 1;
-
-        // Create the review branch and worktree
-        const reviewBranchName = await this.setupMergedReviewWorktree(loop, git);
-
-        return this.transitionToReviewAndStart(
-          loopId, loop, backend, git, comments, "merged",
-          commentId, nextReviewCycle, reviewBranchName
+        return this.transitionToFeedbackCycleAndStart(
+          loopId,
+          loop,
+          backend,
+          git,
+          {
+            prompt: options.prompt,
+            model: options.model,
+            transitionLabel: "pushed",
+            reviewComment,
+            nextReviewCycle,
+            resultBranch: loop.state.git.workingBranch,
+          },
         );
       }
+
+      if (!loop.state.git?.originalBranch) {
+        return { success: false, error: "No original branch found for merged loop" };
+      }
+
+      loop.state.reviewMode.reviewCycles += 1;
+      const reviewBranchName = await this.setupMergedReviewWorktree(loop, git);
+
+      return this.transitionToFeedbackCycleAndStart(
+        loopId,
+        loop,
+        backend,
+        git,
+        {
+          prompt: options.prompt,
+          model: options.model,
+          transitionLabel: "merged",
+          reviewComment,
+          nextReviewCycle,
+          resultBranch: reviewBranchName,
+        },
+      );
     } catch (error) {
       return { success: false, error: String(error) };
     }
@@ -2368,79 +2504,92 @@ Follow the standard loop execution flow:
   }
 
   /**
-   * Transition a loop to idle for review, persist state, insert the review comment,
-   * and start the review engine. Shared tail logic for both pushed and merged paths
-   * of addressReviewComments().
+   * Transition a loop to idle for a new feedback cycle, persist state, store any
+   * associated review comment, and start the restart engine.
    *
    * @param loopId - The loop ID
    * @param loop - The loop config and state
    * @param backend - The backend connection for this loop
    * @param git - The GitService instance
-   * @param comments - The reviewer comments to address
-   * @param transitionLabel - Label for assertValidTransition (e.g., "pushed" or "merged")
-   * @param commentId - Pre-generated UUID for the comment
-   * @param nextReviewCycle - The review cycle number for this comment
-   * @param resultBranch - The branch name to include in the return value
+   * @param options - Feedback-cycle configuration, branch metadata, and optional review comment
    */
-  private async transitionToReviewAndStart(
+  private async transitionToFeedbackCycleAndStart(
     loopId: string,
     loop: Loop,
     backend: ReturnType<typeof backendManager.getLoopBackend>,
     git: GitService,
-    comments: string,
-    transitionLabel: string,
-    commentId: string,
-    nextReviewCycle: number,
-    resultBranch: string
-  ): Promise<{ success: boolean; reviewCycle: number; branch: string; commentIds: string[] }> {
+    options: {
+      prompt: string;
+      model?: ModelConfig;
+      transitionLabel: string;
+      reviewComment?: {
+        id: string;
+        text: string;
+      };
+      nextReviewCycle: number;
+      resultBranch: string;
+    },
+  ): Promise<{ success: boolean; reviewCycle: number; branch: string; commentIds?: string[] }> {
     // Set status to idle so engine.start() can run (it will set to running)
-    assertValidTransition(loop.state.status, "idle", `addressReviewComments:${transitionLabel}`);
+    assertValidTransition(loop.state.status, "idle", `startFeedbackCycle:${options.transitionLabel}`);
     loop.state.status = "idle";
     loop.state.completedAt = undefined;
+    loop.state.error = undefined;
+    loop.state.syncState = undefined;
+    loop.state.pendingPrompt = undefined;
+    loop.state.pendingModel = undefined;
+    if (options.model !== undefined) {
+      loop.config.model = options.model;
+    }
 
-    await updateLoopState(loopId, loop.state);
+    await saveLoop(loop);
 
-    // Store the comment in the database AFTER state is successfully updated
-    insertReviewComment({
-      id: commentId,
-      loopId,
-      reviewCycle: nextReviewCycle,
-      commentText: comments,
-      createdAt: new Date().toISOString(),
-      status: "pending",
+    if (options.reviewComment) {
+      insertReviewComment({
+        id: options.reviewComment.id,
+        loopId,
+        reviewCycle: options.nextReviewCycle,
+        commentText: options.reviewComment.text,
+        createdAt: new Date().toISOString(),
+        status: "pending",
+      });
+    }
+
+    // Create and start the feedback engine (shared helper)
+    this.startFeedbackEngine(loopId, loop, backend, git, {
+      prompt: options.prompt,
+      model: options.model,
+      startFailureLabel: options.reviewComment ? "addressing comments" : "sending follow-up feedback",
     });
-
-    // Create and start the review engine (shared helper)
-    this.startReviewEngine(loopId, loop, backend, git, comments);
 
     return {
       success: true,
       reviewCycle: loop.state.reviewMode!.reviewCycles,
-      branch: resultBranch,
-      commentIds: [commentId],
+      branch: options.resultBranch,
+      commentIds: options.reviewComment ? [options.reviewComment.id] : undefined,
     };
   }
 
   /**
-   * Create, configure, and start a review engine for addressing reviewer comments.
-   * Shared by both the pushed and merged paths of addressReviewComments().
+   * Create, configure, and start a feedback-cycle engine on an already prepared branch/worktree.
    *
    * @param loopId - The loop ID
    * @param loop - The loop config and state
    * @param backend - The backend connection for this loop
    * @param git - The GitService instance
-   * @param comments - The reviewer comments to address
+   * @param options - Prompt/model configuration for the restart cycle
    */
-  private startReviewEngine(
+  private startFeedbackEngine(
     loopId: string,
     loop: Loop,
     backend: ReturnType<typeof backendManager.getLoopBackend>,
     git: GitService,
-    comments: string
+    options: {
+      prompt: string;
+      model?: ModelConfig;
+      startFailureLabel: string;
+    },
   ): void {
-    // Construct specialized prompt for addressing comments
-    const reviewPrompt = this.constructReviewPrompt(comments);
-
     // Create a new loop engine with skipGitSetup (branch/worktree already exists)
     const engine = new LoopEngine({
       loop: { config: loop.config, state: loop.state },
@@ -2454,8 +2603,10 @@ Follow the standard loop execution flow:
     });
     this.engines.set(loopId, engine);
 
-    // Set the review prompt as pending
-    engine.setPendingPrompt(reviewPrompt);
+    if (options.model !== undefined) {
+      engine.setPendingModel(options.model);
+    }
+    engine.setPendingPrompt(options.prompt);
 
     // Start state persistence
     this.startStatePersistence(loopId);
@@ -2463,7 +2614,7 @@ Follow the standard loop execution flow:
     // Start execution (fire and forget - don't block the caller)
     // The loop runs asynchronously and updates state via events/persistence
     engine.start().catch((error) => {
-      log.error(`Loop ${loopId} failed to start after addressing comments:`, String(error));
+      log.error(`Loop ${loopId} failed to start after ${options.startFailureLabel}:`, String(error));
     });
   }
 
@@ -2774,7 +2925,7 @@ ${fileList}
       throw new Error(`Loop is not a chat (mode: ${loop.config.mode})`);
     }
 
-    const recoverableStatuses = ["completed", "max_iterations"];
+    const recoverableStatuses = ["completed", "max_iterations", "stopped", "failed"];
     if (!recoverableStatuses.includes(loop.state.status)) {
       throw new Error(`Cannot recover chat engine in status: ${loop.state.status}`);
     }

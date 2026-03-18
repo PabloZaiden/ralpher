@@ -203,7 +203,7 @@ describe("LoopManager - Chat Mode", () => {
       ).rejects.toThrow(/not found/);
     });
 
-    test("rejects sending message to a chat in stopped status", async () => {
+    test("restarts a chat from stopped status", async () => {
       const loop = await ctx.manager.createChat({
         ...testModelFields,
         directory: ctx.workDir,
@@ -217,10 +217,42 @@ describe("LoopManager - Chat Mode", () => {
       // Stop the chat
       await ctx.manager.stopLoop(loop.config.id);
 
-      // Sending a message to a stopped chat should fail
-      await expect(
-        ctx.manager.sendChatMessage(loop.config.id, "Should fail"),
-      ).rejects.toThrow(/Cannot (send chat message|recover chat engine)/);
+      await ctx.manager.sendChatMessage(loop.config.id, "Restart after stop");
+      await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"], 15000);
+
+      const updated = await ctx.manager.getLoop(loop.config.id);
+      expect(updated!.state.status).toMatch(/completed|max_iterations/);
+    });
+
+    test("restarts a chat from failed status after recovery", async () => {
+      const loop = await ctx.manager.createChat({
+        ...testModelFields,
+        directory: ctx.workDir,
+        prompt: "Test chat",
+        workspaceId: testWorkspaceId,
+      });
+
+      await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"]);
+
+      const current = await ctx.manager.getLoop(loop.config.id);
+      await updateLoopState(loop.config.id, {
+        ...current!.state,
+        status: "failed",
+        error: {
+          message: "Previous turn failed",
+          iteration: 1,
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      // @ts-expect-error - accessing private field for test purposes
+      ctx.manager.engines.delete(loop.config.id);
+
+      await ctx.manager.sendChatMessage(loop.config.id, "Restart after failure");
+      await waitForLoopStatus(ctx.manager, loop.config.id, ["completed", "max_iterations"], 15000);
+
+      const updated = await ctx.manager.getLoop(loop.config.id);
+      expect(updated!.state.status).toMatch(/completed|max_iterations/);
     });
   });
 

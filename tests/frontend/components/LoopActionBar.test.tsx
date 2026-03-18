@@ -171,6 +171,26 @@ describe("LoopActionBar", () => {
       expect(getByRole("button", { name: "Queue" })).not.toBeDisabled();
     });
 
+    test("requires a message for terminal follow-up submissions", async () => {
+      const models = [
+        createModelInfo({ providerID: "openai", modelID: "gpt-4", modelName: "GPT-4", providerName: "OpenAI", connected: true }),
+      ];
+      const { container, getByRole, user } = renderWithUser(
+        <LoopActionBar
+          {...defaultProps({
+            models,
+            requireMessage: true,
+            submitLabel: "Restart",
+          })}
+        />,
+      );
+
+      const select = container.querySelector("select") as HTMLSelectElement;
+      await user.selectOptions(select, "openai:gpt-4:");
+
+      expect(getByRole("button", { name: "Restart" })).toBeDisabled();
+    });
+
     test("calls onQueuePending with message when submitted", async () => {
       const onQueuePending = mock(async (_data: { message?: string; model?: ModelConfig }) => true);
       const { getByPlaceholderText, getByRole, user } = renderWithUser(
@@ -336,6 +356,22 @@ describe("LoopActionBar", () => {
       await waitFor(() => {
         expect(onClearPending).toHaveBeenCalledTimes(1);
       });
+    });
+  });
+
+  describe("terminal follow-up copy", () => {
+    test("renders custom submit label and helper text", () => {
+      const { getByRole, getByText } = renderWithUser(
+        <LoopActionBar
+          {...defaultProps({
+            submitLabel: "Restart",
+            helperText: "Message will start a new feedback cycle immediately.",
+          })}
+        />,
+      );
+
+      expect(getByRole("button", { name: "Restart" })).toBeInTheDocument();
+      expect(getByText("Message will start a new feedback cycle immediately.")).toBeInTheDocument();
     });
   });
 });
