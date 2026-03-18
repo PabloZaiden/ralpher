@@ -429,6 +429,45 @@ describe("App shell", () => {
     });
   });
 
+  test("opens workspace settings from the workspace shell icon action", async () => {
+    const workspace = createWorkspace({ id: "workspace-1", name: "Frontend", directory: "/workspaces/frontend" });
+    setupDefaultApi({ workspaces: [workspace] });
+    api.get("/api/workspaces/:id", () => workspace);
+    api.get("/api/workspaces/:id/agents-md", () => ({
+      content: "# AGENTS.md",
+      fileExists: true,
+      analysis: {
+        isOptimized: false,
+        currentVersion: null,
+        updateAvailable: false,
+      },
+    }));
+    api.get("/api/workspaces/:id/server-settings/status", () => ({
+      connected: false,
+      provider: workspace.serverSettings.agent.provider,
+      transport: workspace.serverSettings.agent.transport,
+      capabilities: [],
+    }));
+
+    const { getByRole, queryByText, user } = renderWithUser(<App />, { route: "#/workspace/workspace-1" });
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Frontend" })).toBeTruthy();
+    });
+
+    const settingsButton = getByRole("button", { name: "Open workspace settings" });
+    expect(settingsButton.getAttribute("title")).toBe("Workspace Settings");
+    expect(settingsButton.textContent?.trim() ?? "").toBe("");
+    expect(settingsButton.querySelector("svg")).toBeTruthy();
+    expect(queryByText("Workspace Settings")).toBeNull();
+
+    await user.click(settingsButton);
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Workspace Settings" })).toBeTruthy();
+    });
+  });
+
   test("lets users delete an SSH server from the shell detail route", async () => {
     const server = createSshServer({ id: "server-1", name: "Deploy host" });
     setupDefaultApi({ sshServers: [server] });
