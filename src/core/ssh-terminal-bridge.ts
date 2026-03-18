@@ -30,6 +30,7 @@ const log = createLogger("core:ssh-terminal-bridge");
 const SESSION_READY_POLL_INTERVAL_MS = 100;
 const DEFAULT_SESSION_READY_TIMEOUT_MS = 15_000;
 const MAX_SESSION_READY_PROBE_TIMEOUT_MS = 10_000;
+const DEFAULT_SSH_TERMINAL_COMMAND_TIMEOUT_MS = 10_000;
 const OSC_52_SEQUENCE_START = "\u001b]52;";
 const OSC_SEQUENCE_BELL = "\u0007";
 const OSC_SEQUENCE_STRING_TERMINATOR = "\u001b\\";
@@ -437,7 +438,7 @@ export class SshTerminalBridge {
       resizeCommand,
     ], {
       cwd: this.commandCwd,
-      timeout: 5_000,
+      timeout: DEFAULT_SSH_TERMINAL_COMMAND_TIMEOUT_MS,
     });
     if (!result.success) {
       throw new Error(result.stderr.trim() || result.stdout.trim() || "Failed to resize SSH terminal");
@@ -658,7 +659,7 @@ export class SshTerminalBridge {
 
     const result = await executor.exec("bash", ["-lc", buildPersistentSessionBackendProbeCommand()], {
       cwd: "/",
-      timeout: 5_000,
+      timeout: DEFAULT_SSH_TERMINAL_COMMAND_TIMEOUT_MS,
     });
     if (result.success) {
       if (session.state.runtimeConnectionMode || session.state.notice) {
