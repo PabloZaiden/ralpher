@@ -368,6 +368,53 @@ describe("SshTerminalBridge", () => {
     await bridge.dispose();
   });
 
+  test("clamps readiness probes to the remaining deadline budget", async () => {
+    const readyProbeTimeouts: number[] = [];
+    const originalDateNow = Date.now;
+    (Date as { now: typeof Date.now }).now = () => 0;
+
+    execImpl = async (command: string, args: string[], options?: CommandOptions) => {
+      if (command === "bash" && args[0] === "-lc" && args[1]?.includes("command -v dtach")) {
+        return {
+          success: true,
+          stdout: "dtach - version 0.9\n",
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      if (command === "bash" && args[0] === "-lc" && args[1]?.includes("session_socket=")) {
+        readyProbeTimeouts.push(options?.timeout ?? 0);
+        return {
+          success: true,
+          stdout: "",
+          stderr: "",
+          exitCode: 0,
+        };
+      }
+      return {
+        success: true,
+        stdout: "",
+        stderr: "",
+        exitCode: 0,
+      };
+    };
+
+    try {
+      const bridge = new SshTerminalBridge(session.config.id, {
+        onOutput: () => {},
+        readyTimeoutMs: 50,
+      });
+
+      await bridge.connect();
+
+      expect(readyProbeTimeouts).toEqual([50]);
+
+      await bridge.dispose();
+    } finally {
+      (Date as { now: typeof Date.now }).now = originalDateNow;
+    }
+  });
+
   test("dispose waits for close and allows reconnecting the same bridge instance", async () => {
     const bridge = new SshTerminalBridge(session.config.id, {
       onOutput: () => {},

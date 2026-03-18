@@ -561,7 +561,7 @@ export class SshTerminalBridge {
   }
 
   private getReadyProbeTimeout(deadline: number): number {
-    const remainingMs = Math.max(SESSION_READY_POLL_INTERVAL_MS, deadline - Date.now());
+    const remainingMs = Math.max(0, deadline - Date.now());
     return Math.min(MAX_SESSION_READY_PROBE_TIMEOUT_MS, remainingMs);
   }
 
