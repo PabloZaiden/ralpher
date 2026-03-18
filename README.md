@@ -171,6 +171,8 @@ bun dev
 
 The web UI will be available at `http://localhost:3000` (configurable via `RALPHER_PORT`).
 
+When the server starts, it logs the effective listening address and whether built-in basic auth is enabled so you can verify the current exposure immediately.
+
 ### Creating Your First Loop
 
 1. Click **"New Loop"** in the dashboard
@@ -185,10 +187,25 @@ The web UI will be available at `http://localhost:3000` (configurable via `RALPH
 
 | Variable | Description | Default |
 |----------|-------------|---------|
+| `RALPHER_HOST` | Host/interface passed to `Bun.serve`; set this to restrict which interfaces accept requests | `0.0.0.0` |
 | `RALPHER_PORT` | Server port | `3000` |
+| `RALPHER_PASSWORD` | Enable built-in HTTP Basic auth for every request when this is non-empty after trimming | unset |
+| `RALPHER_USERNAME` | Username for built-in HTTP Basic auth when `RALPHER_PASSWORD` enables it | `ralpher` |
 | `RALPHER_DATA_DIR` | Data directory for persistence | `./data` |
 | `RALPHER_REMOTE_ONLY` | Disable local `stdio` transport and only allow `ssh` transport (`true`/`1`/`yes`) | unset |
 | `RALPHER_LOG_LEVEL` | Override server log level (`silly`, `trace`, `debug`, `info`, `warn`, `error`, `fatal`) | `info` |
+
+### Optional Built-In Basic Auth
+
+Set `RALPHER_PASSWORD` to a non-empty value to require HTTP Basic auth on every request, including API requests, websocket upgrades, and the SPA fallback. The username defaults to `ralpher`; set `RALPHER_USERNAME` if you want a different username.
+
+```bash
+RALPHER_PASSWORD=secret ralpher
+RALPHER_USERNAME=admin RALPHER_PASSWORD=secret ralpher
+RALPHER_HOST=127.0.0.1 RALPHER_PASSWORD=secret ralpher
+```
+
+Startup logs explain both the effective bind address and whether auth is enabled or disabled. They also mention `RALPHER_HOST`, `RALPHER_PASSWORD`, and `RALPHER_USERNAME` so it is clear which env vars to change.
 
 ### Data Storage
 

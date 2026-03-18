@@ -44,6 +44,10 @@ RUN mkdir -p /app/data && chown -R ralpher:ralpher /app/data
 
 # Set environment variables
 ENV NODE_ENV=production
+# Optional runtime controls:
+# - RALPHER_HOST limits which interfaces Bun listens on (default: 0.0.0.0)
+# - RALPHER_PASSWORD enables built-in HTTP Basic auth when non-empty after trimming
+# - RALPHER_USERNAME overrides the default Basic auth username ("ralpher")
 ENV RALPHER_PORT=8080
 ENV RALPHER_DATA_DIR=/app/data
 ENV TERM=xterm-256color
