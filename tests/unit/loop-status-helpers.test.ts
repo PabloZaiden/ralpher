@@ -7,6 +7,7 @@ import { describe, test, expect } from "bun:test";
 import {
   getStatusLabel,
   canAccept,
+  canMarkMerged,
   isFinalState,
   isLoopActive,
   isLoopRunning,
@@ -155,6 +156,46 @@ describe("canAccept", () => {
     ];
     for (const status of nonAcceptable) {
       expect(canAccept(status)).toBe(false);
+    }
+  });
+});
+
+// ============================================================================
+// canMarkMerged
+// ============================================================================
+
+describe("canMarkMerged", () => {
+  test("returns true only for git-backed statuses supported by the backend flow", () => {
+    const eligibleStatuses: LoopStatus[] = ["completed", "max_iterations", "pushed"];
+
+    for (const status of ALL_STATUSES) {
+      expect(canMarkMerged(status, true)).toBe(eligibleStatuses.includes(status));
+    }
+  });
+
+  test("returns false for backend-rejected statuses even when git metadata exists", () => {
+    const ineligibleStatuses: LoopStatus[] = [
+      "idle",
+      "draft",
+      "planning",
+      "starting",
+      "running",
+      "waiting",
+      "stopped",
+      "failed",
+      "resolving_conflicts",
+      "merged",
+      "deleted",
+    ];
+
+    for (const status of ineligibleStatuses) {
+      expect(canMarkMerged(status, true)).toBe(false);
+    }
+  });
+
+  test("returns false when git metadata is unavailable", () => {
+    for (const status of ALL_STATUSES) {
+      expect(canMarkMerged(status, false)).toBe(false);
     }
   });
 });
