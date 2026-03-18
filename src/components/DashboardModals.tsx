@@ -235,43 +235,6 @@ export function DashboardModals(props: DashboardModalsProps) {
             </>
           ) : (
             <>
-              {/* Left side - Save as Draft / Update Draft button — hidden in chat mode */}
-              {!isChatMode && (!props.formActionState.isEditing || props.formActionState.isEditingDraft) && (
-                props.formActionState.isEditingDraft ? (
-                  <div className="flex flex-col gap-2 sm:mr-auto sm:flex-row sm:items-center sm:gap-3">
-                    <Button
-                      type="button"
-                      variant="danger"
-                      onClick={openDeleteDraftConfirmation}
-                      disabled={props.formActionState.isSubmitting}
-                    >
-                      Delete Draft
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={props.formActionState.onSaveAsDraft}
-                      disabled={props.formActionState.isSubmitting || !props.formActionState.canSaveDraft}
-                      loading={props.formActionState.isSubmitting}
-                    >
-                      Update Draft
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={props.formActionState.onSaveAsDraft}
-                    disabled={props.formActionState.isSubmitting || !props.formActionState.canSaveDraft}
-                    loading={props.formActionState.isSubmitting}
-                    className="sm:mr-auto"
-                  >
-                    Save as Draft
-                  </Button>
-                )
-              )}
-
-              {/* Right side - Cancel and Create/Start buttons */}
               <Button
                 type="button"
                 variant="ghost"
@@ -280,6 +243,27 @@ export function DashboardModals(props: DashboardModalsProps) {
               >
                 Cancel
               </Button>
+              {props.formActionState.isEditingDraft && (
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={openDeleteDraftConfirmation}
+                  disabled={props.formActionState.isSubmitting}
+                >
+                  Delete Draft
+                </Button>
+              )}
+              {!isChatMode && (!props.formActionState.isEditing || props.formActionState.isEditingDraft) && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={props.formActionState.onSaveAsDraft}
+                  disabled={props.formActionState.isSubmitting || !props.formActionState.canSaveDraft}
+                  loading={props.formActionState.isSubmitting}
+                >
+                  {props.formActionState.isEditingDraft ? "Update Draft" : "Save as Draft"}
+                </Button>
+              )}
               <Button
                 type="button"
                 onClick={props.formActionState.onSubmit}

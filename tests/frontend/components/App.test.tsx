@@ -140,13 +140,24 @@ afterEach(() => {
 
 describe("App shell", () => {
   test("renders the shell overview by default", async () => {
-    const { getByRole, getByText } = renderWithUser(<App />);
+    const { getByRole, getByText, queryByText } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
       expect(getByText("Recent activity")).toBeTruthy();
-      expect(getByText("Workspace map")).toBeTruthy();
+      expect(getByText("Server maps")).toBeTruthy();
+      expect(getByText("Workspaces map")).toBeTruthy();
     });
+
+    const recentActivityHeading = getByRole("heading", { name: "Recent activity" });
+    const serverMapsHeading = getByRole("heading", { name: "Server maps" });
+    const workspacesMapHeading = getByRole("heading", { name: "Workspaces map" });
+
+    expect(recentActivityHeading.compareDocumentPosition(serverMapsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(serverMapsHeading.compareDocumentPosition(workspacesMapHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(queryByText("Tracked repositories and hosts.")).toBeNull();
+    expect(queryByText("Task-oriented Ralph loops.")).toBeNull();
+    expect(queryByText("Interactive conversations.")).toBeNull();
   });
 
   test("wraps long server map and recent activity text inside the shell overview cards", async () => {
@@ -370,9 +381,14 @@ describe("App shell", () => {
     await waitFor(() => {
       expect(getByRole("heading", { name: "Deploy host" })).toBeTruthy();
       expect(getByRole("button", { name: "Delete Server" })).toBeTruthy();
+      expect(getByRole("button", { name: "New Session" })).toBeTruthy();
     });
 
-    await user.click(getByRole("button", { name: "Delete Server" }));
+    const deleteButton = getByRole("button", { name: "Delete Server" });
+    const newSessionButton = getByRole("button", { name: "New Session" });
+    expect(deleteButton.compareDocumentPosition(newSessionButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+
+    await user.click(deleteButton);
 
     await waitFor(() => {
       expect(getByText('Delete "Deploy host"? This removes the saved SSH server metadata from Ralpher and any saved browser credential for this server.')).toBeTruthy();
