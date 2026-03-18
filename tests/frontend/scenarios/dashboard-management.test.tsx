@@ -88,7 +88,7 @@ describe("dashboard management scenario", () => {
     expect(getByText("Recent activity will appear here as you start work.")).toBeTruthy();
   });
 
-  test("overview shows recent loops and the workspace map", async () => {
+  test("overview shows recent loops, server maps, and the workspaces map", async () => {
     setupBaseApi();
 
     const runningLoop = createLoopWithStatus("running", {
@@ -104,17 +104,25 @@ describe("dashboard management scenario", () => {
     api.get("/api/loops", () => [runningLoop, completedLoop, draftLoop]);
     api.get("/api/workspaces", () => [WORKSPACE_A, WORKSPACE_B]);
 
-    const { getAllByText, getByText } = renderWithUser(<App />);
+    const { getAllByText, getByRole, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
       expect(getAllByText("Project Alpha").length).toBeGreaterThan(0);
     });
 
     expect(getAllByText("Project Beta").length).toBeGreaterThan(0);
-    expect(getByText("Workspace map")).toBeTruthy();
+    expect(getByText("Server maps")).toBeTruthy();
+    expect(getByText("Workspaces map")).toBeTruthy();
     expect(getAllByText("Running Task").length).toBeGreaterThan(0);
     expect(getAllByText("Done Task").length).toBeGreaterThan(0);
     expect(getAllByText("Draft Task").length).toBeGreaterThan(0);
+
+    const recentActivityHeading = getByRole("heading", { name: "Recent activity" });
+    const serverMapsHeading = getByRole("heading", { name: "Server maps" });
+    const workspacesMapHeading = getByRole("heading", { name: "Workspaces map" });
+
+    expect(recentActivityHeading.compareDocumentPosition(serverMapsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(serverMapsHeading.compareDocumentPosition(workspacesMapHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   test("clicking a loop card navigates to loop details", async () => {
@@ -170,6 +178,7 @@ describe("dashboard management scenario", () => {
       expect(getByRole("button", { name: /ralpher/i })).toBeTruthy();
       expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
       expect(getByText("Recent activity")).toBeTruthy();
+      expect(getByText("Server maps")).toBeTruthy();
     });
   });
 
@@ -217,7 +226,7 @@ describe("dashboard management scenario", () => {
     });
   });
 
-  test("overview displays shell summary cards", async () => {
+  test("overview omits removed shell summary cards", async () => {
     setupBaseApi();
     api.get("/api/loops", () => [
       createLoopWithStatus("running", {
@@ -226,15 +235,17 @@ describe("dashboard management scenario", () => {
     ]);
     api.get("/api/workspaces", () => [WORKSPACE_A, WORKSPACE_B]);
 
-    const { getAllByText } = renderWithUser(<App />);
+    const { getByText, queryByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getAllByText("Workspaces").length).toBeGreaterThan(0);
+      expect(getByText("Recent activity")).toBeTruthy();
+      expect(getByText("Server maps")).toBeTruthy();
+      expect(getByText("Workspaces map")).toBeTruthy();
     });
 
-    expect(getAllByText("Loops").length).toBeGreaterThan(0);
-    expect(getAllByText("Chats").length).toBeGreaterThan(0);
-    expect(getAllByText("SSH").length).toBeGreaterThan(0);
+    expect(queryByText("Tracked repositories and hosts.")).toBeNull();
+    expect(queryByText("Task-oriented Ralph loops.")).toBeNull();
+    expect(queryByText("Interactive conversations.")).toBeNull();
   });
 
   // Note: "connection status indicator shows connected state" test was removed because
@@ -254,7 +265,7 @@ describe("dashboard management scenario", () => {
     const { getAllByText, getByText } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Workspace map")).toBeTruthy();
+      expect(getByText("Workspaces map")).toBeTruthy();
     });
     expect(getAllByText("Project Beta").length).toBeGreaterThan(0);
     expect(getByText("0 items")).toBeTruthy();
