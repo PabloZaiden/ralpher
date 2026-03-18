@@ -45,6 +45,8 @@ import {
   PASSWORD_INPUT_PROPS,
   SidebarIcon,
   type BadgeVariant,
+  getLoopStatusBadgeVariant,
+  getSshSessionStatusBadgeVariant,
   getStatusBadgeVariant,
 } from "./common";
 
@@ -304,21 +306,25 @@ function ShellSection({
   );
 }
 
+interface SectionItemProps {
+  active?: boolean;
+  title: string;
+  subtitle?: string;
+  badge?: string;
+  badgeVariant?: BadgeVariant;
+  nested?: boolean;
+  onClick: () => void;
+}
+
 function SectionItem({
   active = false,
   title,
   subtitle,
   badge,
+  badgeVariant = "default",
   nested = false,
   onClick,
-}: {
-  active?: boolean;
-  title: string;
-  subtitle?: string;
-  badge?: string;
-  nested?: boolean;
-  onClick: () => void;
-}) {
+}: SectionItemProps) {
   return (
     <button
       type="button"
@@ -345,16 +351,16 @@ function SectionItem({
         )}
       </span>
       {badge && (
-        <span
+        <Badge
+          variant={badgeVariant}
+          size="sm"
           className={[
-            "ml-3 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-            active
-              ? "bg-white/10 text-white dark:bg-neutral-900/10 dark:text-gray-950"
-              : "bg-gray-200 text-gray-600 dark:bg-neutral-700 dark:text-gray-300",
+            "ml-3 shrink-0 uppercase tracking-wide",
+            active ? "ring-1 ring-white/10 dark:ring-gray-300/20" : "",
           ].join(" ")}
         >
           {badge}
-        </span>
+        </Badge>
       )}
     </button>
   );
@@ -1584,6 +1590,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         title: session.config.name,
         subtitle: `${workspacesById.get(session.config.workspaceId)?.name ?? "Unknown workspace"} · ${getSshConnectionModeLabel(session.config.connectionMode)}`,
         badge: session.state.status,
+        badgeVariant: getSshSessionStatusBadgeVariant(session.state.status),
         createdAt: session.config.createdAt,
       })),
       ...standaloneSessions.map((session) => ({
@@ -1591,6 +1598,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
         title: session.config.name,
         subtitle: `${serversById.get(session.config.sshServerId)?.config.name ?? "Unknown server"} · ${getSshConnectionModeLabel(session.config.connectionMode)}`,
         badge: session.state.status,
+        badgeVariant: getSshSessionStatusBadgeVariant(session.state.status),
         createdAt: session.config.createdAt,
       })),
     ].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
@@ -2625,6 +2633,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                     active={route.view === "loop" && route.loopId === loop.config.id}
                     title={loop.config.name}
                     badge={getLoopStatusLabel(loop)}
+                    badgeVariant={getLoopStatusBadgeVariant(loop.state.status, loop.state.planMode?.isPlanReady ?? false)}
                     onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
                   />
                 )}
@@ -2654,6 +2663,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                     active={route.view === "chat" && route.chatId === chat.config.id}
                     title={chat.config.name}
                     badge={getStatusLabel(chat.state.status, chat.state.syncState)}
+                    badgeVariant={getLoopStatusBadgeVariant(chat.state.status, chat.state.planMode?.isPlanReady ?? false)}
                     onClick={() => navigateWithinShell({ view: "chat", chatId: chat.config.id })}
                   />
                 )}
@@ -2679,6 +2689,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                   title={session.title}
                   subtitle={session.subtitle}
                   badge={session.badge}
+                  badgeVariant={session.badgeVariant}
                   onClick={() => navigateWithinShell({ view: "ssh", sshSessionId: session.id })}
                 />
               ))

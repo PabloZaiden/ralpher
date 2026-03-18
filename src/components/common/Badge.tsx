@@ -3,6 +3,7 @@
  */
 
 import type { HTMLAttributes } from "react";
+import type { SshSessionStatus } from "../../types";
 
 export type BadgeVariant = 
   | "default" 
@@ -100,6 +101,30 @@ export function getStatusBadgeVariant(status: string): BadgeVariant {
       return "pushed";
     case "deleted":
       return "deleted";
+    default:
+      return "default";
+  }
+}
+
+export function getLoopStatusBadgeVariant(status: string, isPlanReady = false): BadgeVariant {
+  if (status === "planning" && isPlanReady) {
+    return "plan_ready";
+  }
+
+  return getStatusBadgeVariant(status);
+}
+
+export function getSshSessionStatusBadgeVariant(status: SshSessionStatus): BadgeVariant {
+  switch (status) {
+    case "connected":
+      return "success";
+    case "connecting":
+      return "info";
+    case "failed":
+      return "error";
+    case "disconnected":
+      return "warning";
+    case "ready":
     default:
       return "default";
   }
