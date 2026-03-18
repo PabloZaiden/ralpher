@@ -381,9 +381,14 @@ describe("App shell", () => {
     await waitFor(() => {
       expect(getByRole("heading", { name: "Deploy host" })).toBeTruthy();
       expect(getByRole("button", { name: "Delete Server" })).toBeTruthy();
+      expect(getByRole("button", { name: "New Session" })).toBeTruthy();
     });
 
-    await user.click(getByRole("button", { name: "Delete Server" }));
+    const deleteButton = getByRole("button", { name: "Delete Server" });
+    const newSessionButton = getByRole("button", { name: "New Session" });
+    expect(deleteButton.compareDocumentPosition(newSessionButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+
+    await user.click(deleteButton);
 
     await waitFor(() => {
       expect(getByText('Delete "Deploy host"? This removes the saved SSH server metadata from Ralpher and any saved browser credential for this server.')).toBeTruthy();

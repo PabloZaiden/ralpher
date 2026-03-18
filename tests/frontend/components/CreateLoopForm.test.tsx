@@ -752,6 +752,19 @@ describe("CreateLoopForm", () => {
       expect(getByRole("button", { name: "Save as Draft" })).toBeInTheDocument();
     });
 
+    test("renders actions in cancel, save draft, create order", () => {
+      const { getByRole } = renderWithUser(
+        <CreateLoopForm {...defaultProps()} />
+      );
+
+      const cancelButton = getByRole("button", { name: "Cancel" });
+      const saveDraftButton = getByRole("button", { name: "Save as Draft" });
+      const createButton = getByRole("button", { name: /Create (Plan|Loop)/ });
+
+      expect(cancelButton.compareDocumentPosition(saveDraftButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+      expect(saveDraftButton.compareDocumentPosition(createButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
+    });
+
     test("Save as Draft is disabled when workspace is not selected", () => {
       const { getByRole } = renderWithUser(
         <CreateLoopForm {...defaultProps()} />

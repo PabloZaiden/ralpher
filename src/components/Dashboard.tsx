@@ -253,10 +253,6 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
                     setEditingSshServer(null);
                     setShowCreateSshServerModal(true);
                   }}
-                  onOpenEditServer={(server) => {
-                    setEditingSshServer(server);
-                    setShowCreateSshServerModal(true);
-                  }}
                   onDeleteServer={async (serverId) => {
                     await deleteServer(serverId);
                   }}
