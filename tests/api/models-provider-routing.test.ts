@@ -26,7 +26,9 @@ describe("GET /api/models provider routing", () => {
     testDataDir = await mkdtemp(join(tmpdir(), "ralpher-model-routing-test-"));
     process.env["RALPHER_DATA_DIR"] = testDataDir;
 
+    const { backendManager } = await import("../../src/core/backend-manager");
     const { ensureDataDirectories } = await import("../../src/persistence/database");
+    backendManager.resetForTesting();
     await ensureDataDirectories();
   });
 
@@ -45,9 +47,7 @@ describe("GET /api/models provider routing", () => {
     const workDir = await mkdtemp(join(tmpdir(), "ralpher-model-routing-workdir-"));
     try {
       const { backendManager } = await import("../../src/core/backend-manager");
-      backendManager.resetForTesting();
-
-      const acpModelsBackend = new MockAcpBackend({
+      backendManager.setBackendForTesting(new MockAcpBackend({
         models: [
           {
             providerID: "openai",
@@ -71,49 +71,42 @@ describe("GET /api/models provider routing", () => {
             connected: true,
           },
         ],
-      });
-      const originalCreateBackend = backendManager.createBackend.bind(backendManager);
-
+      }));
       backendManager.setExecutorFactoryForTesting(() => new FailOnCopilotExecutionExecutor());
-      backendManager.createBackend = () => acpModelsBackend;
 
-      try {
-        const { createWorkspace } = await import("../../src/persistence/workspaces");
-        await createWorkspace({
-          id: "copilot-model-workspace",
-          name: "Copilot Workspace",
-          directory: workDir,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          serverSettings: {
-            agent: {
-              provider: "copilot",
-              transport: "stdio",
-            },
+      const { createWorkspace } = await import("../../src/persistence/workspaces");
+      await createWorkspace({
+        id: "copilot-model-workspace",
+        name: "Copilot Workspace",
+        directory: workDir,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        serverSettings: {
+          agent: {
+            provider: "copilot",
+            transport: "stdio",
           },
-        });
+        },
+      });
 
-        const { modelsRoutes } = await import("../../src/api/models");
-        const response = await modelsRoutes["/api/models"].GET(
-          new Request(
-            `http://localhost/api/models?directory=${encodeURIComponent(workDir)}&workspaceId=copilot-model-workspace`,
-          ),
-        );
+      const { modelsRoutes } = await import("../../src/api/models");
+      const response = await modelsRoutes["/api/models"].GET(
+        new Request(
+          `http://localhost/api/models?directory=${encodeURIComponent(workDir)}&workspaceId=copilot-model-workspace`,
+        ),
+      );
 
-        expect(response.status).toBe(200);
-        const models = await response.json() as Array<{
-          providerID: string;
-          providerName: string;
-          modelID: string;
-        }>;
-        const modelIds = models.map((model) => model.modelID).sort();
+      expect(response.status).toBe(200);
+      const models = await response.json() as Array<{
+        providerID: string;
+        providerName: string;
+        modelID: string;
+      }>;
+      const modelIds = models.map((model) => model.modelID).sort();
 
-        expect(modelIds).toEqual(["claude-sonnet-4.6", "gpt-4.1", "gpt-5.3-codex"]);
-        expect(models.every((model) => model.providerID === "copilot")).toBe(true);
-        expect(models.every((model) => model.providerName === "Copilot")).toBe(true);
-      } finally {
-        backendManager.createBackend = originalCreateBackend;
-      }
+      expect(modelIds).toEqual(["claude-sonnet-4.6", "gpt-4.1", "gpt-5.3-codex"]);
+      expect(models.every((model) => model.providerID === "copilot")).toBe(true);
+      expect(models.every((model) => model.providerName === "Copilot")).toBe(true);
     } finally {
       await rm(workDir, { recursive: true, force: true });
     }
