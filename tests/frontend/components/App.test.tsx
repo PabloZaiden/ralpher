@@ -428,6 +428,64 @@ describe("App shell", () => {
     });
   });
 
+  test("shows 'Plan Ready' for ready planning loops in the sidebar", async () => {
+    const workspace = createWorkspace({ id: "workspace-1", name: "Frontend", directory: "/workspaces/frontend" });
+    const readyPlanningLoop = createLoopWithStatus("planning", {
+      config: { id: "loop-plan-ready", name: "Plan Ready Loop", workspaceId: workspace.id },
+      state: {
+        planMode: {
+          active: true,
+          feedbackRounds: 0,
+          planningFolderCleared: false,
+          isPlanReady: true,
+        },
+      },
+    });
+
+    setupDefaultApi({ workspaces: [workspace], loops: [readyPlanningLoop] });
+
+    const { getByRole } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      const sidebar = document.querySelector("aside");
+      expect(sidebar).toBeTruthy();
+      expect(within(sidebar as HTMLElement).getByText("Plan Ready Loop")).toBeTruthy();
+      expect(within(sidebar as HTMLElement).getByText("Plan Ready")).toBeTruthy();
+    });
+
+    expect(getByRole("button", { name: /Collapse Loops section/ })).toBeTruthy();
+  });
+
+  test("keeps non-ready planning loops labeled 'Planning' in the sidebar", async () => {
+    const workspace = createWorkspace({ id: "workspace-1", name: "Frontend", directory: "/workspaces/frontend" });
+    const planningLoop = createLoopWithStatus("planning", {
+      config: { id: "loop-planning", name: "Planning Loop", workspaceId: workspace.id },
+      state: {
+        planMode: {
+          active: true,
+          feedbackRounds: 0,
+          planningFolderCleared: false,
+          isPlanReady: false,
+        },
+      },
+    });
+    const runningLoop = createLoopWithStatus("running", {
+      config: { id: "loop-running", name: "Running Loop", workspaceId: workspace.id },
+    });
+
+    setupDefaultApi({ workspaces: [workspace], loops: [planningLoop, runningLoop] });
+
+    renderWithUser(<App />);
+
+    await waitFor(() => {
+      const sidebar = document.querySelector("aside");
+      expect(sidebar).toBeTruthy();
+      expect(within(sidebar as HTMLElement).getByText("Planning Loop")).toBeTruthy();
+      expect(within(sidebar as HTMLElement).getByText("Planning")).toBeTruthy();
+      expect(within(sidebar as HTMLElement).getByText("Running")).toBeTruthy();
+    });
+  });
+
   test("reacts to hash changes with the new shell routes", async () => {
     const { getByRole } = renderWithUser(<App />);
 

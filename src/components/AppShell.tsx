@@ -25,7 +25,7 @@ import {
   useWorkspaceServerSettings,
   useWorkspaces,
 } from "../hooks";
-import { getPlanningStatusLabel, getStatusLabel } from "../utils";
+import { getLoopStatusLabel, getStatusLabel } from "../utils";
 import { AppSettingsPanel } from "./AppSettingsModal";
 import { CreateLoopForm, type CreateLoopFormActionState, type CreateLoopFormSubmitRequest } from "./CreateLoopForm";
 import { LoopDetails } from "./LoopDetails";
@@ -598,9 +598,7 @@ function OverviewView({
                 const route: ShellRoute = loop.config.mode === "chat"
                   ? { view: "chat", chatId: loop.config.id }
                   : { view: "loop", loopId: loop.config.id };
-                const label = loop.state.status === "planning"
-                  ? getPlanningStatusLabel(loop.state.planMode?.isPlanReady ?? false)
-                  : getStatusLabel(loop.state.status, loop.state.syncState);
+                const label = getLoopStatusLabel(loop);
                 return (
                   <button
                     key={loop.config.id}
@@ -798,9 +796,7 @@ function WorkspaceView({
                       </span>
                     </span>
                     <Badge variant={getStatusBadgeVariant(loop.state.status)}>
-                      {loop.state.status === "planning"
-                        ? getPlanningStatusLabel(loop.state.planMode?.isPlanReady ?? false)
-                        : getStatusLabel(loop.state.status, loop.state.syncState)}
+                      {getLoopStatusLabel(loop)}
                     </Badge>
                   </button>
                 );
@@ -2614,7 +2610,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                     key={loop.config.id}
                     active={route.view === "loop" && route.loopId === loop.config.id}
                     title={loop.config.name}
-                    badge={getStatusLabel(loop.state.status, loop.state.syncState)}
+                    badge={getLoopStatusLabel(loop)}
                     onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
                   />
                 )}

@@ -148,6 +148,16 @@ export function getPlanningStatusLabel(isPlanReady: boolean): string {
 }
 
 /**
+ * Get the appropriate human-readable status label for a loop, including
+ * planning sub-states that need to distinguish ready plans from active planning.
+ */
+export function getLoopStatusLabel(loop: Loop): string {
+  return loop.state.status === "planning"
+    ? getPlanningStatusLabel(loop.state.planMode?.isPlanReady ?? false)
+    : getStatusLabel(loop.state.status, loop.state.syncState);
+}
+
+/**
  * Check if a loop's plan is ready for human review.
  * Returns true only when the loop is in planning status AND the plan is marked as ready.
  */
