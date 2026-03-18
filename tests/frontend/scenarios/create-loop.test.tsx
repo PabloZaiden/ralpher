@@ -67,7 +67,7 @@ async function selectWorkspace(user: ReturnType<typeof renderWithUser>["user"]) 
   await user.selectOptions(wsSelect, "ws-1");
   await waitFor(() => {
     const submitBtn = Array.from(document.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Create Loop") || button.textContent?.includes("Create Plan"),
+      (button) => button.textContent?.includes("Create"),
     );
     expect(submitBtn).toBeTruthy();
   });
@@ -106,12 +106,12 @@ describe("create loop scenario", () => {
     await waitFor(() => {
       expect(getByRole("button", { name: "Cancel" })).toBeTruthy();
       expect(getByRole("button", { name: "Save as Draft" })).toBeTruthy();
-      expect(getByRole("button", { name: /Create (Plan|Loop)/ })).toBeTruthy();
+      expect(getByRole("button", { name: "Create" })).toBeTruthy();
     });
 
     const cancelButton = getByRole("button", { name: "Cancel" });
     const saveDraftButton = getByRole("button", { name: "Save as Draft" });
-    const createButton = getByRole("button", { name: /Create (Plan|Loop)/ });
+    const createButton = getByRole("button", { name: "Create" });
 
     expect(cancelButton.compareDocumentPosition(saveDraftButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
     expect(saveDraftButton.compareDocumentPosition(createButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeGreaterThan(0);
@@ -141,7 +141,7 @@ describe("create loop scenario", () => {
     await user.type(getByLabelText(/Title/) as HTMLInputElement, "X");
 
     const submitBtn = Array.from(document.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Create Loop") || button.textContent?.includes("Create Plan"),
+      (button) => button.textContent?.includes("Create"),
     );
     expect(submitBtn).toBeTruthy();
     await user.click(submitBtn!);
@@ -200,7 +200,7 @@ describe("create loop scenario", () => {
     await user.type(getByLabelText(/Title/) as HTMLInputElement, "X");
 
     const submitBtn = Array.from(document.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Create Loop") || button.textContent?.includes("Create Plan"),
+      (button) => button.textContent?.includes("Create"),
     );
     expect(submitBtn).toBeTruthy();
     await user.click(submitBtn!);
