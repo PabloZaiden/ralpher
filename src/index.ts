@@ -6,12 +6,47 @@
 import { serve, type Server } from "bun";
 import index from "./index.html";
 import { apiRoutes } from "./api";
+import {
+  createAuthenticatedStaticRoute,
+  createStaticAssetServer,
+  wrapRoutesWithBasicAuth,
+  wrapRouteHandler,
+} from "./api/basic-auth";
 import { portForwardProxyRoutes } from "./api/port-forwards";
 import { ensureDataDirectories } from "./persistence/database";
 import { backendManager } from "./core/backend-manager";
 import { websocketHandlers, type WebSocketData } from "./api/websocket";
+import {
+  getServerDevelopmentConfig,
+  getServerRuntimeConfig,
+  getServerStartupMessages,
+} from "./core/server-config";
 import { log, setLogLevel, isLogLevelFromEnv } from "./core/logger";
 import { getLogLevelPreference } from "./persistence/preferences";
+
+type StoppableServer = {
+  stop(closeActiveConnections?: boolean): void;
+};
+
+function registerServerShutdown(servers: StoppableServer[]): void {
+  let alreadyStopped = false;
+
+  const stopServers = () => {
+    if (alreadyStopped) {
+      return;
+    }
+
+    alreadyStopped = true;
+    for (const server of servers) {
+      server.stop(true);
+    }
+  };
+
+  process.once("SIGINT", stopServers);
+  process.once("SIGTERM", stopServers);
+}
+
+let staticAssetServer: Server<undefined> | undefined;
 
 try {
   // Ensure data directories exist on startup
@@ -29,86 +64,108 @@ try {
   // Initialize the global backend manager (loads settings from preferences)
   await backendManager.initialize();
 
-  // Port can be configured via RALPHER_PORT environment variable
-  const port = parseInt(process.env["RALPHER_PORT"] ?? "3000", 10);
+  const runtimeConfig = getServerRuntimeConfig();
+  const development = getServerDevelopmentConfig();
+  staticAssetServer = runtimeConfig.basicAuth.enabled
+    ? createStaticAssetServer(index, development)
+    : undefined;
+  const staticRoute = staticAssetServer
+    ? createAuthenticatedStaticRoute(staticAssetServer, runtimeConfig.basicAuth)
+    : index;
+  const protectedApiRoutes = wrapRoutesWithBasicAuth(apiRoutes, runtimeConfig.basicAuth);
+  const protectedPortForwardRoutes = wrapRoutesWithBasicAuth(
+    portForwardProxyRoutes,
+    runtimeConfig.basicAuth,
+  );
+  const websocketRoute = wrapRouteHandler(
+    (req: Request, server: Server<WebSocketData>) => {
+      const url = new URL(req.url);
+      const loopId = url.searchParams.get("loopId") ?? undefined;
+      const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
+      const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
+      const provisioningJobId = url.searchParams.get("provisioningJobId") ?? undefined;
+
+      const upgraded = server.upgrade(req, {
+        data: {
+          loopId,
+          sshSessionId,
+          sshServerSessionId,
+          provisioningJobId,
+          terminalMode: false,
+        } as WebSocketData,
+      });
+
+      if (upgraded) {
+        // Return undefined to indicate successful upgrade (Bun handles the response)
+        return undefined;
+      }
+
+      // Upgrade failed
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    },
+    runtimeConfig.basicAuth,
+  );
+  const sshTerminalRoute = wrapRouteHandler(
+    (req: Request, server: Server<WebSocketData>) => {
+      const url = new URL(req.url);
+      const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
+      const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
+
+      if (!sshSessionId && !sshServerSessionId) {
+        return new Response("sshSessionId or sshServerSessionId is required", { status: 400 });
+      }
+
+      const upgraded = server.upgrade(req, {
+        data: { sshSessionId, sshServerSessionId, terminalMode: true } as WebSocketData,
+      });
+
+      if (upgraded) {
+        // Return undefined to indicate successful upgrade (Bun handles the response)
+        return undefined;
+      }
+
+      // Upgrade failed
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    },
+    runtimeConfig.basicAuth,
+  );
 
   const server = serve<WebSocketData>({
-    port,
+    hostname: runtimeConfig.host,
+    port: runtimeConfig.port,
     // Increase idle timeout from default 10s to 120s for long-running operations
     // like git push/pull/fetch that happen over the network
     idleTimeout: 120,
     routes: {
       // API routes
-      ...apiRoutes,
-      ...portForwardProxyRoutes,
+      ...protectedApiRoutes,
+      ...protectedPortForwardRoutes,
 
       // WebSocket endpoint for real-time events
-      "/api/ws": (req: Request, server: Server<WebSocketData>) => {
-        const url = new URL(req.url);
-        const loopId = url.searchParams.get("loopId") ?? undefined;
-        const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
-        const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
-        const provisioningJobId = url.searchParams.get("provisioningJobId") ?? undefined;
+      "/api/ws": websocketRoute,
 
-        const upgraded = server.upgrade(req, {
-          data: {
-            loopId,
-            sshSessionId,
-            sshServerSessionId,
-            provisioningJobId,
-            terminalMode: false,
-          } as WebSocketData,
-        });
-
-        if (upgraded) {
-          // Return undefined to indicate successful upgrade (Bun handles the response)
-          return undefined;
-        }
-
-        // Upgrade failed
-        return new Response("WebSocket upgrade failed", { status: 400 });
-      },
-
-      "/api/ssh-terminal": (req: Request, server: Server<WebSocketData>) => {
-        const url = new URL(req.url);
-        const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
-        const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
-
-        if (!sshSessionId && !sshServerSessionId) {
-          return new Response("sshSessionId or sshServerSessionId is required", { status: 400 });
-        }
-
-        const upgraded = server.upgrade(req, {
-          data: { sshSessionId, sshServerSessionId, terminalMode: true } as WebSocketData,
-        });
-
-        if (upgraded) {
-          // Return undefined to indicate successful upgrade (Bun handles the response)
-          return undefined;
-        }
-
-        // Upgrade failed
-        return new Response("WebSocket upgrade failed", { status: 400 });
-      },
+      "/api/ssh-terminal": sshTerminalRoute,
 
       // Serve index.html for all unmatched routes (SPA fallback)
-      "/*": index,
+      "/*": staticRoute,
     },
 
     // WebSocket handlers
     websocket: websocketHandlers,
 
-    development: process.env.NODE_ENV !== "production" && {
-      // Enable browser hot reloading in development
-      hmr: true,
-
-      // Echo console logs from the browser to the server
-      console: true,
-    },
+    development,
   });
 
+  registerServerShutdown(staticAssetServer ? [server, staticAssetServer] : [server]);
+
+  for (const message of getServerStartupMessages(runtimeConfig)) {
+    log.info(message);
+  }
   log.info(`Ralpher server running at ${server.url}`);
 } catch (error) {
+  if (typeof staticAssetServer !== "undefined") {
+    staticAssetServer.stop(true);
+  }
   // Use console.error as a last resort since the logger may not be initialized
   console.error(`Fatal error during startup: ${String(error)}`);
   process.exit(1);

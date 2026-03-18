@@ -29,11 +29,11 @@ For more project information, see the [README.md](README.md).
 
 ## Authentication & Authorization
 
-Ralpher runs behind a reverse proxy that enforces authentication and authorization. The application itself does not implement authentication or authorization — all access control is handled at the infrastructure level before requests reach Ralpher. This means:
+Ralpher is typically deployed behind a reverse proxy that enforces authentication and authorization. The application also supports optional built-in HTTP Basic auth controlled by `RALPHER_PASSWORD` and `RALPHER_USERNAME`. This means:
 
-- API endpoints do not require authentication tokens or session validation
-- Destructive endpoints (server kill, database reset) are protected by the reverse proxy
-- WebSocket connections are authenticated at the proxy level
+- API endpoints do not require session management inside Ralpher itself
+- Destructive endpoints (server kill, database reset) should still be protected by the reverse proxy or by the optional built-in Basic auth layer
+- WebSocket connections can be protected either at the proxy layer or by the optional built-in Basic auth layer
 
 ## Remote Command Execution Architecture
 

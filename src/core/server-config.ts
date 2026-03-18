@@ -1,0 +1,106 @@
+/**
+ * Server runtime configuration helpers.
+ *
+ * Reads host, port, and optional HTTP Basic auth settings from environment variables
+ * so startup code can stay centralized and testable.
+ */
+
+const DEFAULT_HOST = "0.0.0.0";
+const DEFAULT_PORT = 3000;
+const DEFAULT_BASIC_AUTH_USERNAME = "ralpher";
+const MAX_PORT = 65535;
+
+export interface BasicAuthConfig {
+  enabled: boolean;
+  username: string;
+  password: string;
+  usernameSource: "RALPHER_USERNAME" | "default";
+}
+
+export interface ServerRuntimeConfig {
+  host: string;
+  port: number;
+  hostSource: "RALPHER_HOST" | "default";
+  basicAuth: BasicAuthConfig;
+}
+
+export type BunDevelopmentConfig = false | {
+  hmr: true;
+  console: true;
+};
+
+function getTrimmedEnv(name: string): string {
+  return process.env[name]?.trim() ?? "";
+}
+
+function parsePort(value: string | undefined): number {
+  const trimmedValue = value?.trim() ?? "";
+  if (!trimmedValue) {
+    return DEFAULT_PORT;
+  }
+
+  if (!/^\d+$/.test(trimmedValue)) {
+    throw new Error(`RALPHER_PORT must be an integer between 0 and ${String(MAX_PORT)}; received "${trimmedValue}".`);
+  }
+
+  const port = Number(trimmedValue);
+  if (!Number.isInteger(port) || port < 0 || port > MAX_PORT) {
+    throw new Error(`RALPHER_PORT must be an integer between 0 and ${String(MAX_PORT)}; received "${trimmedValue}".`);
+  }
+
+  return port;
+}
+
+export function getServerRuntimeConfig(): ServerRuntimeConfig {
+  const hostFromEnv = getTrimmedEnv("RALPHER_HOST");
+  const usernameFromEnv = getTrimmedEnv("RALPHER_USERNAME");
+  const trimmedPassword = getTrimmedEnv("RALPHER_PASSWORD");
+  const port = parsePort(process.env["RALPHER_PORT"]);
+
+  return {
+    host: hostFromEnv || DEFAULT_HOST,
+    port,
+    hostSource: hostFromEnv ? "RALPHER_HOST" : "default",
+    basicAuth: {
+      enabled: trimmedPassword.length > 0,
+      username: usernameFromEnv || DEFAULT_BASIC_AUTH_USERNAME,
+      password: trimmedPassword,
+      usernameSource: usernameFromEnv ? "RALPHER_USERNAME" : "default",
+    },
+  };
+}
+
+export function getServerDevelopmentConfig(
+  nodeEnv: string | undefined = process.env["NODE_ENV"],
+): BunDevelopmentConfig {
+  if (nodeEnv === "production") {
+    return false;
+  }
+
+  return {
+    hmr: true,
+    console: true,
+  };
+}
+
+export function getServerStartupMessages(config: ServerRuntimeConfig): string[] {
+  const listenMessage = config.hostSource === "RALPHER_HOST"
+    ? `Listening on http://${config.host}:${String(config.port)} from RALPHER_HOST. Change RALPHER_HOST to choose which interfaces accept requests.`
+    : `Listening on http://${config.host}:${String(config.port)} using the default host because RALPHER_HOST was not set. Set RALPHER_HOST to limit the listener to a specific interface such as 127.0.0.1.`;
+
+  if (config.basicAuth.enabled) {
+    const usernameMessage = config.basicAuth.usernameSource === "RALPHER_USERNAME"
+      ? `using the username "${config.basicAuth.username}" from RALPHER_USERNAME`
+      : `using the default username "${config.basicAuth.username}" because RALPHER_USERNAME was not set`;
+
+    return [
+      listenMessage,
+      `Basic auth is enabled because RALPHER_PASSWORD was set to a non-empty value after trimming, ${usernameMessage}.`,
+    ];
+  }
+
+  return [
+    listenMessage,
+    `Basic auth is disabled because RALPHER_PASSWORD was not set or became empty after trimming. Set RALPHER_PASSWORD to enable auth, and optionally set RALPHER_USERNAME to override the default username "${DEFAULT_BASIC_AUTH_USERNAME}".`,
+  ];
+}

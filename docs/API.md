@@ -8,11 +8,21 @@ This document describes the REST API for the Ralpher Loop Management System.
 http://localhost:3000/api
 ```
 
-The port can be configured via the `RALPHER_PORT` environment variable.
+The port can be configured via the `RALPHER_PORT` environment variable, and the bind host can be configured via `RALPHER_HOST`.
 
 ## Authentication
 
-The API itself does not implement authentication. In production deployments, Ralpher runs behind a reverse proxy that enforces authentication and authorization. In local development, no authentication is needed.
+By default, the API does not require application-level credentials. In production deployments, Ralpher is still expected to run behind a reverse proxy that enforces authentication and authorization.
+
+Ralpher also supports optional built-in HTTP Basic auth. When `RALPHER_PASSWORD` is set to a non-empty value after trimming, every request requires Basic auth credentials. The username defaults to `ralpher` and can be overridden with `RALPHER_USERNAME`.
+
+Example:
+
+```http
+Authorization: Basic cmFscGhlcjpzZWNyZXQ=
+```
+
+This built-in auth applies to REST requests, websocket upgrade requests, and browser requests for the SPA.
 
 ## Response Format
 
