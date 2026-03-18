@@ -198,7 +198,7 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
     setEvents([]);
   }, []);
 
-  // Auto-connect on mount, reconnect when URL changes
+  // Auto-connect when enabled and keep the stable callback deps aligned with the current socket lifecycle.
   useEffect(() => {
     if (autoConnect) {
       connect();
@@ -210,7 +210,7 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
       clearReconnectTimeout();
       closeCurrentSocket(true);
     };
-  }, [autoConnect, clearReconnectTimeout, closeCurrentSocket, connect, url]); // Only depend on url and autoConnect
+  }, [autoConnect, clearReconnectTimeout, closeCurrentSocket, connect, url]);
 
   return {
     events,
