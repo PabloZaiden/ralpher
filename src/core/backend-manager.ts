@@ -233,10 +233,10 @@ class BackendManager {
    * Static capabilities exposed to the status endpoint.
    */
   private getAgentCapabilities(settings: ServerSettings): string[] {
-    if (settings.agent.provider === "opencode") {
+    if (settings.agent.provider === "opencode" || settings.agent.provider === "copilot") {
       return ["createSession", "sendPromptAsync", "abortSession", "queueActivePrompt", "subscribeToEvents", "models"];
     }
-    return ["createSession", "sendPromptAsync", "abortSession", "queueActivePrompt", "subscribeToEvents"];
+    return ["createSession", "sendPromptAsync", "abortSession", "queueActivePrompt", "subscribeToEvents", "models"];
   }
 
   /**
