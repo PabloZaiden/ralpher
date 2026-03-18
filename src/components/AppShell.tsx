@@ -25,7 +25,7 @@ import {
   useWorkspaceServerSettings,
   useWorkspaces,
 } from "../hooks";
-import { getLoopStatusLabel, getStatusLabel } from "../utils";
+import { getLoopStatusLabel, getStatusLabel, shouldShowInRecentActivity } from "../utils";
 import { AppSettingsPanel } from "./AppSettingsModal";
 import { CreateLoopForm, type CreateLoopFormActionState, type CreateLoopFormSubmitRequest } from "./CreateLoopForm";
 import { LoopDetails } from "./LoopDetails";
@@ -565,6 +565,7 @@ function OverviewView({
 }) {
   const recentLoops = useMemo(() => {
     return [...loops]
+      .filter((loop) => shouldShowInRecentActivity(loop.state.status))
       .sort((left, right) => right.config.createdAt.localeCompare(left.config.createdAt))
       .slice(0, 5);
   }, [loops]);
