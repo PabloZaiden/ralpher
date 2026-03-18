@@ -15,13 +15,16 @@ import type {
   SshServer,
 } from "../types";
 import type { WorkspaceExportData, WorkspaceImportResult, CreateWorkspaceRequest } from "../types/workspace";
-import type { CreateLoopFormActionState } from "./CreateLoopForm";
+import {
+  CreateLoopForm,
+  getComposeDraftActionLabel,
+  getComposeSubmitActionLabel,
+} from "./CreateLoopForm";
+import type { CreateLoopFormActionState, CreateLoopFormSubmitRequest } from "./CreateLoopForm";
 import type { PurgeArchivedLoopsResult } from "../hooks";
 import type { CreateLoopResult, CreateChatResult } from "../hooks/useLoops";
 import type { UseWorkspaceServerSettingsResult } from "../hooks/useWorkspaceServerSettings";
 import { Modal, Button } from "./common";
-import { CreateLoopForm } from "./CreateLoopForm";
-import type { CreateLoopFormSubmitRequest } from "./CreateLoopForm";
 import {
   UncommittedChangesModal,
   RenameLoopModal,
@@ -224,14 +227,14 @@ export function DashboardModals(props: DashboardModalsProps) {
               >
                 Keep Draft
               </Button>
-              <Button
-                type="button"
-                variant="danger"
-                onClick={handleDeleteDraft}
-                loading={deletingDraft}
-              >
-                Delete Draft
-              </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={handleDeleteDraft}
+                  loading={deletingDraft}
+                >
+                  Delete
+                </Button>
             </>
           ) : (
             <>
@@ -250,7 +253,7 @@ export function DashboardModals(props: DashboardModalsProps) {
                   onClick={openDeleteDraftConfirmation}
                   disabled={props.formActionState.isSubmitting}
                 >
-                  Delete Draft
+                  Delete
                 </Button>
               )}
               {!isChatMode && (!props.formActionState.isEditing || props.formActionState.isEditingDraft) && (
@@ -261,22 +264,20 @@ export function DashboardModals(props: DashboardModalsProps) {
                   disabled={props.formActionState.isSubmitting || !props.formActionState.canSaveDraft}
                   loading={props.formActionState.isSubmitting}
                 >
-                  {props.formActionState.isEditingDraft ? "Update Draft" : "Save as Draft"}
+                  {getComposeDraftActionLabel(props.formActionState.isEditingDraft)}
                 </Button>
               )}
-              <Button
-                type="button"
-                onClick={props.formActionState.onSubmit}
-                loading={props.formActionState.isSubmitting}
-                disabled={!props.formActionState.canSubmit}
-              >
-                {isChatMode
-                  ? "Start Chat"
-                  : props.formActionState.isEditing
-                    ? (props.formActionState.planMode ? "Start Plan" : "Start Loop")
-                    : (props.formActionState.planMode ? "Create Plan" : "Create Loop")
-                }
-              </Button>
+                <Button
+                  type="button"
+                  onClick={props.formActionState.onSubmit}
+                  loading={props.formActionState.isSubmitting}
+                  disabled={!props.formActionState.canSubmit}
+                >
+                  {getComposeSubmitActionLabel({
+                    isChatMode,
+                    isEditing: props.formActionState.isEditing,
+                  })}
+                </Button>
             </>
           )
         )}
@@ -477,7 +478,7 @@ async function handleCreateLoopSubmit(
       }
     };
 
-    // If draft flag is set, this is an "Update Draft" action
+    // If draft flag is set, this is an update action.
     if (request.draft) {
       return await persistDraftChanges();
     }
@@ -487,7 +488,7 @@ async function handleCreateLoopSubmit(
       return false;
     }
 
-    // Otherwise, this is a "Start Loop" action - transition draft to execution
+    // Otherwise, start the draft and transition it to execution.
     try {
       const startResponse = await appFetch(`/api/loops/${editLoop.config.id}/draft/start`, {
         method: "POST",
