@@ -337,7 +337,7 @@ describe("workspace management scenario", () => {
     const { getAllByText, getByRole, getByText, user } = renderWithUser(<App />);
 
     await waitFor(() => {
-      expect(getByText("Workspace map")).toBeTruthy();
+      expect(getByText("Workspaces map")).toBeTruthy();
     });
 
     await user.click(getAllByText("Existing Project")[0]!);
