@@ -266,11 +266,11 @@ export function createMockApi(): MockApiInstance {
     },
 
     uninstall: () => {
-      if (originalFetch) {
+      if (originalFetch && globalThis.fetch === mockFetch) {
         globalThis.fetch = originalFetch;
         originalFetch = null;
       }
-      if (typeof window !== "undefined" && originalWindowFetch) {
+      if (typeof window !== "undefined" && originalWindowFetch && window.fetch === mockFetch) {
         window.fetch = originalWindowFetch;
         originalWindowFetch = null;
       }

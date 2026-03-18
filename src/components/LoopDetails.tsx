@@ -121,7 +121,6 @@ export function LoopDetails({
     loop,
     loading,
     error,
-    connectionStatus,
     messages,
     toolCalls,
     logs,
@@ -237,22 +236,44 @@ export function LoopDetails({
   useEffect(() => {
     if (!loop?.config.directory || !loop?.config.workspaceId) return;
 
+    const directory = loop.config.directory;
+    const workspaceId = loop.config.workspaceId;
+    const controller = new AbortController();
+
     async function fetchModels() {
       setModelsLoading(true);
       try {
-        const response = await appFetch(`/api/models?directory=${encodeURIComponent(loop!.config.directory)}&workspaceId=${encodeURIComponent(loop!.config.workspaceId)}`);
+        const response = await appFetch(
+          `/api/models?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`,
+          { signal: controller.signal },
+        );
+        if (controller.signal.aborted) {
+          return;
+        }
         if (response.ok) {
           const data = await response.json() as ModelInfo[];
+          if (controller.signal.aborted) {
+            return;
+          }
           setModels(data);
         }
       } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
         log.error("Failed to fetch models:", String(error));
       } finally {
-        setModelsLoading(false);
+        if (!controller.signal.aborted) {
+          setModelsLoading(false);
+        }
       }
     }
 
-    fetchModels();
+    void fetchModels();
+
+    return () => {
+      controller.abort();
+    };
   }, [loop?.config.directory, loop?.config.workspaceId]);
 
   // Clear update indicator when switching to a tab
@@ -743,44 +764,9 @@ export function LoopDetails({
             <Badge variant={isPlanning ? (isPlanReady ? "plan_ready" : "planning") : getStatusBadgeVariant(state.status)} size="sm">
               {isPlanning ? getPlanningStatusLabel(isPlanReady) : getStatusLabel(state.status, state.syncState)}
             </Badge>
-            {/* Activity dot: pulsing neutral for active/planning, static amber for plan ready */}
-            {isActive && !isPlanning && (
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-500" />
-              </span>
-            )}
-            {isPlanningActive && (
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-500 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-gray-600" />
-              </span>
-            )}
-            {isPlanReady && (
-              <span className="relative flex h-2 w-2">
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500" />
-              </span>
-            )}
             <span className="text-xs text-gray-500 dark:text-gray-400 font-mono truncate hidden sm:inline">
               {config.directory}
             </span>
-            {/* Spacer */}
-            <div className="flex-1" />
-            {/* WebSocket Status */}
-            <div className="flex items-center gap-1.5 text-xs">
-              <span
-                className={`h-2 w-2 rounded-full flex-shrink-0 ${
-                  connectionStatus === "open"
-                    ? "bg-green-500"
-                    : connectionStatus === "connecting"
-                    ? "bg-yellow-500"
-                    : "bg-red-500"
-                }`}
-              />
-              <span className="text-gray-500 dark:text-gray-400">
-                {connectionStatus === "open" ? "Live" : connectionStatus === "connecting" ? "Connecting..." : "Disconnected"}
-              </span>
-            </div>
           </div>
         </div>
       </header>

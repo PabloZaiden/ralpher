@@ -8,7 +8,7 @@
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { createMockApi, MockApiError } from "../helpers/mock-api";
 import { createMockWebSocket } from "../helpers/mock-websocket";
-import { renderWithUser, waitFor } from "../helpers/render";
+import { renderWithUser, waitFor, within } from "../helpers/render";
 import {
   createLoopWithStatus,
   createFileDiff,
@@ -65,6 +65,14 @@ function setupDefaultApi(loopOverrides?: Parameters<typeof createLoopWithStatus>
   api.post("/api/loops/:id/plan/discard", () => ({ success: true }));
 
   return loop;
+}
+
+function expectHeaderHasNoLegacyIndicators(container: HTMLElement): void {
+  const header = container.querySelector("header");
+  expect(header).toBeTruthy();
+  expect(header!.querySelector(".animate-ping")).toBeNull();
+  expect(header!.querySelector(".bg-amber-500")).toBeNull();
+  expect(within(header as HTMLElement).queryByText(/^Live$/)).toBeNull();
 }
 
 beforeEach(() => {
@@ -229,13 +237,12 @@ describe("header display", () => {
     });
   });
 
-  test("shows active indicator for running loops", async () => {
+  test("does not show legacy header activity indicators for running loops", async () => {
     setupDefaultApi();
     const { container } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
 
     await waitFor(() => {
-      const pinger = container.querySelector(".animate-ping");
-      expect(pinger).toBeTruthy();
+      expectHeaderHasNoLegacyIndicators(container);
     });
   });
 
@@ -275,13 +282,15 @@ describe("header display", () => {
 // ─── Connection status ───────────────────────────────────────────────────────
 
 describe("connection status", () => {
-  test("shows Live when websocket is open", async () => {
+  test("does not show a Live connection label in the header", async () => {
     setupDefaultApi();
-    const { getByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+    const { container, getByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
 
     await waitFor(() => {
-      expect(getByText("Live")).toBeTruthy();
+      expect(getByText("Test Loop")).toBeTruthy();
     });
+
+    expectHeaderHasNoLegacyIndicators(container);
   });
 });
 
@@ -1298,7 +1307,7 @@ describe("planning mode", () => {
     expect(queryByText("Working...")).toBeNull();
   });
 
-  test("shows pulsing neutral activity indicator when planning with isPlanReady=false", async () => {
+  test("does not show legacy header activity indicators when planning with isPlanReady=false", async () => {
     const loop = createLoopWithStatus("planning", {
       config: { id: LOOP_ID, name: "Cyan Indicator Loop" },
     });
@@ -1317,18 +1326,10 @@ describe("planning mode", () => {
       expect(getByText("Cyan Indicator Loop")).toBeTruthy();
     });
 
-    // Should have a pulsing neutral indicator
-    const header = container.querySelector("header");
-    expect(header).toBeTruthy();
-    const planningPinger = header!.querySelector(".animate-ping.bg-gray-500");
-    expect(planningPinger).toBeTruthy();
-
-    // Should NOT have the running-state neutral indicator
-    const runningPinger = header!.querySelector(".animate-ping.bg-gray-400");
-    expect(runningPinger).toBeNull();
+    expectHeaderHasNoLegacyIndicators(container);
   });
 
-  test("shows static amber activity indicator when planning with isPlanReady=true", async () => {
+  test("does not show legacy header activity indicators when planning with isPlanReady=true", async () => {
     const loop = createLoopWithStatus("planning", {
       config: { id: LOOP_ID, name: "Amber Indicator Loop" },
       state: {
@@ -1355,18 +1356,10 @@ describe("planning mode", () => {
       expect(getByText("Amber Indicator Loop")).toBeTruthy();
     });
 
-    // Should have a static amber dot (bg-amber-500 without animate-ping)
-    const header = container.querySelector("header");
-    expect(header).toBeTruthy();
-    const amberDot = header!.querySelector(".bg-amber-500");
-    expect(amberDot).toBeTruthy();
-
-    // Should NOT have any animate-ping element (amber dot is static)
-    const pinger = header!.querySelector(".animate-ping");
-    expect(pinger).toBeNull();
+    expectHeaderHasNoLegacyIndicators(container);
   });
 
-  test("running loop shows pulsing neutral activity indicator, not planning indicators", async () => {
+  test("does not show legacy header activity indicators for running loops in planning mode coverage", async () => {
     setupDefaultApi();
     const { getByText, container } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
 
@@ -1374,17 +1367,7 @@ describe("planning mode", () => {
       expect(getByText("Test Loop")).toBeTruthy();
     });
 
-    // Should have a pulsing neutral indicator
-    const header = container.querySelector("header");
-    expect(header).toBeTruthy();
-    const runningPinger = header!.querySelector(".animate-ping.bg-gray-400");
-    expect(runningPinger).toBeTruthy();
-
-    // Should NOT have the planning or amber indicators
-    const planningPinger = header!.querySelector(".animate-ping.bg-gray-500");
-    expect(planningPinger).toBeNull();
-    const amberDot = header!.querySelector(".bg-amber-500");
-    expect(amberDot).toBeNull();
+    expectHeaderHasNoLegacyIndicators(container);
   });
 });
 
