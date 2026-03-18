@@ -760,9 +760,16 @@ function WorkspaceView({
       headerOffsetClassName={headerOffsetClassName}
       actions={(
         <>
-          <Button variant="secondary" size="sm" onClick={onOpenSettings} aria-label="Open workspace settings">
-            <span className="sm:hidden">Settings</span>
-            <span className="hidden sm:inline">Workspace Settings</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenSettings}
+            title="Workspace Settings"
+            aria-label="Open workspace settings"
+            className="min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0 px-1.5"
+            icon={<GearIcon size="h-5 w-5" />}
+          >
+            {null}
           </Button>
           <ActionMenu items={createActionItems} ariaLabel={`Create items in workspace ${workspace.name}`} />
         </>
