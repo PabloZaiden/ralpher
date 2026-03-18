@@ -2307,6 +2307,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
 
       return (
         <LoopDetails
+          key={`loop:${route.loopId}`}
           loopId={route.loopId}
           onBack={handleLoopDetailsExit}
           showBackButton={false}
@@ -2319,6 +2320,7 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
     if (route.view === "chat") {
       return (
         <LoopDetails
+          key={`chat:${route.chatId}`}
           loopId={route.chatId}
           onBack={handleLoopDetailsExit}
           showBackButton={false}

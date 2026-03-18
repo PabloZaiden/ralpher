@@ -486,6 +486,151 @@ describe("WebSocket lifecycle events trigger refresh", () => {
   });
 });
 
+// ─── Loop switching isolation ────────────────────────────────────────────────
+
+describe("loop switching isolation", () => {
+  test("ignores stale WebSocket messages after switching loops", async () => {
+    const secondLoopId = "test-loop-2";
+    const loopsById: Record<string, Loop> = {
+      [LOOP_ID]: createLoop({ config: { id: LOOP_ID }, state: { id: LOOP_ID } }),
+      [secondLoopId]: createLoop({ config: { id: secondLoopId }, state: { id: secondLoopId } }),
+    };
+    api.get("/api/loops/:id", (req) => {
+      const loop = loopsById[req.params["id"]!];
+      if (!loop) {
+        throw new MockApiError(404, { message: "Loop not found" });
+      }
+      return loop;
+    });
+
+    const { result, rerender } = renderHook(
+      ({ loopId }) => useLoop(loopId),
+      { initialProps: { loopId: LOOP_ID } },
+    );
+
+    await waitForLoad(result);
+    await waitFor(() => {
+      expect(ws.getLoopConnection(LOOP_ID)?.isOpen).toBe(true);
+    });
+
+    const oldConnection = ws.getLoopConnection(LOOP_ID)!;
+
+    act(() => {
+      oldConnection.instance.onmessage?.(
+        new MessageEvent("message", {
+          data: JSON.stringify({
+            type: "loop.log",
+            loopId: LOOP_ID,
+            id: "initial-log",
+            level: "info",
+            message: "before switch",
+            timestamp: new Date().toISOString(),
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.logs).toHaveLength(1);
+    });
+
+    rerender({ loopId: secondLoopId });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.loop?.config.id).toBe(secondLoopId);
+    });
+
+    await waitFor(() => {
+      const openLoopConnections = ws.connections().filter(
+        (connection) => connection.isOpen && !!connection.queryParams["loopId"],
+      );
+      expect(openLoopConnections).toHaveLength(1);
+      expect(openLoopConnections[0]!.queryParams["loopId"]).toBe(secondLoopId);
+    });
+
+    await waitFor(() => {
+      expect(result.current.logs).toHaveLength(0);
+    });
+
+    act(() => {
+      oldConnection.instance.onmessage?.(
+        new MessageEvent("message", {
+          data: JSON.stringify({
+            type: "loop.log",
+            loopId: LOOP_ID,
+            id: "stale-log",
+            level: "info",
+            message: "stale log",
+            timestamp: new Date().toISOString(),
+          }),
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(result.current.logs).toHaveLength(0);
+    });
+  });
+
+  test("ignores stale push callbacks after switching loops", async () => {
+    const secondLoopId = "test-loop-2";
+    const loopsById: Record<string, Loop> = {
+      [LOOP_ID]: createLoopWithStatus("completed", { config: { id: LOOP_ID }, state: { id: LOOP_ID } }),
+      [secondLoopId]: createLoopWithStatus("completed", {
+        config: { id: secondLoopId },
+        state: { id: secondLoopId },
+      }),
+    };
+    api.get("/api/loops/:id", (req) => {
+      const loop = loopsById[req.params["id"]!];
+      if (!loop) {
+        throw new MockApiError(404, { message: "Loop not found" });
+      }
+      return loop;
+    });
+    api.post("/api/loops/:id/push", (req) => ({
+      success: true,
+      remoteBranch: `branch-${req.params["id"]!}`,
+    }));
+
+    const { result, rerender } = renderHook(
+      ({ loopId }) => useLoop(loopId),
+      { initialProps: { loopId: LOOP_ID } },
+    );
+
+    await waitForLoad(result);
+
+    const stalePush = result.current.push;
+
+    rerender({ loopId: secondLoopId });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+      expect(result.current.loop?.config.id).toBe(secondLoopId);
+    });
+
+    let staleResult: { success: boolean; remoteBranch?: string } = { success: true };
+    await act(async () => {
+      staleResult = await stalePush();
+    });
+
+    expect(staleResult.success).toBe(false);
+    expect(api.calls("/api/loops/:id/push", "POST")).toHaveLength(0);
+
+    let pushResult: { success: boolean; remoteBranch?: string } = { success: false };
+    await act(async () => {
+      pushResult = await result.current.push();
+    });
+
+    expect(pushResult.success).toBe(true);
+    expect(pushResult.remoteBranch).toBe(`branch-${secondLoopId}`);
+    const pushCalls = api.calls("/api/loops/:id/push", "POST");
+    expect(pushCalls).toHaveLength(1);
+    expect(pushCalls[0]!.params["id"]).toBe(secondLoopId);
+  });
+});
+
 // ─── Actions: update ─────────────────────────────────────────────────────────
 
 describe("update", () => {
