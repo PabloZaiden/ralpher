@@ -14,6 +14,7 @@ import {
   canSendTerminalFollowUp,
   isAwaitingFeedback,
   isArchivedLoop,
+  getLoopStatusLabel,
   getPlanningStatusLabel,
   isLoopPlanReady,
 } from "../../src/utils/loop-status";
@@ -391,6 +392,40 @@ describe("getPlanningStatusLabel", () => {
 
   test("returns 'Plan Ready' when isPlanReady is true", () => {
     expect(getPlanningStatusLabel(true)).toBe("Plan Ready");
+  });
+});
+
+// ============================================================================
+// getLoopStatusLabel
+// ============================================================================
+
+describe("getLoopStatusLabel", () => {
+  test("returns 'Plan Ready' for planning loops with isPlanReady === true", () => {
+    expect(getLoopStatusLabel(createTestLoop({
+      status: "planning",
+      planMode: {
+        active: true,
+        feedbackRounds: 0,
+        planningFolderCleared: false,
+        isPlanReady: true,
+      },
+    }))).toBe("Plan Ready");
+  });
+
+  test("returns 'Planning' for planning loops whose plan is not ready", () => {
+    expect(getLoopStatusLabel(createTestLoop({
+      status: "planning",
+      planMode: {
+        active: true,
+        feedbackRounds: 0,
+        planningFolderCleared: false,
+        isPlanReady: false,
+      },
+    }))).toBe("Planning");
+  });
+
+  test("preserves normal labels for non-planning loops", () => {
+    expect(getLoopStatusLabel(createTestLoop({ status: "running" }))).toBe("Running");
   });
 });
 

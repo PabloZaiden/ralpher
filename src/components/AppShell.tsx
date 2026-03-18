@@ -25,7 +25,7 @@ import {
   useWorkspaceServerSettings,
   useWorkspaces,
 } from "../hooks";
-import { getPlanningStatusLabel, getStatusLabel } from "../utils";
+import { getLoopStatusLabel, getStatusLabel } from "../utils";
 import { AppSettingsPanel } from "./AppSettingsModal";
 import { CreateLoopForm, type CreateLoopFormActionState, type CreateLoopFormSubmitRequest } from "./CreateLoopForm";
 import { LoopDetails } from "./LoopDetails";
@@ -674,9 +674,7 @@ function OverviewView({
                   const route = loop.config.mode === "chat"
                     ? { view: "chat", chatId: loop.config.id } as ShellRoute
                     : { view: "loop", loopId: loop.config.id } as ShellRoute;
-                  const label = loop.state.status === "planning"
-                    ? getPlanningStatusLabel(loop.state.planMode?.isPlanReady ?? false)
-                    : getStatusLabel(loop.state.status, loop.state.syncState);
+                  const label = getLoopStatusLabel(loop);
                   return (
                     <button
                       key={loop.config.id}
@@ -692,9 +690,9 @@ function OverviewView({
                           {loop.config.directory}
                         </span>
                       </span>
-                      <Badge variant={getStatusBadgeVariant(loop.state.status)} className="shrink-0">
-                        {label}
-                      </Badge>
+                    <Badge variant={getStatusBadgeVariant(loop.state.status)} className="shrink-0">
+                      {label}
+                    </Badge>
                     </button>
                   );
                 })
@@ -805,9 +803,7 @@ function WorkspaceView({
                       </span>
                     </span>
                     <Badge variant={getStatusBadgeVariant(loop.state.status)}>
-                      {loop.state.status === "planning"
-                        ? getPlanningStatusLabel(loop.state.planMode?.isPlanReady ?? false)
-                        : getStatusLabel(loop.state.status, loop.state.syncState)}
+                      {getLoopStatusLabel(loop)}
                     </Badge>
                   </button>
                 );
@@ -2616,13 +2612,13 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                 collapsedGroups={collapsedWorkspaceGroups}
                 onToggleGroup={toggleWorkspaceGroupCollapsed}
                 renderItem={(loop) => (
-                  <SectionItem
-                    key={loop.config.id}
-                    active={route.view === "loop" && route.loopId === loop.config.id}
-                    title={loop.config.name}
-                    badge={getStatusLabel(loop.state.status, loop.state.syncState)}
-                    onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
-                  />
+                    <SectionItem
+                      key={loop.config.id}
+                      active={route.view === "loop" && route.loopId === loop.config.id}
+                      title={loop.config.name}
+                      badge={getLoopStatusLabel(loop)}
+                      onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
+                    />
                 )}
               />
             )}
@@ -2643,13 +2639,13 @@ export function AppShell({ route, onNavigate }: AppShellProps) {
                 collapsedGroups={collapsedWorkspaceGroups}
                 onToggleGroup={toggleWorkspaceGroupCollapsed}
                 renderItem={(loop) => (
-                  <SectionItem
-                    key={loop.config.id}
-                    active={route.view === "loop" && route.loopId === loop.config.id}
-                    title={loop.config.name}
-                    badge={getStatusLabel(loop.state.status, loop.state.syncState)}
-                    onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
-                  />
+                    <SectionItem
+                      key={loop.config.id}
+                      active={route.view === "loop" && route.loopId === loop.config.id}
+                      title={loop.config.name}
+                      badge={getLoopStatusLabel(loop)}
+                      onClick={() => navigateWithinShell({ view: "loop", loopId: loop.config.id })}
+                    />
                 )}
               />
             )}

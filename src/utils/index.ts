@@ -13,6 +13,7 @@ export {
   isAwaitingFeedback,
   isArchivedLoop,
   getPlanningStatusLabel,
+  getLoopStatusLabel,
   isLoopPlanReady,
   getEntityLabel,
   isChat,
