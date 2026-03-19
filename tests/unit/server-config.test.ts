@@ -37,7 +37,7 @@ describe("getServerRuntimeConfig", () => {
     delete process.env["RALPHER_PASSWORD"];
 
     expect(getServerRuntimeConfig()).toEqual({
-      host: "0.0.0.0",
+      host: "127.0.0.1",
       port: 3000,
       hostSource: "default",
       basicAuth: {
@@ -130,6 +130,7 @@ describe("getServerStartupMessages", () => {
 
     expect(messages).toHaveLength(2);
     expect(messages[0]).toContain("RALPHER_HOST");
+    expect(messages[0]).toContain("127.0.0.1");
     expect(messages[0]).toContain("0.0.0.0");
     expect(messages[1]).toContain("RALPHER_PASSWORD");
     expect(messages[1]).toContain("RALPHER_USERNAME");
