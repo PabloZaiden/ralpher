@@ -92,14 +92,29 @@ export interface UseLoopGroupingResult {
  */
 export function useLoopGrouping(loops: Loop[], workspaces: Workspace[]): UseLoopGroupingResult {
   const workspaceGroups = useMemo(() => {
-    return workspaces.map((workspace) => {
-      const workspaceLoops = loops.filter((loop) => loop.config.workspaceId === workspace.id);
-      return {
+    return workspaces
+      .map((workspace, index) => {
+        const workspaceLoops = loops.filter((loop) => loop.config.workspaceId === workspace.id);
+        return {
+          workspace,
+          loops: workspaceLoops,
+          statusGroups: groupLoopsByStatus(workspaceLoops),
+          index,
+        };
+      })
+      .sort((left, right) => {
+        const loopCountDifference = right.loops.length - left.loops.length;
+        if (loopCountDifference !== 0) {
+          return loopCountDifference;
+        }
+
+        return left.index - right.index;
+      })
+      .map(({ workspace, loops: workspaceLoops, statusGroups }) => ({
         workspace,
         loops: workspaceLoops,
-        statusGroups: groupLoopsByStatus(workspaceLoops),
-      };
-    });
+        statusGroups,
+      }));
   }, [loops, workspaces]);
 
   const unassignedLoops = useMemo(() => {
