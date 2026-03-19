@@ -21,7 +21,7 @@ export function PromptField({
   onAttachmentsChange,
   isChatMode,
   planMode,
-  isEditingDraft = false,
+  isEditingDraft: _isEditingDraft = false,
   selectedTemplate,
   onTemplateClear,
 }: PromptFieldProps) {
@@ -59,7 +59,7 @@ export function PromptField({
         <ImageAttachmentControl
           attachments={attachments}
           onChange={onAttachmentsChange}
-          hint={isEditingDraft ? "Images are sent when you start the draft and are not saved with it." : "Optional. Images are sent inline with the first message only."}
+          iconOnly
         />
       </div>
     </div>

@@ -46,11 +46,11 @@ describe("LoopActionBar", () => {
       expect(select).toBeInTheDocument();
     });
 
-    test("renders help text about message delivery", () => {
-      const { getByText } = renderWithUser(
+    test("renders the submit button with appropriate aria-label", () => {
+      const { getByRole } = renderWithUser(
         <LoopActionBar {...defaultProps()} />
       );
-      expect(getByText(/Message will be sent after current step/)).toBeInTheDocument();
+      expect(getByRole("button", { name: "Queue" })).toBeInTheDocument();
     });
   });
 
@@ -360,18 +360,16 @@ describe("LoopActionBar", () => {
   });
 
   describe("terminal follow-up copy", () => {
-    test("renders custom submit label and helper text", () => {
-      const { getByRole, getByText } = renderWithUser(
+    test("renders custom submit label as aria-label", () => {
+      const { getByRole } = renderWithUser(
         <LoopActionBar
           {...defaultProps({
             submitLabel: "Restart",
-            helperText: "Message will start a new feedback cycle immediately.",
           })}
         />,
       );
 
       expect(getByRole("button", { name: "Restart" })).toBeInTheDocument();
-      expect(getByText("Message will start a new feedback cycle immediately.")).toBeInTheDocument();
     });
   });
 });

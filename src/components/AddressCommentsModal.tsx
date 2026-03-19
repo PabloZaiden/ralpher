@@ -150,7 +150,7 @@ export function AddressCommentsModal({
               attachments={attachments}
               onChange={setAttachments}
               disabled={submitting}
-              hint="Optional images are sent with this feedback and are not stored on the server."
+              iconOnly
             />
           </div>
         </div>
