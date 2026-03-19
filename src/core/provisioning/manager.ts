@@ -1,0 +1,473 @@
+import { posix as pathPosix } from "node:path";
+import { backendManager } from "../backend-manager";
+import type { CommandExecutor } from "../command-executor";
+import { GitService } from "../git-service";
+import { createLogger } from "../logger";
+import { sshServerManager } from "../ssh-server-manager";
+import {
+  createWorkspace,
+  deleteWorkspace,
+  getWorkspace,
+  getWorkspaceByDirectoryAndServerSettings,
+} from "../../persistence/workspaces";
+import type {
+  ProvisioningJob,
+  ProvisioningJobSnapshot,
+  ProvisioningLogEntry,
+  ServerSettings,
+} from "../../types";
+import { DEFAULT_JOB_RETENTION_MS, DEFAULT_MAX_LOG_ENTRIES, DEVBOX_UP_TIMEOUT_MS, GIT_CLONE_TIMEOUT_MS } from "./constants";
+import { buildError, getPublishedPortFallback, parseDevboxCredentialContent, parseDevboxStatusOutput } from "./devbox-utils";
+import { ProvisioningCancelledError, ProvisioningFailedError } from "./errors";
+import { emitJobCancelled, emitJobCompleted, emitJobFailed, emitJobStarted } from "./job-events";
+import { appendSystemLog, setStep } from "./job-logger";
+import { runProvisioningCommand } from "./command-runner";
+import { extractRepoName, normalizeRepoUrl } from "./repo-utils";
+import type { ProvisioningJobRecord, StartProvisioningJobOptions } from "./types";
+
+const log = createLogger("core:provisioning-manager");
+
+export class ProvisioningManager {
+  private readonly jobs = new Map<string, ProvisioningJobRecord>();
+
+  constructor(
+    private readonly jobRetentionMs: number = DEFAULT_JOB_RETENTION_MS,
+    private readonly maxLogEntries: number = DEFAULT_MAX_LOG_ENTRIES,
+  ) {}
+
+  async startJob(options: StartProvisioningJobOptions): Promise<ProvisioningJobSnapshot> {
+    const now = new Date().toISOString();
+    const jobId = crypto.randomUUID();
+    const record: ProvisioningJobRecord = {
+      job: {
+        config: {
+          id: jobId,
+          name: options.name.trim(),
+          sshServerId: options.sshServerId.trim(),
+          repoUrl: options.repoUrl.trim(),
+          basePath: options.basePath.trim(),
+          provider: options.provider,
+          createdAt: now,
+        },
+        state: {
+          status: "pending",
+          updatedAt: now,
+        },
+      },
+      logs: [],
+      abortController: new AbortController(),
+    };
+
+    this.jobs.set(jobId, record);
+    emitJobStarted(record.job);
+
+    void this.runJob(record, options.password).catch((error) => {
+      log.error("Provisioning job crashed unexpectedly", {
+        provisioningJobId: record.job.config.id,
+        error: String(error),
+      });
+    });
+
+    return await this.getSnapshotOrThrow(jobId);
+  }
+
+  async getJobSnapshot(jobId: string): Promise<ProvisioningJobSnapshot | null> {
+    const record = this.jobs.get(jobId);
+    if (!record) {
+      return null;
+    }
+    return await this.buildSnapshot(record);
+  }
+
+  getJobLogs(jobId: string): ProvisioningLogEntry[] | null {
+    const record = this.jobs.get(jobId);
+    return record ? [...record.logs] : null;
+  }
+
+  async cancelJob(jobId: string): Promise<ProvisioningJobSnapshot | null> {
+    const record = this.jobs.get(jobId);
+    if (!record) {
+      return null;
+    }
+
+    if (record.job.state.status === "running" || record.job.state.status === "pending") {
+      record.abortController.abort();
+      appendSystemLog(record, this.maxLogEntries, "Cancellation requested", record.job.state.currentStep);
+    }
+
+    return await this.buildSnapshot(record);
+  }
+
+  resetForTesting(): void {
+    for (const record of this.jobs.values()) {
+      record.abortController.abort();
+      if (record.cleanupTimer) {
+        clearTimeout(record.cleanupTimer);
+      }
+    }
+    this.jobs.clear();
+  }
+
+  private async runJob(record: ProvisioningJobRecord, password?: string): Promise<void> {
+    let createdWorkspaceId: string | undefined;
+
+    try {
+      const { server, executor } = await sshServerManager.getCommandExecutor(
+        record.job.config.sshServerId,
+        password,
+      );
+      const git = GitService.withExecutor(executor);
+
+      setStep(record, this.maxLogEntries, "verify_devbox", "Checking for devbox");
+      await this.runCmd(record, executor, {
+        step: "verify_devbox",
+        label: "Checking devbox availability",
+        command: "bash",
+        args: ["-lc", "command -v devbox >/dev/null 2>&1"],
+        errorCode: "devbox_not_found",
+        errorMessage: "Devbox is not installed or not available on PATH",
+        captureStdout: false,
+      });
+
+      setStep(record, this.maxLogEntries, "prepare_directory", "Preparing remote base directory");
+      await this.runCmd(record, executor, {
+        step: "prepare_directory",
+        label: `Ensuring base path ${record.job.config.basePath}`,
+        command: "mkdir",
+        args: ["-p", record.job.config.basePath],
+      });
+
+      setStep(record, this.maxLogEntries, "clone_repo", "Preparing repository checkout");
+      const repoName = extractRepoName(record.job.config.repoUrl);
+      const targetDirectory = pathPosix.join(record.job.config.basePath, repoName);
+      this.updateState(record, { targetDirectory });
+
+      const targetExists = await executor.directoryExists(targetDirectory);
+      if (!targetExists) {
+        await this.runCmd(record, executor, {
+          step: "clone_repo",
+          label: `Cloning repository into ${targetDirectory}`,
+          command: "git",
+          args: ["clone", record.job.config.repoUrl, targetDirectory],
+          timeout: GIT_CLONE_TIMEOUT_MS,
+          streamOutput: true,
+          errorCode: "clone_failed",
+          errorMessage: "Failed to clone repository",
+        });
+      } else {
+        const existingRepo = await git.isGitRepo(targetDirectory);
+        if (!existingRepo) {
+          throw new ProvisioningFailedError(
+            "clone_conflict",
+            "clone_repo",
+            `Target directory already exists and is not a git repository: ${targetDirectory}`,
+          );
+        }
+
+        const remoteUrlResult = await executor.exec(
+          "git",
+          ["remote", "get-url", "origin"],
+          {
+            cwd: targetDirectory,
+            signal: record.abortController.signal,
+          },
+        );
+        this.throwIfCancelled(record);
+        if (!remoteUrlResult.success) {
+          throw new ProvisioningFailedError(
+            "clone_conflict",
+            "clone_repo",
+            `Target directory already exists but its origin remote could not be verified: ${targetDirectory}`,
+          );
+        }
+
+        if (normalizeRepoUrl(remoteUrlResult.stdout) !== normalizeRepoUrl(record.job.config.repoUrl)) {
+          throw new ProvisioningFailedError(
+            "clone_conflict",
+            "clone_repo",
+            `Target directory already exists with a different origin remote: ${targetDirectory}`,
+          );
+        }
+
+        appendSystemLog(record, this.maxLogEntries, `Reusing existing checkout at ${targetDirectory}`, "clone_repo");
+      }
+
+      setStep(record, this.maxLogEntries, "devbox_up", "Starting devbox");
+      await this.runCmd(record, executor, {
+        step: "devbox_up",
+        label: "Running devbox up",
+        command: "devbox",
+        args: ["up"],
+        cwd: targetDirectory,
+        timeout: DEVBOX_UP_TIMEOUT_MS,
+        streamOutput: true,
+        errorCode: "devbox_up_failed",
+        errorMessage: "Failed to start devbox",
+      });
+
+      setStep(record, this.maxLogEntries, "devbox_status", "Reading devbox status");
+      const statusResult = await this.runCmd(record, executor, {
+        step: "devbox_status",
+        label: "Reading devbox status",
+        command: "devbox",
+        args: ["status"],
+        cwd: targetDirectory,
+        errorCode: "invalid_devbox_status",
+        errorMessage: "Failed to read devbox status",
+        captureStdout: false,
+      });
+      const status = parseDevboxStatusOutput(statusResult.stdout);
+      if (!status.running) {
+        throw new ProvisioningFailedError(
+          "invalid_devbox_status",
+          "devbox_status",
+          "devbox status reported that the environment is not running",
+        );
+      }
+
+      let devboxCredential = parseDevboxCredentialContent("");
+      if (!status.password && status.hasCredentialFile && status.credentialPath) {
+        const credentialContent = await executor.readFile(status.credentialPath);
+        if (credentialContent) {
+          devboxCredential = parseDevboxCredentialContent(credentialContent);
+        }
+      }
+
+      const resolvedDirectory = status.workdir?.trim();
+      if (!resolvedDirectory) {
+        throw new ProvisioningFailedError(
+          "invalid_devbox_status",
+          "devbox_status",
+          "devbox status did not include a workdir value",
+        );
+      }
+
+      const resolvedPort = status.sshPort ?? status.port ?? getPublishedPortFallback(status);
+      if (!resolvedPort) {
+        throw new ProvisioningFailedError(
+          "invalid_devbox_status",
+          "devbox_status",
+          "devbox status did not include SSH port information",
+        );
+      }
+
+      const resolvedUsername =
+        status.sshUser?.trim() ||
+        devboxCredential.username?.trim() ||
+        status.remoteUser?.trim() ||
+        server.username.trim();
+      if (!resolvedUsername) {
+        throw new ProvisioningFailedError(
+          "invalid_devbox_status",
+          "devbox_status",
+          "devbox status did not include SSH username information",
+        );
+      }
+
+      const resolvedPassword = status.password?.trim() || devboxCredential.password?.trim();
+      if (!resolvedPassword) {
+        throw new ProvisioningFailedError(
+          "invalid_devbox_status",
+          "devbox_status",
+          "Could not determine the devbox SSH password from devbox status or credential file",
+        );
+      }
+
+      const serverSettings: ServerSettings = {
+        agent: {
+          provider: record.job.config.provider,
+          transport: "ssh",
+          hostname: server.address,
+          port: resolvedPort,
+          username: resolvedUsername,
+          password: resolvedPassword,
+        },
+      };
+
+      this.updateState(record, { resolvedDirectory, serverSettings });
+      appendSystemLog(
+        record,
+        this.maxLogEntries,
+        `Resolved devbox SSH endpoint ${resolvedUsername}@${server.address}:${resolvedPort}`,
+        "devbox_status",
+      );
+
+      setStep(record, this.maxLogEntries, "create_workspace", "Creating workspace record");
+      const existingWorkspace = await getWorkspaceByDirectoryAndServerSettings(
+        resolvedDirectory,
+        serverSettings,
+      );
+      if (existingWorkspace) {
+        this.updateState(record, {
+          workspaceId: existingWorkspace.id,
+          workspaceAction: "reused",
+        });
+        appendSystemLog(
+          record,
+          this.maxLogEntries,
+          `Reusing existing workspace ${existingWorkspace.name}`,
+          "create_workspace",
+        );
+      } else {
+        const now = new Date().toISOString();
+        const workspace = {
+          id: crypto.randomUUID(),
+          name: record.job.config.name,
+          directory: resolvedDirectory,
+          serverSettings,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await createWorkspace(workspace);
+        createdWorkspaceId = workspace.id;
+        this.updateState(record, {
+          workspaceId: workspace.id,
+          workspaceAction: "created",
+        });
+        appendSystemLog(record, this.maxLogEntries, `Created workspace ${workspace.name}`, "create_workspace");
+      }
+
+      setStep(record, this.maxLogEntries, "test_connection", "Testing workspace connection");
+      const connectionResult = await backendManager.testConnection(serverSettings, resolvedDirectory);
+      if (!connectionResult.success) {
+        throw new ProvisioningFailedError(
+          "connection_test_failed",
+          "test_connection",
+          connectionResult.error ?? "Workspace connection test failed",
+        );
+      }
+
+      setStep(record, this.maxLogEntries, "workspace_ready");
+      const completedAt = new Date().toISOString();
+      record.job.state = {
+        ...record.job.state,
+        status: "completed",
+        completedAt,
+        updatedAt: completedAt,
+      };
+      appendSystemLog(
+        record,
+        this.maxLogEntries,
+        record.job.state.workspaceAction === "reused"
+          ? `Workspace connection test succeeded. Existing workspace ${record.job.config.name} is ready.`
+          : `Workspace connection test succeeded. Workspace ${record.job.config.name} was created successfully and is ready.`,
+        "workspace_ready",
+      );
+      emitJobCompleted(record.job);
+      this.scheduleCleanup(record);
+    } catch (error) {
+      const cancelled =
+        error instanceof ProvisioningCancelledError || record.abortController.signal.aborted;
+      const failure = cancelled
+        ? buildError(
+            "cancelled",
+            record.job.state.currentStep ?? "verify_devbox",
+            "Provisioning job was cancelled",
+          )
+        : error instanceof ProvisioningFailedError
+          ? buildError(error.code, error.step, error.message)
+          : buildError(
+              "provisioning_failed",
+              record.job.state.currentStep ?? "verify_devbox",
+              String(error),
+            );
+
+      if (createdWorkspaceId) {
+        try {
+          await deleteWorkspace(createdWorkspaceId);
+          if (record.job.state.workspaceId === createdWorkspaceId) {
+            this.updateState(record, {
+              workspaceId: undefined,
+              workspaceAction: undefined,
+            });
+          }
+          appendSystemLog(
+            record,
+            this.maxLogEntries,
+            "Removed the partially created workspace after provisioning failure",
+            "create_workspace",
+          );
+        } catch (cleanupError) {
+          log.warn("Failed to remove partially created workspace after provisioning failure", {
+            provisioningJobId: record.job.config.id,
+            workspaceId: createdWorkspaceId,
+            error: String(cleanupError),
+          });
+        }
+      }
+
+      const completedAt = new Date().toISOString();
+      record.job.state = {
+        ...record.job.state,
+        status: cancelled ? "cancelled" : "failed",
+        error: failure,
+        completedAt,
+        updatedAt: completedAt,
+      };
+      appendSystemLog(record, this.maxLogEntries, failure.message, failure.step);
+      if (cancelled) {
+        emitJobCancelled(record.job);
+      } else {
+        emitJobFailed(record.job, failure);
+      }
+      this.scheduleCleanup(record);
+    }
+  }
+
+  private async buildSnapshot(record: ProvisioningJobRecord): Promise<ProvisioningJobSnapshot> {
+    const workspace = record.job.state.workspaceId
+      ? await getWorkspace(record.job.state.workspaceId)
+      : null;
+    return {
+      job: structuredClone(record.job),
+      logs: [...record.logs],
+      ...(workspace ? { workspace } : {}),
+    };
+  }
+
+  private async getSnapshotOrThrow(jobId: string): Promise<ProvisioningJobSnapshot> {
+    const snapshot = await this.getJobSnapshot(jobId);
+    if (!snapshot) {
+      throw new Error(`Provisioning job not found: ${jobId}`);
+    }
+    return snapshot;
+  }
+
+  private throwIfCancelled(record: ProvisioningJobRecord): void {
+    if (record.abortController.signal.aborted) {
+      throw new ProvisioningCancelledError("Provisioning job was cancelled");
+    }
+  }
+
+  private updateState(
+    record: ProvisioningJobRecord,
+    updates: Partial<ProvisioningJob["state"]>,
+  ): void {
+    record.job.state = {
+      ...record.job.state,
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  private scheduleCleanup(record: ProvisioningJobRecord): void {
+    if (record.cleanupTimer) {
+      clearTimeout(record.cleanupTimer);
+    }
+    record.cleanupTimer = setTimeout(() => {
+      this.jobs.delete(record.job.config.id);
+    }, this.jobRetentionMs);
+  }
+
+  // Thin wrapper so runJob can call runProvisioningCommand without threading maxLogEntries everywhere.
+  private runCmd(
+    record: ProvisioningJobRecord,
+    executor: CommandExecutor,
+    options: Parameters<typeof runProvisioningCommand>[2],
+  ) {
+    return runProvisioningCommand(record, executor, options, this.maxLogEntries);
+  }
+}
+
+export const provisioningManager = new ProvisioningManager();
+

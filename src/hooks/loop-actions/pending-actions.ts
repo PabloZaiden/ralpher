@@ -1,0 +1,61 @@
+/**
+ * Pending prompt and pending value actions for loops.
+ */
+
+import { apiCall, apiAction, apiActionWithBody } from "./helpers";
+
+/**
+ * Result of setting pending values.
+ */
+export interface SetPendingResult {
+  success: boolean;
+}
+
+/**
+ * Set a pending prompt for a loop via the API.
+ */
+export async function setPendingPromptApi(
+  loopId: string,
+  prompt: string,
+): Promise<boolean> {
+  return apiActionWithBody(
+    `/api/loops/${loopId}/pending-prompt`,
+    "PUT",
+    { prompt },
+    "Set pending prompt",
+  );
+}
+
+/**
+ * Clear the pending prompt for a loop via the API.
+ */
+export async function clearPendingPromptApi(loopId: string): Promise<boolean> {
+  return apiAction(`/api/loops/${loopId}/pending-prompt`, "DELETE", "Clear pending prompt");
+}
+
+/**
+ * Set pending message and/or model for a loop via the API.
+ * These values will be used for the next iteration instead of the default.
+ */
+export async function setPendingApi(
+  loopId: string,
+  options: { message?: string; model?: { providerID: string; modelID: string } },
+): Promise<SetPendingResult> {
+  await apiCall(
+    `/api/loops/${loopId}/pending`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(options),
+    },
+    "Set pending values",
+  );
+  return { success: true };
+}
+
+/**
+ * Clear all pending values (message and model) for a loop via the API.
+ */
+export async function clearPendingApi(loopId: string): Promise<boolean> {
+  return apiAction(`/api/loops/${loopId}/pending`, "DELETE", "Clear pending values");
+}

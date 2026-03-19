@@ -1,0 +1,284 @@
+import type { LoopCtx } from "./context";
+import { createTimestamp } from "../../types/events";
+import { loadLoop, updateLoopState, deleteLoop as deleteLoopFile, resetStaleLoops } from "../../persistence/loops";
+import { backendManager } from "../backend-manager";
+import { GitService } from "../git-service";
+import { log } from "../logger";
+import { assertValidTransition } from "../loop-state-machine";
+import { sshSessionManager } from "../ssh-session-manager";
+import { portForwardManager } from "../port-forward-manager";
+
+export async function deleteLoopImpl(ctx: LoopCtx, loopId: string): Promise<boolean> {
+  log.debug(`[LoopManager] deleteLoop: Starting for loop ${loopId}, engine exists: ${ctx.engines.has(loopId)}`);
+
+  if (ctx.engines.has(loopId)) {
+    log.debug(`[LoopManager] deleteLoop: Stopping engine for loop ${loopId}`);
+    await ctx.stopLoop(loopId, "Loop deleted");
+  }
+
+  const loop = await loadLoop(loopId);
+  if (!loop) {
+    log.debug(`[LoopManager] deleteLoop: Loop ${loopId} not found`);
+    return false;
+  }
+  log.debug(`[LoopManager] deleteLoop: Loaded loop ${loopId}, status: ${loop.state.status}, hasGitBranch: ${!!loop.state.git?.workingBranch}`);
+
+  if (loop.state.git?.workingBranch) {
+    log.debug(`[LoopManager] deleteLoop: Discarding git branch for loop ${loopId}`);
+    const discardResult = await discardLoopImpl(ctx, loopId);
+    if (!discardResult.success) {
+      log.warn(`Failed to discard git branch during delete: ${discardResult.error}`);
+    }
+  }
+
+  log.debug(`[LoopManager] deleteLoop: Updating status to deleted for loop ${loopId}`);
+  assertValidTransition(loop.state.status, "deleted", "deleteLoop");
+  const updatedState = {
+    ...loop.state,
+    status: "deleted" as const,
+    reviewMode: loop.state.reviewMode
+      ? { ...loop.state.reviewMode, addressable: false }
+      : undefined,
+  };
+  await updateLoopState(loopId, updatedState);
+  log.debug(`[LoopManager] deleteLoop: Status updated to deleted for loop ${loopId}`);
+
+  ctx.emitter.emit({
+    type: "loop.deleted",
+    loopId,
+    timestamp: createTimestamp(),
+  });
+
+  return true;
+}
+
+export async function discardLoopImpl(ctx: LoopCtx, loopId: string): Promise<{ success: boolean; error?: string }> {
+  let loop = await ctx.getLoop(loopId);
+  if (!loop) {
+    return { success: false, error: "Loop not found" };
+  }
+
+  if (ctx.engines.has(loopId)) {
+    await ctx.stopLoop(loopId, "Loop discarded");
+    loop = await ctx.getLoop(loopId);
+    if (!loop) {
+      return { success: false, error: "Loop not found" };
+    }
+  }
+
+  if (!loop.state.git) {
+    return { success: false, error: "No git branch was created for this loop" };
+  }
+
+  try {
+    if (!loop.config.useWorktree) {
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+      const git = GitService.withExecutor(executor);
+      await git.resetHard(loop.config.directory, {
+        expectedBranch: loop.state.git.workingBranch,
+      });
+      await git.checkoutBranch(loop.config.directory, loop.state.git.originalBranch);
+    }
+
+    assertValidTransition(loop.state.status, "deleted", "discardLoop");
+    const updatedState = {
+      ...loop.state,
+      status: "deleted" as const,
+    };
+    await updateLoopState(loopId, updatedState);
+
+    await backendManager.disconnectLoop(loopId);
+
+    ctx.engines.delete(loopId);
+
+    ctx.emitter.emit({
+      type: "loop.discarded",
+      loopId,
+      timestamp: createTimestamp(),
+    });
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function purgeLoopImpl(_ctx: LoopCtx, loopId: string): Promise<{ success: boolean; error?: string }> {
+  const loop = await loadLoop(loopId);
+  if (!loop) {
+    return { success: false, error: "Loop not found" };
+  }
+
+  const isDraft = loop.state.status === "draft";
+
+  if (!isDraft && loop.state.status !== "merged" && loop.state.status !== "pushed" && loop.state.status !== "deleted") {
+    return { success: false, error: `Cannot purge loop in status: ${loop.state.status}. Only draft, merged, pushed, or deleted loops can be purged.` };
+  }
+
+  try {
+    await portForwardManager.deleteForwardsByLoopId(loopId);
+  } catch (error) {
+    return { success: false, error: `Failed to delete linked port forwards: ${String(error)}` };
+  }
+
+  try {
+    await sshSessionManager.deleteSessionByLoopId(loopId);
+  } catch (error) {
+    return { success: false, error: `Failed to delete linked SSH session: ${String(error)}` };
+  }
+
+  if (!isDraft) {
+    try {
+      const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
+      const git = GitService.withExecutor(executor);
+
+      const worktreePath = loop.state.git?.worktreePath;
+      if (worktreePath) {
+        await git.ensureWorktreeRemoved(loop.config.directory, worktreePath, { force: true });
+        log.debug(`[LoopManager] purgeLoop: Removed worktree and pruned metadata for loop ${loopId}: ${worktreePath}`);
+      }
+
+      if (!loop.config.useWorktree && loop.state.git?.workingBranch && loop.state.git.originalBranch) {
+        try {
+          await git.checkoutBranch(loop.config.directory, loop.state.git.originalBranch);
+        } catch (error) {
+          log.debug(`[LoopManager] purgeLoop: Could not switch back to original branch: ${String(error)}`);
+        }
+      }
+
+      if (loop.state.git?.workingBranch) {
+        try {
+          await git.deleteBranch(loop.config.directory, loop.state.git.workingBranch);
+          log.debug(`[LoopManager] purgeLoop: Deleted working branch for loop ${loopId}`);
+        } catch (error) {
+          log.debug(`[LoopManager] purgeLoop: Could not delete working branch: ${String(error)}`);
+        }
+      }
+
+      if (loop.state.reviewMode?.reviewBranches && loop.state.reviewMode.reviewBranches.length > 0) {
+        for (const branchName of loop.state.reviewMode.reviewBranches) {
+          if (branchName === loop.state.git?.workingBranch) continue;
+          try {
+            await git.deleteBranch(loop.config.directory, branchName);
+            log.debug(`[LoopManager] purgeLoop: Cleaned up review branch: ${branchName}`);
+          } catch (error) {
+            log.debug(`[LoopManager] purgeLoop: Could not delete branch ${branchName}: ${String(error)}`);
+          }
+        }
+      }
+    } catch (error) {
+      return { success: false, error: `Failed to clean up git state during purge: ${String(error)}` };
+    }
+  }
+
+  if (loop.state.reviewMode) {
+    loop.state.reviewMode.addressable = false;
+    await updateLoopState(loopId, loop.state);
+  }
+
+  const deleted = await deleteLoopFile(loopId);
+  if (!deleted) {
+    return { success: false, error: "Failed to delete loop file" };
+  }
+
+  return { success: true };
+}
+
+export async function markMergedImpl(ctx: LoopCtx, loopId: string): Promise<{ success: boolean; error?: string }> {
+  const loop = await ctx.getLoop(loopId);
+  if (!loop) {
+    return { success: false, error: "Loop not found" };
+  }
+
+  const allowedStatuses = ["pushed", "merged", "completed", "max_iterations"];
+  if (!allowedStatuses.includes(loop.state.status)) {
+    return {
+      success: false,
+      error: `Cannot mark loop as merged in status: ${loop.state.status}. Only finished loops can be marked as merged.`,
+    };
+  }
+
+  const persistedLoop = await loadLoop(loopId);
+  const gitState = persistedLoop ? persistedLoop.state.git : loop.state.git;
+
+  if (!gitState) {
+    return { success: false, error: "No git branch was created for this loop" };
+  }
+
+  try {
+    const nextStatus = "merged" as const;
+    if (loop.state.status !== nextStatus) {
+      assertValidTransition(loop.state.status, nextStatus, "markMerged");
+    }
+
+    const updatedState = {
+      ...loop.state,
+      status: nextStatus,
+      reviewMode: loop.state.reviewMode
+        ? { ...loop.state.reviewMode, addressable: false }
+        : undefined,
+    };
+    await updateLoopState(loopId, updatedState);
+
+    await backendManager.disconnectLoop(loopId);
+
+    ctx.engines.delete(loopId);
+
+    ctx.emitter.emit({
+      type: "loop.merged",
+      loopId,
+      timestamp: createTimestamp(),
+    });
+
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  }
+}
+
+export async function shutdownImpl(ctx: LoopCtx): Promise<void> {
+  const promises = Array.from(ctx.engines.keys()).map((loopId) =>
+    ctx.stopLoop(loopId, "Server shutdown")
+  );
+  await Promise.allSettled(promises);
+}
+
+export async function forceResetAllImpl(ctx: LoopCtx): Promise<{ enginesCleared: number; loopsReset: number }> {
+  const engineCount = ctx.engines.size;
+
+  const stopPromises = Array.from(ctx.engines.entries()).map(async ([loopId, engine]) => {
+    try {
+      if (engine.state.status === "planning") {
+        log.info(`Preserving planning loop ${loopId} status during force reset`);
+        await updateLoopState(loopId, engine.state);
+        await engine.abortSessionOnly();
+      } else {
+        await engine.stop("Force reset by user");
+        await updateLoopState(loopId, engine.state);
+      }
+    } catch (error) {
+      log.warn(`Failed to stop engine ${loopId} during force reset: ${String(error)}`);
+    }
+  });
+
+  await Promise.allSettled(stopPromises);
+
+  ctx.engines.clear();
+  ctx.loopsBeingAccepted.clear();
+
+  const loopsReset = await resetStaleLoops();
+
+  await backendManager.resetAllConnections();
+
+  log.info(`Force reset completed: ${engineCount} engines cleared, ${loopsReset} loops reset in database`);
+
+  return {
+    enginesCleared: engineCount,
+    loopsReset,
+  };
+}
+
+export function resetForTestingImpl(ctx: LoopCtx): void {
+  ctx.engines.clear();
+  ctx.loopsBeingAccepted.clear();
+}
