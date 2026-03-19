@@ -108,11 +108,24 @@ export interface AgentSession {
 /**
  * Part of a prompt message.
  */
-export interface PromptPart {
+export type PromptPart = TextPromptPart | ImagePromptPart;
+
+export interface TextPromptPart {
   /** Part type */
   type: "text";
   /** Text content */
   text: string;
+}
+
+export interface ImagePromptPart {
+  /** Part type */
+  type: "image";
+  /** Image MIME type */
+  mimeType: string;
+  /** Base64-encoded image data */
+  data: string;
+  /** Original filename, used for debugging/UX only */
+  filename?: string;
 }
 
 /**

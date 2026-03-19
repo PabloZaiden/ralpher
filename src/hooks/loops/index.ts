@@ -12,6 +12,7 @@ import { useLoopMutations, type CreateLoopResult, type CreateChatResult } from "
 import { useLoopActions } from "./use-loop-actions";
 import type { AcceptLoopResult, PushLoopResult, AddressCommentsResult, PurgeArchivedLoopsResult } from "../loopActions";
 import type { Loop, CreateLoopRequest, CreateChatRequest, UpdateLoopRequest } from "../../types";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 
 export interface UseLoopsResult {
   /** Array of all loops */
@@ -43,7 +44,7 @@ export interface UseLoopsResult {
   /** Purge all archived loops for a workspace */
   purgeArchivedWorkspaceLoops: (workspaceId: string) => Promise<PurgeArchivedLoopsResult>;
   /** Address reviewer comments (only for pushed/merged loops with reviewMode.addressable = true) */
-  addressReviewComments: (id: string, comments: string) => Promise<AddressCommentsResult>;
+  addressReviewComments: (id: string, comments: string, attachments?: MessageImageAttachment[]) => Promise<AddressCommentsResult>;
   /** Get a loop by ID */
   getLoop: (id: string) => Loop | undefined;
 }

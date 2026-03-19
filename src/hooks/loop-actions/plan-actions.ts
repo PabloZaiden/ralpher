@@ -3,6 +3,7 @@
  */
 
 import type { SshSession, PlanAcceptResponse } from "../../types";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import { apiCall, apiAction, apiActionWithBody } from "./helpers";
 
 /**
@@ -28,11 +29,12 @@ export type AcceptPlanResult =
 export async function sendPlanFeedbackApi(
   loopId: string,
   feedback: string,
+  attachments?: MessageImageAttachment[],
 ): Promise<boolean> {
   return apiActionWithBody(
     `/api/loops/${loopId}/plan/feedback`,
     "POST",
-    { feedback },
+    { feedback, attachments },
     "Send plan feedback",
   );
 }

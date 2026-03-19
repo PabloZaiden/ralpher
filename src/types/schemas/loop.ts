@@ -10,6 +10,44 @@
 import { z } from "zod";
 import { normalizeCommitScope } from "../../utils/commit-scope";
 import { ModelConfigSchema } from "./model";
+import {
+  MESSAGE_IMAGE_ATTACHMENT_LIMIT,
+  MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES,
+  MESSAGE_IMAGE_ALLOWED_MIME_TYPES,
+} from "../message-attachments";
+
+/**
+ * Approximate the decoded byte size of a base64 string.
+ * base64 encodes 3 bytes into 4 characters, plus optional padding.
+ */
+function approximateBase64DecodedSize(base64: string): number {
+  const len = base64.length;
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.floor(((len * 3) / 4) - padding);
+}
+
+const allowedMimeTypes = MESSAGE_IMAGE_ALLOWED_MIME_TYPES as readonly string[];
+
+export const MessageImageAttachmentSchema = z.object({
+  id: z.string().min(1, "attachment id is required"),
+  filename: z.string().min(1, "attachment filename is required"),
+  mimeType: z.string().refine(
+    (mime) => allowedMimeTypes.includes(mime),
+    { message: `attachments must be one of: ${MESSAGE_IMAGE_ALLOWED_MIME_TYPES.join(", ")}` },
+  ),
+  data: z.string().min(1, "attachment data is required").refine(
+    (data) => approximateBase64DecodedSize(data) <= MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES,
+    { message: `attachment data exceeds ${MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES} bytes` },
+  ),
+  size: z.number().int().positive().max(
+    MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES,
+    `attachments must be ${MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES} bytes or smaller`,
+  ),
+});
+
+const MessageImageAttachmentsSchema = z
+  .array(MessageImageAttachmentSchema)
+  .max(MESSAGE_IMAGE_ATTACHMENT_LIMIT, `no more than ${MESSAGE_IMAGE_ATTACHMENT_LIMIT} images can be attached`);
 
 /**
  * Schema for GitConfig - git integration settings.
@@ -69,6 +107,7 @@ export const CreateLoopRequestSchema = z.object({
   name: LoopNameSchema,
   workspaceId: z.string().min(1, "workspaceId is required"),
   prompt: z.string().min(1, "prompt is required and must be a non-empty string"),
+  attachments: MessageImageAttachmentsSchema.optional(),
   model: ModelConfigSchema,
   maxIterations: z.number().optional(),
   maxConsecutiveErrors: z.number().optional(),
@@ -128,6 +167,7 @@ export const AddressCommentsRequestSchema = z.object({
   comments: z.string().refine((val) => val.trim().length > 0, {
     message: "comments cannot be empty",
   }),
+  attachments: MessageImageAttachmentsSchema.optional(),
 });
 
 /**
@@ -137,6 +177,7 @@ export const PlanFeedbackRequestSchema = z.object({
   feedback: z.string().refine((val) => val.trim().length > 0, {
     message: "feedback cannot be empty",
   }),
+  attachments: MessageImageAttachmentsSchema.optional(),
 });
 
 /**
@@ -167,6 +208,7 @@ export const PendingPromptRequestSchema = z.object({
   prompt: z.string().refine((val) => val.trim().length > 0, {
     message: "prompt is required and cannot be empty or whitespace-only",
   }),
+  attachments: MessageImageAttachmentsSchema.optional(),
 });
 
 /**
@@ -178,6 +220,7 @@ export const SetPendingRequestSchema = z.object({
   message: z.string().optional(),
   model: ModelConfigSchema.optional(),
   immediate: z.boolean().optional(),
+  attachments: MessageImageAttachmentsSchema.optional(),
 });
 
 /**
@@ -185,6 +228,7 @@ export const SetPendingRequestSchema = z.object({
  */
 export const StartDraftRequestSchema = z.object({
   planMode: z.boolean({ error: "planMode is required" }),
+  attachments: MessageImageAttachmentsSchema.optional(),
 });
 
 /**
@@ -196,6 +240,7 @@ export const StartDraftRequestSchema = z.object({
 export const CreateChatRequestSchema = z.object({
   workspaceId: z.string().min(1, "workspaceId is required"),
   prompt: z.string().min(1, "prompt is required and must be a non-empty string"),
+  attachments: MessageImageAttachmentsSchema.optional(),
   model: ModelConfigSchema,
   baseBranch: z.string().optional(),
   useWorktree: z.boolean({ error: "useWorktree is required and must be a boolean (true or false)" }),
@@ -210,6 +255,7 @@ export const SendChatMessageRequestSchema = z.object({
     message: "message cannot be empty",
   }),
   model: ModelConfigSchema.optional(),
+  attachments: MessageImageAttachmentsSchema.optional(),
 });
 
 /**
@@ -220,4 +266,5 @@ export const FollowUpRequestSchema = z.object({
     message: "message cannot be empty",
   }),
   model: ModelConfigSchema.optional(),
+  attachments: MessageImageAttachmentsSchema.optional(),
 });

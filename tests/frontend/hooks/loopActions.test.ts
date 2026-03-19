@@ -29,8 +29,16 @@ import {
   sendFollowUpApi,
 } from "@/hooks/loopActions";
 import { createSshSession } from "../helpers/factories";
+import type { MessageImageAttachment } from "@/types/message-attachments";
 
 const LOOP_ID = "test-loop-123";
+const SAMPLE_ATTACHMENT: MessageImageAttachment = {
+  id: "img-1",
+  filename: "screen.png",
+  mimeType: "image/png",
+  data: "ZmFrZQ==",
+  size: 1234,
+};
 
 const api = createMockApi();
 
@@ -281,6 +289,18 @@ describe("sendFollowUpApi", () => {
       "Loop cannot accept a terminal follow-up",
     );
   });
+
+  test("includes attachments in the request body", async () => {
+    api.post(`/api/loops/${LOOP_ID}/follow-up`, () => ({ success: true }));
+
+    await sendFollowUpApi(LOOP_ID, "Please restart this", undefined, [SAMPLE_ATTACHMENT]);
+
+    expect(api.calls(`/api/loops/${LOOP_ID}/follow-up`, "POST")[0]?.body).toEqual({
+      message: "Please restart this",
+      model: undefined,
+      attachments: [SAMPLE_ATTACHMENT],
+    });
+  });
 });
 
 // ─── markMergedApi ───────────────────────────────────────────────────────────
@@ -340,6 +360,17 @@ describe("setPendingPromptApi", () => {
     });
 
     await expect(setPendingPromptApi(LOOP_ID, "test")).rejects.toThrow("Failed to set pending prompt");
+  });
+
+  test("includes attachments in the request body when provided", async () => {
+    api.put(`/api/loops/${LOOP_ID}/pending-prompt`, () => ({ success: true }));
+
+    await setPendingPromptApi(LOOP_ID, "Do this next", [SAMPLE_ATTACHMENT]);
+
+    expect(api.calls(`/api/loops/${LOOP_ID}/pending-prompt`, "PUT")[0]?.body).toEqual({
+      prompt: "Do this next",
+      attachments: [SAMPLE_ATTACHMENT],
+    });
   });
 });
 

@@ -12,6 +12,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Loop, LoopEvent, UpdateLoopRequest, FileDiff, FileContentResponse, PullRequestDestinationResponse, MessageData, ToolCallData, SshSession } from "../../types";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { LogEntry } from "../../components/LogViewer";
 import { useLoopEvents } from "../useWebSocket";
 import { createLogger } from "../../lib/logger";
@@ -66,7 +67,7 @@ export interface UseLoopResult {
   /** Mark a loop as merged and sync with remote (only for final-state loops) */
   markMerged: () => Promise<boolean>;
   /** Set a pending prompt for the next iteration (only works when loop is running) */
-  setPendingPrompt: (prompt: string) => Promise<boolean>;
+  setPendingPrompt: (prompt: string, attachments?: MessageImageAttachment[]) => Promise<boolean>;
   /** Clear the pending prompt (only works when loop is running) */
   clearPendingPrompt: () => Promise<boolean>;
   /** Get the git diff */
@@ -78,7 +79,7 @@ export interface UseLoopResult {
   /** Get pull request navigation metadata for pushed loops */
   getPullRequestDestination: () => Promise<PullRequestDestinationResponse>;
   /** Send feedback to refine the plan (only works when loop is in planning status) */
-  sendPlanFeedback: (feedback: string) => Promise<boolean>;
+  sendPlanFeedback: (feedback: string, attachments?: MessageImageAttachment[]) => Promise<boolean>;
   /** Answer a pending plan-mode question */
   answerPlanQuestion: (answers: string[][]) => Promise<boolean>;
   /** Accept the plan via the requested mode (only works when loop is in planning status) */
@@ -86,15 +87,23 @@ export interface UseLoopResult {
   /** Discard the plan and delete the loop (only works when loop is in planning status) */
   discardPlan: () => Promise<boolean>;
   /** Address reviewer comments (only works for pushed/merged loops with reviewMode.addressable = true) */
-  addressReviewComments: (comments: string) => Promise<AddressCommentsResult>;
+  addressReviewComments: (comments: string, attachments?: MessageImageAttachment[]) => Promise<AddressCommentsResult>;
   /** Set pending message and/or model for next iteration (only works when loop is active) */
-  setPending: (options: { message?: string; model?: { providerID: string; modelID: string } }) => Promise<SetPendingResult>;
+  setPending: (options: { message?: string; model?: { providerID: string; modelID: string }; attachments?: MessageImageAttachment[] }) => Promise<SetPendingResult>;
   /** Clear all pending values (message and model) */
   clearPending: () => Promise<boolean>;
   /** Send a message to a chat (only works for chat-mode loops) */
-  sendChatMessage: (message: string, model?: { providerID: string; modelID: string }) => Promise<boolean>;
+  sendChatMessage: (
+    message: string,
+    model?: { providerID: string; modelID: string },
+    attachments?: MessageImageAttachment[],
+  ) => Promise<boolean>;
   /** Start a new feedback cycle from a restartable terminal state */
-  sendFollowUp: (message: string, model?: { providerID: string; modelID: string }) => Promise<boolean>;
+  sendFollowUp: (
+    message: string,
+    model?: { providerID: string; modelID: string },
+    attachments?: MessageImageAttachment[],
+  ) => Promise<boolean>;
   /** Get or create the loop's linked SSH session */
   connectViaSsh: () => Promise<SshSession | null>;
 }

@@ -4,6 +4,7 @@
 
 import { useCallback } from "react";
 import type { Loop } from "../../types";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import {
   acceptLoopApi,
   pushLoopApi,
@@ -31,7 +32,7 @@ export interface UseLoopActionsResult {
   discardLoop: (id: string) => Promise<boolean>;
   purgeLoop: (id: string) => Promise<boolean>;
   purgeArchivedWorkspaceLoops: (workspaceId: string) => Promise<PurgeArchivedLoopsResult>;
-  addressReviewComments: (id: string, comments: string) => Promise<AddressCommentsResult>;
+  addressReviewComments: (id: string, comments: string, attachments?: MessageImageAttachment[]) => Promise<AddressCommentsResult>;
 }
 
 export function useLoopActions({ setError, setLoops, refreshLoop }: UseLoopActionsOptions): UseLoopActionsResult {
@@ -112,9 +113,13 @@ export function useLoopActions({ setError, setLoops, refreshLoop }: UseLoopActio
     }
   }, [setError, setLoops]);
 
-  const addressReviewComments = useCallback(async (id: string, comments: string): Promise<AddressCommentsResult> => {
+  const addressReviewComments = useCallback(async (
+    id: string,
+    comments: string,
+    attachments?: MessageImageAttachment[],
+  ): Promise<AddressCommentsResult> => {
     try {
-      const result = await addressReviewCommentsApi(id, comments);
+      const result = await addressReviewCommentsApi(id, comments, attachments);
       await refreshLoop(id);
       return result;
     } catch (err) {

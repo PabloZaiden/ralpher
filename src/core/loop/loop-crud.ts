@@ -140,7 +140,7 @@ export async function createChatImpl(
     clearPlanningFolder: false,
   });
 
-  await ctx.startLoop(loop.config.id);
+  await ctx.startLoop(loop.config.id, { attachments: options.attachments });
 
   const updatedLoop = await ctx.getLoop(loop.config.id);
   return updatedLoop ?? loop;

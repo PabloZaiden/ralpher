@@ -13,6 +13,7 @@ export { getLoopWorkingDirectory } from "./loop-types";
 import type { LoopCtx } from "./context";
 import type { Loop, LoopConfig, LoopState, ModelConfig } from "../../types/loop";
 import type { LoopEvent } from "../../types/events";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { CreateLoopOptions, StartLoopOptions, AcceptPlanOptions, AcceptPlanResult, AcceptLoopResult, SendFollowUpResult, PushLoopResult } from "./loop-types";
 import type { PullRequestDestinationResponse } from "../../types/api";
 
@@ -44,9 +45,9 @@ export class LoopManager {
       deleteLoop: (id) => this.deleteLoop(id),
       discardLoop: (id) => this.discardLoop(id),
       getLoop: (id) => this.getLoop(id),
-      startLoop: (id) => this.startLoop(id),
-      startPlanMode: (id) => this.startPlanMode(id),
-      sendChatMessage: (id, msg, model) => this.sendChatMessage(id, msg, model),
+      startLoop: (id, options) => this.startLoop(id, options),
+      startPlanMode: (id, options) => this.startPlanMode(id, options),
+      sendChatMessage: (id, msg, model, attachments) => this.sendChatMessage(id, msg, model, attachments),
       startStatePersistence: (id) => startStatePersistenceImpl(this.ctx, id),
       ensureLoopBranchCheckedOut: (loop, git, dir) => ensureLoopBranchCheckedOutImpl(this.ctx, loop, git, dir),
       validateMainCheckoutStart: (loop, git) => validateMainCheckoutStartImpl(this.ctx, loop, git),
@@ -70,20 +71,25 @@ export class LoopManager {
     return createChatImpl(this.ctx, options);
   }
 
-  async sendChatMessage(loopId: string, message: string, model?: ModelConfig): Promise<void> {
-    return sendChatMessageImpl(this.ctx, loopId, message, model);
+  async sendChatMessage(
+    loopId: string,
+    message: string,
+    model?: ModelConfig,
+    attachments?: MessageImageAttachment[],
+  ): Promise<void> {
+    return sendChatMessageImpl(this.ctx, loopId, message, model, attachments);
   }
 
-  async startPlanMode(loopId: string): Promise<void> {
-    return startPlanModeImpl(this.ctx, loopId);
+  async startPlanMode(loopId: string, options?: StartLoopOptions): Promise<void> {
+    return startPlanModeImpl(this.ctx, loopId, options);
   }
 
-  async startDraft(loopId: string, options: { planMode: boolean }): Promise<Loop> {
+  async startDraft(loopId: string, options: { planMode: boolean; attachments?: MessageImageAttachment[] }): Promise<Loop> {
     return startDraftImpl(this.ctx, loopId, options);
   }
 
-  async sendPlanFeedback(loopId: string, feedback: string): Promise<void> {
-    return sendPlanFeedbackImpl(this.ctx, loopId, feedback);
+  async sendPlanFeedback(loopId: string, feedback: string, attachments?: MessageImageAttachment[]): Promise<void> {
+    return sendPlanFeedbackImpl(this.ctx, loopId, feedback, attachments);
   }
 
   async answerPendingPlanQuestion(loopId: string, answers: string[][]): Promise<void> {
@@ -153,8 +159,12 @@ export class LoopManager {
     return markMergedImpl(this.ctx, loopId);
   }
 
-  async setPendingPrompt(loopId: string, prompt: string): Promise<{ success: boolean; error?: string }> {
-    return setPendingPromptImpl(this.ctx, loopId, prompt);
+  async setPendingPrompt(
+    loopId: string,
+    prompt: string,
+    attachments?: MessageImageAttachment[],
+  ): Promise<{ success: boolean; error?: string }> {
+    return setPendingPromptImpl(this.ctx, loopId, prompt, attachments);
   }
 
   async clearPendingPrompt(loopId: string): Promise<{ success: boolean; error?: string }> {
@@ -173,23 +183,33 @@ export class LoopManager {
     return clearPendingImpl(this.ctx, loopId);
   }
 
-  async setPending(loopId: string, options: { message?: string; model?: ModelConfig }): Promise<{ success: boolean; error?: string }> {
+  async setPending(
+    loopId: string,
+    options: { message?: string; model?: ModelConfig; attachments?: MessageImageAttachment[] },
+  ): Promise<{ success: boolean; error?: string }> {
     return setPendingImpl(this.ctx, loopId, options);
   }
 
-  async injectPending(loopId: string, options: { message?: string; model?: ModelConfig }): Promise<{ success: boolean; error?: string }> {
+  async injectPending(
+    loopId: string,
+    options: { message?: string; model?: ModelConfig; attachments?: MessageImageAttachment[] },
+  ): Promise<{ success: boolean; error?: string }> {
     return injectPendingImpl(this.ctx, loopId, options);
   }
 
-  async sendFollowUp(loopId: string, options: { message: string; model?: ModelConfig }): Promise<SendFollowUpResult> {
+  async sendFollowUp(
+    loopId: string,
+    options: { message: string; model?: ModelConfig; attachments?: MessageImageAttachment[] },
+  ): Promise<SendFollowUpResult> {
     return sendFollowUpImpl(this.ctx, loopId, options);
   }
 
   async addressReviewComments(
     loopId: string,
-    comments: string
+    comments: string,
+    attachments?: MessageImageAttachment[],
   ): Promise<{ success: boolean; error?: string; reviewCycle?: number; branch?: string; commentIds?: string[] }> {
-    return addressReviewCommentsImpl(this.ctx, loopId, comments);
+    return addressReviewCommentsImpl(this.ctx, loopId, comments, attachments);
   }
 
   async getReviewHistory(loopId: string): Promise<{ success: boolean; error?: string; history?: {

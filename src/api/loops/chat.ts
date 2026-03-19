@@ -101,6 +101,7 @@ export const loopsChatRoutes = {
         const chat = await loopManager.createChat({
           directory,
           prompt: body.prompt,
+          attachments: body.attachments,
           workspaceId,
           modelProviderID: body.model?.providerID,
           modelID: body.model?.modelID,
@@ -180,6 +181,7 @@ export const loopsChatRoutes = {
             modelID: body.model.modelID,
             variant: body.model.variant,
           } : undefined,
+          body.attachments,
         );
 
         const response: SendChatMessageResponse = {

@@ -12,16 +12,18 @@ import {
   type SetPendingResult,
 } from "../loopActions";
 import { createLogger } from "../../lib/logger";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { UseLoopActionsParams } from "./useLoopActions";
 
 const log = createLogger("useLoop");
 
 export interface UseLoopPendingActionsResult {
-  setPendingPrompt: (prompt: string) => Promise<boolean>;
+  setPendingPrompt: (prompt: string, attachments?: MessageImageAttachment[]) => Promise<boolean>;
   clearPendingPrompt: () => Promise<boolean>;
   setPending: (options: {
     message?: string;
     model?: { providerID: string; modelID: string };
+    attachments?: MessageImageAttachment[];
   }) => Promise<SetPendingResult>;
   clearPending: () => Promise<boolean>;
 }
@@ -31,7 +33,7 @@ export function useLoopPendingActions(params: UseLoopActionsParams): UseLoopPend
     params;
 
   const setPendingPrompt = useCallback(
-    async (prompt: string): Promise<boolean> => {
+    async (prompt: string, attachments?: MessageImageAttachment[]): Promise<boolean> => {
       const actionLoopId = loopId;
       const staleAction = ignoreStaleLoopAction("setPendingPrompt", actionLoopId, false);
       if (staleAction !== null) {
@@ -39,7 +41,7 @@ export function useLoopPendingActions(params: UseLoopActionsParams): UseLoopPend
       }
       log.debug("Setting pending prompt", { loopId: actionLoopId, promptLength: prompt.length });
       try {
-        await setPendingPromptApi(actionLoopId, prompt);
+        await setPendingPromptApi(actionLoopId, prompt, attachments);
         await refresh();
         if (!isActiveLoop(actionLoopId)) {
           return false;
@@ -89,6 +91,7 @@ export function useLoopPendingActions(params: UseLoopActionsParams): UseLoopPend
     async (options: {
       message?: string;
       model?: { providerID: string; modelID: string };
+      attachments?: MessageImageAttachment[];
     }): Promise<SetPendingResult> => {
       const actionLoopId = loopId;
       const staleAction = ignoreStaleLoopAction("setPending", actionLoopId, { success: false });

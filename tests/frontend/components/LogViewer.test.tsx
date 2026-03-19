@@ -63,6 +63,25 @@ describe("LogViewer", () => {
       expect(getByText("Hello world")).toBeInTheDocument();
     });
 
+    test("renders transient user image attachments", () => {
+      const msg = createMessageData({
+        role: "user",
+        content: "Hello world",
+        attachments: [{
+          id: "img-1",
+          filename: "screen.png",
+          mimeType: "image/png",
+          data: "ZmFrZQ==",
+          size: 1234,
+        }],
+      });
+      const { container, getByAltText } = renderWithUser(
+        <LogViewer messages={[msg]} toolCalls={[]} />
+      );
+      expect(getByAltText("screen.png")).toBeInTheDocument();
+      expect(container.querySelector("img")?.getAttribute("src")).toContain("data:image/png;base64,ZmFrZQ==");
+    });
+
     test("filters out assistant messages from display", () => {
       const msg = createMessageData({ role: "assistant", content: "I can help with that" });
       const { queryByText } = renderWithUser(

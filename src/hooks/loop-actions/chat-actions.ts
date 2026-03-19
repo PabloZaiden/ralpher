@@ -3,6 +3,7 @@
  */
 
 import type { Loop, CreateChatRequest, SendChatMessageResponse } from "../../types";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import { apiCall } from "./helpers";
 
 /**
@@ -28,13 +29,14 @@ export async function sendChatMessageApi(
   loopId: string,
   message: string,
   model?: { providerID: string; modelID: string },
+  attachments?: MessageImageAttachment[],
 ): Promise<SendChatMessageResponse> {
   return apiCall<SendChatMessageResponse>(
     `/api/loops/${loopId}/chat`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message, model }),
+      body: JSON.stringify({ message, model, attachments }),
     },
     "Send chat message",
   );

@@ -12,12 +12,13 @@ import {
   type AcceptPlanResult,
 } from "../loopActions";
 import { createLogger } from "../../lib/logger";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { UseLoopActionsParams } from "./useLoopActions";
 
 const log = createLogger("useLoop");
 
 export interface UseLoopPlanActionsResult {
-  sendPlanFeedback: (feedback: string) => Promise<boolean>;
+  sendPlanFeedback: (feedback: string, attachments?: MessageImageAttachment[]) => Promise<boolean>;
   answerPlanQuestion: (answers: string[][]) => Promise<boolean>;
   acceptPlan: (mode?: "start_loop" | "open_ssh") => Promise<AcceptPlanResult>;
   discardPlan: () => Promise<boolean>;
@@ -28,7 +29,7 @@ export function useLoopPlanActions(params: UseLoopActionsParams): UseLoopPlanAct
     params;
 
   const sendPlanFeedback = useCallback(
-    async (feedback: string): Promise<boolean> => {
+    async (feedback: string, attachments?: MessageImageAttachment[]): Promise<boolean> => {
       const actionLoopId = loopId;
       const staleAction = ignoreStaleLoopAction("sendPlanFeedback", actionLoopId, false);
       if (staleAction !== null) {
@@ -39,7 +40,7 @@ export function useLoopPlanActions(params: UseLoopActionsParams): UseLoopPlanAct
         feedbackLength: feedback.length,
       });
       try {
-        await sendPlanFeedbackApi(actionLoopId, feedback);
+        await sendPlanFeedbackApi(actionLoopId, feedback, attachments);
         await refresh();
         if (!isActiveLoop(actionLoopId)) {
           return false;

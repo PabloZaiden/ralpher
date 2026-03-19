@@ -869,11 +869,20 @@ export class AcpBackend implements Backend {
     }));
   }
 
-  private buildPromptParts(prompt: PromptInput): Array<Record<string, string>> {
-    return prompt.parts.map((part) => ({
-      type: "text",
-      text: part.text,
-    }));
+  private buildPromptParts(prompt: PromptInput): Array<Record<string, unknown>> {
+    return prompt.parts.map((part) => {
+      if (part.type === "image") {
+        return {
+          type: "image",
+          mimeType: part.mimeType,
+          data: part.data,
+        };
+      }
+      return {
+        type: "text",
+        text: part.text,
+      };
+    });
   }
 
   private buildPromptParams(sessionId: string, prompt: PromptInput): Record<string, unknown> {

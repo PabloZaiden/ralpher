@@ -95,7 +95,7 @@ describe("Chat API Integration", () => {
     const originalSendPrompt = mockBackend.sendPrompt.bind(mockBackend);
     mockBackend.sendPrompt = async (sessionId, prompt) => {
       // Check if this is a name generation prompt (contains "Generate a title")
-      const promptText = prompt.parts?.map((p: { text?: string }) => p.text).join("") ?? "";
+      const promptText = prompt.parts?.map((part) => part.type === "text" ? part.text : "").join("") ?? "";
       if (promptText.includes("Generate a title")) {
         nameCounter++;
         return {

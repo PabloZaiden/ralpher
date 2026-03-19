@@ -1,12 +1,14 @@
 import type { LoopCtx } from "./context";
 import type { ModelConfig } from "../../types/loop";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import { loadLoop } from "../../persistence/loops";
 import { jumpstartLoopFromEngine } from "./loop-jumpstart";
 
 export async function setPendingPromptImpl(
   ctx: LoopCtx,
   loopId: string,
-  prompt: string
+  prompt: string,
+  attachments: MessageImageAttachment[] = [],
 ): Promise<{ success: boolean; error?: string }> {
   const engine = ctx.engines.get(loopId);
   if (!engine) {
@@ -22,7 +24,7 @@ export async function setPendingPromptImpl(
     return { success: false, error: `Loop is not running (status: ${status}). Pending prompts can only be set for running loops.` };
   }
 
-  engine.setPendingPrompt(prompt);
+  engine.setPendingPrompt(prompt, attachments);
 
   return { success: true };
 }
@@ -127,7 +129,7 @@ export async function clearPendingImpl(
 export async function setPendingImpl(
   ctx: LoopCtx,
   loopId: string,
-  options: { message?: string; model?: ModelConfig }
+  options: { message?: string; model?: ModelConfig; attachments?: MessageImageAttachment[] }
 ): Promise<{ success: boolean; error?: string }> {
   const engine = ctx.engines.get(loopId);
   if (!engine) {
@@ -148,7 +150,7 @@ export async function setPendingImpl(
   }
 
   if (options.message !== undefined) {
-    engine.setPendingPrompt(options.message);
+    engine.setPendingPrompt(options.message, options.attachments);
   }
   if (options.model !== undefined) {
     engine.setPendingModel(options.model);
@@ -160,7 +162,7 @@ export async function setPendingImpl(
 export async function injectPendingImpl(
   ctx: LoopCtx,
   loopId: string,
-  options: { message?: string; model?: ModelConfig }
+  options: { message?: string; model?: ModelConfig; attachments?: MessageImageAttachment[] }
 ): Promise<{ success: boolean; error?: string }> {
   const engine = ctx.engines.get(loopId);
 

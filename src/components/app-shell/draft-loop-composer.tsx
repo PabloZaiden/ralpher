@@ -13,6 +13,7 @@ import { Button, ConfirmModal } from "../common";
 import type { ShellRoute } from "./shell-types";
 import { ShellPanel } from "./shell-panel";
 import type { CreateLoopRequest } from "../../types";
+import { stripTransientAttachments } from "../../lib/image-attachments";
 
 export function DraftLoopComposer({
   loop,
@@ -75,7 +76,7 @@ export function DraftLoopComposer({
       const response = await appFetch(`/api/loops/${loop.config.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
+        body: JSON.stringify(stripTransientAttachments(request)),
       });
 
       if (!response.ok) {
@@ -112,7 +113,10 @@ export function DraftLoopComposer({
       const response = await appFetch(`/api/loops/${loop.config.id}/draft/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planMode: request.planMode ?? false }),
+        body: JSON.stringify({
+          planMode: request.planMode ?? false,
+          attachments: request.attachments,
+        }),
       });
 
       if (response.status === 409) {

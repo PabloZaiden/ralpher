@@ -10,6 +10,7 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import type { Loop, UpdateLoopRequest, SshSession } from "../../types";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type {
   AcceptLoopResult,
   AcceptPlanResult,
@@ -47,25 +48,28 @@ export interface UseLoopActionsResult {
   discard: () => Promise<boolean>;
   purge: () => Promise<boolean>;
   markMerged: () => Promise<boolean>;
-  setPendingPrompt: (prompt: string) => Promise<boolean>;
+  setPendingPrompt: (prompt: string, attachments?: MessageImageAttachment[]) => Promise<boolean>;
   clearPendingPrompt: () => Promise<boolean>;
-  sendPlanFeedback: (feedback: string) => Promise<boolean>;
+  sendPlanFeedback: (feedback: string, attachments?: MessageImageAttachment[]) => Promise<boolean>;
   answerPlanQuestion: (answers: string[][]) => Promise<boolean>;
   acceptPlan: (mode?: "start_loop" | "open_ssh") => Promise<AcceptPlanResult>;
   discardPlan: () => Promise<boolean>;
-  addressReviewComments: (comments: string) => Promise<AddressCommentsResult>;
+  addressReviewComments: (comments: string, attachments?: MessageImageAttachment[]) => Promise<AddressCommentsResult>;
   setPending: (options: {
     message?: string;
     model?: { providerID: string; modelID: string };
+    attachments?: MessageImageAttachment[];
   }) => Promise<SetPendingResult>;
   clearPending: () => Promise<boolean>;
   sendChatMessage: (
     message: string,
     model?: { providerID: string; modelID: string },
+    attachments?: MessageImageAttachment[],
   ) => Promise<boolean>;
   sendFollowUp: (
     message: string,
     model?: { providerID: string; modelID: string },
+    attachments?: MessageImageAttachment[],
   ) => Promise<boolean>;
   connectViaSsh: () => Promise<SshSession | null>;
 }

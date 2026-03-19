@@ -53,6 +53,7 @@ export const loopsDraftRoutes = {
       try {
         const updatedLoop = await loopManager.startDraft(req.params.id, {
           planMode: body.planMode,
+          attachments: body.attachments,
         });
         return Response.json(updatedLoop);
       } catch (startError) {

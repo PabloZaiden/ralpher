@@ -30,6 +30,7 @@ import type {
   LogLevel,
 } from "../../types/events";
 import { createTimestamp } from "../../types/events";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type {
   PromptInput,
   AgentEvent,
@@ -90,6 +91,8 @@ export class LoopEngine {
   private pendingPlanQuestionResolver?: () => void;
   private pendingPlanQuestionRejecter?: (error: Error) => void;
   private pendingPlanQuestionRequestId?: string;
+  private initialPromptAttachments: MessageImageAttachment[];
+  private pendingPromptAttachments: MessageImageAttachment[] = [];
 
   constructor(options: LoopEngineOptions) {
     this.loop = options.loop;
@@ -99,6 +102,7 @@ export class LoopEngine {
     this.stopDetector = new StopPatternDetector(options.loop.config.stopPattern);
     this.onPersistState = options.onPersistState;
     this.skipGitSetup = options.skipGitSetup ?? false;
+    this.initialPromptAttachments = [...(options.initialPromptAttachments ?? [])];
   }
 
   /**
@@ -146,8 +150,9 @@ export class LoopEngine {
    * Set a pending prompt that will be used for the next iteration.
    * This overrides the config.prompt for one iteration only.
    */
-  setPendingPrompt(prompt: string): void {
+  setPendingPrompt(prompt: string, attachments: MessageImageAttachment[] = []): void {
     this.updateState({ pendingPrompt: prompt });
+    this.pendingPromptAttachments = [...attachments];
   }
 
   /**
@@ -155,6 +160,7 @@ export class LoopEngine {
    */
   clearPendingPrompt(): void {
     this.updateState({ pendingPrompt: undefined });
+    this.pendingPromptAttachments = [];
   }
 
   /**
@@ -191,6 +197,7 @@ export class LoopEngine {
    */
   clearPending(): void {
     this.updateState({ pendingPrompt: undefined, pendingModel: undefined });
+    this.pendingPromptAttachments = [];
     // Emit event for UI update
     this.emitter.emit({
       type: "loop.pending.updated",
@@ -212,10 +219,17 @@ export class LoopEngine {
    *
    * @param options - The pending prompt and/or model to inject
    */
-  async injectPendingNow(options: { message?: string; model?: ModelConfig }): Promise<void> {
+  async injectPendingNow(options: {
+    message?: string;
+    model?: ModelConfig;
+    attachments?: MessageImageAttachment[];
+  }): Promise<void> {
     // Set the pending values first
     if (options.message !== undefined) {
       this.updateState({ pendingPrompt: options.message });
+      this.pendingPromptAttachments = [...(options.attachments ?? [])];
+    } else if (options.attachments) {
+      this.pendingPromptAttachments = [...options.attachments];
     }
     if (options.model !== undefined) {
       this.updateState({ pendingModel: options.model });
@@ -486,9 +500,10 @@ export class LoopEngine {
    *
    * @param feedback - The user's feedback message
    */
-  async injectPlanFeedback(feedback: string): Promise<void> {
+  async injectPlanFeedback(feedback: string, attachments: MessageImageAttachment[] = []): Promise<void> {
     // Set the feedback as a pending prompt
     this.updateState({ pendingPrompt: feedback });
+    this.pendingPromptAttachments = [...attachments];
 
     // Emit event for UI update
     this.emitter.emit({
@@ -559,9 +574,14 @@ export class LoopEngine {
    * @param message - The user's chat message
    * @param model - Optional model override for this turn
    */
-  async injectChatMessage(message: string, model?: ModelConfig): Promise<void> {
+  async injectChatMessage(
+    message: string,
+    model?: ModelConfig,
+    attachments: MessageImageAttachment[] = [],
+  ): Promise<void> {
     // Set the message as a pending prompt
     this.updateState({ pendingPrompt: message });
+    this.pendingPromptAttachments = [...attachments];
 
     // Set model override if provided
     if (model !== undefined) {
@@ -926,6 +946,8 @@ export class LoopEngine {
       emitUserMessage: this.emitUserMessage.bind(this),
       emitLog: this.emitLog.bind(this),
       updateState: this.updateState.bind(this),
+      consumeInitialPromptAttachments: this.consumeInitialPromptAttachments.bind(this),
+      consumePendingPromptAttachments: this.consumePendingPromptAttachments.bind(this),
     };
   }
 
@@ -1421,12 +1443,19 @@ export class LoopEngine {
     log.debug("[LoopEngine] runIteration: Prompt details", {
       partsCount: prompt.parts.length,
       model: prompt.model ? `${prompt.model.providerID}/${prompt.model.modelID}` : "default",
-      textLength: prompt.parts[0]?.text?.length ?? 0,
-      textPreview: prompt.parts[0]?.text?.slice(0, 200) ?? "",
+      textLength: prompt.parts[0]?.type === "text" ? prompt.parts[0].text.length : 0,
+      textPreview: prompt.parts[0]?.type === "text" ? prompt.parts[0].text.slice(0, 200) : "",
     });
 
     // Log the exact prompt text to the log viewer at debug level
-    const fullPromptText = prompt.parts.map((p) => p.text).join("\n---\n");
+    const fullPromptText = prompt.parts
+      .map((part) => {
+        if (part.type === "image") {
+          return `[image:${part.mimeType}]`;
+        }
+        return part.text;
+      })
+      .join("\n---\n");
     this.emitLog("debug", `[Prompt] ${fullPromptText}`);
 
     let hasRetriedMissingSession = false;
@@ -1529,12 +1558,29 @@ export class LoopEngine {
    * @param idSuffix - Optional suffix for the deterministic message ID.
    *                   Defaults to the current iteration number.
    */
-  private emitUserMessage(content: string, idSuffix?: string): void {
+  private consumeInitialPromptAttachments(): MessageImageAttachment[] {
+    const attachments = this.initialPromptAttachments;
+    this.initialPromptAttachments = [];
+    return attachments;
+  }
+
+  private consumePendingPromptAttachments(): MessageImageAttachment[] {
+    const attachments = this.pendingPromptAttachments;
+    this.pendingPromptAttachments = [];
+    return attachments;
+  }
+
+  private emitUserMessage(
+    content: string,
+    idSuffix?: string,
+    attachments: MessageImageAttachment[] = [],
+  ): void {
     const suffix = idSuffix ?? `iter-${this.loop.state.currentIteration}`;
     const messageData: MessageData = {
       id: `user-msg-${this.config.id}-${suffix}`,
       role: "user",
       content,
+      attachments: attachments.length > 0 ? attachments : undefined,
       timestamp: createTimestamp(),
     };
     this.persistMessage(messageData);

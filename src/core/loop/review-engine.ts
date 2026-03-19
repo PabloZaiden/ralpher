@@ -1,5 +1,6 @@
 import type { LoopCtx } from "./context";
 import type { Loop, ModelConfig } from "../../types/loop";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import { LoopEngine } from "../loop-engine";
 import { insertReviewComment, } from "../../persistence/review-comments";
 import { backendManager } from "../backend-manager";
@@ -54,6 +55,7 @@ export async function transitionToFeedbackCycleAndStart(
     };
     nextReviewCycle: number;
     resultBranch: string;
+    attachments?: MessageImageAttachment[];
   },
 ): Promise<{ success: boolean; reviewCycle: number; branch: string; commentIds?: string[] }> {
   assertValidTransition(loop.state.status, "idle", `startFeedbackCycle:${options.transitionLabel}`);
@@ -84,6 +86,7 @@ export async function transitionToFeedbackCycleAndStart(
     prompt: options.prompt,
     model: options.model,
     startFailureLabel: options.reviewComment ? "addressing comments" : "sending follow-up feedback",
+    attachments: options.attachments,
   });
 
   return {
@@ -104,6 +107,7 @@ function startFeedbackEngine(
     prompt: string;
     model?: ModelConfig;
     startFailureLabel: string;
+    attachments?: MessageImageAttachment[];
   },
 ): void {
   const engine = new LoopEngine({
@@ -115,12 +119,16 @@ function startFeedbackEngine(
       await updateLoopState(loopId, state);
     },
     skipGitSetup: true,
+    initialPromptAttachments: options.attachments,
   });
   ctx.engines.set(loopId, engine);
 
   if (options.model !== undefined) {
     engine.setPendingModel(options.model);
   }
+  // Only set the prompt text — attachments are already provided via initialPromptAttachments
+  // to avoid duplicating them (engine-prompt prefers pending over initial, which would
+  // cause the initial copy to leak into a later prompt unexpectedly).
   engine.setPendingPrompt(options.prompt);
 
   startStatePersistenceImpl(ctx, loopId);

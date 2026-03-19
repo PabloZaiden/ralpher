@@ -3,6 +3,7 @@
  */
 
 import { apiCall, apiActionWithBody } from "./helpers";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 
 /**
  * Result of an address comments action.
@@ -19,13 +20,14 @@ export interface AddressCommentsResult {
 export async function addressReviewCommentsApi(
   loopId: string,
   comments: string,
+  attachments?: MessageImageAttachment[],
 ): Promise<AddressCommentsResult> {
   const data = await apiCall<{ reviewCycle: number; branch: string }>(
     `/api/loops/${loopId}/address-comments`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comments }),
+        body: JSON.stringify({ comments, attachments }),
     },
     "Address comments",
     // Handle both error shapes:
@@ -47,11 +49,12 @@ export async function sendFollowUpApi(
   loopId: string,
   message: string,
   model?: { providerID: string; modelID: string },
+  attachments?: MessageImageAttachment[],
 ): Promise<boolean> {
   return apiActionWithBody(
     `/api/loops/${loopId}/follow-up`,
     "POST",
-    { message, model },
+    { message, model, attachments },
     "Send follow-up",
   );
 }

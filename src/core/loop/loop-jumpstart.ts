@@ -1,5 +1,6 @@
 import type { LoopCtx } from "./context";
 import type { Loop, ModelConfig } from "../../types/loop";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import { LoopEngine } from "../loop-engine";
 import { createTimestamp } from "../../types/events";
 import { loadLoop, updateLoopState, saveLoop } from "../../persistence/loops";
@@ -13,7 +14,7 @@ import { startStatePersistenceImpl } from "./loop-execution";
 export async function jumpstartLoopImpl(
   ctx: LoopCtx,
   loopId: string,
-  options: { message?: string; model?: ModelConfig }
+  options: { message?: string; model?: ModelConfig; attachments?: MessageImageAttachment[] }
 ): Promise<{ success: boolean; error?: string }> {
   return jumpstartLoopFromEngine(ctx, loopId, options);
 }
@@ -22,7 +23,7 @@ export async function jumpstartLoopImpl(
 export async function jumpstartLoopFromEngine(
   ctx: LoopCtx,
   loopId: string,
-  options: { message?: string; model?: ModelConfig }
+  options: { message?: string; model?: ModelConfig; attachments?: MessageImageAttachment[] }
 ): Promise<{ success: boolean; error?: string }> {
   const loop = await loadLoop(loopId);
   if (!loop) {
@@ -73,10 +74,10 @@ export async function jumpstartLoopFromEngine(
 
   if (wasInPlanningMode) {
     if (canReuse) {
-      return jumpstartOnExistingBranch(ctx, loopId, loop, true);
+      return jumpstartOnExistingBranch(ctx, loopId, loop, true, options.attachments);
     } else {
       try {
-        await ctx.startPlanMode(loopId);
+        await ctx.startPlanMode(loopId, { attachments: options.attachments });
         log.info(`Jumpstarted planning loop ${loopId} with pending message`);
         return { success: true };
       } catch (startError) {
@@ -87,10 +88,10 @@ export async function jumpstartLoopFromEngine(
   }
 
   if (canReuse) {
-    return jumpstartOnExistingBranch(ctx, loopId, loop);
+    return jumpstartOnExistingBranch(ctx, loopId, loop, false, options.attachments);
   } else {
     try {
-      await ctx.startLoop(loopId);
+      await ctx.startLoop(loopId, { attachments: options.attachments });
       log.info(`Jumpstarted loop ${loopId} with pending message (new branch)`);
       return { success: true };
     } catch (startError) {
@@ -146,7 +147,8 @@ async function jumpstartOnExistingBranch(
   ctx: LoopCtx,
   loopId: string,
   loop: Loop,
-  isPlanning = false
+  isPlanning = false,
+  attachments: MessageImageAttachment[] = [],
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const workingDirectory = getLoopWorkingDirectory(loop);
@@ -172,6 +174,7 @@ async function jumpstartOnExistingBranch(
         await updateLoopState(loopId, state);
       },
       skipGitSetup: true,
+      initialPromptAttachments: attachments,
     });
     ctx.engines.set(loopId, engine);
 

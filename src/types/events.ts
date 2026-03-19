@@ -16,6 +16,7 @@
  */
 
 import type { GitCommit, LoopConfig, ModelConfig, PendingPlanQuestion } from "./loop";
+import type { MessageImageAttachment } from "./message-attachments";
 
 /**
  * Message data from the AI agent.
@@ -40,6 +41,8 @@ export interface MessageData {
   role: "user" | "assistant";
   /** The message content (may contain markdown) */
   content: string;
+  /** Transient inline image attachments, not persisted in durable loop state */
+  attachments?: MessageImageAttachment[];
   /** ISO 8601 timestamp when the message was created */
   timestamp: string;
 }
