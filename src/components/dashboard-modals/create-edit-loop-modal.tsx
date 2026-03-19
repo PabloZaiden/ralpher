@@ -14,20 +14,15 @@ import type {
   CreateChatRequest,
   SshServer,
 } from "../../types";
-import {
-  CreateLoopForm,
-  getComposeDraftActionLabel,
-  getComposeSubmitActionLabel,
-} from "../CreateLoopForm";
-import type { CreateLoopFormActionState, CreateLoopFormSubmitRequest } from "../CreateLoopForm";
+import { CreateLoopForm } from "../CreateLoopForm";
+import type { CreateLoopFormActionState } from "../CreateLoopForm";
 import type { CreateLoopResult, CreateChatResult } from "../../hooks/useLoops";
-import { Modal, Button } from "../common";
-import { createLogger } from "../../lib/logger";
+import { Modal } from "../common";
 import { useToast } from "../../hooks";
-import { appFetch } from "../../lib/public-path";
 import { DEFAULT_LOOP_CONFIG } from "../../types/loop";
-
-const log = createLogger("DashboardModals");
+import { DeleteDraftConfirmation } from "./delete-draft-confirmation";
+import { DeleteConfirmFooter, LoopFormFooter } from "./loop-modal-footer";
+import { isCreateLoopRequest, handleCreateLoopSubmit, handleCreateChatSubmit } from "./loop-submit-handlers";
 
 export interface CreateEditLoopModalProps {
   loops: Loop[];
@@ -142,6 +137,15 @@ export function CreateEditLoopModal(props: CreateEditLoopModalProps) {
     workspaceId: editLoop.config.workspaceId,
   } : null;
 
+  const submitHandlerProps = {
+    workspaces: props.workspaces,
+    setLastModel: props.setLastModel,
+    setUncommittedModal: props.setUncommittedModal,
+    onRefresh: props.onRefresh,
+    onCreateLoop: props.onCreateLoop,
+    onCreateChat: props.onCreateChat,
+  };
+
   return (
     <Modal
       isOpen={props.showCreateModal}
@@ -151,79 +155,22 @@ export function CreateEditLoopModal(props: CreateEditLoopModalProps) {
       size="lg"
       footer={props.formActionState && (
         isConfirmingDraftDelete ? (
-          <>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setDeleteDraftConfirmation(null)}
-              disabled={deletingDraft}
-            >
-              Keep Draft
-            </Button>
-              <Button
-                type="button"
-                variant="danger"
-                onClick={handleDeleteDraft}
-                loading={deletingDraft}
-              >
-                Delete
-              </Button>
-          </>
+          <DeleteConfirmFooter
+            deletingDraft={deletingDraft}
+            onKeepDraft={() => setDeleteDraftConfirmation(null)}
+            onDeleteDraft={handleDeleteDraft}
+          />
         ) : (
-          <>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={props.formActionState.onCancel}
-              disabled={props.formActionState.isSubmitting}
-            >
-              Cancel
-            </Button>
-            {props.formActionState.isEditingDraft && (
-              <Button
-                type="button"
-                variant="danger"
-                onClick={openDeleteDraftConfirmation}
-                disabled={props.formActionState.isSubmitting}
-              >
-                Delete
-              </Button>
-            )}
-            {!isChatMode && (!props.formActionState.isEditing || props.formActionState.isEditingDraft) && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={props.formActionState.onSaveAsDraft}
-                disabled={props.formActionState.isSubmitting || !props.formActionState.canSaveDraft}
-                loading={props.formActionState.isSubmitting}
-              >
-                {getComposeDraftActionLabel(props.formActionState.isEditingDraft)}
-              </Button>
-            )}
-              <Button
-                type="button"
-                onClick={props.formActionState.onSubmit}
-                loading={props.formActionState.isSubmitting}
-                disabled={!props.formActionState.canSubmit}
-              >
-                {getComposeSubmitActionLabel({
-                  isChatMode,
-                  isEditing: props.formActionState.isEditing,
-                })}
-              </Button>
-          </>
+          <LoopFormFooter
+            formActionState={props.formActionState}
+            isChatMode={isChatMode}
+            onOpenDeleteConfirmation={openDeleteDraftConfirmation}
+          />
         )
       )}
     >
       {isConfirmingDraftDelete ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-900/60 dark:bg-red-950/30">
-           <h3 className="text-sm font-semibold text-red-800 dark:text-red-200">
-             Delete Draft?
-           </h3>
-           <p className="mt-2 text-sm text-red-700 dark:text-red-300">
-             Are you sure you want to permanently delete "{deleteDraftConfirmation.loopName}"?
-           </p>
-         </div>
+        <DeleteDraftConfirmation loopName={deleteDraftConfirmation.loopName} />
       ) : (
         <CreateLoopForm
           key={isEditing ? editLoop!.config.id : `create-new-${props.createMode}`}
@@ -237,12 +184,12 @@ export function CreateEditLoopModal(props: CreateEditLoopModalProps) {
               if (isCreateLoopRequest(request)) {
                 throw new Error("Expected chat submission request");
               }
-              return await handleCreateChatSubmit(props, request, toast);
+              return await handleCreateChatSubmit(submitHandlerProps, request, toast);
             }
             if (!isCreateLoopRequest(request)) {
               throw new Error("Expected loop submission request");
             }
-            return await handleCreateLoopSubmit(props, editLoop, request, toast);
+            return await handleCreateLoopSubmit(submitHandlerProps, editLoop, request, toast);
           }}
           onCancel={props.onCloseCreateModal}
           models={props.models}
@@ -262,165 +209,4 @@ export function CreateEditLoopModal(props: CreateEditLoopModalProps) {
       )}
     </Modal>
   );
-}
-
-function isCreateLoopRequest(request: CreateLoopFormSubmitRequest): request is CreateLoopRequest {
-  return "name" in request;
-}
-
-async function handleCreateLoopSubmit(
-  props: CreateEditLoopModalProps,
-  editLoop: Loop | null | undefined,
-  request: CreateLoopRequest,
-  toast: { error: (msg: string) => void },
-): Promise<boolean> {
-  const isEditing = !!editLoop;
-
-  if (isEditing && editLoop) {
-    const persistDraftChanges = async (): Promise<boolean> => {
-      try {
-        const response = await appFetch(`/api/loops/${editLoop.config.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(request),
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          log.error("Failed to update draft:", error);
-          toast.error("Failed to update draft");
-          return false;
-        }
-
-        await props.onRefresh();
-        return true;
-      } catch (error) {
-        log.error("Failed to update draft:", error);
-        toast.error("Failed to update draft");
-        return false;
-      }
-    };
-
-    if (request.draft) {
-      return await persistDraftChanges();
-    }
-
-    const persisted = await persistDraftChanges();
-    if (!persisted) {
-      return false;
-    }
-
-    try {
-      const startResponse = await appFetch(`/api/loops/${editLoop.config.id}/draft/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planMode: request.planMode ?? false }),
-      });
-
-      if (!startResponse.ok) {
-        const error = await startResponse.json();
-
-        if (error.error === "uncommitted_changes") {
-          props.setUncommittedModal({
-            open: true,
-            loopId: editLoop.config.id,
-            error: error.message,
-          });
-          return true;
-        }
-
-        log.error("Failed to start draft:", error);
-        toast.error("Failed to start loop");
-        return false;
-      }
-
-      await props.onRefresh();
-      return true;
-    } catch (error) {
-      log.error("Failed to start draft:", error);
-      toast.error("Failed to start loop");
-      return false;
-    }
-  }
-
-  const result = await props.onCreateLoop(request);
-
-  if (result.startError) {
-    props.setUncommittedModal({
-      open: true,
-      loopId: result.loop?.config.id ?? null,
-      error: result.startError,
-    });
-    return true;
-  }
-
-  if (result.loop) {
-    await props.onRefresh();
-
-    if (request.model) {
-      props.setLastModel(request.model);
-    }
-
-    if (request.workspaceId) {
-      const workspace = props.workspaces.find(w => w.id === request.workspaceId);
-      if (workspace) {
-        try {
-          await appFetch("/api/preferences/last-directory", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ directory: workspace.directory }),
-          });
-        } catch {
-          // Ignore errors saving preference
-        }
-      }
-    }
-    return true;
-  }
-
-  return false;
-}
-
-async function handleCreateChatSubmit(
-  props: CreateEditLoopModalProps,
-  request: CreateChatRequest,
-  toast: { error: (msg: string) => void },
-): Promise<boolean> {
-  const result = await props.onCreateChat(request);
-
-  if (result.startError) {
-    props.setUncommittedModal({
-      open: true,
-      loopId: result.loop?.config.id ?? null,
-      error: result.startError,
-    });
-    return true;
-  }
-
-  if (result.loop) {
-    await props.onRefresh();
-
-    if (request.model) {
-      props.setLastModel(request.model);
-    }
-
-    if (request.workspaceId) {
-      const workspace = props.workspaces.find(w => w.id === request.workspaceId);
-      if (workspace) {
-        try {
-          await appFetch("/api/preferences/last-directory", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ directory: workspace.directory }),
-          });
-        } catch {
-          // Ignore errors saving preference
-        }
-      }
-    }
-    return true;
-  }
-
-  toast.error("Failed to create chat");
-  return false;
 }
