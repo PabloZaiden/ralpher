@@ -8,6 +8,7 @@
  */
 
 import { loopManager } from "../../core/loop-manager";
+import { createLogger } from "../../core/logger";
 import { parseAndValidate, validateRequest } from "../validation";
 import { errorResponse, successResponse } from "../helpers";
 import type { PlanAcceptResponse } from "../../types/api";
@@ -17,6 +18,8 @@ import {
   PlanAcceptRequestSchema,
   AnswerPlanQuestionRequestSchema,
 } from "../../types/schemas";
+
+const log = createLogger("api:loops");
 
 export const loopsPlanRoutes = {
   "/api/loops/:id/plan/feedback": {
@@ -56,6 +59,10 @@ export const loopsPlanRoutes = {
         if (errorMsg.includes("not in planning status")) {
           return errorResponse("not_planning", errorMsg, 400);
         }
+        log.error("Failed to send plan feedback", {
+          loopId: req.params.id,
+          error: errorMsg,
+        });
         return errorResponse("feedback_failed", errorMsg, 500);
       }
     },
@@ -109,6 +116,10 @@ export const loopsPlanRoutes = {
         if (errorMsg.includes("Plan is not ready yet")) {
           return errorResponse("plan_not_ready", errorMsg, 400);
         }
+        log.error("Failed to accept plan", {
+          loopId: req.params.id,
+          error: errorMsg,
+        });
         return errorResponse("accept_failed", errorMsg, 500);
       }
     },
@@ -135,6 +146,10 @@ export const loopsPlanRoutes = {
         if (errorMsg.includes("Expected ")) {
           return errorResponse("invalid_question_answer", errorMsg, 400);
         }
+        log.error("Failed to answer pending plan question", {
+          loopId: req.params.id,
+          error: errorMsg,
+        });
         return errorResponse("answer_plan_question_failed", errorMsg, 500);
       }
     },
@@ -157,6 +172,10 @@ export const loopsPlanRoutes = {
         }
         return successResponse();
       } catch (error) {
+        log.error("Failed to discard plan", {
+          loopId: req.params.id,
+          error: String(error),
+        });
         return errorResponse("discard_failed", String(error), 500);
       }
     },

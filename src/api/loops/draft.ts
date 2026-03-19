@@ -60,6 +60,10 @@ export const loopsDraftRoutes = {
           startError,
           body.planMode ? "start_plan_failed" : "start_failed",
           body.planMode ? "Failed to start plan mode" : "Failed to start loop",
+          {
+            loopId: req.params.id,
+            planMode: body.planMode,
+          },
         );
       }
     },

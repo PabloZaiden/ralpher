@@ -12,8 +12,11 @@
 import { getLoopWorkingDirectory, loopManager } from "../../core/loop-manager";
 import { backendManager } from "../../core/backend-manager";
 import { GitService } from "../../core/git-service";
+import { createLogger } from "../../core/logger";
 import type { FileContentResponse, PullRequestDestinationResponse } from "../../types/api";
 import { errorResponse, normalizeDirectoryPath, resolveWorkspaceForDirectory } from "../helpers";
+
+const log = createLogger("api:loops");
 
 export const loopsDataRoutes = {
   "/api/loops/:id/diff": {
@@ -49,6 +52,10 @@ export const loopsDataRoutes = {
         );
         return Response.json(diffs);
       } catch (error) {
+        log.error("Failed to get loop diff", {
+          loopId: req.params.id,
+          error: String(error),
+        });
         return errorResponse("diff_failed", String(error), 500);
       }
     },
@@ -220,10 +227,14 @@ export const loopsDataRoutes = {
           files,
         });
       } catch (error) {
+        log.error("Failed to inspect planning directory", {
+          directory: normalizedDirectory,
+          workspaceId: workspace.id,
+          error: String(error),
+        });
         return errorResponse("check_failed", String(error), 500);
       }
     },
   },
 };
-
 

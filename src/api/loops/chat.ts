@@ -122,7 +122,10 @@ export const loopsChatRoutes = {
 
         return Response.json(chat, { status: 201 });
       } catch (error) {
-        return startErrorResponse(error, "create_chat_failed", "Failed to create chat");
+        return startErrorResponse(error, "create_chat_failed", "Failed to create chat", {
+          workspaceId,
+          directory,
+        });
       }
     },
   },
@@ -195,6 +198,10 @@ export const loopsChatRoutes = {
         if (errorMsg.includes("Cannot send chat message")) {
           return errorResponse("invalid_state", errorMsg, 400);
         }
+        log.error("Failed to send chat message", {
+          loopId: req.params.id,
+          error: errorMsg,
+        });
         return errorResponse("send_chat_message_failed", errorMsg, 500);
       }
     },

@@ -79,6 +79,7 @@ async function applyLoopUpdates(
         return errorResponse("use_worktree_immutable", errorMessage, status ?? 409);
       }
     }
+    log.error("Failed to update loop", { loopId, error: errorMessage });
     return errorResponse("update_failed", errorMessage, 500);
   }
 }

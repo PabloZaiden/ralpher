@@ -206,7 +206,10 @@ export const loopsCollectionRoutes = {
             } catch (deleteError) {
               log.warn("Failed to clean up loop after start failure", { loopId: loop.config.id, error: String(deleteError) });
             }
-            return startErrorResponse(startError, "start_plan_failed", "Loop created but failed to start plan mode");
+            return startErrorResponse(startError, "start_plan_failed", "Loop created but failed to start plan mode", {
+              loopId: loop.config.id,
+              planMode: true,
+            });
           }
         } else {
           // Always start the loop immediately after creation (normal mode)
@@ -222,10 +225,17 @@ export const loopsCollectionRoutes = {
             } catch (deleteError) {
               log.warn("Failed to clean up loop after start failure", { loopId: loop.config.id, error: String(deleteError) });
             }
-            return startErrorResponse(startError, "start_failed", "Loop created but failed to start");
+            return startErrorResponse(startError, "start_failed", "Loop created but failed to start", {
+              loopId: loop.config.id,
+              planMode: false,
+            });
           }
         }
       } catch (error) {
+        log.error("Failed to create loop", {
+          workspaceId: body.workspaceId,
+          error: String(error),
+        });
         return errorResponse("create_failed", String(error), 500);
       }
     },
@@ -253,6 +263,10 @@ export const loopsCollectionRoutes = {
         });
         return Response.json({ title });
       } catch (error) {
+        log.error("Failed to generate loop title", {
+          workspaceId: workspace.id,
+          error: String(error),
+        });
         return errorResponse("title_generation_failed", String(error), 500);
       }
     },
