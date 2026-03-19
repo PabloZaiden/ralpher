@@ -2,125 +2,35 @@
  * CreateLoopForm component for creating new Ralph Loops.
  */
 
-import { useState, useEffect, useRef, useCallback, type FormEvent, type ReactNode } from "react";
-import type { CreateLoopRequest, CreateChatRequest, ModelInfo, BranchInfo, SshServer } from "../../types";
-import type { Workspace } from "../../types/workspace";
+import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
+import type { CreateLoopRequest, CreateChatRequest } from "../../types";
 import { DEFAULT_LOOP_CONFIG } from "../../types/loop";
-import { Button } from "../common";
 import { WorkspaceSelector } from "../WorkspaceSelector";
-import { ModelSelector, makeModelKey, parseModelKey, isModelEnabled, modelVariantExists, groupModelsByProvider } from "../ModelSelector";
+import { makeModelKey, parseModelKey, isModelEnabled, modelVariantExists } from "../ModelSelector";
 import { createLogger } from "../../lib/logger";
-import { PROMPT_TEMPLATES, getTemplateById } from "../../lib/prompt-templates";
 import { useToast } from "../../hooks";
 import { generateLoopTitleApi } from "../../hooks/loopActions";
+import {
+  type CreateLoopFormActionState,
+  type CreateLoopFormProps,
+  type CreateLoopFormSubmitRequest,
+  getComposeDraftActionLabel,
+  getComposeSubmitActionLabel,
+} from "./types";
+import { BranchSelector } from "./branch-selector";
+import { ModelField } from "./model-field";
+import { TemplateSelector } from "./template-selector";
+import { TitleField } from "./title-field";
+import { PromptField } from "./prompt-field";
+import { LoopSettings } from "./loop-settings";
+import { AdvancedOptions } from "./advanced-options";
+import { FormActions } from "./form-actions";
+
+export type { CreateLoopFormActionState, CreateLoopFormProps, CreateLoopFormSubmitRequest };
+export { getComposeDraftActionLabel, getComposeSubmitActionLabel };
 
 // Create a named logger for this component
 const log = createLogger("CreateLoopForm");
-
-/** State for action buttons, exposed via renderActions prop */
-export interface CreateLoopFormActionState {
-  /** Whether the form is currently submitting */
-  isSubmitting: boolean;
-  /** Whether the form can be submitted to start a loop (has required fields AND model is enabled) */
-  canSubmit: boolean;
-  /** Whether the form can be saved as a draft (has required fields, model can be disconnected) */
-  canSaveDraft: boolean;
-  /** Whether we're editing an existing loop */
-  isEditing: boolean;
-  /** Whether we're editing a draft loop */
-  isEditingDraft: boolean;
-  /** Whether plan mode is enabled */
-  planMode: boolean;
-  /** Handler for cancel button */
-  onCancel: () => void;
-  /** Handler for submit button (creates/starts the loop) */
-  onSubmit: () => void;
-  /** Handler for save as draft button */
-  onSaveAsDraft: () => void;
-}
-
-export function getComposeDraftActionLabel(isEditingDraft: boolean): string {
-  return isEditingDraft ? "Update" : "Save as Draft";
-}
-
-export function getComposeSubmitActionLabel({
-  isChatMode,
-  isEditing,
-}: {
-  isChatMode: boolean;
-  isEditing: boolean;
-}): string {
-  return isChatMode || isEditing ? "Start" : "Create";
-}
-
-export interface CreateLoopFormProps {
-  /** Callback when form is submitted. Returns true if successful, false otherwise. */
-  onSubmit: (request: CreateLoopFormSubmitRequest) => Promise<boolean>;
-  /** Callback when form is cancelled */
-  onCancel: () => void;
-  /** Whether to call onCancel after a successful submit */
-  closeOnSuccess?: boolean;
-  /** Whether form is submitting */
-  loading?: boolean;
-  /** Available models */
-  models?: ModelInfo[];
-  /** Loading models */
-  modelsLoading?: boolean;
-  /** Last used model (includes variant) */
-  lastModel?: { providerID: string; modelID: string; variant?: string } | null;
-  /** Callback when workspace changes (to reload models and branches) */
-  onWorkspaceChange?: (workspaceId: string | null, directory: string) => void;
-  /** Warning about .planning directory */
-  planningWarning?: string | null;
-  /** Available branches for the workspace's directory */
-  branches?: BranchInfo[];
-  /** Whether branches are loading */
-  branchesLoading?: boolean;
-  /** Current branch name */
-  currentBranch?: string;
-  /** Default branch name (e.g., "main" or "master") */
-  defaultBranch?: string;
-  /** Loop ID if editing an existing draft */
-  editLoopId?: string | null;
-  /** Initial loop data for editing */
-  initialLoopData?: {
-    name?: string;
-    directory: string;
-    prompt: string;
-    model?: { providerID: string; modelID: string; variant?: string };
-    maxIterations?: number;
-    maxConsecutiveErrors?: number;
-    activityTimeoutSeconds?: number;
-    baseBranch?: string;
-    useWorktree?: boolean;
-    clearPlanningFolder?: boolean;
-    planMode?: boolean;
-    planModeAutoReply?: boolean;
-    workspaceId?: string;
-  } | null;
-  /** Whether editing a draft loop (to show the Update button) */
-  isEditingDraft?: boolean;
-  /** Available workspaces */
-  workspaces?: Workspace[];
-  /** Whether workspaces are loading */
-  workspacesLoading?: boolean;
-  /** Workspace-related error */
-  workspaceError?: string | null;
-  /** Registered SSH servers for workspace label resolution */
-  registeredSshServers?: readonly SshServer[];
-  /** 
-   * Optional render prop for action buttons. When provided, action buttons 
-   * are NOT rendered inside the form - caller is responsible for rendering them.
-   * This is useful for rendering actions in a Modal footer (sticky position).
-   */
-  renderActions?: (state: CreateLoopFormActionState) => void;
-  /** Optional extra actions rendered beside the draft/save action group. */
-  leadingActions?: ReactNode;
-  /** Mode: "loop" (default) or "chat" — controls which fields are shown */
-  mode?: "loop" | "chat";
-}
-
-export type CreateLoopFormSubmitRequest = CreateLoopRequest | CreateChatRequest;
 
 export function CreateLoopForm({
   onSubmit,
@@ -621,440 +531,109 @@ export function CreateLoopForm({
       </div>
 
       {/* Base Branch Selection */}
-      <div>
-        <label
-          htmlFor="branch"
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          Base Branch
-        </label>
-        <select
-          id="branch"
-          value={selectedBranch}
-          onChange={(e) => {
-            setSelectedBranch(e.target.value);
-            setUserChangedBranch(true);
-          }}
-          disabled={branchesLoading || branches.length === 0}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600 disabled:opacity-50 font-mono text-sm"
-        >
-          {branchesLoading && (
-            <option value="">Loading branches...</option>
-          )}
-          {!branchesLoading && branches.length === 0 && (
-            <option value="">Select a workspace to load branches</option>
-          )}
-          {!branchesLoading && branches.length > 0 && (
-            <>
-              {/* Default branch first (with label) */}
-              {defaultBranch && (
-                <option value={defaultBranch}>
-                  {defaultBranch} (default){defaultBranch === currentBranch ? " (current)" : ""}
-                </option>
-              )}
-              {/* Current branch if different from default */}
-              {currentBranch && currentBranch !== defaultBranch && (
-                <option value={currentBranch}>
-                  {currentBranch} (current)
-                </option>
-              )}
-              {/* Separator if we have special branches */}
-              {(defaultBranch || currentBranch) && branches.length > 1 && (
-                <option disabled>──────────</option>
-              )}
-              {/* Other branches sorted by name (excluding default and current) */}
-              {branches
-                .filter((b) => b.name !== defaultBranch && b.name !== currentBranch)
-                .map((branch) => (
-                  <option key={branch.name} value={branch.name}>
-                    {branch.name}
-                  </option>
-                ))}
-            </>
-          )}
-        </select>
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Branch to base the loop on (default: repository's default branch)
-        </p>
-      </div>
+      <BranchSelector
+        selectedBranch={selectedBranch}
+        onBranchChange={(branch) => {
+          setSelectedBranch(branch);
+          setUserChangedBranch(true);
+        }}
+        branches={branches}
+        branchesLoading={branchesLoading}
+        defaultBranch={defaultBranch}
+        currentBranch={currentBranch}
+      />
 
       {/* Model Selection */}
-      <div>
-        <label
-          htmlFor="model"
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          Model
-        </label>
-        <ModelSelector
-          id="model"
-          value={selectedModel}
-          onChange={setSelectedModel}
-          models={models}
-          loading={modelsLoading}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600 disabled:opacity-50"
-        />
-        {!modelsLoading && models.length > 0 && groupModelsByProvider(models).connectedProviders.length === 0 && (
-          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-            No providers are connected. Please configure your agent backend credentials/settings.
-          </p>
-        )}
-        {!modelsLoading && models.length > 0 && groupModelsByProvider(models).connectedProviders.length > 0 && !selectedModel && (
-          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
-            Model is required. Please select a model.
-          </p>
-        )}
-      </div>
+      <ModelField
+        selectedModel={selectedModel}
+        onChange={setSelectedModel}
+        models={models}
+        modelsLoading={modelsLoading}
+      />
 
       {/* Prompt Template — hidden in chat mode */}
       {!isChatMode && (
-      <div>
-        <label
-          htmlFor="template"
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          Template
-        </label>
-        <select
-          id="template"
-          value={selectedTemplate}
-          onChange={(e) => {
-            const templateId = e.target.value;
-            setSelectedTemplate(templateId);
-            if (templateId) {
-              const template = getTemplateById(templateId);
-              if (template) {
-                setPrompt(template.prompt);
-                promptRef.current = template.prompt;
-                if (template.defaults?.planMode !== undefined) {
-                  setPlanMode(template.defaults.planMode);
-                }
-              }
-            }
+        <TemplateSelector
+          selectedTemplate={selectedTemplate}
+          onChange={setSelectedTemplate}
+          onPromptChange={(p) => {
+            setPrompt(p);
+            promptRef.current = p;
           }}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
-        >
-          <option value="">No template (custom prompt)</option>
-          {PROMPT_TEMPLATES.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
-            </option>
-          ))}
-        </select>
-        {selectedTemplate && (() => {
-          const t = getTemplateById(selectedTemplate);
-          return t ? (
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              {t.description}
-            </p>
-          ) : null;
-        })()}
-      </div>
+          onPlanModeChange={setPlanMode}
+          promptRef={promptRef}
+        />
       )}
 
+      {/* Title — hidden in chat mode */}
       {!isChatMode && (
-        <div>
-          <label
-            htmlFor="name"
-            className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-          >
-            Title <span className="text-red-500">*</span>
-          </label>
-          <div className="mt-1 flex items-start gap-2">
-            <input
-              id="name"
-              type="text"
-              value={name}
-              onChange={(e) => {
-                const newValue = e.target.value;
-                setName(newValue);
-                nameRef.current = newValue;
-              }}
-              placeholder="Short loop title"
-              required
-              maxLength={100}
-              className="block flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
-            />
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={() => void handleGenerateTitle()}
-              disabled={!canGenerateTitle}
-              loading={generatingTitle}
-              icon={<TitleSparkIcon className="h-4 w-4" />}
-              aria-label="Generate title with AI"
-              title="Generate title with AI"
-              className="shrink-0 px-2"
-            >
-              {null}
-            </Button>
-          </div>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Give the loop a clear title, or use AI to suggest one from the current prompt.
-          </p>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            {name.trim().length}/100 characters
-          </p>
-        </div>
+        <TitleField
+          name={name}
+          onChange={(value) => {
+            setName(value);
+            nameRef.current = value;
+          }}
+          onGenerate={() => void handleGenerateTitle()}
+          canGenerate={canGenerateTitle}
+          generating={generatingTitle}
+        />
       )}
 
       {/* Prompt */}
-      <div>
-        <label
-          htmlFor="prompt"
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          {isChatMode ? "Message" : "Prompt"} <span className="text-red-500">*</span>
-        </label>
-        <textarea
-          id="prompt"
-          value={prompt}
-          onChange={(e) => {
-            const newValue = e.target.value;
-            setPrompt(newValue);
-            promptRef.current = newValue;
-            // Reset template selection if user edits the prompt away from the template text
-            if (selectedTemplate) {
-              const template = getTemplateById(selectedTemplate);
-              if (template && newValue !== template.prompt) {
-                setSelectedTemplate("");
-              }
-            }
-          }}
-          placeholder={isChatMode ? "Ask a question or describe what you want to do..." : (planMode ? "Describe what you want to achieve. The AI will create a detailed plan based on this." : "Do everything that's pending in the plan")}
-          required
-          rows={3}
-          className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600 min-h-[76px] sm:min-h-[120px] resize-y"
-        />
-        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          {isChatMode ? "Your first message to start the conversation" : "The prompt sent to the AI agent at the start of each iteration"}
-        </p>
-      </div>
+      <PromptField
+        prompt={prompt}
+        onChange={(value) => {
+          setPrompt(value);
+          promptRef.current = value;
+        }}
+        isChatMode={isChatMode}
+        planMode={planMode}
+        selectedTemplate={selectedTemplate}
+        onTemplateClear={() => setSelectedTemplate("")}
+      />
 
-      {/* Plan Mode Toggle — hidden in chat mode */}
-      {!isChatMode && (
-      <div>
-        <label className="flex items-start gap-3">
-          <input
-            type="checkbox"
-            checked={planMode}
-            onChange={(e) => setPlanMode(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-300"
-          />
-          <div className="flex-1">
-            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Plan Mode
-            </span>
-            {/* Short description on mobile, full description on desktop */}
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 sm:hidden">
-              Review AI plan before execution
-            </p>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400 hidden sm:block">
-              Create and review a plan before starting the loop. The AI will generate a plan based on your prompt, and you can provide feedback before execution begins.
-            </p>
-          </div>
-        </label>
-      </div>
-      )}
+      {/* Plan Mode, Auto-reply, and Use Worktree toggles */}
+      <LoopSettings
+        isChatMode={isChatMode}
+        planMode={planMode}
+        onPlanModeChange={setPlanMode}
+        planModeAutoReply={planModeAutoReply}
+        onPlanModeAutoReplyChange={setPlanModeAutoReply}
+        useWorktree={useWorktree}
+        onUseWorktreeChange={setUseWorktree}
+      />
 
-      {!isChatMode && planMode && (
-      <div className="ml-7">
-        <label className="flex items-start gap-3">
-          <input
-            type="checkbox"
-            checked={planModeAutoReply}
-            onChange={(e) => setPlanModeAutoReply(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-300"
-          />
-          <div className="flex-1">
-            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Auto-reply plan questions
-            </span>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Enabled by default. Turn this off to answer plan-mode questions yourself below the execution log.
-            </p>
-          </div>
-        </label>
-      </div>
-      )}
-
-      <div>
-        <label className="flex items-start gap-3">
-          <input
-            type="checkbox"
-            checked={useWorktree}
-            onChange={(e) => setUseWorktree(e.target.checked)}
-            className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-300"
-          />
-          <div className="flex-1">
-            <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Use Worktree
-            </span>
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Run in a dedicated Ralph worktree. Turn this off to use the main checkout with a dedicated Ralph branch.
-            </p>
-          </div>
-        </label>
-      </div>
-
-      {/* Advanced options toggle — hidden in chat mode */}
-      {!isChatMode && (
-      <button
-        type="button"
-        onClick={() => setShowAdvanced(!showAdvanced)}
-        className="text-sm text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-gray-100"
-      >
-        {showAdvanced ? "Hide" : "Show"} advanced options
-      </button>
-      )}
-
-      {/* Advanced options — hidden in chat mode */}
-      {!isChatMode && showAdvanced && (
-        <div className="space-y-4 p-4 bg-gray-50 dark:bg-neutral-800 rounded-md">
-          {/* Max iterations */}
-          <div>
-            <label
-              htmlFor="maxIterations"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-            >
-              Max Iterations
-            </label>
-            <input
-              type="number"
-              id="maxIterations"
-              value={maxIterations}
-              onChange={(e) => setMaxIterations(e.target.value)}
-              min="1"
-              placeholder="Unlimited"
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
-            />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Leave empty for unlimited iterations
-            </p>
-          </div>
-
-          {/* Max consecutive errors */}
-          <div>
-            <label
-              htmlFor="maxConsecutiveErrors"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-            >
-              Max Consecutive Errors
-            </label>
-            <input
-              type="number"
-              id="maxConsecutiveErrors"
-              value={maxConsecutiveErrors}
-              onChange={(e) => setMaxConsecutiveErrors(e.target.value)}
-              min="0"
-              placeholder="10"
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
-            />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Failsafe exit after this many identical consecutive errors. 0 = unlimited. (default: 10)
-            </p>
-          </div>
-
-          {/* Activity timeout */}
-          <div>
-            <label
-              htmlFor="activityTimeoutSeconds"
-              className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-            >
-              Activity Timeout (seconds)
-            </label>
-            <input
-              type="number"
-              id="activityTimeoutSeconds"
-              value={activityTimeoutSeconds}
-              onChange={(e) => setActivityTimeoutSeconds(e.target.value)}
-              min="60"
-              placeholder={String(DEFAULT_LOOP_CONFIG.activityTimeoutSeconds)}
-              className="mt-1 block w-32 rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-900 shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 dark:focus:ring-gray-600"
-            />
-            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Time without AI activity before treating as error and retrying. Minimum: 60 seconds. (default: {DEFAULT_LOOP_CONFIG.activityTimeoutSeconds})
-            </p>
-          </div>
-
-          {/* Clear planning folder */}
-          <div>
-            <label className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={clearPlanningFolder}
-                onChange={(e) => setClearPlanningFolder(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-gray-700 focus:ring-gray-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-300"
-              />
-              <div className="flex-1">
-                <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Clear ./.planning folder
-                </span>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Delete existing plan and status files before starting
-                </p>
-              </div>
-            </label>
-          </div>
-        </div>
-      )}
+      {/* Advanced options toggle + panel — hidden in chat mode */}
+      <AdvancedOptions
+        isChatMode={isChatMode}
+        showAdvanced={showAdvanced}
+        onToggle={() => setShowAdvanced(!showAdvanced)}
+        maxIterations={maxIterations}
+        onMaxIterationsChange={setMaxIterations}
+        maxConsecutiveErrors={maxConsecutiveErrors}
+        onMaxConsecutiveErrorsChange={setMaxConsecutiveErrors}
+        activityTimeoutSeconds={activityTimeoutSeconds}
+        onActivityTimeoutChange={setActivityTimeoutSeconds}
+        clearPlanningFolder={clearPlanningFolder}
+        onClearPlanningFolderChange={setClearPlanningFolder}
+      />
 
       {/* Actions - only render inline if renderActions prop is not provided */}
       {!renderActions && (
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-          <div className="flex flex-wrap items-center gap-2">{leadingActions}</div>
-          
-          {/* Right side - Cancel, Save as Draft, and Create/Start buttons */}
-          <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 sm:ml-auto">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onCancel}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            {!isChatMode && (!isEditing || isEditingDraft) && (
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={(e) => handleSubmit(e, true)}
-                disabled={isSubmitting || !canSaveDraft}
-                loading={isSubmitting}
-              >
-                {getComposeDraftActionLabel(isEditingDraft)}
-              </Button>
-            )}
-            <Button type="submit" loading={isSubmitting} disabled={isSubmitting || !canSubmit}>
-              {getComposeSubmitActionLabel({
-                isChatMode,
-                isEditing,
-              })}
-            </Button>
-          </div>
-        </div>
+        <FormActions
+          isChatMode={isChatMode}
+          isEditing={isEditing}
+          isEditingDraft={isEditingDraft}
+          isSubmitting={isSubmitting}
+          canSubmit={canSubmit}
+          canSaveDraft={canSaveDraft}
+          onCancel={onCancel}
+          onSaveAsDraft={(e) => handleSubmit(e, true)}
+          leadingActions={leadingActions}
+        />
       )}
     </form>
   );
 }
 
 export default CreateLoopForm;
-
-function TitleSparkIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-      />
-    </svg>
-  );
-}
