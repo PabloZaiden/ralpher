@@ -27,6 +27,12 @@ export async function startLoopImpl(ctx: LoopCtx, loopId: string, _options?: Sta
     throw new Error("Loop is already running");
   }
 
+  log.info("Starting loop execution", {
+    loopId,
+    workspaceId: loop.config.workspaceId,
+    mode: loop.config.mode,
+  });
+
   const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
   const git = GitService.withExecutor(executor);
 
@@ -48,8 +54,15 @@ export async function startLoopImpl(ctx: LoopCtx, loopId: string, _options?: Sta
 
   startStatePersistenceImpl(ctx, loopId);
 
+  log.info("Loop execution started", {
+    loopId,
+    workspaceId: loop.config.workspaceId,
+  });
   engine.start().catch((error) => {
-    log.error(`Loop ${loopId} failed to start:`, String(error));
+    log.error("Loop execution failed after start", {
+      loopId,
+      error: String(error),
+    });
   });
 }
 
@@ -59,6 +72,7 @@ export async function stopLoopImpl(ctx: LoopCtx, loopId: string, reason = "User 
     throw new Error("Loop is not running");
   }
 
+  log.info("Stopping loop execution", { loopId, reason });
   await engine.stop(reason);
   ctx.engines.delete(loopId);
 
@@ -69,6 +83,7 @@ export async function stopLoopImpl(ctx: LoopCtx, loopId: string, reason = "User 
   }
 
   await updateLoopState(loopId, engine.state);
+  log.info("Loop execution stopped", { loopId, reason, status: engine.state.status });
 }
 
 export async function startPlanModeImpl(ctx: LoopCtx, loopId: string): Promise<void> {
@@ -84,6 +99,11 @@ export async function startPlanModeImpl(ctx: LoopCtx, loopId: string): Promise<v
   if (ctx.engines.has(loopId)) {
     throw new Error("Loop plan mode is already running");
   }
+
+  log.info("Starting loop plan mode", {
+    loopId,
+    workspaceId: loop.config.workspaceId,
+  });
 
   const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
   const git = GitService.withExecutor(executor);
@@ -121,8 +141,15 @@ export async function startPlanModeImpl(ctx: LoopCtx, loopId: string): Promise<v
 
   startStatePersistenceImpl(ctx, loopId);
 
+  log.info("Loop plan mode started", {
+    loopId,
+    workspaceId: loop.config.workspaceId,
+  });
   engine.start().catch((error) => {
-    log.error(`Loop ${loopId} plan mode failed:`, String(error));
+    log.error("Loop plan mode failed after start", {
+      loopId,
+      error: String(error),
+    });
   });
 }
 

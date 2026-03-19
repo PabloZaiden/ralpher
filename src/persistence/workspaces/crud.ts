@@ -89,7 +89,7 @@ export async function updateWorkspace(
   const stmt = db.prepare(sql);
   stmt.run(...values);
 
-  log.debug("Workspace updated", { id });
+  log.info("Workspace updated", { id });
   return getWorkspace(id);
 }
 

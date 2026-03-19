@@ -34,7 +34,7 @@ export function useLoopPlanActions(params: UseLoopActionsParams): UseLoopPlanAct
       if (staleAction !== null) {
         return staleAction;
       }
-      log.debug("Sending plan feedback", {
+      log.info("Sending plan feedback", {
         loopId: actionLoopId,
         feedbackLength: feedback.length,
       });
@@ -44,7 +44,7 @@ export function useLoopPlanActions(params: UseLoopActionsParams): UseLoopPlanAct
         if (!isActiveLoop(actionLoopId)) {
           return false;
         }
-        log.debug("Plan feedback sent", { loopId: actionLoopId });
+        log.info("Plan feedback sent", { loopId: actionLoopId });
         return true;
       } catch (err) {
         const staleError = ignoreStaleLoopError("sendPlanFeedback", actionLoopId, false, err);
@@ -66,7 +66,7 @@ export function useLoopPlanActions(params: UseLoopActionsParams): UseLoopPlanAct
       if (staleAction !== null) {
         return staleAction;
       }
-      log.debug("Answering plan question", {
+      log.info("Answering plan question", {
         loopId: actionLoopId,
         answerGroups: answers.length,
       });
@@ -76,7 +76,7 @@ export function useLoopPlanActions(params: UseLoopActionsParams): UseLoopPlanAct
         if (!isActiveLoop(actionLoopId)) {
           return false;
         }
-        log.debug("Plan question answered", { loopId: actionLoopId });
+        log.info("Plan question answered", { loopId: actionLoopId });
         return true;
       } catch (err) {
         const staleError = ignoreStaleLoopError("answerPlanQuestion", actionLoopId, false, err);
@@ -100,7 +100,7 @@ export function useLoopPlanActions(params: UseLoopActionsParams): UseLoopPlanAct
       if (staleAction !== null) {
         return staleAction;
       }
-      log.debug("Accepting plan", { loopId: actionLoopId, mode });
+      log.info("Accepting plan", { loopId: actionLoopId, mode });
       try {
         const result = await acceptPlanApi(actionLoopId, mode);
         await refresh();
@@ -135,7 +135,7 @@ export function useLoopPlanActions(params: UseLoopActionsParams): UseLoopPlanAct
     if (staleAction !== null) {
       return staleAction;
     }
-    log.debug("Discarding plan", { loopId: actionLoopId });
+    log.info("Discarding plan", { loopId: actionLoopId });
     try {
       await discardPlanApi(actionLoopId);
       if (!isActiveLoop(actionLoopId)) {

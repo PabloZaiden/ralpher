@@ -9,7 +9,7 @@ import { sshSessionManager } from "../ssh-session-manager";
 import { portForwardManager } from "../port-forward-manager";
 
 export async function deleteLoopImpl(ctx: LoopCtx, loopId: string): Promise<boolean> {
-  log.debug(`[LoopManager] deleteLoop: Starting for loop ${loopId}, engine exists: ${ctx.engines.has(loopId)}`);
+  log.info("Deleting loop", { loopId, hasActiveEngine: ctx.engines.has(loopId) });
 
   if (ctx.engines.has(loopId)) {
     log.debug(`[LoopManager] deleteLoop: Stopping engine for loop ${loopId}`);
@@ -49,10 +49,12 @@ export async function deleteLoopImpl(ctx: LoopCtx, loopId: string): Promise<bool
     timestamp: createTimestamp(),
   });
 
+  log.info("Loop deleted", { loopId });
   return true;
 }
 
 export async function discardLoopImpl(ctx: LoopCtx, loopId: string): Promise<{ success: boolean; error?: string }> {
+  log.info("Discarding loop", { loopId });
   let loop = await ctx.getLoop(loopId);
   if (!loop) {
     return { success: false, error: "Loop not found" };
@@ -97,6 +99,7 @@ export async function discardLoopImpl(ctx: LoopCtx, loopId: string): Promise<{ s
       timestamp: createTimestamp(),
     });
 
+    log.info("Loop discarded", { loopId });
     return { success: true };
   } catch (error) {
     return { success: false, error: String(error) };
@@ -104,6 +107,7 @@ export async function discardLoopImpl(ctx: LoopCtx, loopId: string): Promise<{ s
 }
 
 export async function purgeLoopImpl(_ctx: LoopCtx, loopId: string): Promise<{ success: boolean; error?: string }> {
+  log.info("Purging loop", { loopId });
   const loop = await loadLoop(loopId);
   if (!loop) {
     return { success: false, error: "Loop not found" };
@@ -181,10 +185,12 @@ export async function purgeLoopImpl(_ctx: LoopCtx, loopId: string): Promise<{ su
     return { success: false, error: "Failed to delete loop file" };
   }
 
+  log.info("Loop purged", { loopId });
   return { success: true };
 }
 
 export async function markMergedImpl(ctx: LoopCtx, loopId: string): Promise<{ success: boolean; error?: string }> {
+  log.info("Marking loop as merged", { loopId });
   const loop = await ctx.getLoop(loopId);
   if (!loop) {
     return { success: false, error: "Loop not found" };
@@ -230,6 +236,7 @@ export async function markMergedImpl(ctx: LoopCtx, loopId: string): Promise<{ su
       timestamp: createTimestamp(),
     });
 
+    log.info("Loop marked as merged", { loopId });
     return { success: true };
   } catch (error) {
     return { success: false, error: String(error) };

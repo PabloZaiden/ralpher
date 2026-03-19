@@ -185,7 +185,7 @@ export const exportImportRoutes = {
       const result = await parseAndValidate(WorkspaceImportRequestSchema, req);
 
       if (!result.success) {
-        log.warn("POST /api/workspaces/import - Validation failed");
+        log.debug("POST /api/workspaces/import - Validation failed");
         return result.response;
       }
 

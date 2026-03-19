@@ -12,6 +12,7 @@ import {
   wrapRoutesWithBasicAuth,
   wrapRouteHandler,
 } from "./api/basic-auth";
+import { wrapRoutesWithLogging, wrapRouteHandlerWithLogging } from "./api/request-logging";
 import { portForwardProxyRoutes } from "./api/port-forwards";
 import { ensureDataDirectories } from "./persistence/database";
 import { backendManager } from "./core/backend-manager";
@@ -73,61 +74,68 @@ try {
     ? createAuthenticatedStaticRoute(staticAssetServer, runtimeConfig.basicAuth)
     : index;
   const protectedApiRoutes = wrapRoutesWithBasicAuth(apiRoutes, runtimeConfig.basicAuth);
+  const loggedApiRoutes = wrapRoutesWithLogging(protectedApiRoutes);
   const protectedPortForwardRoutes = wrapRoutesWithBasicAuth(
     portForwardProxyRoutes,
     runtimeConfig.basicAuth,
   );
-  const websocketRoute = wrapRouteHandler(
-    (req: Request, server: Server<WebSocketData>) => {
-      const url = new URL(req.url);
-      const loopId = url.searchParams.get("loopId") ?? undefined;
-      const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
-      const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
-      const provisioningJobId = url.searchParams.get("provisioningJobId") ?? undefined;
+  const websocketRoute = wrapRouteHandlerWithLogging(
+    wrapRouteHandler(
+      (req: Request, server: Server<WebSocketData>) => {
+        const url = new URL(req.url);
+        const loopId = url.searchParams.get("loopId") ?? undefined;
+        const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
+        const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
+        const provisioningJobId = url.searchParams.get("provisioningJobId") ?? undefined;
 
-      const upgraded = server.upgrade(req, {
-        data: {
-          loopId,
-          sshSessionId,
-          sshServerSessionId,
-          provisioningJobId,
-          terminalMode: false,
-        } as WebSocketData,
-      });
+        const upgraded = server.upgrade(req, {
+          data: {
+            loopId,
+            sshSessionId,
+            sshServerSessionId,
+            provisioningJobId,
+            terminalMode: false,
+          } as WebSocketData,
+        });
 
-      if (upgraded) {
-        // Return undefined to indicate successful upgrade (Bun handles the response)
-        return undefined;
-      }
+        if (upgraded) {
+          // Return undefined to indicate successful upgrade (Bun handles the response)
+          return undefined;
+        }
 
-      // Upgrade failed
-      return new Response("WebSocket upgrade failed", { status: 400 });
-    },
-    runtimeConfig.basicAuth,
+        // Upgrade failed
+        return new Response("WebSocket upgrade failed", { status: 400 });
+      },
+      runtimeConfig.basicAuth,
+    ),
+    "/api/ws",
   );
-  const sshTerminalRoute = wrapRouteHandler(
-    (req: Request, server: Server<WebSocketData>) => {
-      const url = new URL(req.url);
-      const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
-      const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
+  const sshTerminalRoute = wrapRouteHandlerWithLogging(
+    wrapRouteHandler(
+      (req: Request, server: Server<WebSocketData>) => {
+        const url = new URL(req.url);
+        const sshSessionId = url.searchParams.get("sshSessionId") ?? undefined;
+        const sshServerSessionId = url.searchParams.get("sshServerSessionId") ?? undefined;
 
-      if (!sshSessionId && !sshServerSessionId) {
-        return new Response("sshSessionId or sshServerSessionId is required", { status: 400 });
-      }
+        if (!sshSessionId && !sshServerSessionId) {
+          return new Response("sshSessionId or sshServerSessionId is required", { status: 400 });
+        }
 
-      const upgraded = server.upgrade(req, {
-        data: { sshSessionId, sshServerSessionId, terminalMode: true } as WebSocketData,
-      });
+        const upgraded = server.upgrade(req, {
+          data: { sshSessionId, sshServerSessionId, terminalMode: true } as WebSocketData,
+        });
 
-      if (upgraded) {
-        // Return undefined to indicate successful upgrade (Bun handles the response)
-        return undefined;
-      }
+        if (upgraded) {
+          // Return undefined to indicate successful upgrade (Bun handles the response)
+          return undefined;
+        }
 
-      // Upgrade failed
-      return new Response("WebSocket upgrade failed", { status: 400 });
-    },
-    runtimeConfig.basicAuth,
+        // Upgrade failed
+        return new Response("WebSocket upgrade failed", { status: 400 });
+      },
+      runtimeConfig.basicAuth,
+    ),
+    "/api/ssh-terminal",
   );
 
   const server = serve<WebSocketData>({
@@ -138,7 +146,7 @@ try {
     idleTimeout: 120,
     routes: {
       // API routes
-      ...protectedApiRoutes,
+      ...loggedApiRoutes,
       ...protectedPortForwardRoutes,
 
       // WebSocket endpoint for real-time events

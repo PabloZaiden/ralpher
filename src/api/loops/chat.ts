@@ -52,7 +52,7 @@ export const loopsChatRoutes = {
       // Parse and validate request body
       const validation = await parseAndValidate(CreateChatRequestSchema, req);
       if (!validation.success) {
-        log.warn("POST /api/loops/chat - Validation error");
+        log.debug("POST /api/loops/chat - Validation failed");
         return validation.response;
       }
       const body = validation.data;

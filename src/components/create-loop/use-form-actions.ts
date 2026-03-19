@@ -101,10 +101,11 @@ export function useFormActions({
       const currentName = nameRef.current;
       const currentPrompt = promptRef.current;
 
-      log.debug("handleSubmit - Form state", {
+      log.info("Submitting create-loop form", {
         asDraft,
-        promptLength: currentPrompt.length,
-        promptPreview: currentPrompt.slice(0, 50),
+        isChatMode,
+        hasPrompt: currentPrompt.trim().length > 0,
+        hasName: currentName.trim().length > 0,
         selectedWorkspaceId,
       });
 

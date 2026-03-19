@@ -85,7 +85,7 @@ export const loopsCollectionRoutes = {
       // Parse and validate request body using Zod schema
       const validation = await parseAndValidate(CreateLoopRequestSchema, req);
       if (!validation.success) {
-        log.warn("POST /api/loops - Validation error");
+        log.debug("POST /api/loops - Validation failed");
         return validation.response;
       }
       const body = validation.data;

@@ -73,7 +73,7 @@ async function validateGitRequest(req: Request): Promise<
   const workspaceId = url.searchParams.get("workspaceId");
 
   if (!directory) {
-    log.warn("Missing directory parameter");
+    log.debug("Missing directory parameter");
     return errorResponse("missing_parameter", "directory query parameter is required");
   }
 

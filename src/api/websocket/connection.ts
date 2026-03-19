@@ -45,7 +45,7 @@ export function open(ws: ServerWebSocket<WebSocketData>): void {
 
   // Track this connection
   activeConnections.add(ws);
-  log.debug("WebSocket connection opened", {
+  log.info("WebSocket connection opened", {
     loopId: loopId ?? "all",
     activeConnections: activeConnections.size,
   });
@@ -162,7 +162,7 @@ export function open(ws: ServerWebSocket<WebSocketData>): void {
 export function close(ws: ServerWebSocket<WebSocketData>): void {
   // Remove from active connections
   activeConnections.delete(ws);
-  log.debug("WebSocket connection closed", {
+  log.info("WebSocket connection closed", {
     activeConnections: activeConnections.size,
   });
 
@@ -190,7 +190,13 @@ export function close(ws: ServerWebSocket<WebSocketData>): void {
  * Logs the error and cleans up the event subscription.
  */
 export function error(ws: ServerWebSocket<WebSocketData>, err: Error): void {
-  log.error("WebSocket error:", err);
+  log.error("WebSocket error", {
+    error: String(err),
+    loopId: ws.data.loopId,
+    sshSessionId: ws.data.sshSessionId,
+    sshServerSessionId: ws.data.sshServerSessionId,
+    provisioningJobId: ws.data.provisioningJobId,
+  });
   // Remove from active connections
   activeConnections.delete(ws);
   if (ws.data.terminalBridge) {
