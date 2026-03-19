@@ -248,6 +248,62 @@ describe("App shell", () => {
     expect(loopDirectory.className.includes("truncate")).toBe(false);
   });
 
+  test("orders the workspaces map by loop count from high to low", async () => {
+    const alphaWorkspace = createWorkspace({
+      id: "workspace-alpha",
+      name: "Project Alpha",
+      directory: "/workspaces/alpha",
+    });
+    const betaWorkspace = createWorkspace({
+      id: "workspace-beta",
+      name: "Project Beta",
+      directory: "/workspaces/beta",
+    });
+    const gammaWorkspace = createWorkspace({
+      id: "workspace-gamma",
+      name: "Project Gamma",
+      directory: "/workspaces/gamma",
+    });
+
+    const loops = [
+      createLoopWithStatus("running", {
+        config: { id: "loop-beta-1", name: "Beta One", workspaceId: betaWorkspace.id },
+      }),
+      createLoopWithStatus("planning", {
+        config: { id: "loop-beta-2", name: "Beta Two", workspaceId: betaWorkspace.id },
+      }),
+      createLoopWithStatus("completed", {
+        config: { id: "loop-alpha-1", name: "Alpha One", workspaceId: alphaWorkspace.id },
+      }),
+    ];
+
+    setupDefaultApi({
+      loops,
+      workspaces: [alphaWorkspace, betaWorkspace, gammaWorkspace],
+    });
+
+    const { getByRole } = renderWithUser(<App />);
+
+    let workspaceButtons: HTMLElement[] = [];
+    await waitFor(() => {
+      const workspacesMapHeading = getByRole("heading", { name: "Workspaces map" });
+      const workspacesCard = workspacesMapHeading.parentElement?.parentElement;
+      expect(workspacesCard).toBeTruthy();
+      if (!(workspacesCard instanceof HTMLElement)) {
+        throw new Error("Expected workspaces map card to be present");
+      }
+
+      workspaceButtons = within(workspacesCard).getAllByRole("button");
+      expect(workspaceButtons).toHaveLength(3);
+    });
+
+    expect(workspaceButtons.map((button) => button.textContent ?? "")).toEqual([
+      expect.stringContaining("Project Beta"),
+      expect.stringContaining("Project Alpha"),
+      expect.stringContaining("Project Gamma"),
+    ]);
+  });
+
   test("renders shell-native workspace composer from the hash route", async () => {
     const { getByRole } = renderWithUser(<App />, { route: "#/new/workspace" });
 
