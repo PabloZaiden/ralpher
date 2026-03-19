@@ -15,7 +15,7 @@
  * @module types/events
  */
 
-import type { GitCommit, LoopConfig, ModelConfig, PendingPlanQuestion, TodoItem } from "./loop";
+import type { GitCommit, LoopConfig, ModelConfig, PendingPlanQuestion } from "./loop";
 
 /**
  * Message data from the AI agent.
@@ -92,7 +92,7 @@ export interface ToolCallData {
  * - **Completion events**: accepted (merged locally), merged (detected externally), discarded, pushed
  * - **Sync events**: sync.started, sync.clean, sync.conflicts
  * - **Plan mode events**: plan.ready, plan.feedback, plan.accepted, plan.discarded
- * - **State events**: todo.updated
+ * - **State events**: pending.updated
  */
 export type LoopEvent =
   | LoopCreatedEvent
@@ -121,7 +121,6 @@ export type LoopEvent =
   | LoopPlanFeedbackSentEvent
   | LoopPlanAcceptedEvent
   | LoopPlanDiscardedEvent
-  | LoopTodoUpdatedEvent
   | LoopPendingUpdatedEvent;
 
 /**
@@ -510,20 +509,6 @@ export interface LoopPlanDiscardedEvent {
   type: "loop.plan.discarded";
   /** ID of the loop */
   loopId: string;
-  /** ISO 8601 timestamp */
-  timestamp: string;
-}
-
-/**
- * Emitted when the loop's TODO list is updated.
- * Contains the full current state of all TODO items.
- */
-export interface LoopTodoUpdatedEvent {
-  type: "loop.todo.updated";
-  /** ID of the loop */
-  loopId: string;
-  /** Current TODO items from the session */
-  todos: TodoItem[];
   /** ISO 8601 timestamp */
   timestamp: string;
 }

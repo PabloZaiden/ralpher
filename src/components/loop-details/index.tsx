@@ -39,7 +39,7 @@ export function LoopDetails({
   onSelectSshSession,
 }: LoopDetailsProps) {
   const {
-    loop, loading, error, messages, toolCalls, logs, todos, gitChangeCounter, isChatMode,
+    loop, loading, error, messages, toolCalls, logs, gitChangeCounter, isChatMode,
     accept, push, updateBranch, remove, purge, markMerged,
     setPending, clearPending, sendChatMessage, sendFollowUp,
     getDiff, getPlan, getStatusFile, getPullRequestDestination,
@@ -191,7 +191,7 @@ export function LoopDetails({
               activeTab={activeTab} loop={loop} loopId={loopId} labels={labels}
               isActive={isActive} isPlanning={isPlanning} isPlanReady={isPlanReady}
               isLogActive={isLogActive} feedbackRounds={feedbackRounds} markdownEnabled={markdownEnabled}
-              messages={messages} toolCalls={toolCalls} logs={logs} todos={todos}
+              messages={messages} toolCalls={toolCalls} logs={logs}
               logDisplay={logDisplay}
               planQuestion={planQuestion}
               portForward={portForward}

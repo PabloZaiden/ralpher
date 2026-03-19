@@ -4,7 +4,7 @@
  */
 
 import type { Loop } from "../../types";
-import type { PersistedMessage, PersistedToolCall, LoopLogEntry, TodoItem, PendingPlanQuestion } from "../../types/loop";
+import type { PersistedMessage, PersistedToolCall, LoopLogEntry, PendingPlanQuestion } from "../../types/loop";
 import type { EntityLabels } from "../../utils";
 import type { TabId } from "./types";
 import type { LogDisplayState } from "./use-log-display-state";
@@ -38,7 +38,6 @@ interface LoopDetailsTabContentProps {
   messages: PersistedMessage[];
   toolCalls: PersistedToolCall[];
   logs: LoopLogEntry[];
-  todos: TodoItem[];
 
   // Bundled state from hooks
   logDisplay: LogDisplayState;
@@ -63,7 +62,6 @@ export function LoopDetailsTabContent({
   messages,
   toolCalls,
   logs,
-  todos,
   logDisplay,
   planQuestion,
   portForward,
@@ -80,7 +78,6 @@ export function LoopDetailsTabContent({
           messages={messages}
           toolCalls={toolCalls}
           logs={logs}
-          todos={todos}
           {...logDisplay}
           markdownEnabled={markdownEnabled}
           isLogActive={isLogActive}

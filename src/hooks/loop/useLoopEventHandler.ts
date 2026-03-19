@@ -4,7 +4,7 @@
  */
 
 import type { Dispatch, SetStateAction } from "react";
-import type { LoopEvent, MessageData, ToolCallData, TodoItem } from "../../types";
+import type { LoopEvent, MessageData, ToolCallData } from "../../types";
 import type { LogEntry } from "../../components/LogViewer";
 import { createLogger } from "../../lib/logger";
 import { MAX_FRONTEND_LOGS, MAX_FRONTEND_MESSAGES, MAX_FRONTEND_TOOL_CALLS } from "./useLoopData";
@@ -18,7 +18,6 @@ export interface LoopEventHandlerParams {
   setMessages: Dispatch<SetStateAction<MessageData[]>>;
   setToolCalls: Dispatch<SetStateAction<ToolCallData[]>>;
   setProgressContent: Dispatch<SetStateAction<string>>;
-  setTodos: Dispatch<SetStateAction<TodoItem[]>>;
   setGitChangeCounter: Dispatch<SetStateAction<number>>;
 }
 
@@ -31,7 +30,6 @@ export function createLoopEventHandler(params: LoopEventHandlerParams) {
     setMessages,
     setToolCalls,
     setProgressContent,
-    setTodos,
     setGitChangeCounter,
   } = params;
 
@@ -143,12 +141,6 @@ export function createLoopEventHandler(params: LoopEventHandlerParams) {
         setGitChangeCounter((prev) => prev + 1);
         refresh();
         break;
-
-      case "loop.todo.updated":
-        // Update TODO list with the latest todos from the agent
-        setTodos(event.todos);
-        break;
-
       case "loop.pending.updated":
         // Pending values changed - refresh to get updated state
         refresh();

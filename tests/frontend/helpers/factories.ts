@@ -5,7 +5,7 @@
  * partial overrides via the spread pattern.
  */
 
-import type { Loop, LoopConfig, LoopState, LoopStatus, ModelConfig, TodoItem } from "@/types/loop";
+import type { Loop, LoopConfig, LoopState, LoopStatus, ModelConfig } from "@/types/loop";
 import type { GitConfig, GitState, GitCommit, IterationSummary, LoopLogEntry, PersistedMessage, PersistedToolCall, LoopError, SessionInfo } from "@/types/loop";
 import type { Workspace } from "@/types/workspace";
 import type { SshSession } from "@/types/ssh-session";
@@ -242,20 +242,6 @@ export function createPersistedToolCall(overrides?: Partial<PersistedToolCall>):
 }
 
 // ============================================
-// Todo Item
-// ============================================
-
-export function createTodoItem(overrides?: Partial<TodoItem>): TodoItem {
-  return {
-    id: nextId(),
-    content: "Test todo item",
-    status: "pending",
-    priority: "medium",
-    ...overrides,
-  };
-}
-
-// ============================================
 // Loop Config
 // ============================================
 
@@ -298,7 +284,6 @@ export function createLoopState(overrides?: Partial<LoopState>): LoopState {
     logs: [],
     messages: [],
     toolCalls: [],
-    todos: [],
     ...overrides,
   };
 }
@@ -558,15 +543,6 @@ export function createLoopPlanReadyEvent(loopId: string, planContent = "# Plan\n
     type: "loop.plan.ready",
     loopId,
     planContent,
-    timestamp: isoNow(),
-  };
-}
-
-export function createLoopTodoUpdatedEvent(loopId: string, todos: TodoItem[] = []): LoopEvent {
-  return {
-    type: "loop.todo.updated",
-    loopId,
-    todos,
     timestamp: isoNow(),
   };
 }

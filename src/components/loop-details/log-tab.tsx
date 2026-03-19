@@ -1,13 +1,11 @@
-import type { PersistedMessage, PersistedToolCall, LoopLogEntry, TodoItem, PendingPlanQuestion } from "../../types/loop";
+import type { PersistedMessage, PersistedToolCall, LoopLogEntry, PendingPlanQuestion } from "../../types/loop";
 import { LogViewer } from "../LogViewer";
-import { TodoViewer } from "../TodoViewer";
 import { Button } from "../common";
 
 interface LogTabProps {
   messages: PersistedMessage[];
   toolCalls: PersistedToolCall[];
   logs: LoopLogEntry[];
-  todos: TodoItem[];
   showSystemInfo: boolean;
   onShowSystemInfoChange: (v: boolean) => void;
   showReasoning: boolean;
@@ -18,8 +16,6 @@ interface LogTabProps {
   onAutoScrollChange: (v: boolean) => void;
   logsCollapsed: boolean;
   onLogsCollapsedChange: (v: boolean) => void;
-  todosCollapsed: boolean;
-  onTodosCollapsedChange: (v: boolean) => void;
   markdownEnabled: boolean;
   isLogActive: boolean;
   pendingPlanQuestion: PendingPlanQuestion | undefined;
@@ -35,7 +31,6 @@ export function LogTab({
   messages,
   toolCalls,
   logs,
-  todos,
   showSystemInfo,
   onShowSystemInfoChange,
   showReasoning,
@@ -46,8 +41,6 @@ export function LogTab({
   onAutoScrollChange,
   logsCollapsed,
   onLogsCollapsedChange,
-  todosCollapsed,
-  onTodosCollapsedChange,
   markdownEnabled,
   isLogActive,
   pendingPlanQuestion,
@@ -60,12 +53,8 @@ export function LogTab({
 }: LogTabProps) {
   return (
     <div className="flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
-      {/* Side-by-side layout for logs and TODOs (75-25 split) */}
-      <div className="flex min-w-0 flex-1 min-h-0 flex-col gap-4 overflow-hidden p-4 lg:flex-row">
-        {/* Logs section */}
-        <div className={`flex flex-col min-w-0 min-h-0 ${
-          logsCollapsed ? "flex-shrink-0" : `${todosCollapsed ? "flex-1" : "flex-[3]"}`
-        }`}>
+      <div className="flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden p-4">
+        <div className={`flex min-w-0 min-h-0 flex-col ${logsCollapsed ? "flex-shrink-0" : "flex-1"}`}>
           <button
             onClick={() => onLogsCollapsedChange(!logsCollapsed)}
             className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0 flex items-center gap-2 hover:text-gray-900 dark:hover:text-gray-100 transition-colors text-left"
@@ -212,24 +201,6 @@ export function LogTab({
                 </div>
               )}
             </>
-          )}
-        </div>
-
-        {/* TODOs section */}
-        <div className={`flex flex-col min-w-0 min-h-0 ${
-          todosCollapsed ? "flex-shrink-0" : `${logsCollapsed ? "flex-1" : "flex-1"}`
-        }`}>
-          <button
-            onClick={() => onTodosCollapsedChange(!todosCollapsed)}
-            className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0 flex items-center gap-2 hover:text-gray-900 dark:hover:text-gray-100 transition-colors text-left"
-            aria-expanded={!todosCollapsed}
-            aria-controls="todos-viewer"
-          >
-            <span className="text-xs">{todosCollapsed ? "▶" : "▼"}</span>
-            <span>TODOs</span>
-          </button>
-          {!todosCollapsed && (
-            <TodoViewer id="todos-viewer" todos={todos} />
           )}
         </div>
       </div>

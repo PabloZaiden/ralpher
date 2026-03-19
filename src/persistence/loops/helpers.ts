@@ -68,7 +68,6 @@ export const ALLOWED_LOOP_COLUMNS = new Set([
   "plan_is_ready",
   "pending_plan_question",
   "review_mode",
-  "todos",
   "git_worktree_path",
   "mode",
 ]);
@@ -147,7 +146,6 @@ export function loopToRow(loop: Loop): Record<string, unknown> {
     plan_is_ready: state.planMode?.isPlanReady ? 1 : 0,
     pending_plan_question: state.planMode?.pendingQuestion ? JSON.stringify(state.planMode.pendingQuestion) : null,
     review_mode: state.reviewMode ? JSON.stringify(state.reviewMode) : null,
-    todos: state.todos ? JSON.stringify(state.todos) : null,
   };
 }
 
@@ -230,7 +228,6 @@ export function rowToLoop(row: Record<string, unknown>): Loop {
     logs: row["logs"] ? safeJsonParse(row["logs"] as string, [], "logs", rowId) : [],
     messages: row["messages"] ? safeJsonParse(row["messages"] as string, [], "messages", rowId) : [],
     toolCalls: row["tool_calls"] ? safeJsonParse(row["tool_calls"] as string, [], "tool_calls", rowId) : [],
-    todos: row["todos"] ? safeJsonParse(row["todos"] as string, [], "todos", rowId) : [],
   };
 
   // Optional state fields

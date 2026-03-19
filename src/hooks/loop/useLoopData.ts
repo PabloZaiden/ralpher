@@ -5,7 +5,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { Loop, MessageData, ToolCallData, TodoItem } from "../../types";
+import type { Loop, MessageData, ToolCallData } from "../../types";
 import type { LogEntry } from "../../components/LogViewer";
 import { createLogger } from "../../lib/logger";
 import { appFetch } from "../../lib/public-path";
@@ -33,8 +33,6 @@ export interface UseLoopDataResult {
   setProgressContent: Dispatch<SetStateAction<string>>;
   logs: LogEntry[];
   setLogs: Dispatch<SetStateAction<LogEntry[]>>;
-  todos: TodoItem[];
-  setTodos: Dispatch<SetStateAction<TodoItem[]>>;
   gitChangeCounter: number;
   setGitChangeCounter: Dispatch<SetStateAction<number>>;
   refresh: () => Promise<void>;
@@ -54,7 +52,6 @@ export function useLoopData(
   const [toolCalls, setToolCalls] = useState<ToolCallData[]>([]);
   const [progressContent, setProgressContent] = useState<string>("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [todos, setTodos] = useState<TodoItem[]>([]);
   const [gitChangeCounter, setGitChangeCounter] = useState(0);
 
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -163,11 +160,6 @@ export function useLoopData(
             })),
           );
         }
-
-        // Load persisted TODOs from loop state
-        if (data.state.todos && data.state.todos.length > 0) {
-          setTodos(data.state.todos);
-        }
       }
     } catch (err) {
       // Ignore abort errors — they are expected during cleanup
@@ -201,8 +193,6 @@ export function useLoopData(
     setProgressContent,
     logs,
     setLogs,
-    todos,
-    setTodos,
     gitChangeCounter,
     setGitChangeCounter,
     refresh,

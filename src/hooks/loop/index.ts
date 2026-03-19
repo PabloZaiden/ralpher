@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef } from "react";
-import type { Loop, LoopEvent, UpdateLoopRequest, FileDiff, FileContentResponse, PullRequestDestinationResponse, MessageData, ToolCallData, TodoItem, SshSession } from "../../types";
+import type { Loop, LoopEvent, UpdateLoopRequest, FileDiff, FileContentResponse, PullRequestDestinationResponse, MessageData, ToolCallData, SshSession } from "../../types";
 import type { LogEntry } from "../../components/LogViewer";
 import { useLoopEvents } from "../useWebSocket";
 import { createLogger } from "../../lib/logger";
@@ -43,8 +43,6 @@ export interface UseLoopResult {
   progressContent: string;
   /** Application logs from the loop engine */
   logs: LogEntry[];
-  /** TODOs from the agent session */
-  todos: TodoItem[];
   /** Counter that increments when git changes occur (use to trigger diff refresh) */
   gitChangeCounter: number;
   /** Whether this loop is in chat mode */
@@ -129,8 +127,6 @@ export function useLoop(loopId: string): UseLoopResult {
     setProgressContent,
     logs,
     setLogs,
-    todos,
-    setTodos,
     gitChangeCounter,
     setGitChangeCounter,
     refresh,
@@ -144,12 +140,11 @@ export function useLoop(loopId: string): UseLoopResult {
     isActiveLoop,
     refresh,
     setLogs,
-    setMessages,
-    setToolCalls,
-    setProgressContent,
-    setTodos,
-    setGitChangeCounter,
-  });
+      setMessages,
+      setToolCalls,
+      setProgressContent,
+      setGitChangeCounter,
+    });
 
   // WebSocket subscription for real-time updates
   const { events, status: connectionStatus, clearEvents } = useLoopEvents<LoopEvent>(loopId, {
@@ -196,7 +191,6 @@ export function useLoop(loopId: string): UseLoopResult {
     setToolCalls([]);
     setProgressContent("");
     setLogs([]);
-    setTodos([]);
     setGitChangeCounter(0);
     clearEvents();
     // Reset initial load tracking so the new loop hydrates from API
@@ -213,7 +207,6 @@ export function useLoop(loopId: string): UseLoopResult {
     setLoop,
     setMessages,
     setProgressContent,
-    setTodos,
     setToolCalls,
   ]);
 
@@ -239,7 +232,6 @@ export function useLoop(loopId: string): UseLoopResult {
       setToolCalls([]);
       setProgressContent("");
       setLogs([]);
-      setTodos([]);
       setGitChangeCounter(0);
       refreshRequestIdRef.current += 1;
       clearEvents();
@@ -258,7 +250,6 @@ export function useLoop(loopId: string): UseLoopResult {
     toolCalls,
     progressContent,
     logs,
-    todos,
     gitChangeCounter,
     isChatMode,
     refresh,

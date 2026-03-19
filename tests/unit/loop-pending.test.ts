@@ -162,7 +162,6 @@ describe("LoopEngine Pending Model", () => {
       logs: [],
       messages: [],
       toolCalls: [],
-      todos: [],
     };
 
     return { config, state };

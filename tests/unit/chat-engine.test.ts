@@ -161,7 +161,6 @@ describe("LoopEngine - Chat Mode", () => {
       logs: [],
       messages: [],
       toolCalls: [],
-      todos: [],
     };
 
     return { config, state };
@@ -592,7 +591,6 @@ describe("LoopEngine - Chat Mode", () => {
       logs: [],
       messages: [],
       toolCalls: [],
-      todos: [],
     };
 
     const loop: Loop = { config, state };

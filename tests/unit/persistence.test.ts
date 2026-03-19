@@ -76,7 +76,6 @@ function createTestLoop(overrides: {
       logs: [],
       messages: [],
       toolCalls: [],
-      todos: [],
     },
   };
 }

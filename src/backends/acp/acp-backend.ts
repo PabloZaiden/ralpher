@@ -6,7 +6,6 @@
 import { isRemoteOnlyMode } from "../../core/config";
 import { log } from "../../core/logger";
 import type { ModelInfo } from "../../types/api";
-import type { TodoItem } from "../../types/loop";
 
 import type {
   BackendConnectionConfig,
@@ -40,7 +39,6 @@ import {
   MAX_RECENT_PROCESS_LINES,
 } from "./types";
 import { isRecord, getString, getNumber, firstString } from "./json-helpers";
-import { parseTodosFromUnknown } from "./todo-parser";
 import { sanitizeSpawnArgsForLogging, getProcessExitHint, inferProviderID } from "./process-utils";
 
 /**
@@ -86,9 +84,6 @@ export class AcpBackend implements Backend {
 
   /** Track tool call names by toolCallId to resolve later updates */
   private toolCallNames = new Map<string, string>();
-
-  /** Track last emitted TODO snapshot per session to avoid duplicate updates */
-  private sessionTodoSnapshots = new Map<string, string>();
 
   /** Recent non-JSON ACP process output lines for diagnostics */
   private recentProcessLines: string[] = [];
@@ -212,7 +207,6 @@ export class AcpBackend implements Backend {
     this.modelCache.clear();
     this.pendingPermissionRequests.clear();
     this.toolCallNames.clear();
-    this.sessionTodoSnapshots.clear();
     this.recentProcessLines = [];
 
     this.connected = false;
@@ -468,24 +462,6 @@ export class AcpBackend implements Backend {
         }
         return;
       }
-
-      if (method === "session/todo_updated") {
-        const sessionId = getString(message.params["sessionId"]);
-        const todos = message.params["todos"];
-        if (!sessionId || !Array.isArray(todos)) {
-          return;
-        }
-        const parsedTodos = parseTodosFromUnknown(todos, `session-todo-updated-${sessionId}`);
-        if (parsedTodos.length > 0) {
-          this.emitTodoUpdate(sessionId, parsedTodos);
-          return;
-        }
-        this.emitSessionEvent(sessionId, {
-          type: "todo.updated",
-          sessionId,
-          todos: todos as any,
-        });
-      }
       return;
     }
 
@@ -604,7 +580,6 @@ export class AcpBackend implements Backend {
         toolName,
         input: content["input"] ?? updateObj["input"] ?? updateObj["rawInput"] ?? {},
       });
-      this.maybeEmitTodoUpdateFromToolPayload(sessionId, updateObj, content);
       return;
     }
 
@@ -660,36 +635,11 @@ export class AcpBackend implements Backend {
           toolName,
           output,
         });
-        this.maybeEmitTodoUpdateFromToolPayload(sessionId, updateObj, content);
         if (toolCallId) {
           this.toolCallNames.delete(toolCallId);
         }
       }
     }
-  }
-
-  private emitTodoUpdate(sessionId: string, todos: TodoItem[]): void {
-    if (todos.length === 0) {
-      return;
-    }
-
-    const snapshot = JSON.stringify(
-      todos.map((todo) => ({
-        content: todo.content,
-        status: todo.status,
-        priority: todo.priority,
-      })),
-    );
-    if (this.sessionTodoSnapshots.get(sessionId) === snapshot) {
-      return;
-    }
-
-    this.sessionTodoSnapshots.set(sessionId, snapshot);
-    this.emitSessionEvent(sessionId, {
-      type: "todo.updated",
-      sessionId,
-      todos,
-    });
   }
 
   private getReasoningPartKey(
@@ -719,51 +669,6 @@ export class AcpBackend implements Backend {
     }
 
     return undefined;
-  }
-
-  private maybeEmitTodoUpdateFromToolPayload(
-    sessionId: string,
-    updateObj: Record<string, unknown>,
-    content: Record<string, unknown>,
-  ): void {
-    const rawInput = isRecord(updateObj["rawInput"]) ? updateObj["rawInput"] : {};
-    const input = isRecord(updateObj["input"]) ? updateObj["input"] : {};
-    const contentInput = isRecord(content["input"]) ? content["input"] : {};
-    const rawOutput = isRecord(updateObj["rawOutput"]) ? updateObj["rawOutput"] : {};
-    const output = isRecord(updateObj["output"]) ? updateObj["output"] : {};
-    const contentOutput = isRecord(content["output"]) ? content["output"] : {};
-
-    const todoCandidates: Array<{ value: unknown; source: string }> = [
-      { value: updateObj["todos"], source: "update-todos" },
-      { value: content["todos"], source: "content-todos" },
-      { value: rawInput["todos"], source: "raw-input-todos" },
-      { value: input["todos"], source: "input-todos" },
-      { value: contentInput["todos"], source: "content-input-todos" },
-      { value: rawOutput["todos"], source: "raw-output-todos" },
-      { value: output["todos"], source: "output-todos" },
-      { value: contentOutput["todos"], source: "content-output-todos" },
-      { value: rawOutput["detailedContent"], source: "raw-output-detailed-content" },
-      { value: rawOutput["content"], source: "raw-output-content" },
-      { value: output["detailedContent"], source: "output-detailed-content" },
-      { value: output["content"], source: "output-content" },
-      { value: contentOutput["detailedContent"], source: "content-output-detailed-content" },
-      { value: contentOutput["content"], source: "content-output-content" },
-    ];
-
-    for (const candidate of todoCandidates) {
-      if (candidate.value === undefined || candidate.value === null) {
-        continue;
-      }
-
-      const parsedTodos = parseTodosFromUnknown(
-        candidate.value,
-        `tool-todos-${sessionId}-${candidate.source}`,
-      );
-      if (parsedTodos.length > 0) {
-        this.emitTodoUpdate(sessionId, parsedTodos);
-        return;
-      }
-    }
   }
 
   private addSessionSubscriber(sessionId: string, subscriber: SessionSubscriber): void {
@@ -1183,7 +1088,6 @@ export class AcpBackend implements Backend {
     this.sessionPromptSequences.delete(id);
     this.sessionPromptHasActivity.delete(id);
     this.sessionReasoningPartKeys.delete(id);
-    this.sessionTodoSnapshots.delete(id);
   }
 
   /**
@@ -1830,22 +1734,6 @@ export class AcpBackend implements Backend {
           status: statusType,
           attempt: statusType === "retry" ? statusInfo.attempt : undefined,
           message: statusType === "retry" ? statusInfo.message : undefined,
-        };
-      }
-
-      case "todo.updated": {
-        // TODO list updated
-        const props = event.properties;
-        if (props.sessionID !== sessionId) return null;
-        return {
-          type: "todo.updated",
-          sessionId: props.sessionID,
-          todos: (props.todos ?? []).map((todo: any, index: number) => ({
-            content: todo.content,
-            status: todo.status as "pending" | "in_progress" | "completed" | "cancelled",
-            priority: todo.priority as "high" | "medium" | "low",
-            id: `todo-${index}`,
-          })),
         };
       }
 
