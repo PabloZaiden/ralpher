@@ -80,22 +80,6 @@ export async function processLoopAgentEvent(event: AgentEvent, ctx: IterationCon
       await handleQuestionAsked(event, toolCtx);
       break;
 
-    case "todo.updated": {
-      toolCtx.state.todos = event.todos;
-      toolCtx.emitLog("debug", "TODOs updated", {
-        sessionId: event.sessionId,
-        todoCount: event.todos.length,
-      });
-      toolCtx.emit({
-        type: "loop.todo.updated",
-        loopId: toolCtx.loopId,
-        todos: event.todos,
-        timestamp: createTimestamp(),
-      });
-      await toolCtx.triggerPersistence();
-      break;
-    }
-
     case "session.status":
       toolCtx.emitLog("debug", `Session status: ${event.status}`, {
         sessionId: event.sessionId,

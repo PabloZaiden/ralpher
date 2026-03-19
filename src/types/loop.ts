@@ -14,20 +14,6 @@ import type { ModelConfig } from "./schemas/model";
 export type { ModelConfig };
 
 /**
- * A TODO item from an agent session.
- */
-export interface TodoItem {
-  /** Brief description of the task */
-  content: string;
-  /** Current status of the task */
-  status: "pending" | "in_progress" | "completed" | "cancelled";
-  /** Priority level of the task */
-  priority: "high" | "medium" | "low";
-  /** Unique identifier for the todo item */
-  id: string;
-}
-
-/**
  * Configuration for a Ralph Loop.
  * 
  * This is the persistent configuration that defines how a loop behaves.
@@ -204,9 +190,6 @@ export interface LoopState {
     /** Which sync phase is in progress — working branch pull or base branch merge */
     syncPhase?: "working_branch" | "base_branch";
   };
-
-  /** TODOs from the session persisted for screen refresh (always initialized as empty array) */
-  todos: TodoItem[];
 }
 
 export interface PlanQuestionOption {
@@ -430,7 +413,6 @@ export function createInitialState(id: string): LoopState {
     logs: [],
     messages: [],
     toolCalls: [],
-    todos: [],
   };
 }
 

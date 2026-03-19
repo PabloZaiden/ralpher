@@ -1510,14 +1510,14 @@ describe("error display", () => {
 // ─── Log tab details ─────────────────────────────────────────────────────────
 
 describe("log tab", () => {
-  test("shows Logs and TODOs sections", async () => {
+  test("shows only the Logs section", async () => {
     setupDefaultApi();
-    const { getByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+    const { getByText, queryByText } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
 
     await waitFor(() => {
       expect(getByText("Logs")).toBeTruthy();
     });
-    expect(getByText("TODOs")).toBeTruthy();
+    expect(queryByText("TODOs")).toBeNull();
   });
 
   test("shows log filter checkboxes", async () => {

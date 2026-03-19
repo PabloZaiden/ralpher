@@ -150,7 +150,6 @@ describe("User Message Logging", () => {
       logs: [],
       messages: [],
       toolCalls: [],
-      todos: [],
     };
 
     return { config, state };

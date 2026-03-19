@@ -384,7 +384,6 @@ describe("Workspace Persistence", () => {
             logs: [],
             messages: [],
             toolCalls: [],
-            todos: [],
           },
         });
       }
@@ -436,7 +435,6 @@ describe("Workspace Persistence", () => {
           logs: [],
           messages: [],
           toolCalls: [],
-          todos: [],
         },
       });
 

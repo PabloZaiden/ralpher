@@ -187,7 +187,6 @@ describe("StopPatternDetector", () => {
       logs: [],
       messages: [],
       toolCalls: [],
-      todos: [],
     };
 
     return { config, state };

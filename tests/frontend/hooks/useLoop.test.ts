@@ -2,7 +2,7 @@
  * Tests for useLoop hook.
  *
  * Tests single loop state management, WebSocket event handling for
- * messages/toolCalls/progress/logs/todos, and all action methods.
+ * messages/toolCalls/progress/logs, and all action methods.
  */
 
 import { describe, test, expect, beforeEach, afterEach } from "bun:test";
@@ -360,36 +360,6 @@ describe("WebSocket event: loop.log", () => {
       expect(result.current.logs[0]!.message).toBe("Processing... done");
     });
     expect(result.current.logs).toHaveLength(1);
-  });
-});
-
-// ─── WebSocket events: todos ─────────────────────────────────────────────────
-
-describe("WebSocket event: loop.todo.updated", () => {
-  test("updates todos from events", async () => {
-    setupLoop();
-    const { result } = renderHook(() => useLoop(LOOP_ID));
-
-    await waitForLoad(result);
-    await waitForWs();
-
-    act(() => {
-      ws.sendEvent({
-        type: "loop.todo.updated",
-        loopId: LOOP_ID,
-        todos: [
-          { id: "todo-1", content: "Fix the bug", status: "in_progress", priority: "high" },
-          { id: "todo-2", content: "Write tests", status: "pending", priority: "medium" },
-        ],
-        timestamp: new Date().toISOString(),
-      });
-    });
-
-    await waitFor(() => {
-      expect(result.current.todos).toHaveLength(2);
-    });
-    expect(result.current.todos[0]!.content).toBe("Fix the bug");
-    expect(result.current.todos[1]!.status).toBe("pending");
   });
 });
 

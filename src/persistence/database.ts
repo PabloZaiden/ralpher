@@ -182,9 +182,7 @@ function createTables(database: Database): void {
         planning_folder_cleared INTEGER DEFAULT 0,
         plan_is_ready INTEGER DEFAULT 0,
         -- Review mode state
-        review_mode TEXT,
-        -- Todo items
-        todos TEXT
+        review_mode TEXT
       )
     `);
 
