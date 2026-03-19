@@ -8,6 +8,7 @@
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_PORT = 3000;
 const DEFAULT_BASIC_AUTH_USERNAME = "ralpher";
+export const DEFAULT_SERVER_IDLE_TIMEOUT_SECONDS = 120;
 const MAX_PORT = 65535;
 
 export interface BasicAuthConfig {

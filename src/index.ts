@@ -18,6 +18,7 @@ import { ensureDataDirectories } from "./persistence/database";
 import { backendManager } from "./core/backend-manager";
 import { websocketHandlers, type WebSocketData } from "./api/websocket";
 import {
+  DEFAULT_SERVER_IDLE_TIMEOUT_SECONDS,
   getServerDevelopmentConfig,
   getServerRuntimeConfig,
   getServerStartupMessages,
@@ -141,9 +142,9 @@ try {
   const server = serve<WebSocketData>({
     hostname: runtimeConfig.host,
     port: runtimeConfig.port,
-    // Increase idle timeout from default 10s to 120s for long-running operations
+    // Increase idle timeout from default 10s for long-running operations
     // like git push/pull/fetch that happen over the network
-    idleTimeout: 120,
+    idleTimeout: DEFAULT_SERVER_IDLE_TIMEOUT_SECONDS,
     routes: {
       // API routes
       ...loggedApiRoutes,
