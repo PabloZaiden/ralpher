@@ -17,7 +17,7 @@ function createTerminalSocket(data: WebSocketData): ServerWebSocket<WebSocketDat
 }
 
 describe("websocketHandlers port-forward mode", () => {
-  test("closes the client socket when the upstream proxy is not open", () => {
+  test("silently drops messages when the upstream proxy is still connecting", () => {
     const close = mock(() => {});
     const send = mock(() => {});
     const proxySocket = {
@@ -36,6 +36,44 @@ describe("websocketHandlers port-forward mode", () => {
     websocketHandlers.message(ws, "not-json");
 
     expect(send).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  test("closes the client socket when the upstream proxy is closed", () => {
+    const close = mock(() => {});
+    const send = mock(() => {});
+    const proxySocket = {
+      readyState: WebSocket.CLOSED,
+      send,
+    } as unknown as WebSocket;
+    const ws = {
+      data: {
+        portForwardMode: true,
+        portForwardId: "forward-2",
+        proxySocket,
+      } as WebSocketData,
+      close,
+    } as unknown as ServerWebSocket<WebSocketData>;
+
+    websocketHandlers.message(ws, "not-json");
+
+    expect(send).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledWith(1011, "Upstream proxy is not open");
+  });
+
+  test("closes the client socket when the upstream proxy is missing", () => {
+    const close = mock(() => {});
+    const ws = {
+      data: {
+        portForwardMode: true,
+        portForwardId: "forward-3",
+        proxySocket: undefined,
+      } as WebSocketData,
+      close,
+    } as unknown as ServerWebSocket<WebSocketData>;
+
+    websocketHandlers.message(ws, "not-json");
+
     expect(close).toHaveBeenCalledWith(1011, "Upstream proxy is not open");
   });
 });

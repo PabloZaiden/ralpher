@@ -1,0 +1,303 @@
+/**
+ * CreateWorkspaceModal component for manual and automatic workspace creation.
+ */
+
+import { useState, useEffect, useCallback, useMemo, useRef, type FormEvent } from "react";
+import { Modal } from "../common";
+import { ProvisioningJobView } from "../ProvisioningJobView";
+import { getStoredSshServerCredential } from "../../lib/ssh-browser-credentials";
+import type { AgentProvider, ServerSettings, SshServer } from "../../types";
+import type { CreateWorkspaceRequest } from "../../types/workspace";
+import { appFetch } from "../../lib/public-path";
+import { useProvisioningJob } from "../../hooks/useProvisioningJob";
+import { getCreateWorkspaceDefaultServerSettings } from "../../types/settings";
+import { ModeTabs } from "./mode-tabs";
+import { WorkspaceNameField } from "./workspace-name-field";
+import { ManualWorkspaceForm } from "./manual-workspace-form";
+import { AutomaticWorkspaceForm } from "./automatic-workspace-form";
+import { FormError } from "./form-error";
+import { ModalFooter } from "./modal-footer";
+
+export interface CreateWorkspaceModalProps {
+  /** Whether the modal is open */
+  isOpen: boolean;
+  /** Callback when modal should close */
+  onClose: () => void;
+  /** Callback to create the workspace */
+  onCreate: (request: CreateWorkspaceRequest) => Promise<boolean>;
+  /** Whether creation is in progress */
+  creating?: boolean;
+  /** Error message from workspace creation */
+  error?: string | null;
+  /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
+  remoteOnly?: boolean;
+  /** Registered standalone SSH servers available for hostname selection */
+  registeredSshServers?: SshServer[];
+  /** Callback invoked when provisioning creates or reuses a workspace */
+  onProvisioningSuccess?: () => Promise<void>;
+}
+
+/**
+ * CreateWorkspaceModal provides UI for creating new workspaces with server settings.
+ */
+export function CreateWorkspaceModal({
+  isOpen,
+  onClose,
+  onCreate,
+  creating = false,
+  error,
+  remoteOnly = false,
+  registeredSshServers = [],
+  onProvisioningSuccess,
+}: CreateWorkspaceModalProps) {
+  const provisioning = useProvisioningJob();
+  const defaultServerSettings = useMemo(() => getCreateWorkspaceDefaultServerSettings(), []);
+  const hasActiveProvisioningJob = provisioning.activeJobId !== null;
+  const lastProvisioningRefreshIdRef = useRef<string | null>(null);
+  const wasOpenRef = useRef(false);
+
+  // Workspace form state
+  const [name, setName] = useState("");
+  const [directory, setDirectory] = useState("");
+  const [mode, setMode] = useState<"manual" | "automatic">("manual");
+  const [automaticServerId, setAutomaticServerId] = useState("");
+  const [automaticRepoUrl, setAutomaticRepoUrl] = useState("");
+  const [automaticBasePath, setAutomaticBasePath] = useState("/workspaces");
+  const [automaticProvider, setAutomaticProvider] = useState<AgentProvider>("copilot");
+  const [automaticPassword, setAutomaticPassword] = useState("");
+
+  // Server settings state
+  const [serverSettings, setServerSettings] = useState<ServerSettings>(defaultServerSettings);
+  const [isServerSettingsValid, setIsServerSettingsValid] = useState(true);
+
+  // Test connection state (managed internally)
+  const [testing, setTesting] = useState(false);
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      return;
+    }
+
+    if (wasOpenRef.current) {
+      if (hasActiveProvisioningJob) {
+        setMode("automatic");
+      }
+      return;
+    }
+
+    wasOpenRef.current = true;
+    if (hasActiveProvisioningJob) {
+      setMode("automatic");
+      return;
+    }
+
+    setMode("manual");
+    setName("");
+    setDirectory("");
+    setAutomaticServerId(registeredSshServers[0]?.config.id ?? "");
+    setAutomaticRepoUrl("");
+    setAutomaticBasePath("/workspaces");
+    setAutomaticProvider("copilot");
+    setAutomaticPassword("");
+    setServerSettings(defaultServerSettings);
+    setIsServerSettingsValid(true);
+    setTesting(false);
+  }, [defaultServerSettings, hasActiveProvisioningJob, isOpen, registeredSshServers]);
+
+  useEffect(() => {
+    const jobId = provisioning.snapshot?.job.config.id ?? null;
+    if (
+      provisioning.snapshot?.job.state.status === "completed"
+      && onProvisioningSuccess
+      && jobId
+      && lastProvisioningRefreshIdRef.current !== jobId
+    ) {
+      lastProvisioningRefreshIdRef.current = jobId;
+      void onProvisioningSuccess();
+    }
+  }, [
+    onProvisioningSuccess,
+    provisioning.snapshot?.job.config.id,
+    provisioning.snapshot?.job.state.status,
+  ]);
+
+  // Handle form submission
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+
+    if (mode === "automatic") {
+      const snapshot = await provisioning.startJob({
+        name: name.trim(),
+        sshServerId: automaticServerId,
+        repoUrl: automaticRepoUrl.trim(),
+        basePath: automaticBasePath.trim(),
+        provider: automaticProvider,
+        password: automaticPassword,
+      });
+      if (snapshot) {
+        setMode("automatic");
+        setAutomaticPassword("");
+      }
+      return;
+    }
+
+    const request: CreateWorkspaceRequest = {
+      name: name.trim(),
+      directory: directory.trim(),
+      serverSettings,
+    };
+
+    const success = await onCreate(request);
+    if (success) {
+      onClose();
+    }
+  }
+
+  // Handle server settings change
+  function handleServerSettingsChange(settings: ServerSettings, isValid: boolean) {
+    setServerSettings(settings);
+    setIsServerSettingsValid(isValid);
+  }
+
+  // Handle test connection - uses the directory from the form
+  const handleTestConnection = useCallback(async (settings: ServerSettings): Promise<{ success: boolean; error?: string }> => {
+    const trimmedDirectory = directory.trim();
+    if (!trimmedDirectory) {
+      return { success: false, error: "Please enter a directory first" };
+    }
+
+    setTesting(true);
+    try {
+      const res = await appFetch("/api/server-settings/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings, directory: trimmedDirectory }),
+      });
+      const result = await res.json();
+      return result;
+    } catch (error) {
+      return { success: false, error: String(error) };
+    } finally {
+      setTesting(false);
+    }
+  }, [directory]);
+
+  // Validation
+  const isNameValid = name.trim().length > 0;
+  const isDirectoryValid = directory.trim().length > 0;
+  const selectedServerHasStoredCredential = automaticServerId
+    ? getStoredSshServerCredential(automaticServerId) !== null
+    : false;
+  const isAutomaticValid = isNameValid
+    && automaticServerId.trim().length > 0
+    && automaticRepoUrl.trim().length > 0
+    && automaticBasePath.trim().length > 0;
+  const isManualValid = isNameValid && isDirectoryValid && isServerSettingsValid;
+  const isValid = mode === "automatic" ? isAutomaticValid : isManualValid;
+  const provisioningStatus = provisioning.snapshot?.job.state.status;
+  const canReturnToAutomaticForm = provisioningStatus === "failed" || provisioningStatus === "cancelled";
+
+  function handleBackToAutomaticForm(): void {
+    const config = provisioning.snapshot?.job.config;
+    if (!config) {
+      provisioning.clearActiveJob();
+      return;
+    }
+
+    setMode("automatic");
+    setName(config.name);
+    setAutomaticServerId(config.sshServerId);
+    setAutomaticRepoUrl(config.repoUrl);
+    setAutomaticBasePath(config.basePath);
+    setAutomaticProvider(config.provider);
+    setAutomaticPassword("");
+    provisioning.clearActiveJob();
+  }
+
+  function handleClose(): void {
+    const shouldClearProvisioning = provisioning.activeJobId
+      && provisioningStatus
+      && provisioningStatus !== "running"
+      && provisioningStatus !== "pending";
+    if (shouldClearProvisioning) {
+      provisioning.clearActiveJob();
+    }
+    onClose();
+  }
+
+  const footer = (
+    <ModalFooter
+      hasActiveProvisioningJob={hasActiveProvisioningJob}
+      provisioningStatus={provisioningStatus}
+      canReturnToAutomaticForm={canReturnToAutomaticForm}
+      creating={creating}
+      provisioningStarting={provisioning.starting}
+      mode={mode}
+      isValid={isValid}
+      onClose={handleClose}
+      onBack={handleBackToAutomaticForm}
+      onCancelJob={() => { void provisioning.cancelJob(); }}
+    />
+  );
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Create Workspace"
+      description="Create a new workspace manually with server connection settings or provision one automatically over SSH."
+      size="md"
+      footer={footer}
+    >
+      {hasActiveProvisioningJob ? (
+        <ProvisioningJobView
+          snapshot={provisioning.snapshot}
+          logs={provisioning.logs}
+          websocketStatus={provisioning.websocketStatus}
+          loading={provisioning.loading}
+          error={provisioning.error}
+        />
+      ) : (
+        <form id="create-workspace-form" onSubmit={handleSubmit} className="space-y-6">
+          <ModeTabs mode={mode} onChange={setMode} />
+
+          <WorkspaceNameField value={name} onChange={setName} />
+
+          {mode === "manual" ? (
+            <ManualWorkspaceForm
+              directory={directory}
+              onDirectoryChange={setDirectory}
+              defaultServerSettings={defaultServerSettings}
+              onServerSettingsChange={handleServerSettingsChange}
+              onTestConnection={handleTestConnection}
+              testing={testing}
+              remoteOnly={remoteOnly}
+              registeredSshServers={registeredSshServers}
+            />
+          ) : (
+            <AutomaticWorkspaceForm
+              serverId={automaticServerId}
+              onServerIdChange={setAutomaticServerId}
+              repoUrl={automaticRepoUrl}
+              onRepoUrlChange={setAutomaticRepoUrl}
+              basePath={automaticBasePath}
+              onBasePathChange={setAutomaticBasePath}
+              provider={automaticProvider}
+              onProviderChange={setAutomaticProvider}
+              password={automaticPassword}
+              onPasswordChange={setAutomaticPassword}
+              registeredSshServers={registeredSshServers}
+              selectedServerHasStoredCredential={selectedServerHasStoredCredential}
+            />
+          )}
+
+          <FormError error={mode === "manual" ? error : provisioning.error} />
+        </form>
+      )}
+    </Modal>
+  );
+}
+
+export default CreateWorkspaceModal;

@@ -1,0 +1,106 @@
+/**
+ * Loops review routes - handle review comments after push/merge.
+ *
+ * These endpoints allow addressing reviewer feedback on completed loops:
+ * - POST /api/loops/:id/address-comments - Start addressing reviewer comments
+ * - GET /api/loops/:id/review-history - Get review history for a loop
+ */
+
+import { loopManager } from "../../core/loop-manager";
+import { parseAndValidate } from "../validation";
+import { errorResponse } from "../helpers";
+import type { AddressCommentsResponse, ReviewHistoryResponse } from "../../types/api";
+import { AddressCommentsRequestSchema } from "../../types/schemas";
+
+export const loopsReviewRoutes = {
+  "/api/loops/:id/address-comments": {
+    /**
+     * POST /api/loops/:id/address-comments - Start addressing reviewer comments.
+     *
+     * Creates a new review cycle and restarts the loop to address the provided
+     * reviewer comments. The loop will work on addressing the feedback.
+     * Only works for loops in pushed or merged status that aren't already running.
+     *
+     * Request Body:
+     * - comments (required): Reviewer's comments to address
+     *
+     * @returns AddressCommentsResponse with reviewCycle, branch, and commentIds
+     */
+    async POST(req: Request & { params: { id: string } }): Promise<Response> {
+      // Parse and validate request body using Zod schema
+      const validation = await parseAndValidate(AddressCommentsRequestSchema, req);
+      if (!validation.success) {
+        return validation.response;
+      }
+      const body = validation.data;
+
+      try {
+        const result = await loopManager.addressReviewComments(req.params.id, body.comments);
+
+        if (!result.success) {
+          // Map error messages to status codes
+          const errorMsg = result.error ?? "Unknown error";
+          let status = 400;
+
+          if (errorMsg.includes("not found")) {
+            status = 404;
+          } else if (errorMsg.includes("already running")) {
+            status = 409;
+          }
+
+          const responseBody: AddressCommentsResponse = {
+            success: false,
+            error: errorMsg,
+          };
+          return Response.json(responseBody, { status });
+        }
+
+        const responseBody: AddressCommentsResponse = {
+          success: true,
+          reviewCycle: result.reviewCycle!,
+          branch: result.branch!,
+          commentIds: result.commentIds!,
+        };
+        return Response.json(responseBody);
+      } catch (error) {
+        const responseBody: AddressCommentsResponse = {
+          success: false,
+          error: String(error),
+        };
+        return Response.json(responseBody, { status: 500 });
+      }
+    },
+  },
+
+  "/api/loops/:id/review-history": {
+    /**
+     * GET /api/loops/:id/review-history - Get review history for a loop.
+     *
+     * Returns the review history including addressability, completion action,
+     * number of review cycles, and list of review branches created.
+     *
+     * @returns ReviewHistoryResponse with history object
+     */
+    async GET(req: Request & { params: { id: string } }): Promise<Response> {
+      try {
+        const result = await loopManager.getReviewHistory(req.params.id);
+
+        if (!result.success) {
+          const responseBody: ReviewHistoryResponse = {
+            success: false,
+            error: result.error!,
+          };
+          return Response.json(responseBody, { status: result.error === "Loop not found" ? 404 : 400 });
+        }
+
+        const responseBody: ReviewHistoryResponse = {
+          success: true,
+          history: result.history!,
+        };
+        return Response.json(responseBody);
+      } catch (error) {
+        return errorResponse("get_review_history_failed", String(error), 500);
+      }
+    },
+  },
+};

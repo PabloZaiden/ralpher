@@ -1,0 +1,35 @@
+import type { ModelConfig } from "../../types/loop";
+
+export type TabId = "log" | "info" | "prompt" | "plan" | "status" | "diff" | "review" | "actions";
+
+export const tabs: { id: TabId; label: string }[] = [
+  { id: "log", label: "Log" },
+  { id: "info", label: "Info" },
+  { id: "prompt", label: "Prompt" },
+  { id: "plan", label: "Plan" },
+  { id: "status", label: "Status" },
+  { id: "diff", label: "Diff" },
+  { id: "review", label: "Review" },
+  { id: "actions", label: "Actions" },
+];
+
+/**
+ * Format a timestamp for display.
+ */
+export function formatDateTime(isoString: string | undefined): string {
+  if (!isoString) return "N/A";
+  return new Date(isoString).toLocaleString();
+}
+
+/**
+ * Format model configuration for display.
+ * Shows providerID/modelID, with variant in parentheses if present.
+ */
+export function formatModelDisplay(model: ModelConfig | undefined): string {
+  if (!model) return "Not configured";
+  const base = `${model.providerID}/${model.modelID}`;
+  if (model.variant && model.variant.trim() !== "") {
+    return `${base} (${model.variant})`;
+  }
+  return base;
+}

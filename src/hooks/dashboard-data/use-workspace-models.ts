@@ -1,0 +1,110 @@
+/**
+ * Sub-hook for workspace model fetching and last-model preference.
+ */
+
+import { useState, useCallback, useEffect, useRef } from "react";
+import type { ModelInfo } from "../../types";
+import { appFetch } from "../../lib/public-path";
+
+export interface UseWorkspaceModelsResult {
+  models: ModelInfo[];
+  modelsLoading: boolean;
+  lastModel: { providerID: string; modelID: string } | null;
+  setLastModel: (model: { providerID: string; modelID: string } | null) => void;
+  modelsWorkspaceId: string | null;
+  setModelsWorkspaceId: (id: string | null) => void;
+  fetchModels: (directory: string, workspaceId: string | null) => Promise<void>;
+  resetModels: () => void;
+}
+
+export function useWorkspaceModels(): UseWorkspaceModelsResult {
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [lastModel, setLastModel] = useState<{ providerID: string; modelID: string } | null>(null);
+  const [modelsWorkspaceId, setModelsWorkspaceId] = useState<string | null>(null);
+
+  const modelsRequestIdRef = useRef(0);
+  const modelsAbortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      modelsAbortControllerRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    async function fetchLastModel() {
+      try {
+        const response = await appFetch("/api/preferences/last-model");
+        if (response.ok) {
+          const data = await response.json();
+          setLastModel(data);
+        }
+      } catch {
+        // Ignore errors
+      }
+    }
+    fetchLastModel();
+  }, []);
+
+  const fetchModels = useCallback(async (directory: string, workspaceId: string | null) => {
+    const requestId = ++modelsRequestIdRef.current;
+    modelsAbortControllerRef.current?.abort();
+
+    if (!directory || !workspaceId) {
+      setModels([]);
+      setModelsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    modelsAbortControllerRef.current = controller;
+
+    setModelsLoading(true);
+    try {
+      const response = await appFetch(
+        `/api/models?directory=${encodeURIComponent(directory)}&workspaceId=${encodeURIComponent(workspaceId)}`,
+        { signal: controller.signal },
+      );
+      if (controller.signal.aborted || requestId !== modelsRequestIdRef.current) {
+        return;
+      }
+      if (response.ok) {
+        const data = await response.json() as ModelInfo[];
+        if (controller.signal.aborted || requestId !== modelsRequestIdRef.current) {
+          return;
+        }
+        setModels(data);
+      } else {
+        setModels([]);
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+      if (requestId === modelsRequestIdRef.current) {
+        setModels([]);
+      }
+    } finally {
+      if (!controller.signal.aborted && requestId === modelsRequestIdRef.current) {
+        setModelsLoading(false);
+      }
+    }
+  }, []);
+
+  const resetModels = useCallback(() => {
+    setModels([]);
+    setModelsWorkspaceId(null);
+  }, []);
+
+  return {
+    models,
+    modelsLoading,
+    lastModel,
+    setLastModel,
+    modelsWorkspaceId,
+    setModelsWorkspaceId,
+    fetchModels,
+    resetModels,
+  };
+}

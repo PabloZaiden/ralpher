@@ -1,0 +1,220 @@
+/**
+ * Route handlers for exporting and importing workspace configurations.
+ */
+
+import {
+  createWorkspace,
+  exportWorkspaces,
+  getWorkspaceByDirectoryAndServerSettings,
+} from "../../persistence/workspaces";
+import { backendManager } from "../../core/backend-manager";
+import { createLogger } from "../../core/logger";
+import { getDefaultServerSettings } from "../../types/settings";
+import type { Workspace, WorkspaceImportResult } from "../../types/workspace";
+import type { WorkspaceExportData } from "../../types/schemas";
+import { parseAndValidate } from "../validation";
+import { errorResponse } from "../helpers";
+import { WorkspaceImportRequestSchema } from "../../types/schemas";
+
+const log = createLogger("api:workspaces");
+
+/**
+ * Import workspaces with directory validation.
+ * Each workspace's directory is validated on the remote server (via backendManager)
+ * before being created. Workspaces that fail validation are reported as "failed"
+ * in the result details, rather than silently creating invalid entries.
+ *
+ * This mirrors the validation enforced by POST /api/workspaces.
+ */
+async function importWorkspacesWithValidation(
+  data: WorkspaceExportData,
+): Promise<WorkspaceImportResult> {
+  log.debug("Importing workspaces with validation", { count: data.workspaces.length });
+
+  const result: WorkspaceImportResult = {
+    created: 0,
+    skipped: 0,
+    failed: 0,
+    details: [],
+  };
+
+  for (const config of data.workspaces) {
+    const name = config.name.trim();
+    const directory = config.directory.trim();
+
+    // Check if a workspace with this directory already exists
+    const serverSettings = config.serverSettings ?? getDefaultServerSettings();
+    const existing = await getWorkspaceByDirectoryAndServerSettings(directory, serverSettings);
+    if (existing) {
+      log.debug("Skipping workspace import - directory already exists", {
+        name,
+        directory,
+        existingId: existing.id,
+      });
+      result.skipped++;
+      result.details.push({
+        name,
+        directory,
+        status: "skipped",
+        reason: `A workspace already exists for directory ${directory} on this server target`,
+      });
+      continue;
+    }
+
+    // Validate directory on the remote server (same validation as POST /api/workspaces)
+    try {
+      const validation = await backendManager.validateRemoteDirectory(
+        serverSettings,
+        directory,
+      );
+
+      if (!validation.success) {
+        log.warn("Import: failed to validate remote directory", {
+          name,
+          directory,
+          error: validation.error,
+        });
+        result.failed++;
+        result.details.push({
+          name,
+          directory,
+          status: "failed",
+          reason: `Failed to validate directory: ${validation.error}`,
+        });
+        continue;
+      }
+
+      if (validation.directoryExists === false) {
+        log.warn("Import: directory does not exist on remote server", {
+          name,
+          directory,
+        });
+        result.failed++;
+        result.details.push({
+          name,
+          directory,
+          status: "failed",
+          reason: "Directory does not exist on the remote server",
+        });
+        continue;
+      }
+
+      if (!validation.isGitRepo) {
+        log.warn("Import: directory is not a git repository", {
+          name,
+          directory,
+        });
+        result.failed++;
+        result.details.push({
+          name,
+          directory,
+          status: "failed",
+          reason: "Directory is not a git repository",
+        });
+        continue;
+      }
+    } catch (error) {
+      log.warn("Import: unexpected error during directory validation", {
+        name,
+        directory,
+        error: String(error),
+      });
+      result.failed++;
+      result.details.push({
+        name,
+        directory,
+        status: "failed",
+        reason: `Validation error: ${String(error)}`,
+      });
+      continue;
+    }
+
+    // Validation passed — create the workspace
+    const now = new Date().toISOString();
+    const workspace: Workspace = {
+      id: crypto.randomUUID(),
+      name,
+      directory,
+      serverSettings,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await createWorkspace(workspace);
+    result.created++;
+    result.details.push({
+      name: config.name,
+      directory: config.directory,
+      status: "created",
+    });
+  }
+
+  log.info("Workspaces imported with validation", {
+    created: result.created,
+    skipped: result.skipped,
+    failed: result.failed,
+  });
+  return result;
+}
+
+export const exportImportRoutes = {
+  /**
+   * GET /api/workspaces/export - Export all workspace configs as JSON
+   */
+  "/api/workspaces/export": {
+    async GET() {
+      log.debug("GET /api/workspaces/export - Exporting workspace configs");
+      try {
+        const exportData = await exportWorkspaces();
+        return Response.json(exportData);
+      } catch (error) {
+        log.error("Failed to export workspaces:", String(error));
+        return errorResponse("export_failed", `Failed to export workspaces: ${String(error)}`, 500);
+      }
+    },
+  },
+
+  /**
+   * POST /api/workspaces/import - Import workspace configs from JSON.
+   * Validates each workspace's directory on the remote server before creating it.
+   * Reports per-entry results (created, skipped, failed).
+   */
+  "/api/workspaces/import": {
+    async POST(req: Request) {
+      log.debug("POST /api/workspaces/import - Importing workspace configs");
+      const result = await parseAndValidate(WorkspaceImportRequestSchema, req);
+
+      if (!result.success) {
+        log.warn("POST /api/workspaces/import - Validation failed");
+        return result.response;
+      }
+
+      const data = result.data;
+
+      // Normalize inputs (trim whitespace from name and directory) before passing
+      // to the persistence layer, consistent with POST /api/workspaces behavior.
+      const normalizedData = {
+        ...data,
+        workspaces: data.workspaces.map((ws) => ({
+          ...ws,
+          name: ws.name.trim(),
+          directory: ws.directory.trim(),
+        })),
+      };
+
+      try {
+        // Validate each workspace's directory on the remote server before importing
+        const importResult = await importWorkspacesWithValidation(normalizedData);
+        log.info("Workspace import complete", {
+          created: importResult.created,
+          skipped: importResult.skipped,
+          failed: importResult.failed,
+        });
+        return Response.json(importResult);
+      } catch (error) {
+        log.error("Failed to import workspaces:", String(error));
+        return errorResponse("import_failed", `Failed to import workspaces: ${String(error)}`, 500);
+      }
+    },
+  },
+};

@@ -1,0 +1,144 @@
+/**
+ * Form fields for automatic workspace provisioning over SSH.
+ */
+
+import { PASSWORD_INPUT_PROPS } from "../common";
+import type { AgentProvider, SshServer } from "../../types";
+
+interface AutomaticWorkspaceFormProps {
+  serverId: string;
+  onServerIdChange: (id: string) => void;
+  repoUrl: string;
+  onRepoUrlChange: (url: string) => void;
+  basePath: string;
+  onBasePathChange: (path: string) => void;
+  provider: AgentProvider;
+  onProviderChange: (provider: AgentProvider) => void;
+  password: string;
+  onPasswordChange: (password: string) => void;
+  registeredSshServers: SshServer[];
+  selectedServerHasStoredCredential: boolean;
+}
+
+export function AutomaticWorkspaceForm({
+  serverId,
+  onServerIdChange,
+  repoUrl,
+  onRepoUrlChange,
+  basePath,
+  onBasePathChange,
+  provider,
+  onProviderChange,
+  password,
+  onPasswordChange,
+  registeredSshServers,
+  selectedServerHasStoredCredential,
+}: AutomaticWorkspaceFormProps) {
+  return (
+    <>
+      <div>
+        <label
+          htmlFor="automatic-ssh-server"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+        >
+          Saved SSH Server <span className="text-red-500">*</span>
+        </label>
+        <select
+          id="automatic-ssh-server"
+          value={serverId}
+          onChange={(e) => onServerIdChange(e.target.value)}
+          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
+        >
+          <option value="">Select a saved SSH server</option>
+          {registeredSshServers.map((server) => (
+            <option key={server.config.id} value={server.config.id}>
+              {server.config.name} ({server.config.username}@{server.config.address})
+            </option>
+          ))}
+        </select>
+        {registeredSshServers.length === 0 && (
+          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+            Add a saved SSH server first to use automatic workspace provisioning.
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label
+          htmlFor="automatic-repo-url"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+        >
+          Git Repository URL <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          id="automatic-repo-url"
+          value={repoUrl}
+          onChange={(e) => onRepoUrlChange(e.target.value)}
+          placeholder="git@github.com:owner/repo.git"
+          required
+          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 font-mono"
+        />
+      </div>
+
+      <div>
+        <label
+          htmlFor="automatic-base-path"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+        >
+          Remote Base Path <span className="text-red-500">*</span>
+        </label>
+        <input
+          type="text"
+          id="automatic-base-path"
+          value={basePath}
+          onChange={(e) => onBasePathChange(e.target.value)}
+          placeholder="/workspaces"
+          required
+          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100 font-mono"
+        />
+      </div>
+
+      <div>
+        <label
+          htmlFor="automatic-provider"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+        >
+          Provider <span className="text-red-500">*</span>
+        </label>
+        <select
+          id="automatic-provider"
+          value={provider}
+          onChange={(e) => onProviderChange(e.target.value as AgentProvider)}
+          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
+        >
+          <option value="copilot">copilot</option>
+          <option value="opencode">opencode</option>
+        </select>
+      </div>
+
+      {!selectedServerHasStoredCredential && (
+        <div>
+          <label
+            htmlFor="automatic-ssh-password"
+            className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
+            SSH Password
+          </label>
+          <input
+            {...PASSWORD_INPUT_PROPS}
+            type="password"
+            id="automatic-ssh-password"
+            value={password}
+            onChange={(e) => onPasswordChange(e.target.value)}
+            placeholder="Leave blank for key-based auth"
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            The password is encrypted in the browser, exchanged for a short-lived token, and kept in memory only while provisioning runs.
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
