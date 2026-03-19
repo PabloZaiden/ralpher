@@ -1,0 +1,42 @@
+/**
+ * Loops API endpoints for Ralph Loops Management System.
+ *
+ * This module provides comprehensive CRUD operations and lifecycle control for Ralph Loops:
+ * - CRUD: Create, read, update, and delete loops
+ * - Control: Accept, push, discard, and purge completed loops
+ * - Plan Mode: Create, review, and accept plans before execution
+ * - Chat: Interactive single-turn conversations on the same loop infrastructure
+ * - SSH: Loop-linked SSH session management
+ * - Port Forwards: Loop-scoped remote service exposure
+ * - Review: Address reviewer comments on pushed/merged loops
+ * - Data: Access loop diffs, plans, status files, and PR navigation metadata
+ *
+ * Uses the CommandExecutor abstraction over the configured execution channel:
+ * - local provider: commands run on the Ralpher host
+ * - ssh provider: commands run on the remote workspace host
+ *
+ * @module api/loops
+ */
+
+export { loopsCrudRoutes } from "./crud";
+export { loopsControlRoutes } from "./lifecycle";
+export { loopsDataRoutes } from "./data";
+export { loopsReviewRoutes } from "./review";
+export { loopsChatRoutes } from "./chat";
+
+import { loopsCrudRoutes } from "./crud";
+import { loopsControlRoutes } from "./lifecycle";
+import { loopsDataRoutes } from "./data";
+import { loopsReviewRoutes } from "./review";
+import { loopsChatRoutes } from "./chat";
+
+/**
+ * All loops routes combined.
+ */
+export const loopsRoutes = {
+  ...loopsCrudRoutes,
+  ...loopsControlRoutes,
+  ...loopsDataRoutes,
+  ...loopsReviewRoutes,
+  ...loopsChatRoutes,
+};
