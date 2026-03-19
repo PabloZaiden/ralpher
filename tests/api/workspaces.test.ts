@@ -689,6 +689,50 @@ describe("Workspace API Integration", () => {
         });
         expect(response.status).toBe(404);
       });
+
+      test("does not emit a reset event when submitted server settings are unchanged", async () => {
+        const { loopEventEmitter } = await import("../../src/core/event-emitter");
+
+        const initialSettings = makeServerSettings({
+          mode: "connect",
+          hostname: "unchanged.example.com",
+          port: 2222,
+        });
+
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "No-op Server Settings Update",
+            directory: testWorkDir,
+            serverSettings: initialSettings,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        const events: Array<{ type: string; workspaceId?: string }> = [];
+        const unsubscribe = loopEventEmitter.subscribe((event) => {
+          const eventType = (event as { type: string }).type;
+          if (eventType === "server.reset") {
+            events.push(event as { type: string; workspaceId?: string });
+          }
+        });
+
+        try {
+          const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(initialSettings),
+          });
+
+          expect(response.ok).toBe(true);
+          const updatedSettings = await response.json();
+          expect(updatedSettings).toEqual(initialSettings);
+          expect(events.length).toBe(0);
+        } finally {
+          unsubscribe();
+        }
+      });
     });
 
     describe("GET /api/workspaces/:id/server-settings/status", () => {
@@ -1042,6 +1086,54 @@ describe("Workspace API Integration", () => {
           expect(updated.name).toBe("Updated Name Only Again");
 
           // Verify NO server.reset event was emitted
+          expect(events.length).toBe(0);
+        } finally {
+          unsubscribe();
+        }
+      });
+
+      test("does NOT emit a reset event when submitted server settings are unchanged", async () => {
+        const { loopEventEmitter } = await import("../../src/core/event-emitter");
+
+        const originalSettings = makeServerSettings({
+          mode: "connect",
+          hostname: "original.server.com",
+          port: 5000,
+        });
+
+        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "No-op Workspace Update Test",
+            directory: testWorkDir,
+            serverSettings: originalSettings,
+          }),
+        });
+        const workspace = await createResponse.json();
+
+        const events: Array<{ type: string; workspaceId?: string }> = [];
+        const unsubscribe = loopEventEmitter.subscribe((event) => {
+          const eventType = (event as { type: string }).type;
+          if (eventType === "server.reset") {
+            events.push(event as { type: string; workspaceId?: string });
+          }
+        });
+
+        try {
+          const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: "Renamed Without Reset",
+              serverSettings: originalSettings,
+            }),
+          });
+
+          expect(response.ok).toBe(true);
+          const updated = await response.json();
+          expect(updated.name).toBe("Renamed Without Reset");
+          expect(updated.serverSettings).toEqual(originalSettings);
           expect(events.length).toBe(0);
         } finally {
           unsubscribe();

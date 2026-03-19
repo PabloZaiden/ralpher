@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { findRegisteredSshServer, getServerLabel } from "../../src/types/settings";
+import { areServerSettingsEqual, findRegisteredSshServer, getServerLabel } from "../../src/types/settings";
 import type { SshServer } from "../../src/types";
 
 function createRegisteredSshServer(overrides?: Partial<SshServer["config"]>): SshServer {
@@ -62,5 +62,50 @@ describe("settings labels", () => {
         transport: "stdio",
       },
     }, [createRegisteredSshServer()])).toBe("copilot via local stdio");
+  });
+});
+
+describe("server settings equality", () => {
+  test("treats omitted optional SSH fields as equal to undefined persisted fields", () => {
+    expect(areServerSettingsEqual(
+      {
+        agent: {
+          provider: "opencode",
+          transport: "ssh",
+          hostname: "example.com",
+          port: 22,
+        },
+      },
+      {
+        agent: {
+          provider: "opencode",
+          transport: "ssh",
+          hostname: "example.com",
+          port: 22,
+          username: undefined,
+          password: undefined,
+          identityFile: undefined,
+        },
+      },
+    )).toBe(true);
+  });
+
+  test("detects actual server settings changes", () => {
+    expect(areServerSettingsEqual(
+      {
+        agent: {
+          provider: "opencode",
+          transport: "stdio",
+        },
+      },
+      {
+        agent: {
+          provider: "opencode",
+          transport: "ssh",
+          hostname: "example.com",
+          port: 22,
+        },
+      },
+    )).toBe(false);
   });
 });

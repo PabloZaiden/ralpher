@@ -779,11 +779,21 @@ describe("Plan + Loop User Scenarios", () => {
       );
       expect(currentSettingsResponse.status).toBe(200);
       const currentSettings = await currentSettingsResponse.json();
+      expect(currentSettings.agent.transport).toBe("stdio");
+
+      const updatedSettings = {
+        agent: {
+          provider: currentSettings.agent.provider,
+          transport: "ssh",
+          hostname: "127.0.0.1",
+          port: 22,
+        },
+      };
 
       const updateResponse = await fetch(`${ctx.baseUrl}/api/workspaces/${ctx.workspaceId}/server-settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(currentSettings),
+        body: JSON.stringify(updatedSettings),
       });
       expect(updateResponse.status).toBe(200);
 

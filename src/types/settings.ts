@@ -3,6 +3,8 @@
  * Defines workspace settings for agent and deterministic execution channels.
  */
 
+import { isDeepStrictEqual } from "node:util";
+
 // Import and re-export ServerSettings from schema (single source of truth)
 import type {
   ServerSettings,
@@ -150,6 +152,36 @@ export function parseServerSettings(jsonString: string | null): ServerSettings {
   } catch {
     return defaults;
   }
+}
+
+function getComparableServerSettings(settings: ServerSettings): ServerSettings {
+  if (settings.agent.transport === "ssh") {
+    return {
+      agent: {
+        provider: settings.agent.provider,
+        transport: "ssh",
+        hostname: settings.agent.hostname,
+        ...(settings.agent.port !== undefined ? { port: settings.agent.port } : {}),
+        ...(settings.agent.username !== undefined ? { username: settings.agent.username } : {}),
+        ...(settings.agent.password !== undefined ? { password: settings.agent.password } : {}),
+        ...(settings.agent.identityFile !== undefined ? { identityFile: settings.agent.identityFile } : {}),
+      },
+    };
+  }
+
+  return {
+    agent: {
+      provider: settings.agent.provider,
+      transport: "stdio",
+    },
+  };
+}
+
+export function areServerSettingsEqual(left: ServerSettings, right: ServerSettings): boolean {
+  return isDeepStrictEqual(
+    getComparableServerSettings(left),
+    getComparableServerSettings(right),
+  );
 }
 
 function normalizeHostname(hostname: string): string {

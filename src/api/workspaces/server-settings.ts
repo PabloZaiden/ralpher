@@ -5,6 +5,7 @@
 import { getWorkspaceByDirectoryAndServerSettings, updateWorkspace } from "../../persistence/workspaces";
 import { backendManager } from "../../core/backend-manager";
 import { createLogger } from "../../core/logger";
+import { areServerSettingsEqual } from "../../types/settings";
 import { parseAndValidate } from "../validation";
 import {
   requireWorkspace,
@@ -49,6 +50,13 @@ export const serverSettingsRoutes = {
         const currentWorkspace = await requireWorkspace(id);
         if (currentWorkspace instanceof Response) {
           return currentWorkspace;
+        }
+
+        const settingsChanged = !areServerSettingsEqual(currentWorkspace.serverSettings, body);
+
+        if (!settingsChanged) {
+          log.info(`Server settings unchanged for workspace: ${currentWorkspace.name}`);
+          return Response.json(currentWorkspace.serverSettings);
         }
 
         const existingWorkspace = await getWorkspaceByDirectoryAndServerSettings(
