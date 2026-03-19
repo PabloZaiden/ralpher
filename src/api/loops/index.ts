@@ -23,9 +23,20 @@ export { loopsControlRoutes } from "./lifecycle";
 export { loopsDataRoutes } from "./data";
 export { loopsReviewRoutes } from "./review";
 export { loopsChatRoutes } from "./chat";
+export { loopsDraftRoutes } from "./draft";
+export { loopsAcceptPushRoutes } from "./accept-push";
+export { loopsDiscardPurgeRoutes } from "./discard-purge";
+export { loopsSshPortsRoutes } from "./ssh-ports";
+export { loopsPendingRoutes } from "./pending";
+export { loopsPlanRoutes } from "./plan";
 
 import { loopsCrudRoutes } from "./crud";
-import { loopsControlRoutes } from "./lifecycle";
+import { loopsDraftRoutes } from "./draft";
+import { loopsAcceptPushRoutes } from "./accept-push";
+import { loopsDiscardPurgeRoutes } from "./discard-purge";
+import { loopsSshPortsRoutes } from "./ssh-ports";
+import { loopsPendingRoutes } from "./pending";
+import { loopsPlanRoutes } from "./plan";
 import { loopsDataRoutes } from "./data";
 import { loopsReviewRoutes } from "./review";
 import { loopsChatRoutes } from "./chat";
@@ -35,7 +46,12 @@ import { loopsChatRoutes } from "./chat";
  */
 export const loopsRoutes = {
   ...loopsCrudRoutes,
-  ...loopsControlRoutes,
+  ...loopsDraftRoutes,
+  ...loopsAcceptPushRoutes,
+  ...loopsDiscardPurgeRoutes,
+  ...loopsSshPortsRoutes,
+  ...loopsPendingRoutes,
+  ...loopsPlanRoutes,
   ...loopsDataRoutes,
   ...loopsReviewRoutes,
   ...loopsChatRoutes,
