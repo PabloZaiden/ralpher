@@ -14,13 +14,13 @@ import {
   hasActiveTerminalModifiers,
   type TerminalModifierState,
   type TerminalSpecialKey,
-} from "../utils/terminal-keys";
+} from "../../utils/terminal-keys";
 import {
   getEffectiveSshConnectionMode,
   getSshConnectionModeLabel,
   isPersistentSshSession,
   writeTextToClipboard,
-} from "../utils";
+} from "../../utils";
 import { appWebSocketUrl } from "../../lib/public-path";
 import { getStoredSshCredentialToken, storeSshServerPassword } from "../../lib/ssh-browser-credentials";
 import type { SshServer } from "../../types";
