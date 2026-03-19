@@ -15,7 +15,7 @@ import type {
   ToolCallData,
   TodoItem,
   SshSession,
-} from "../types";
+} from "../../types";
 import type { LogEntry } from "../../components/LogViewer";
 import { useLoopEvents } from "../useWebSocket";
 import {
