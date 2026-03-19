@@ -4,12 +4,9 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { FileDiff, FileContentResponse, ModelInfo, PullRequestDestinationResponse } from "../../types";
-import type { ReviewComment, ModelConfig } from "../../types/loop";
+import type { ReviewComment } from "../../types/loop";
 import { useLoop, useLoopPortForwards, useMarkdownPreference, useToast } from "../../hooks";
 import { Badge, Button, ConfirmModal, getStatusBadgeVariant, EditIcon } from "../common";
-import { LogViewer } from "../LogViewer";
-import { TodoViewer } from "../TodoViewer";
-import { MarkdownRenderer } from "../MarkdownRenderer";
 import {
   AcceptLoopModal,
   AddressCommentsModal,
@@ -24,7 +21,6 @@ import {
   getStatusLabel,
   getPlanningStatusLabel,
   canAccept,
-  canMarkMerged,
   isFinalState,
   isLoopActive,
   canSendTerminalFollowUp,
@@ -33,6 +29,16 @@ import {
 import { writeTextToClipboard } from "../../utils";
 import { appAbsoluteUrl, appPath, appFetch } from "../../lib/public-path";
 import { log } from "../../lib/logger";
+import type { TabId } from "./types";
+import { tabs, formatDateTime } from "./types";
+import { LogTab } from "./log-tab";
+import { InfoTab } from "./info-tab";
+import { PromptTab } from "./prompt-tab";
+import { PlanTab } from "./plan-tab";
+import { StatusTab } from "./status-tab";
+import { DiffTab } from "./diff-tab";
+import { ReviewTab } from "./review-tab";
+import { ActionsTab } from "./actions-tab";
 
 export interface LoopDetailsProps {
   /** Loop ID to display */
@@ -45,70 +51,6 @@ export interface LoopDetailsProps {
   headerOffsetClassName?: string;
   /** Navigate to the SSH session details view */
   onSelectSshSession?: (sshSessionId: string) => void;
-}
-
-type TabId = "log" | "info" | "prompt" | "plan" | "status" | "diff" | "review" | "actions";
-
-const tabs: { id: TabId; label: string }[] = [
-  { id: "log", label: "Log" },
-  { id: "info", label: "Info" },
-  { id: "prompt", label: "Prompt" },
-  { id: "plan", label: "Plan" },
-  { id: "status", label: "Status" },
-  { id: "diff", label: "Diff" },
-  { id: "review", label: "Review" },
-  { id: "actions", label: "Actions" },
-];
-
-/**
- * Format a timestamp for display.
- */
-function formatDateTime(isoString: string | undefined): string {
-  if (!isoString) return "N/A";
-  return new Date(isoString).toLocaleString();
-}
-
-/**
- * Format model configuration for display.
- * Shows providerID/modelID, with variant in parentheses if present.
- */
-function formatModelDisplay(model: ModelConfig | undefined): string {
-  if (!model) return "Not configured";
-  const base = `${model.providerID}/${model.modelID}`;
-  if (model.variant && model.variant.trim() !== "") {
-    return `${base} (${model.variant})`;
-  }
-  return base;
-}
-
-/**
- * Render diff patch with syntax highlighting for additions/deletions.
- */
-function DiffPatchViewer({ patch }: { patch: string }) {
-  // Normalize line endings and split
-  const lines = patch.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-  
-  return (
-    <pre className="text-xs font-mono overflow-x-auto bg-neutral-950 p-3 rounded-b">
-      {lines.map((line, i) => {
-        let className = "text-gray-400";
-        if (line.startsWith("+") && !line.startsWith("+++")) {
-          className = "text-green-400 bg-green-950/50";
-        } else if (line.startsWith("-") && !line.startsWith("---")) {
-          className = "text-red-400 bg-red-950/50";
-        } else if (line.startsWith("@@")) {
-          className = "text-gray-300";
-        } else if (line.startsWith("diff --git") || line.startsWith("index ") || line.startsWith("---") || line.startsWith("+++")) {
-          className = "text-gray-500";
-        }
-        return (
-          <div key={i} className={className}>
-            {line || " "}
-          </div>
-        );
-      })}
-    </pre>
-  );
 }
 
 export function LoopDetails({
@@ -841,944 +783,114 @@ export function LoopDetails({
                 {/* Tab content */}
                 <div className="flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-neutral-800">
                   {activeTab === "log" && (
-                    <div className="flex min-w-0 flex-1 min-h-0 flex-col overflow-hidden">
-                      {/* Side-by-side layout for logs and TODOs (75-25 split) */}
-                      <div className="flex min-w-0 flex-1 min-h-0 flex-col gap-4 overflow-hidden p-4 lg:flex-row">
-                        {/* Logs section */}
-                        <div className={`flex flex-col min-w-0 min-h-0 ${
-                          logsCollapsed ? 'flex-shrink-0' : `${todosCollapsed ? 'flex-1' : 'flex-[3]'}`
-                        }`}>
-                          <button
-                            onClick={() => setLogsCollapsed(!logsCollapsed)}
-                            className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0 flex items-center gap-2 hover:text-gray-900 dark:hover:text-gray-100 transition-colors text-left"
-                            aria-expanded={!logsCollapsed}
-                            aria-controls="logs-viewer"
-                          >
-                            <span className="text-xs">{logsCollapsed ? "▶" : "▼"}</span>
-                            <span>Logs</span>
-                          </button>
-                          {!logsCollapsed && (
-                            <>
-                              <LogViewer
-                                id="logs-viewer"
-                                messages={messages}
-                                toolCalls={toolCalls}
-                                logs={logs}
-                                showSystemInfo={showSystemInfo}
-                                showReasoning={showReasoning}
-                                showTools={showTools}
-                                autoScroll={autoScroll}
-                                markdownEnabled={markdownEnabled}
-                                isActive={isLogActive}
-                              />
-                              {pendingPlanQuestion && (
-                                <div className="mt-4 flex-shrink-0 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/60 dark:bg-amber-950/30">
-                                  <div className="mb-3">
-                                    <h3 className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                                      Pending plan question
-                                    </h3>
-                                    <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
-                                      This prompt stays here until you answer it. Use the recent log output above for context.
-                                    </p>
-                                  </div>
-
-                                  <div className="space-y-4">
-                                    {pendingPlanQuestion.questions.map((question, questionIndex) => {
-                                      const selection = planQuestionSelections[questionIndex] ?? [];
-                                      const customAnswer = planQuestionCustomAnswers[questionIndex] ?? "";
-                                      const useCheckboxes = question.multiple === true;
-
-                                      return (
-                                        <div
-                                          key={`${pendingPlanQuestion.requestId}-${questionIndex}`}
-                                          className="rounded-md border border-amber-200/80 bg-white/70 p-3 dark:border-amber-900/50 dark:bg-neutral-900/40"
-                                        >
-                                          <div className="space-y-1">
-                                            <p className="text-xs font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
-                                              {question.header}
-                                            </p>
-                                            <p className="text-sm text-gray-900 dark:text-gray-100">
-                                              {question.question}
-                                            </p>
-                                          </div>
-
-                                          {question.options.length > 0 && (
-                                            <div className="mt-3 space-y-2">
-                                              {question.options.map((option) => {
-                                                const checked = selection.includes(option.label);
-                                                return (
-                                                  <label
-                                                    key={option.label}
-                                                    className="flex items-start gap-3 rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:border-amber-300 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-200"
-                                                  >
-                                                    <input
-                                                      type={useCheckboxes ? "checkbox" : "radio"}
-                                                      name={`plan-question-${questionIndex}`}
-                                                      checked={checked}
-                                                      onChange={(event) => {
-                                                        const isChecked = event.target.checked;
-                                                        setPlanQuestionSelections((prev) => {
-                                                          const next = [...prev];
-                                                          const existing = next[questionIndex] ?? [];
-                                                          if (useCheckboxes) {
-                                                            next[questionIndex] = isChecked
-                                                              ? [...existing, option.label]
-                                                              : existing.filter((value) => value !== option.label);
-                                                          } else {
-                                                            next[questionIndex] = isChecked ? [option.label] : [];
-                                                          }
-                                                          return next;
-                                                        });
-                                                      }}
-                                                      className="mt-0.5 h-4 w-4 border-gray-300 text-amber-600 focus:ring-amber-500 dark:border-gray-600 dark:bg-neutral-700"
-                                                    />
-                                                    <span className="min-w-0">
-                                                      <span className="block font-medium text-gray-900 dark:text-gray-100">
-                                                        {option.label}
-                                                      </span>
-                                                      {option.description && (
-                                                        <span className="mt-1 block text-xs text-gray-500 dark:text-gray-400">
-                                                          {option.description}
-                                                        </span>
-                                                      )}
-                                                    </span>
-                                                  </label>
-                                                );
-                                              })}
-                                            </div>
-                                          )}
-
-                                          <div className="mt-3">
-                                            <label
-                                              htmlFor={`plan-question-custom-${questionIndex}`}
-                                              className="block text-xs font-medium text-gray-700 dark:text-gray-300"
-                                            >
-                                              Your answer
-                                            </label>
-                                            <textarea
-                                              id={`plan-question-custom-${questionIndex}`}
-                                              value={customAnswer}
-                                              onChange={(event) => {
-                                                const value = event.target.value;
-                                                setPlanQuestionCustomAnswers((prev) => {
-                                                  const next = [...prev];
-                                                  next[questionIndex] = value;
-                                                  return next;
-                                                });
-                                              }}
-                                              rows={3}
-                                              placeholder={
-                                                question.options.length > 0
-                                                  ? "Optional freeform answer. If provided, it overrides the option selection above."
-                                                  : "Type your answer here..."
-                                              }
-                                              className="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 dark:border-gray-600 dark:bg-neutral-700 dark:text-gray-100"
-                                            />
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-
-                                  <div className="mt-4 flex items-center justify-end">
-                                    <Button
-                                      type="button"
-                                      onClick={handleAnswerPlanQuestion}
-                                      loading={planQuestionSubmitting}
-                                      disabled={planQuestionSubmitting}
-                                    >
-                                      Submit answer
-                                    </Button>
-                                  </div>
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
-                        
-                        {/* TODOs section */}
-                        <div className={`flex flex-col min-w-0 min-h-0 ${
-                          todosCollapsed ? 'flex-shrink-0' : `${logsCollapsed ? 'flex-1' : 'flex-1'}`
-                        }`}>
-                          <button
-                            onClick={() => setTodosCollapsed(!todosCollapsed)}
-                            className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 flex-shrink-0 flex items-center gap-2 hover:text-gray-900 dark:hover:text-gray-100 transition-colors text-left"
-                            aria-expanded={!todosCollapsed}
-                            aria-controls="todos-viewer"
-                          >
-                            <span className="text-xs">{todosCollapsed ? "▶" : "▼"}</span>
-                            <span>TODOs</span>
-                          </button>
-                          {!todosCollapsed && (
-                            <TodoViewer id="todos-viewer" todos={todos} />
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Log filter and autoscroll toggles at the bottom */}
-                      <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
-                        <div className="flex flex-wrap items-center gap-4">
-                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={showSystemInfo}
-                              onChange={(e) => setShowSystemInfo(e.target.checked)}
-                              className="rounded border-gray-300 dark:border-gray-600 text-gray-700 focus:ring-gray-500 focus:ring-offset-0 dark:text-gray-300"
-                            />
-                            <span>Show system info</span>
-                          </label>
-                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={showReasoning}
-                              onChange={(e) => setShowReasoning(e.target.checked)}
-                              className="rounded border-gray-300 dark:border-gray-600 text-gray-700 focus:ring-gray-500 focus:ring-offset-0 dark:text-gray-300"
-                            />
-                            <span>Show reasoning</span>
-                          </label>
-                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={showTools}
-                              onChange={(e) => setShowTools(e.target.checked)}
-                              className="rounded border-gray-300 dark:border-gray-600 text-gray-700 focus:ring-gray-500 focus:ring-offset-0 dark:text-gray-300"
-                            />
-                            <span>Show tools</span>
-                          </label>
-                          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={autoScroll}
-                              onChange={(e) => setAutoScroll(e.target.checked)}
-                              className="rounded border-gray-300 dark:border-gray-600 text-gray-700 focus:ring-gray-500 focus:ring-offset-0 dark:text-gray-300"
-                            />
-                            <span>Autoscroll</span>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
+                    <LogTab
+                      messages={messages}
+                      toolCalls={toolCalls}
+                      logs={logs}
+                      todos={todos}
+                      showSystemInfo={showSystemInfo}
+                      onShowSystemInfoChange={setShowSystemInfo}
+                      showReasoning={showReasoning}
+                      onShowReasoningChange={setShowReasoning}
+                      showTools={showTools}
+                      onShowToolsChange={setShowTools}
+                      autoScroll={autoScroll}
+                      onAutoScrollChange={setAutoScroll}
+                      logsCollapsed={logsCollapsed}
+                      onLogsCollapsedChange={setLogsCollapsed}
+                      todosCollapsed={todosCollapsed}
+                      onTodosCollapsedChange={setTodosCollapsed}
+                      markdownEnabled={markdownEnabled}
+                      isLogActive={isLogActive}
+                      pendingPlanQuestion={pendingPlanQuestion}
+                      planQuestionSelections={planQuestionSelections}
+                      onPlanQuestionSelectionsChange={setPlanQuestionSelections}
+                      planQuestionCustomAnswers={planQuestionCustomAnswers}
+                      onPlanQuestionCustomAnswersChange={setPlanQuestionCustomAnswers}
+                      planQuestionSubmitting={planQuestionSubmitting}
+                      onAnswerPlanQuestion={handleAnswerPlanQuestion}
+                    />
                   )}
-
                   {activeTab === "info" && (
-                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-                      <div className="min-w-0 w-full space-y-4">
-                      <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{labels.capitalized} Information</h3>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Statistics */}
-                        <div className="space-y-2">
-                          <div className="text-sm">
-                            <span className="text-gray-500 dark:text-gray-400">Iteration: </span>
-                            <span className="font-medium text-gray-900 dark:text-gray-100">
-                              {state.currentIteration}{config.maxIterations ? ` / ${config.maxIterations}` : ""}
-                            </span>
-                          </div>
-                          <div className="text-sm">
-                            <span className="text-gray-500 dark:text-gray-400">Started: </span>
-                            <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.startedAt)}</span>
-                          </div>
-                          <div className="text-sm">
-                            <span className="text-gray-500 dark:text-gray-400">Last Activity: </span>
-                            <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.lastActivityAt)}</span>
-                          </div>
-                          {state.completedAt && (
-                            <div className="text-sm">
-                              <span className="text-gray-500 dark:text-gray-400">Completed: </span>
-                              <span className="font-medium text-gray-900 dark:text-gray-100">{formatDateTime(state.completedAt)}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Git and Model info */}
-                        <div className="space-y-2">
-                          {state.git && (
-                            <>
-                              <div className="text-sm">
-                                <span className="text-gray-500 dark:text-gray-400">Branch: </span>
-                                <span className="font-mono font-medium text-gray-900 dark:text-gray-100 break-all">{state.git.originalBranch}</span>
-                                <span className="text-gray-400 dark:text-gray-500"> → </span>
-                                <span className="font-mono font-medium text-gray-900 dark:text-gray-100 break-all">{state.git.workingBranch}</span>
-                              </div>
-                              <div className="text-sm">
-                                <span className="text-gray-500 dark:text-gray-400">Commits: </span>
-                                <span className="font-medium text-gray-900 dark:text-gray-100">{state.git.commits.length}</span>
-                              </div>
-                              {state.git.worktreePath && (
-                                <div className="text-sm">
-                                  <span className="text-gray-500 dark:text-gray-400">Worktree: </span>
-                                  <span className="font-mono font-medium text-gray-900 dark:text-gray-100 break-all">{state.git.worktreePath}</span>
-                                </div>
-                              )}
-                            </>
-                          )}
-                          <div className="text-sm">
-                            <span className="text-gray-500 dark:text-gray-400">Model: </span>
-                            <span className="font-medium text-gray-900 dark:text-gray-100">
-                              {formatModelDisplay(config.model)}
-                            </span>
-                            {state.pendingModel && (
-                              <span className="ml-1 text-yellow-600 dark:text-yellow-400">
-                                → {formatModelDisplay(state.pendingModel)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="border-t border-gray-200 dark:border-gray-700 pt-4 space-y-4">
-                        <button
-                          onClick={handleConnectViaSsh}
-                          disabled={sshConnecting}
-                          className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center">
-                            <span className="text-gray-700 dark:text-gray-300 text-sm">⌁</span>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                              {sshConnecting ? "Connecting..." : "Connect via ssh"}
-                            </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                              Open or reconnect to this loop&apos;s persistent SSH session
-                            </div>
-                          </div>
-                          <span className="text-gray-400 dark:text-gray-500">→</span>
-                        </button>
-
-                        <div className="rounded-lg border border-gray-200 p-3 dark:border-gray-700">
-                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Forward a Port</div>
-                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                            Expose a remote service through a Ralpher URL in a new browser window.
-                          </div>
-                          <div className="mt-3 flex flex-wrap items-end gap-3">
-                            <label className="text-sm">
-                              <span className="mb-1 block text-gray-500 dark:text-gray-400">Remote port</span>
-                              <input
-                                type="number"
-                                min={1}
-                                max={65535}
-                                step={1}
-                                value={newForwardPort}
-                                onChange={(e) => setNewForwardPort(e.target.value)}
-                                className="w-28 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-neutral-800 dark:text-gray-100"
-                                inputMode="numeric"
-                                placeholder=""
-                              />
-                            </label>
-                            <Button
-                              size="sm"
-                              onClick={handleCreateForward}
-                              disabled={creatingForward}
-                            >
-                              {creatingForward ? "Creating..." : "Create Port Forward"}
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-3 mb-3">
-                          <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Port Forwards</h4>
-                          {forwardsLoading && (
-                            <span className="text-xs text-gray-500 dark:text-gray-400">Refreshing...</span>
-                          )}
-                        </div>
-                        {forwardsError && (
-                          <p className="mb-3 text-sm text-red-600 dark:text-red-400">{forwardsError}</p>
-                        )}
-                        {forwards.length === 0 ? (
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            No forwarded ports yet. Create one above.
-                          </p>
-                        ) : (
-                          <div className="space-y-3">
-                            {forwards.map((forward) => (
-                              <div
-                                key={forward.config.id}
-                                className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-neutral-900"
-                              >
-                                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                  <div className="space-y-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant={forward.state.status === "active" ? "success" : forward.state.status === "failed" ? "error" : "warning"}>
-                                        {forward.state.status}
-                                      </Badge>
-                                      <span className="font-mono text-sm text-gray-900 dark:text-gray-100">
-                                        {forward.config.remoteHost}:{forward.config.remotePort}
-                                      </span>
-                                    </div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400 font-mono break-all">
-                                      {appAbsoluteUrl(`/loop/${loopId}/port/${forward.config.id}/`)}
-                                    </div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400">
-                                      Local listener: {forward.config.localPort}
-                                    </div>
-                                    {forward.state.error && (
-                                      <div className="text-xs text-red-600 dark:text-red-400">
-                                        {forward.state.error}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div className="flex flex-wrap gap-2">
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleOpenForward(forward.config.id)}
-                                      disabled={forward.state.status !== "active"}
-                                    >
-                                      Open
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="secondary"
-                                      onClick={() => handleCopyForwardUrl(forward.config.id)}
-                                    >
-                                      Copy URL
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="danger"
-                                      onClick={() => handleDeleteForward(forward.config.id)}
-                                    >
-                                      Delete
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      </div>
-                    </div>
+                    <InfoTab
+                      loop={loop}
+                      labels={labels}
+                      sshConnecting={sshConnecting}
+                      onConnectViaSsh={handleConnectViaSsh}
+                      newForwardPort={newForwardPort}
+                      onNewForwardPortChange={setNewForwardPort}
+                      creatingForward={creatingForward}
+                      onCreateForward={handleCreateForward}
+                      forwards={forwards}
+                      forwardsLoading={forwardsLoading}
+                      forwardsError={forwardsError}
+                      onOpenForward={handleOpenForward}
+                      onCopyForwardUrl={handleCopyForwardUrl}
+                      onDeleteForward={handleDeleteForward}
+                      loopId={loopId}
+                    />
                   )}
-
                   {activeTab === "prompt" && (
-                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-                      <div className="min-w-0 w-full space-y-6">
-                      {/* Original Task Prompt (read-only) */}
-                      <div>
-                        <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                          Original Task Prompt
-                        </h3>
-                        <pre className="whitespace-pre-wrap break-words text-sm text-gray-900 dark:text-gray-100 font-mono bg-gray-50 dark:bg-neutral-900 rounded-md p-4 [overflow-wrap:anywhere]">
-                          {config.prompt || "No prompt specified."}
-                        </pre>
-                      </div>
-
-                      {/* Pending prompt status (read-only) */}
-                      {state.pendingPrompt && (
-                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-                          <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-200 mb-2">
-                            Queued Message
-                          </h3>
-                          <pre className="whitespace-pre-wrap break-words text-sm text-yellow-700 dark:text-yellow-300 font-mono [overflow-wrap:anywhere]">
-                            {state.pendingPrompt}
-                          </pre>
-                          <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-2">
-                            This message will be sent after the current step completes.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Pending model status (read-only) */}
-                      {state.pendingModel && (
-                        <div className="bg-gray-50 dark:bg-neutral-900/40 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
-                          <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
-                            Model Change Queued
-                          </h3>
-                          <p className="text-sm text-gray-700 dark:text-gray-300">
-                            Model will change to <span className="font-mono font-medium">{state.pendingModel.modelID}</span> after the current step.
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Tip for using action bar */}
-                      {isActive && !state.pendingPrompt && !state.pendingModel && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Use the action bar at the bottom to send a message or change the model while the {labels.singular} is running.
-                        </p>
-                      )}
-
-                      {/* Info message when loop is not running */}
-                      {!isActive && !state.pendingPrompt && !state.pendingModel && (
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Messages can only be queued while the {labels.singular} is running.
-                        </p>
-                      )}
-                      </div>
-                    </div>
+                    <PromptTab
+                      config={config}
+                      state={state}
+                      labels={labels}
+                      isActive={isActive}
+                    />
                   )}
-
                   {activeTab === "plan" && (
-                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-                      <div className="min-w-0 flex-1">
-                      {/* Feedback rounds counter (planning mode only) */}
-                      {isPlanning && feedbackRounds > 0 && (
-                        <div className="mb-3 flex items-center text-sm text-gray-600 dark:text-gray-400">
-                          Feedback rounds: {feedbackRounds}
-                        </div>
-                      )}
-
-                      {loadingContent && !isPlanning ? (
-                        <div className="flex justify-center py-8">
-                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-500 border-t-transparent" />
-                        </div>
-                      ) : isPlanning && !planContent?.exists ? (
-                        /* Waiting for AI to generate plan (no content yet) */
-                        <div className="flex items-center gap-3 text-gray-600 dark:text-gray-400 py-8 justify-center">
-                          <span className="relative flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-500 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-gray-600" />
-                          </span>
-                          <span>Waiting for AI to generate plan...</span>
-                        </div>
-                      ) : isPlanning && planContent?.exists && !isPlanReady ? (
-                        /* Plan content exists but AI is still writing */
-                        <div className="relative">
-                          <MarkdownRenderer content={planContent.content} dimmed rawMode={!markdownEnabled} className="min-w-0 rounded-lg bg-gray-50 p-4 dark:bg-neutral-900" />
-                          <div className="absolute top-4 right-4 flex items-center gap-3 text-gray-600 dark:text-gray-400 bg-white dark:bg-neutral-800 px-3 py-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
-                            <span className="relative flex h-3 w-3">
-                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-gray-500 opacity-75" />
-                              <span className="relative inline-flex rounded-full h-3 w-3 bg-gray-600" />
-                            </span>
-                            <span className="text-sm font-medium">AI is still writing...</span>
-                          </div>
-                        </div>
-                      ) : planContent?.exists ? (
-                        <MarkdownRenderer content={planContent.content} rawMode={!markdownEnabled} className="min-w-0 rounded-lg bg-gray-50 p-4 dark:bg-neutral-900" />
-                      ) : (
-                        <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-                          No plan.md file found in the project directory.
-                        </p>
-                      )}
-                      </div>
-                    </div>
+                    <PlanTab
+                      isPlanning={isPlanning}
+                      isPlanReady={isPlanReady}
+                      feedbackRounds={feedbackRounds}
+                      planContent={planContent}
+                      loadingContent={loadingContent}
+                      markdownEnabled={markdownEnabled}
+                    />
                   )}
-
                   {activeTab === "status" && (
-                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-                      <div className="min-w-0 flex-1">
-                      {loadingContent ? (
-                        <div className="flex justify-center py-8">
-                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-500 border-t-transparent" />
-                        </div>
-                      ) : statusContent?.exists ? (
-                        <MarkdownRenderer content={statusContent.content} rawMode={!markdownEnabled} className="min-w-0 rounded-lg bg-gray-50 p-4 dark:bg-neutral-900" />
-                      ) : (
-                        <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-                          No status.md file found in the project directory.
-                        </p>
-                      )}
-                      </div>
-                    </div>
+                    <StatusTab
+                      statusContent={statusContent}
+                      loadingContent={loadingContent}
+                      markdownEnabled={markdownEnabled}
+                    />
                   )}
-
                   {activeTab === "diff" && (
-                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-                      <div className="min-w-0 flex-1">
-                      {loadingContent ? (
-                        <div className="flex justify-center py-8">
-                          <div className="animate-spin rounded-full h-6 w-6 border-2 border-gray-500 border-t-transparent" />
-                        </div>
-                      ) : diffContent.length > 0 ? (
-                        <div className="space-y-2">
-                          {diffContent.map((file) => {
-                            const isExpanded = expandedFiles.has(file.path);
-                            const hasPatch = !!file.patch;
-                            
-                            return (
-                              <div
-                                key={file.path}
-                                className="bg-gray-50 dark:bg-neutral-900 rounded text-xs sm:text-sm overflow-hidden"
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (hasPatch) {
-                                      setExpandedFiles((prev) => {
-                                        const next = new Set(prev);
-                                        if (isExpanded) {
-                                          next.delete(file.path);
-                                        } else {
-                                          next.add(file.path);
-                                        }
-                                        return next;
-                                      });
-                                    }
-                                  }}
-                                  className={`w-full flex items-center gap-2 sm:gap-3 p-2 text-left ${
-                                    hasPatch ? "cursor-pointer hover:bg-gray-100 dark:hover:bg-neutral-800" : "cursor-default"
-                                  }`}
-                                >
-                                  {hasPatch && (
-                                    <span className="text-gray-400 flex-shrink-0 text-sm">
-                                      {isExpanded ? "▼" : "▶"}
-                                    </span>
-                                  )}
-                                  <span
-                                    className={`font-medium flex-shrink-0 ${
-                                      file.status === "added"
-                                        ? "text-green-600 dark:text-green-400"
-                                        : file.status === "deleted"
-                                        ? "text-red-600 dark:text-red-400"
-                                        : file.status === "renamed"
-                                        ? "text-gray-600 dark:text-gray-300"
-                                        : "text-yellow-600 dark:text-yellow-400"
-                                    }`}
-                                  >
-                                    {file.status === "added" && "+"}
-                                    {file.status === "deleted" && "-"}
-                                    {file.status === "renamed" && "→"}
-                                    {file.status === "modified" && "~"}
-                                  </span>
-                                  <span className="font-mono text-gray-900 dark:text-gray-100 flex-1 truncate min-w-0">
-                                    {file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
-                                  </span>
-                                  <span className="text-gray-500 dark:text-gray-400 flex-shrink-0 whitespace-nowrap">
-                                    <span className="text-green-600 dark:text-green-400">+{file.additions}</span>
-                                    {" "}
-                                    <span className="text-red-600 dark:text-red-400">-{file.deletions}</span>
-                                  </span>
-                                </button>
-                                {isExpanded && file.patch && (
-                                  <DiffPatchViewer patch={file.patch} />
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <p className="text-gray-500 dark:text-gray-400 text-center py-8">
-                          No changes yet.
-                        </p>
-                      )}
-                      </div>
-                    </div>
+                    <DiffTab
+                      diffContent={diffContent}
+                      loadingContent={loadingContent}
+                      expandedFiles={expandedFiles}
+                      onExpandedFilesChange={setExpandedFiles}
+                    />
                   )}
-
                   {activeTab === "review" && (
-                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-                      <div className="min-w-0 w-full space-y-4">
-                      {loop.state.reviewMode ? (
-                        <>
-                          <div className="bg-gray-50 dark:bg-neutral-900/40 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
-                            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                              Review Mode Status
-                            </h3>
-                            <div className="space-y-2 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Addressable:</span>
-                                <span className="font-medium text-gray-900 dark:text-gray-100">
-                                  {loop.state.reviewMode.addressable ? "Yes" : "No"}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Completion Action:</span>
-                                <span className="font-medium text-gray-900 dark:text-gray-100 capitalize">
-                                  {loop.state.reviewMode.completionAction}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Review Cycles:</span>
-                                <span className="font-medium text-gray-900 dark:text-gray-100">
-                                  {loop.state.reviewMode.reviewCycles}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {loop.state.reviewMode.reviewBranches.length > 0 && (
-                            <div className="bg-gray-50 dark:bg-neutral-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                              <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                                Review Branches
-                              </h3>
-                              <div className="space-y-2">
-                                {loop.state.reviewMode.reviewBranches.map((branch, index) => (
-                                  <div
-                                    key={index}
-                                    className="flex min-w-0 items-center gap-2 text-sm font-mono text-gray-700 dark:text-gray-300"
-                                  >
-                                    <span className="text-gray-400">{index + 1}.</span>
-                                    <span className="break-all">{branch}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Comment History */}
-                          <div className="bg-gray-50 dark:bg-neutral-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
-                              Comment History
-                            </h3>
-                            
-                            {loadingComments ? (
-                              <div className="text-center py-4">
-                                <span className="text-sm text-gray-500 dark:text-gray-400">
-                                  Loading comments...
-                                </span>
-                              </div>
-                            ) : reviewComments.length === 0 ? (
-                              <p className="text-sm text-gray-500 dark:text-gray-400">
-                                No comments yet.
-                              </p>
-                            ) : (
-                              <div className="space-y-4">
-                                {/* Group comments by review cycle */}
-                                {Object.entries(
-                                  reviewComments.reduce((acc, comment) => {
-                                    const cycleComments = acc[comment.reviewCycle] ?? [];
-                                    cycleComments.push(comment);
-                                    acc[comment.reviewCycle] = cycleComments;
-                                    return acc;
-                                  }, {} as Record<number, ReviewComment[]>)
-                                )
-                                  .sort(([cycleA], [cycleB]) => Number(cycleA) - Number(cycleB))
-                                  .map(([cycle, comments]) => (
-                                    <div key={cycle} className="border-l-2 border-gray-300 dark:border-gray-600 pl-3">
-                                      <h4 className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                        Review Cycle {cycle}
-                                      </h4>
-                                      <div className="space-y-2">
-                                        {comments.map((comment) => (
-                                          <div
-                                            key={comment.id}
-                                            className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-gray-700 rounded p-3"
-                                          >
-                                            <div className="flex items-start justify-between gap-2 mb-2">
-                                              <span
-                                                className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                                                  comment.status === "addressed"
-                                                    ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300"
-                                                    : "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300"
-                                                }`}
-                                              >
-                                                {comment.status === "addressed" ? "Addressed" : "Pending"}
-                                              </span>
-                                              <span className="text-xs text-gray-500 dark:text-gray-400">
-                                                {new Date(comment.createdAt).toLocaleString()}
-                                              </span>
-                                            </div>
-                                            <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                                              {comment.commentText}
-                                            </p>
-                                            {comment.addressedAt && (
-                                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                                                Addressed on {new Date(comment.addressedAt).toLocaleString()}
-                                              </p>
-                                            )}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  ))}
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="bg-gray-50 dark:bg-neutral-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                              About Review Mode
-                            </h3>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                              This {labels.singular} can receive reviewer comments and address them iteratively.
-                              {loop.state.reviewMode.completionAction === "push"
-                                ? " Pushed loops continue adding commits to the same branch."
-                                : " Merged loops create new review branches for each cycle."}
-                            </p>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="text-center py-8">
-                          <p className="text-gray-500 dark:text-gray-400">
-                            This {labels.singular} does not have review mode enabled.
-                          </p>
-                          <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-                            Review mode is automatically enabled when a {labels.singular} is pushed or merged.
-                          </p>
-                        </div>
-                      )}
-                      </div>
-                    </div>
+                    <ReviewTab
+                      loop={loop}
+                      labels={labels}
+                      loadingComments={loadingComments}
+                      reviewComments={reviewComments}
+                    />
                   )}
-
                   {activeTab === "actions" && (
-                    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-                          <div className="max-w-md min-w-0 space-y-2">
-
-                          {isPlanning ? (
-                          <>
-                            <button
-                              onClick={() => handleAcceptPlan("start_loop")}
-                              disabled={planActionSubmitting || !isPlanReady || !planContent?.content?.trim()}
-                              className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                                <span className="text-green-600 dark:text-green-400 text-sm">✓</span>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                  {planActionSubmitting ? "Accepting..." : "Accept Plan & Start Loop"}
-                                </div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">
-                                  {isPlanReady
-                                    ? "Accept the plan and begin loop execution"
-                                    : "Waiting for AI to finish writing the plan..."}
-                                </div>
-                              </div>
-                              <span className="text-gray-400 dark:text-gray-500">→</span>
-                            </button>
-                            <button
-                              onClick={() => handleAcceptPlan("open_ssh")}
-                              disabled={planActionSubmitting || !isPlanReady || !planContent?.content?.trim()}
-                              className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center">
-                                <span className="text-gray-700 dark:text-gray-300 text-sm">⌁</span>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                  {planActionSubmitting ? "Accepting..." : "Accept Plan & Open SSH"}
-                                </div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">
-                                  {isPlanReady
-                                    ? "Accept the plan, mark the loop complete, and open its SSH session"
-                                    : "Waiting for AI to finish writing the plan..."}
-                                </div>
-                              </div>
-                              <span className="text-gray-400 dark:text-gray-500">→</span>
-                            </button>
-                            <button
-                              onClick={() => setDiscardPlanModal(true)}
-                              disabled={planActionSubmitting}
-                              className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                                <span className="text-red-600 dark:text-red-400 text-sm">✗</span>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Discard Plan</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">Discard this plan and delete the loop</div>
-                              </div>
-                              <span className="text-gray-400 dark:text-gray-500">→</span>
-                            </button>
-                          </>
-                        ) : isFinalState(state.status) ? (
-                          <>
-                            {state.status === "pushed" && state.reviewMode?.addressable && (
-                              <button
-                                onClick={handleOpenPullRequest}
-                                disabled={loadingPullRequestDestination || !pullRequestDestination?.enabled}
-                                className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center">
-                                  <span className="text-gray-700 dark:text-gray-300 text-sm">↗</span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Go to PR</div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                                    {loadingPullRequestDestination
-                                      ? "Checking for an existing pull request..."
-                                      : pullRequestDestination?.enabled
-                                      ? pullRequestDestination.destinationType === "existing_pr"
-                                        ? "Open the existing pull request for this branch"
-                                        : "Open GitHub to create a pull request from this branch"
-                                      : pullRequestDestination?.disabledReason ?? "Pull request navigation is unavailable."}
-                                  </div>
-                                </div>
-                                <span className="text-gray-400 dark:text-gray-500">→</span>
-                              </button>
-                            )}
-                            {state.reviewMode?.addressable && state.status !== "deleted" && (
-                              <button
-                                onClick={() => setAddressCommentsModal(true)}
-                                className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left"
-                              >
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center">
-                                  <span className="text-gray-700 dark:text-gray-300 text-sm">💬</span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Address Comments</div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">Submit comments for the next review cycle</div>
-                                </div>
-                                <span className="text-gray-400 dark:text-gray-500">→</span>
-                              </button>
-                            )}
-                            {state.status === "pushed" && state.git && (
-                              <button
-                                onClick={() => setUpdateBranchModal(true)}
-                                className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left"
-                              >
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gray-100 dark:bg-neutral-800 flex items-center justify-center">
-                                  <span className="text-gray-700 dark:text-gray-300 text-sm">⟳</span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Update Branch</div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">Sync with base branch and push latest changes</div>
-                                </div>
-                                <span className="text-gray-400 dark:text-gray-500">→</span>
-                              </button>
-                            )}
-                            {canMarkMerged(state.status, Boolean(state.git)) && (
-                              <button
-                                onClick={() => setMarkMergedModal(true)}
-                                className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left"
-                              >
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                                  <span className="text-green-600 dark:text-green-400 text-sm">⤵</span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Mark as Merged</div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">Keep this loop as merged after the branch landed elsewhere</div>
-                                </div>
-                                <span className="text-gray-400 dark:text-gray-500">→</span>
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setPurgeModal(true)}
-                              className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left"
-                            >
-                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                                <span className="text-red-600 dark:text-red-400 text-sm">🗑</span>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Purge {labels.capitalized}</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">Delete this {labels.singular} and all associated data</div>
-                              </div>
-                              <span className="text-gray-400 dark:text-gray-500">→</span>
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            {canAccept(state.status) && state.git && (
-                              <button
-                                onClick={() => setAcceptModal(true)}
-                                className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left"
-                              >
-                                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-                                  <span className="text-green-600 dark:text-green-400 text-sm">✓</span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Accept</div>
-                                  <div className="text-xs text-gray-500 dark:text-gray-400">Accept changes and merge or push to remote</div>
-                                </div>
-                                <span className="text-gray-400 dark:text-gray-500">→</span>
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setDeleteModal(true)}
-                              className="w-full flex items-center gap-4 p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-neutral-700/50 transition-colors text-left"
-                            >
-                              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                                <span className="text-red-600 dark:text-red-400 text-sm">✗</span>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">Delete {labels.capitalized}</div>
-                                <div className="text-xs text-gray-500 dark:text-gray-400">Cancel and delete this {labels.singular}</div>
-                              </div>
-                              <span className="text-gray-400 dark:text-gray-500">→</span>
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </div>
+                    <ActionsTab
+                      isPlanning={isPlanning}
+                      isPlanReady={isPlanReady}
+                      planContent={planContent}
+                      planActionSubmitting={planActionSubmitting}
+                      onAcceptPlan={handleAcceptPlan}
+                      onDiscardPlanModal={() => setDiscardPlanModal(true)}
+                      state={state}
+                      loadingPullRequestDestination={loadingPullRequestDestination}
+                      pullRequestDestination={pullRequestDestination}
+                      onOpenPullRequest={handleOpenPullRequest}
+                      onAddressCommentsModal={() => setAddressCommentsModal(true)}
+                      onUpdateBranchModal={() => setUpdateBranchModal(true)}
+                      onMarkMergedModal={() => setMarkMergedModal(true)}
+                      onPurgeModal={() => setPurgeModal(true)}
+                      onAcceptModal={() => setAcceptModal(true)}
+                      onDeleteModal={() => setDeleteModal(true)}
+                      labels={labels}
+                    />
                   )}
                 </div>
               </div>
