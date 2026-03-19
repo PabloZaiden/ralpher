@@ -1,6 +1,7 @@
 import type { ComposerImageAttachment, MessageImageAttachment } from "../types/message-attachments";
 import {
   MESSAGE_IMAGE_ACCEPT,
+  MESSAGE_IMAGE_ALLOWED_MIME_TYPES,
   MESSAGE_IMAGE_ATTACHMENT_LIMIT,
   MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES,
 } from "../types/message-attachments";
@@ -31,8 +32,8 @@ export async function createComposerImageAttachments(
   }
 
   return Promise.all(files.map(async (file) => {
-    if (!file.type.startsWith("image/")) {
-      throw new Error(`${file.name} is not an image.`);
+    if (!(MESSAGE_IMAGE_ALLOWED_MIME_TYPES as readonly string[]).includes(file.type)) {
+      throw new Error(`${file.name} is not a supported image type. Accepted: ${MESSAGE_IMAGE_ALLOWED_MIME_TYPES.join(", ")}.`);
     }
 
     if (file.size > MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES) {
@@ -66,6 +67,15 @@ export function toMessageImageAttachments(
   attachments: ComposerImageAttachment[],
 ): MessageImageAttachment[] {
   return attachments.map(({ previewUrl: _previewUrl, ...attachment }) => attachment);
+}
+
+/**
+ * Strip the transient `attachments` field from a request before persisting.
+ * Used by draft save and loop edit flows to avoid storing image data.
+ */
+export function stripTransientAttachments<T extends { attachments?: unknown }>(request: T): Omit<T, "attachments"> {
+  const { attachments: _attachments, ...persistedRequest } = request;
+  return persistedRequest;
 }
 
 export {

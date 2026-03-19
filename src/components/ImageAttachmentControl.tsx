@@ -28,7 +28,16 @@ export function ImageAttachmentControl({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const previous = attachmentsRef.current;
     attachmentsRef.current = attachments;
+
+    // Revoke object URLs for attachments that were removed or replaced.
+    const currentIds = new Set(attachments.map((a) => a.id));
+    for (const prev of previous) {
+      if (!currentIds.has(prev.id)) {
+        URL.revokeObjectURL(prev.previewUrl);
+      }
+    }
   }, [attachments]);
 
   useEffect(() => {

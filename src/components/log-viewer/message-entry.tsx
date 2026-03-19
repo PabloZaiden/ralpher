@@ -36,7 +36,7 @@ export function MessageEntry({ data: msg, showHeader, spacingClass, index }: Mes
               {msg.attachments.map((attachment) => (
                 <div
                   key={attachment.id}
-                  className="rounded border border-gray-700 bg-neutral-800 p-1"
+                  className="rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-neutral-800 p-1"
                 >
                   <img
                     src={`data:${attachment.mimeType};base64,${attachment.data}`}

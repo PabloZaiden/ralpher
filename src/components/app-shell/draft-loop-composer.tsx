@@ -13,11 +13,7 @@ import { Button, ConfirmModal } from "../common";
 import type { ShellRoute } from "./shell-types";
 import { ShellPanel } from "./shell-panel";
 import type { CreateLoopRequest } from "../../types";
-
-function stripTransientAttachments<T extends { attachments?: unknown }>(request: T): Omit<T, "attachments"> {
-  const { attachments: _attachments, ...persistedRequest } = request;
-  return persistedRequest;
-}
+import { stripTransientAttachments } from "../../lib/image-attachments";
 
 export function DraftLoopComposer({
   loop,

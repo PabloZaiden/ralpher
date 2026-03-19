@@ -13,13 +13,32 @@ import { ModelConfigSchema } from "./model";
 import {
   MESSAGE_IMAGE_ATTACHMENT_LIMIT,
   MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES,
+  MESSAGE_IMAGE_ALLOWED_MIME_TYPES,
 } from "../message-attachments";
+
+/**
+ * Approximate the decoded byte size of a base64 string.
+ * base64 encodes 3 bytes into 4 characters, plus optional padding.
+ */
+function approximateBase64DecodedSize(base64: string): number {
+  const len = base64.length;
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.floor(((len * 3) / 4) - padding);
+}
+
+const allowedMimeTypes = MESSAGE_IMAGE_ALLOWED_MIME_TYPES as readonly string[];
 
 export const MessageImageAttachmentSchema = z.object({
   id: z.string().min(1, "attachment id is required"),
   filename: z.string().min(1, "attachment filename is required"),
-  mimeType: z.string().regex(/^image\//, "attachments must be images"),
-  data: z.string().min(1, "attachment data is required"),
+  mimeType: z.string().refine(
+    (mime) => allowedMimeTypes.includes(mime),
+    { message: `attachments must be one of: ${MESSAGE_IMAGE_ALLOWED_MIME_TYPES.join(", ")}` },
+  ),
+  data: z.string().min(1, "attachment data is required").refine(
+    (data) => approximateBase64DecodedSize(data) <= MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES,
+    { message: `attachment data exceeds ${MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES} bytes` },
+  ),
   size: z.number().int().positive().max(
     MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES,
     `attachments must be ${MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES} bytes or smaller`,

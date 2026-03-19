@@ -72,8 +72,8 @@ export async function jumpstartLoopFromEngine(
 
   const canReuse = await canReuseExistingBranch(loop);
 
-    if (wasInPlanningMode) {
-      if (canReuse) {
+  if (wasInPlanningMode) {
+    if (canReuse) {
       return jumpstartOnExistingBranch(ctx, loopId, loop, true, options.attachments);
     } else {
       try {

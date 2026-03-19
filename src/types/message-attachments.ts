@@ -6,8 +6,17 @@
  */
 
 export const MESSAGE_IMAGE_ATTACHMENT_LIMIT = 3;
-export const MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
-export const MESSAGE_IMAGE_ACCEPT = "image/png,image/jpeg,image/webp,image/gif,image/svg+xml";
+export const MESSAGE_IMAGE_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
+
+/** Explicit MIME allowlist — excludes image/svg+xml to avoid script-injection risks. */
+export const MESSAGE_IMAGE_ALLOWED_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+] as const;
+
+export const MESSAGE_IMAGE_ACCEPT = MESSAGE_IMAGE_ALLOWED_MIME_TYPES.join(",");
 
 export interface MessageImageAttachment {
   id: string;

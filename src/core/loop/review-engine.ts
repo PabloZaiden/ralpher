@@ -126,7 +126,10 @@ function startFeedbackEngine(
   if (options.model !== undefined) {
     engine.setPendingModel(options.model);
   }
-  engine.setPendingPrompt(options.prompt, options.attachments);
+  // Only set the prompt text — attachments are already provided via initialPromptAttachments
+  // to avoid duplicating them (engine-prompt prefers pending over initial, which would
+  // cause the initial copy to leak into a later prompt unexpectedly).
+  engine.setPendingPrompt(options.prompt);
 
   startStatePersistenceImpl(ctx, loopId);
 

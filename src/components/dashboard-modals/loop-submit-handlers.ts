@@ -8,16 +8,12 @@ import type { CreateLoopFormSubmitRequest } from "../CreateLoopForm";
 import type { CreateLoopResult, CreateChatResult } from "../../hooks/useLoops";
 import { createLogger } from "../../lib/logger";
 import { appFetch } from "../../lib/public-path";
+import { stripTransientAttachments } from "../../lib/image-attachments";
 
 const log = createLogger("DashboardModals");
 
 export function isCreateLoopRequest(request: CreateLoopFormSubmitRequest): request is CreateLoopRequest {
   return "name" in request;
-}
-
-function stripTransientAttachments<T extends { attachments?: unknown }>(request: T): Omit<T, "attachments"> {
-  const { attachments: _attachments, ...persistedRequest } = request;
-  return persistedRequest;
 }
 
 interface SubmitHandlerProps {
