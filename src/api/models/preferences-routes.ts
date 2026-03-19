@@ -24,6 +24,7 @@ import {
   setDashboardViewMode,
 } from "../../persistence/preferences";
 import {
+  createLogger,
   setLogLevel as setBackendLogLevel,
   type LogLevelName,
   VALID_LOG_LEVELS,
@@ -38,6 +39,15 @@ import {
   SetLogLevelRequestSchema,
   SetDashboardViewModeRequestSchema,
 } from "../../types/schemas";
+
+const log = createLogger("api:preferences");
+
+function logPreferenceSaveFailure(preference: string, error: unknown): void {
+  log.error("Failed to save preference", {
+    preference,
+    error: String(error),
+  });
+}
 
 /**
  * Preferences API routes.
@@ -79,6 +89,7 @@ export const preferencesRoutes = {
 
         return Response.json({ success: true });
       } catch (error) {
+        logPreferenceSaveFailure("last-model", error);
         return errorResponse("save_failed", String(error), 500);
       }
     },
@@ -114,6 +125,7 @@ export const preferencesRoutes = {
 
         return Response.json({ success: true });
       } catch (error) {
+        logPreferenceSaveFailure("last-directory", error);
         return errorResponse("save_failed", String(error), 500);
       }
     },
@@ -149,6 +161,7 @@ export const preferencesRoutes = {
 
         return Response.json({ success: true });
       } catch (error) {
+        logPreferenceSaveFailure("markdown-rendering", error);
         return errorResponse("save_failed", String(error), 500);
       }
     },
@@ -199,6 +212,7 @@ export const preferencesRoutes = {
 
         return Response.json({ success: true, level });
       } catch (error) {
+        logPreferenceSaveFailure("log-level", error);
         return errorResponse("save_failed", String(error), 500);
       }
     },
@@ -233,6 +247,7 @@ export const preferencesRoutes = {
         await setDashboardViewMode(result.data.mode);
         return Response.json({ success: true, mode: result.data.mode });
       } catch (error) {
+        logPreferenceSaveFailure("dashboard-view-mode", error);
         return errorResponse("save_failed", String(error), 500);
       }
     },

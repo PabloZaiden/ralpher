@@ -32,7 +32,7 @@ export function useLoopGitActions(params: UseLoopActionsParams): UseLoopGitActio
     if (staleAction !== null) {
       return staleAction;
     }
-    log.debug("Accepting loop", { loopId: actionLoopId });
+    log.info("Accepting loop", { loopId: actionLoopId });
     try {
       const result = await acceptLoopApi(actionLoopId);
       await refresh();
@@ -58,7 +58,7 @@ export function useLoopGitActions(params: UseLoopActionsParams): UseLoopGitActio
     if (staleAction !== null) {
       return staleAction;
     }
-    log.debug("Pushing loop", { loopId: actionLoopId });
+    log.info("Pushing loop", { loopId: actionLoopId });
     try {
       const result = await pushLoopApi(actionLoopId);
       await refresh();
@@ -84,7 +84,7 @@ export function useLoopGitActions(params: UseLoopActionsParams): UseLoopGitActio
     if (staleAction !== null) {
       return staleAction;
     }
-    log.debug("Updating branch", { loopId: actionLoopId });
+    log.info("Updating branch", { loopId: actionLoopId });
     try {
       const result = await updateBranchApi(actionLoopId);
       await refresh();

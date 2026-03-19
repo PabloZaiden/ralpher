@@ -3,6 +3,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
+import { createLogger } from "../../lib/logger";
 import { appFetch } from "../../lib/public-path";
 
 export interface UsePlanningDirResult {
@@ -12,6 +13,7 @@ export interface UsePlanningDirResult {
 }
 
 export function usePlanningDir(): UsePlanningDirResult {
+  const log = createLogger("usePlanningDir");
   const [planningWarning, setPlanningWarning] = useState<string | null>(null);
   const planningRequestIdRef = useRef(0);
 
@@ -38,7 +40,12 @@ export function usePlanningDir(): UsePlanningDirResult {
       } else {
         setPlanningWarning(null);
       }
-    } catch {
+    } catch (error) {
+      log.warn("Failed to check planning directory status", {
+        workspaceId,
+        directory,
+        error: String(error),
+      });
       if (requestId === planningRequestIdRef.current) {
         setPlanningWarning(null);
       }

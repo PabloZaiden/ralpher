@@ -3,6 +3,10 @@
  * These have no dependency on the LoopEngine class itself.
  */
 
+import { createLogger } from "../logger";
+
+const log = createLogger("core:engine");
+
 /**
  * Stop pattern detector.
  * Checks if the AI response indicates completion.
@@ -17,7 +21,10 @@ export class StopPatternDetector {
       // Invalid regex pattern — log a warning and disable matching
       // to prevent ReDoS or runtime crashes from user-supplied patterns.
       this.pattern = null;
-      console.warn(`Invalid stop pattern regex "${patternString}": ${String(error)}`);
+      log.warn("Invalid stop pattern regex, disabling stop-pattern matching", {
+        patternString,
+        error: String(error),
+      });
     }
   }
 

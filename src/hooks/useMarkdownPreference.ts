@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createLogger } from "../lib/logger";
 import { appFetch } from "../lib/public-path";
 
 export interface UseMarkdownPreferenceResult {
@@ -26,6 +27,7 @@ export interface UseMarkdownPreferenceResult {
  * The setting persists across browser sessions.
  */
 export function useMarkdownPreference(): UseMarkdownPreferenceResult {
+  const log = createLogger("useMarkdownPreference");
   const [enabled, setEnabledState] = useState(true); // Default to true
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +51,7 @@ export function useMarkdownPreference(): UseMarkdownPreferenceResult {
       const data = (await response.json()) as { enabled: boolean };
       setEnabledState(data.enabled);
     } catch (err) {
+      log.error("Failed to fetch markdown preference", { error: String(err) });
       setError(String(err));
     } finally {
       setLoading(false);
@@ -73,6 +76,7 @@ export function useMarkdownPreference(): UseMarkdownPreferenceResult {
 
       setEnabledState(newEnabled);
     } catch (err) {
+      log.error("Failed to save markdown preference", { enabled: newEnabled, error: String(err) });
       setError(String(err));
     } finally {
       setSaving(false);

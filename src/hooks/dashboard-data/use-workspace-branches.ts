@@ -3,6 +3,7 @@
  */
 
 import { useState, useCallback, useRef } from "react";
+import { createLogger } from "../../lib/logger";
 import type { BranchInfo } from "../../types";
 import { appFetch } from "../../lib/public-path";
 
@@ -17,6 +18,7 @@ export interface UseWorkspaceBranchesResult {
 }
 
 export function useWorkspaceBranches(): UseWorkspaceBranchesResult {
+  const log = createLogger("useWorkspaceBranches");
   const [branches, setBranches] = useState<BranchInfo[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [currentBranch, setCurrentBranch] = useState("");
@@ -53,7 +55,12 @@ export function useWorkspaceBranches(): UseWorkspaceBranchesResult {
         setBranches([]);
         setCurrentBranch("");
       }
-    } catch {
+    } catch (error) {
+      log.error("Failed to fetch workspace branches", {
+        workspaceId,
+        directory,
+        error: String(error),
+      });
       if (requestId === branchesRequestIdRef.current) {
         setBranches([]);
         setCurrentBranch("");
@@ -88,7 +95,12 @@ export function useWorkspaceBranches(): UseWorkspaceBranchesResult {
       } else {
         setDefaultBranch("");
       }
-    } catch {
+    } catch (error) {
+      log.warn("Failed to fetch workspace default branch", {
+        workspaceId,
+        directory,
+        error: String(error),
+      });
       if (requestId === defaultBranchRequestIdRef.current) {
         setDefaultBranch("");
       }

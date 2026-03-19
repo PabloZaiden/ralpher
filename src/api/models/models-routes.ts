@@ -7,8 +7,11 @@
  */
 
 import { getWorkspace } from "../../persistence/workspaces";
+import { createLogger } from "../../core/logger";
 import { errorResponse } from "../helpers";
 import { getModelsForWorkspace } from "./model-discovery";
+
+const log = createLogger("api:models");
 
 /**
  * Models API routes.
@@ -49,6 +52,11 @@ export const modelsRoutes = {
         const models = await getModelsForWorkspace(workspaceId, directory, workspace);
         return Response.json(models);
       } catch (error) {
+        log.error("Failed to discover models", {
+          workspaceId,
+          directory,
+          error: String(error),
+        });
         return errorResponse("models_failed", String(error), 500);
       }
     },

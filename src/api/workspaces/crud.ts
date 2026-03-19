@@ -49,7 +49,7 @@ export const crudRoutes = {
       const result = await parseAndValidate(CreateWorkspaceRequestSchema, req);
 
       if (!result.success) {
-        log.warn("POST /api/workspaces - Validation failed");
+        log.debug("POST /api/workspaces - Validation failed");
         return result.response;
       }
 
@@ -152,7 +152,7 @@ export const crudRoutes = {
       const result = await parseAndValidate(UpdateWorkspaceRequestSchema, req);
 
       if (!result.success) {
-        log.warn("PUT /api/workspaces/:id - Validation failed", { workspaceId: id });
+        log.debug("PUT /api/workspaces/:id - Validation failed", { workspaceId: id });
         return result.response;
       }
 

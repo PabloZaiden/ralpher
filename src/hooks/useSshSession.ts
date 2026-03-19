@@ -9,6 +9,7 @@ import type {
   SshSessionEvent,
   UpdateSshSessionRequest,
 } from "../types";
+import { createLogger } from "../lib/logger";
 import { useWebSocket } from "./useWebSocket";
 import { appFetch } from "../lib/public-path";
 import { deleteStandaloneSshSessionApi } from "./sshServerActions";
@@ -28,6 +29,7 @@ export interface UseSshSessionResult {
 }
 
 export function useSshSession(sessionId: string): UseSshSessionResult {
+  const log = createLogger("useSshSession");
   const [session, setSession] = useState<AnySshSession | null>(null);
   const [sessionKind, setSessionKind] = useState<SshSessionKind | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,6 +92,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
       setSessionKind(next.kind);
       initialLoadDoneRef.current = true;
     } catch (err) {
+      log.error("Failed to refresh SSH session", { sessionId, error: String(err) });
       setError(String(err));
     } finally {
       setLoading(false);
@@ -142,6 +145,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
       return updated;
     } catch (err) {
       const message = String(err);
+      log.error("Failed to update SSH session", { sessionId, sessionKind, error: message });
       setError(message);
       throw err instanceof Error ? err : new Error(message);
     }
@@ -173,6 +177,7 @@ export function useSshSession(sessionId: string): UseSshSessionResult {
       setSession(null);
       return true;
     } catch (err) {
+      log.error("Failed to delete SSH session", { sessionId, sessionKind, error: String(err) });
       setError(String(err));
       return false;
     }

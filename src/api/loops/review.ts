@@ -7,10 +7,13 @@
  */
 
 import { loopManager } from "../../core/loop-manager";
+import { createLogger } from "../../core/logger";
 import { parseAndValidate } from "../validation";
 import { errorResponse } from "../helpers";
 import type { AddressCommentsResponse, ReviewHistoryResponse } from "../../types/api";
 import { AddressCommentsRequestSchema } from "../../types/schemas";
+
+const log = createLogger("api:loops");
 
 export const loopsReviewRoutes = {
   "/api/loops/:id/address-comments": {
@@ -63,6 +66,10 @@ export const loopsReviewRoutes = {
         };
         return Response.json(responseBody);
       } catch (error) {
+        log.error("Failed to address review comments", {
+          loopId: req.params.id,
+          error: String(error),
+        });
         const responseBody: AddressCommentsResponse = {
           success: false,
           error: String(error),
@@ -99,6 +106,10 @@ export const loopsReviewRoutes = {
         };
         return Response.json(responseBody);
       } catch (error) {
+        log.error("Failed to get loop review history", {
+          loopId: req.params.id,
+          error: String(error),
+        });
         return errorResponse("get_review_history_failed", String(error), 500);
       }
     },

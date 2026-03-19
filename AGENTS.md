@@ -420,6 +420,17 @@ The existing Error Handling section covers try/catch syntax. Additionally:
 - **Chain error causes** — when re-throwing or wrapping errors, use `new Error("context message", { cause: originalError })` to preserve the stack trace.
 - **Use structured error classes** for domain errors (e.g., `GitCommandError` with command, stderr, exit code fields).
 
+### Logging Severity
+
+- **Use `error` for unrecoverable failures** — if the current layer cannot recover and the operation fails, log at `error`.
+- **Map request boundary severity by outcome** — at API and WebSocket boundaries, log unexpected server-side failures and 5xx responses at `error`, expected client-side 4xx outcomes at `warn`, and redirects or other non-2xx-but-non-failure outcomes at `info`.
+- **Use `warn` for recoverable failures** — log at `warn` when the code falls back, skips optional work, or encounters a non-critical expectation mismatch but can keep going.
+- **Use `info` for high-level business milestones** — request start/finish, loop lifecycle milestones, provisioning start/finish, and similarly important operation checkpoints belong at `info`.
+- **Use `debug` for control-flow detail** — branch decisions, intermediate execution steps, and helper-level flow detail that helps explain how the code moved through an operation should use `debug`.
+- **Use `trace` for the most verbose diagnostics** — parameter values, detailed intermediate state, and deep execution detail should use `trace` when that extra detail materially helps diagnosis.
+- **Do not duplicate the same failure log across layers** — prefer one clear boundary `error` plus only the lower-level logs that add meaningful new context.
+- **Do not log secrets or credential material** — tokens, passwords, auth headers, private keys, raw credential payloads, and similar sensitive values must never appear in `debug` or `trace` logs.
+
 ### Component & Method Decomposition
 
 - **Components over 300 LOC should be decomposed.** Extract sub-components (`DashboardHeader`, `LoopGrid`, `DashboardModals`) and custom hooks (`useDashboardData`, `useLoopGrouping`).

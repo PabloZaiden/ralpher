@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createLogger } from "../lib/logger";
 import type { DashboardViewMode } from "../types/preferences";
 import { appFetch } from "../lib/public-path";
 
@@ -32,6 +33,7 @@ export interface UseViewModePreferenceResult {
  * The setting persists across browser sessions via server-side storage.
  */
 export function useViewModePreference(): UseViewModePreferenceResult {
+  const log = createLogger("useViewModePreference");
   const [viewMode, setViewModeState] = useState<DashboardViewMode>("rows"); // Default to rows
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +57,7 @@ export function useViewModePreference(): UseViewModePreferenceResult {
       const data = (await response.json()) as { mode: DashboardViewMode };
       setViewModeState(data.mode);
     } catch (err) {
+      log.error("Failed to fetch dashboard view mode preference", { error: String(err) });
       setError(String(err));
     } finally {
       setLoading(false);
@@ -79,6 +82,7 @@ export function useViewModePreference(): UseViewModePreferenceResult {
 
       setViewModeState(newMode);
     } catch (err) {
+      log.error("Failed to save dashboard view mode preference", { viewMode: newMode, error: String(err) });
       setError(String(err));
     } finally {
       setSaving(false);

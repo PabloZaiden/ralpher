@@ -21,12 +21,28 @@ async function apiCall<T = unknown>(
   options: RequestInit,
   actionName: string,
 ): Promise<T> {
-  const response = await appFetch(url, options);
-  if (!response.ok) {
-    const errorData = await response.json() as { message?: string };
-    throw new Error(errorData.message || `Failed to ${actionName.toLowerCase()}`);
+  let loggedFailure = false;
+
+  try {
+    const response = await appFetch(url, options);
+    if (!response.ok) {
+      const errorData = await response.json() as { message?: string };
+      const message = errorData.message || `Failed to ${actionName.toLowerCase()}`;
+      log.error("SSH server API request failed", { actionName, url, error: message });
+      loggedFailure = true;
+      throw new Error(message);
+    }
+    return await response.json() as T;
+  } catch (error) {
+    if (!loggedFailure) {
+      log.error("SSH server API request failed", {
+        actionName,
+        url,
+        error: String(error),
+      });
+    }
+    throw error;
   }
-  return await response.json() as T;
 }
 
 async function resolveCredentialToken(serverId: string, password?: string): Promise<string> {

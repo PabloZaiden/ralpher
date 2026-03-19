@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { CreateSshSessionRequest, SshSession, SshSessionEvent, UpdateSshSessionRequest } from "../types";
+import { createLogger } from "../lib/logger";
 import { useGlobalEvents } from "./useWebSocket";
 import { appFetch } from "../lib/public-path";
 
@@ -19,6 +20,7 @@ export interface UseSshSessionsResult {
 }
 
 export function useSshSessions(): UseSshSessionsResult {
+  const log = createLogger("useSshSessions");
   const [sessions, setSessions] = useState<SshSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +37,7 @@ export function useSshSessions(): UseSshSessionsResult {
       const data = await response.json() as SshSession[];
       setSessions(data);
     } catch (err) {
+      log.error("Failed to fetch SSH sessions", { error: String(err) });
       setError(String(err));
     } finally {
       setLoading(false);
@@ -63,6 +66,7 @@ export function useSshSessions(): UseSshSessionsResult {
         return [session, ...prev];
       });
     } catch (err) {
+      log.error("Failed to refresh SSH session", { sshSessionId: id, error: String(err) });
       setError(String(err));
     }
   }, []);
@@ -105,6 +109,7 @@ export function useSshSessions(): UseSshSessionsResult {
       return session;
     } catch (err) {
       const message = String(err);
+      log.error("Failed to create SSH session", { error: message });
       setError(message);
       throw err instanceof Error ? err : new Error(message);
     }
@@ -127,6 +132,7 @@ export function useSshSessions(): UseSshSessionsResult {
       return session;
     } catch (err) {
       const message = String(err);
+      log.error("Failed to update SSH session", { sshSessionId: id, error: message });
       setError(message);
       throw err instanceof Error ? err : new Error(message);
     }
@@ -145,6 +151,7 @@ export function useSshSessions(): UseSshSessionsResult {
       setSessions((prev) => prev.filter((item) => item.config.id !== id));
       return true;
     } catch (err) {
+      log.error("Failed to delete SSH session", { sshSessionId: id, error: String(err) });
       setError(String(err));
       return false;
     }

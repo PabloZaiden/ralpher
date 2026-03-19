@@ -45,7 +45,7 @@ export function useLoopLifecycleActions(
       if (staleAction !== null) {
         return staleAction;
       }
-      log.debug("Updating loop", {
+      log.info("Updating loop", {
         loopId: actionLoopId,
         hasNameUpdate: request.name !== undefined,
       });
@@ -64,7 +64,7 @@ export function useLoopLifecycleActions(
           return false;
         }
         setLoop(data);
-        log.debug("Loop updated successfully", { loopId: actionLoopId });
+        log.info("Loop updated successfully", { loopId: actionLoopId });
         return true;
       } catch (err) {
         const staleError = ignoreStaleLoopError("update", actionLoopId, false, err);
@@ -85,7 +85,7 @@ export function useLoopLifecycleActions(
     if (staleAction !== null) {
       return staleAction;
     }
-    log.debug("Deleting loop", { loopId: actionLoopId });
+    log.info("Deleting loop", { loopId: actionLoopId });
     try {
       await deleteLoopApi(actionLoopId);
       if (!isActiveLoop(actionLoopId)) {
@@ -111,7 +111,7 @@ export function useLoopLifecycleActions(
     if (staleAction !== null) {
       return staleAction;
     }
-    log.debug("Discarding loop", { loopId: actionLoopId });
+    log.info("Discarding loop", { loopId: actionLoopId });
     try {
       await discardLoopApi(actionLoopId);
       await refresh();
@@ -137,7 +137,7 @@ export function useLoopLifecycleActions(
     if (staleAction !== null) {
       return staleAction;
     }
-    log.debug("Purging loop", { loopId: actionLoopId });
+    log.info("Purging loop", { loopId: actionLoopId });
     try {
       await purgeLoopApi(actionLoopId);
       if (!isActiveLoop(actionLoopId)) {
@@ -163,7 +163,7 @@ export function useLoopLifecycleActions(
     if (staleAction !== null) {
       return staleAction;
     }
-    log.debug("Marking loop as merged", { loopId: actionLoopId });
+    log.info("Marking loop as merged", { loopId: actionLoopId });
     try {
       await markMergedApi(actionLoopId);
       await refresh();

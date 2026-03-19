@@ -1331,7 +1331,7 @@ export class AcpBackend implements Backend {
           });
           return;
         }
-        log.debug("[AcpBackend] Async prompt failed", {
+        log.error("[AcpBackend] Async prompt failed", {
           sessionId,
           sequence,
           message,

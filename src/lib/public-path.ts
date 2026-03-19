@@ -55,6 +55,6 @@ export function appWebSocketUrl(path: string): string {
   return url.toString();
 }
 
-export function appFetch(path: string, init?: RequestInit): Promise<Response> {
+export async function appFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(appPath(path), init);
 }

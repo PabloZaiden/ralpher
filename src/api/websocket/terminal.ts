@@ -64,6 +64,12 @@ export async function startTerminalBridge(
       sshServerSessionId: sshServerSessionId ?? null,
     }));
   } catch (error) {
+    log.error("Failed to connect SSH terminal bridge", {
+      terminalSessionId,
+      sshSessionId,
+      sshServerSessionId,
+      error: String(error),
+    });
     try {
       ws.send(JSON.stringify({ type: "terminal.error", message: String(error) }));
     } catch (sendError) {

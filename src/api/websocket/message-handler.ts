@@ -36,7 +36,7 @@ export function createMessageHandler(helpers: TerminalHelpers) {
     }
 
     // Upstream is definitively unavailable (CLOSING, CLOSED, or missing) — close the client.
-    log.debug("Closing port-forward WebSocket because upstream proxy is not open", {
+    log.warn("Closing port-forward WebSocket because upstream proxy is not open", {
       portForwardId: ws.data.portForwardId,
       proxyReadyState: proxySocket ? proxySocket.readyState : "missing",
     });
@@ -89,7 +89,7 @@ export function createMessageHandler(helpers: TerminalHelpers) {
         typeof data.rows === "number"
       ) {
         void ws.data.terminalBridge.resize(data.cols, data.rows).catch((resizeError: Error) => {
-          log.debug("Ignoring SSH terminal resize error", {
+          log.warn("Ignoring SSH terminal resize error", {
             sshSessionId: ws.data.sshSessionId,
             sshServerSessionId: ws.data.sshServerSessionId,
             error: String(resizeError),

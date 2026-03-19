@@ -3,6 +3,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from "react";
+import { createLogger } from "../../lib/logger";
 import type { ModelInfo } from "../../types";
 import { appFetch } from "../../lib/public-path";
 
@@ -18,6 +19,7 @@ export interface UseWorkspaceModelsResult {
 }
 
 export function useWorkspaceModels(): UseWorkspaceModelsResult {
+  const log = createLogger("useWorkspaceModels");
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [lastModel, setLastModel] = useState<{ providerID: string; modelID: string } | null>(null);
@@ -40,8 +42,8 @@ export function useWorkspaceModels(): UseWorkspaceModelsResult {
           const data = await response.json();
           setLastModel(data);
         }
-      } catch {
-        // Ignore errors
+      } catch (error) {
+        log.warn("Failed to fetch last model preference", { error: String(error) });
       }
     }
     fetchLastModel();
@@ -82,6 +84,11 @@ export function useWorkspaceModels(): UseWorkspaceModelsResult {
       if (error instanceof DOMException && error.name === "AbortError") {
         return;
       }
+      log.error("Failed to fetch workspace models", {
+        workspaceId,
+        directory,
+        error: String(error),
+      });
       if (requestId === modelsRequestIdRef.current) {
         setModels([]);
       }

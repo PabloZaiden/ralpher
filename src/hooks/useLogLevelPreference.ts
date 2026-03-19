@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { setLogLevel as setFrontendLogLevel, type LogLevelName, LOG_LEVEL_OPTIONS, DEFAULT_LOG_LEVEL } from "../lib/logger";
+import { createLogger, setLogLevel as setFrontendLogLevel, type LogLevelName, LOG_LEVEL_OPTIONS, DEFAULT_LOG_LEVEL } from "../lib/logger";
 import { appFetch } from "../lib/public-path";
 
 export interface UseLogLevelPreferenceResult {
@@ -33,6 +33,7 @@ export interface UseLogLevelPreferenceResult {
  * frontend and backend logging.
  */
 export function useLogLevelPreference(): UseLogLevelPreferenceResult {
+  const log = createLogger("useLogLevelPreference");
   const [level, setLevelState] = useState<LogLevelName>(DEFAULT_LOG_LEVEL);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +55,7 @@ export function useLogLevelPreference(): UseLogLevelPreferenceResult {
       // Also update the frontend logger
       setFrontendLogLevel(data.level);
     } catch (err) {
+      log.error("Failed to fetch log level preference", { error: String(err) });
       setError(String(err));
     } finally {
       setLoading(false);
@@ -80,6 +82,7 @@ export function useLogLevelPreference(): UseLogLevelPreferenceResult {
       // Also update the frontend logger
       setFrontendLogLevel(newLevel);
     } catch (err) {
+      log.error("Failed to save log level preference", { level: newLevel, error: String(err) });
       setError(String(err));
     } finally {
       setSaving(false);

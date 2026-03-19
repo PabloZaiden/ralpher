@@ -179,6 +179,12 @@ export class SshTerminalBridge {
       const startupError = error instanceof Error ? error : new Error(String(error));
       this.ready = false;
       this.startupError = startupError.message;
+      log.error("SSH terminal failed before becoming ready", {
+        sessionId: this.sessionId,
+        trackedSessionId: this.getTrackedSessionId(),
+        connectionMode: this.getConnectionMode(),
+        error: startupError.message,
+      });
 
       if (!this.closing) {
         this.options.onError?.(startupError);

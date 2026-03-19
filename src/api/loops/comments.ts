@@ -5,8 +5,11 @@
  */
 
 import { loopManager } from "../../core/loop-manager";
+import { createLogger } from "../../core/logger";
 import { errorResponse } from "../helpers";
 import type { GetCommentsResponse } from "../../types/api";
+
+const log = createLogger("api:loops");
 
 export const loopsCommentsRoutes = {
   "/api/loops/:id/comments": {
@@ -35,6 +38,10 @@ export const loopsCommentsRoutes = {
         };
         return Response.json(responseBody);
       } catch (error) {
+        log.error("Failed to get loop comments", {
+          loopId: req.params.id,
+          error: String(error),
+        });
         return errorResponse("get_comments_failed", String(error), 500);
       }
     },

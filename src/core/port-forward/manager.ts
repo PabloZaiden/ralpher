@@ -259,15 +259,23 @@ export class PortForwardManager {
       handle.deleting = true;
       try {
         handle.child.kill("SIGTERM");
-      } catch {
-        // Ignore termination errors; cleanup continues below.
+      } catch (error) {
+        log.warn("Failed to send SIGTERM to managed port-forward process during cleanup", {
+          forwardId: forward.config.id,
+          pid: handle.child.pid,
+          error: String(error),
+        });
       }
       await waitForProcessExit(handle.child, STOP_TIMEOUT_MS);
       if (handle.child.exitCode === null) {
         try {
           handle.child.kill("SIGKILL");
-        } catch {
-          // Ignore force-kill failures during cleanup.
+        } catch (error) {
+          log.warn("Failed to send SIGKILL to managed port-forward process during cleanup", {
+            forwardId: forward.config.id,
+            pid: handle.child.pid,
+            error: String(error),
+          });
         }
       }
       this.runtimeHandles.delete(forward.config.id);
@@ -277,8 +285,12 @@ export class PortForwardManager {
     if (forward.state.pid && isProcessAlive(forward.state.pid)) {
       try {
         process.kill(forward.state.pid, "SIGTERM");
-      } catch {
-        // Ignore external-process termination failures during cleanup.
+      } catch (error) {
+        log.warn("Failed to stop external port-forward process during cleanup", {
+          forwardId: forward.config.id,
+          pid: forward.state.pid,
+          error: String(error),
+        });
       }
     }
   }
