@@ -36,6 +36,28 @@ function getDurationMs(startedAt: number): number {
   return Number((performance.now() - startedAt).toFixed(2));
 }
 
+function logResponseOutcome(
+  response: Response,
+  responseContext: { method: string; path: string; routePath: string; status: number; durationMs: number },
+): void {
+  if (response.ok) {
+    log.info("Request completed", responseContext);
+    return;
+  }
+
+  if (response.status >= 500) {
+    log.error("Request completed with server error status", responseContext);
+    return;
+  }
+
+  if (response.status >= 400) {
+    log.warn("Request completed with client error status", responseContext);
+    return;
+  }
+
+  log.info("Request completed with redirect status", responseContext);
+}
+
 export function wrapRouteHandlerWithLogging<TArgs extends unknown[]>(
   handler: RouteLikeHandler<TArgs>,
   routePath?: string,
@@ -67,11 +89,7 @@ export function wrapRouteHandlerWithLogging<TArgs extends unknown[]>(
         durationMs,
       };
 
-      if (response.ok) {
-        log.info("Request completed", responseContext);
-      } else {
-        log.error("Request completed with non-2xx status", responseContext);
-      }
+      logResponseOutcome(response, responseContext);
 
       return response;
     } catch (error) {

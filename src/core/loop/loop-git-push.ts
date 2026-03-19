@@ -54,7 +54,10 @@ export async function pushLoopImpl(ctx: LoopCtx, loopId: string): Promise<PushLo
 
     return await syncBaseBranchAndPush(ctx, loopId, loop, git);
   } catch (error) {
-    log.error(`[LoopManager] pushLoop: Failed to push loop ${loopId}: ${String(error)}`);
+    log.error("[LoopManager] pushLoop: Failed to push loop", {
+      loopId,
+      error: String(error),
+    });
     return { success: false, error: String(error) };
   } finally {
     ctx.loopsBeingAccepted.delete(loopId);
@@ -106,7 +109,10 @@ export async function updateBranchImpl(ctx: LoopCtx, loopId: string): Promise<Pu
 
     return await syncBaseBranchAndPush(ctx, loopId, loop, git);
   } catch (error) {
-    log.error(`[LoopManager] updateBranch: Failed to update branch for loop ${loopId}: ${String(error)}`);
+    log.error("[LoopManager] updateBranch: Failed to update branch for loop", {
+      loopId,
+      error: String(error),
+    });
     return { success: false, error: String(error) };
   } finally {
     ctx.loopsBeingAccepted.delete(loopId);

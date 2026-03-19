@@ -10,6 +10,7 @@ const requestLog = createLogger("api:request");
 describe("request logging wrappers", () => {
   test("logs request start and successful completion at info", async () => {
     const infoSpy = spyOn(requestLog, "info").mockImplementation(() => undefined);
+    const warnSpy = spyOn(requestLog, "warn").mockImplementation(() => undefined);
     const errorSpy = spyOn(requestLog, "error").mockImplementation(() => undefined);
 
     try {
@@ -21,6 +22,7 @@ describe("request logging wrappers", () => {
 
       expect(response.status).toBe(200);
       expect(infoSpy).toHaveBeenCalledTimes(2);
+      expect(warnSpy).not.toHaveBeenCalled();
       expect(errorSpy).not.toHaveBeenCalled();
       expect(infoSpy.mock.calls[0]?.[0]).toBe("Request started");
       expect(infoSpy.mock.calls[0]?.[1]).toEqual({
@@ -37,12 +39,14 @@ describe("request logging wrappers", () => {
       }));
     } finally {
       infoSpy.mockRestore();
+      warnSpy.mockRestore();
       errorSpy.mockRestore();
     }
   });
 
-  test("logs non-2xx responses at error", async () => {
+  test("logs 4xx responses at warn", async () => {
     const infoSpy = spyOn(requestLog, "info").mockImplementation(() => undefined);
+    const warnSpy = spyOn(requestLog, "warn").mockImplementation(() => undefined);
     const errorSpy = spyOn(requestLog, "error").mockImplementation(() => undefined);
 
     try {
@@ -54,9 +58,10 @@ describe("request logging wrappers", () => {
 
       expect(response.status).toBe(404);
       expect(infoSpy).toHaveBeenCalledTimes(1);
-      expect(errorSpy).toHaveBeenCalledTimes(1);
-      expect(errorSpy.mock.calls[0]?.[0]).toBe("Request completed with non-2xx status");
-      expect(errorSpy.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(warnSpy.mock.calls[0]?.[0]).toBe("Request completed with client error status");
+      expect(warnSpy.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
         method: "GET",
         path: "/api/test",
         routePath: "/api/test",
@@ -64,12 +69,44 @@ describe("request logging wrappers", () => {
       }));
     } finally {
       infoSpy.mockRestore();
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  });
+
+  test("logs 5xx responses at error", async () => {
+    const infoSpy = spyOn(requestLog, "info").mockImplementation(() => undefined);
+    const warnSpy = spyOn(requestLog, "warn").mockImplementation(() => undefined);
+    const errorSpy = spyOn(requestLog, "error").mockImplementation(() => undefined);
+
+    try {
+      const wrappedRoute = wrapRouteMethodsWithLogging({
+        GET: async (_req: Request) => new Response("boom", { status: 503 }),
+      }, "/api/test");
+
+      const response = await wrappedRoute.GET!(new Request("http://example.test/api/test"));
+
+      expect(response.status).toBe(503);
+      expect(infoSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy.mock.calls[0]?.[0]).toBe("Request completed with server error status");
+      expect(errorSpy.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
+        method: "GET",
+        path: "/api/test",
+        routePath: "/api/test",
+        status: 503,
+      }));
+    } finally {
+      infoSpy.mockRestore();
+      warnSpy.mockRestore();
       errorSpy.mockRestore();
     }
   });
 
   test("logs successful websocket-style upgrades as completed info events", async () => {
     const infoSpy = spyOn(requestLog, "info").mockImplementation(() => undefined);
+    const warnSpy = spyOn(requestLog, "warn").mockImplementation(() => undefined);
     const errorSpy = spyOn(requestLog, "error").mockImplementation(() => undefined);
 
     try {
@@ -91,6 +128,7 @@ describe("request logging wrappers", () => {
       expect(response).toBeUndefined();
       expect(upgradeCalled).toBe(true);
       expect(infoSpy).toHaveBeenCalledTimes(2);
+      expect(warnSpy).not.toHaveBeenCalled();
       expect(errorSpy).not.toHaveBeenCalled();
       expect(infoSpy.mock.calls[1]?.[0]).toBe("Request completed");
       expect(infoSpy.mock.calls[1]?.[1]).toEqual(expect.objectContaining({
@@ -101,6 +139,7 @@ describe("request logging wrappers", () => {
       }));
     } finally {
       infoSpy.mockRestore();
+      warnSpy.mockRestore();
       errorSpy.mockRestore();
     }
   });

@@ -423,7 +423,7 @@ The existing Error Handling section covers try/catch syntax. Additionally:
 ### Logging Severity
 
 - **Use `error` for unrecoverable failures** — if the current layer cannot recover and the operation fails, log at `error`.
-- **Use `error` for non-2xx request responses** — at API and WebSocket request boundaries, returning a non-2xx result to the caller must produce an `error` log at the boundary.
+- **Map request boundary severity by outcome** — at API and WebSocket boundaries, log unexpected server-side failures and 5xx responses at `error`, expected client-side 4xx outcomes at `warn`, and redirects or other non-2xx-but-non-failure outcomes at `info`.
 - **Use `warn` for recoverable failures** — log at `warn` when the code falls back, skips optional work, or encounters a non-critical expectation mismatch but can keep going.
 - **Use `info` for high-level business milestones** — request start/finish, loop lifecycle milestones, provisioning start/finish, and similarly important operation checkpoints belong at `info`.
 - **Use `debug` for control-flow detail** — branch decisions, intermediate execution steps, and helper-level flow detail that helps explain how the code moved through an operation should use `debug`.
