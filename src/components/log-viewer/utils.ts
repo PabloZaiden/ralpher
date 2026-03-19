@@ -1,16 +1,17 @@
 import type { ToolCallData, LogLevel } from "../../types";
 import type { EntryBase, DisplayEntry } from "./types";
 
+const timeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
 /**
  * Format a timestamp for display.
  */
 export function formatTime(isoString: string): string {
-  const date = new Date(isoString);
-  return date.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  return timeFormatter.format(new Date(isoString));
 }
 
 /**

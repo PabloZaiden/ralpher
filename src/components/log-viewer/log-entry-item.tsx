@@ -1,5 +1,7 @@
+import { memo, useCallback } from "react";
 import { Badge } from "../common";
 import { MarkdownRenderer } from "../MarkdownRenderer";
+import { LazyDetails } from "./lazy-details";
 import type { LogEntry } from "./types";
 import { formatTime, getLogLevelColor, getLogLevelBadge } from "./utils";
 
@@ -11,18 +13,29 @@ interface LogEntryItemProps {
   markdownEnabled: boolean;
 }
 
-export function LogEntryItem({ data: log, showHeader, spacingClass, index, markdownEnabled }: LogEntryItemProps) {
+function getOtherDetails(details: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(details).filter(([key]) => key !== "responseContent" && key !== "logKind")
+  );
+}
+
+export const LogEntryItem = memo(function LogEntryItem({ data: log, showHeader, spacingClass, index, markdownEnabled }: LogEntryItemProps) {
+  const details = log.details;
   const logKind = log.details?.["logKind"] as string | undefined;
   const isReasoning = logKind === "reasoning" || (!logKind && log.message === "AI reasoning...");
   const responseContent = log.details?.["responseContent"];
   const hasResponseContent = typeof responseContent === "string" && responseContent.length > 0;
-  // Filter out responseContent and logKind from details for separate display
-  const otherDetails = log.details
-    ? Object.fromEntries(
-        Object.entries(log.details).filter(([key]) => key !== "responseContent" && key !== "logKind")
-      )
-    : undefined;
-  const hasOtherDetails = otherDetails && Object.keys(otherDetails).length > 0;
+  const hasOtherDetails = details
+    ? Object.keys(details).some((key) => key !== "responseContent" && key !== "logKind")
+    : false;
+  const renderDetails = useCallback(
+    () => (
+      <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
+        {JSON.stringify(getOtherDetails(details!), null, 2)}
+      </pre>
+    ),
+    [details]
+  );
 
   return (
     <div key={`log-${log.id}-${index}`} className={`group ${isReasoning ? "opacity-60" : ""} ${spacingClass}`}>
@@ -59,17 +72,13 @@ export function LogEntryItem({ data: log, showHeader, spacingClass, index, markd
           )}
           {/* Show other details as JSON */}
           {hasOtherDetails && (
-            <details className="mt-1">
-              <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
-                Details
-              </summary>
-              <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
-                {JSON.stringify(otherDetails, null, 2)}
-              </pre>
-            </details>
+            <LazyDetails
+              summary="Details"
+              renderContent={renderDetails}
+            />
           )}
         </div>
       </div>
     </div>
   );
-}
+});
