@@ -70,6 +70,43 @@ class BackendManager {
   }
 
   /**
+   * Ensure a workspace connection state exists and is hydrated from persisted settings.
+   *
+   * This avoids caching default local/stdio settings before the real workspace
+   * configuration has been loaded from persistence.
+   */
+  private async ensureWorkspaceState(workspaceId: string): Promise<WorkspaceConnectionState> {
+    const workspace = await getWorkspace(workspaceId);
+    if (!workspace) {
+      throw new Error(`Workspace not found: ${workspaceId}`);
+    }
+
+    const settings = workspace.serverSettings;
+    let state = this.connections.get(workspaceId);
+    if (!state) {
+      state = {
+        backend: this.createBackendForSettings(settings),
+        settings,
+        connectionError: null,
+      };
+      this.connections.set(workspaceId, state);
+      return state;
+    }
+
+    if (state.settings.agent.provider !== settings.agent.provider) {
+      const previousBackend = state.backend;
+      if (previousBackend.isConnected()) {
+        await previousBackend.disconnect();
+      }
+      state.backend = this.createBackendForSettings(settings);
+      state.connectionError = null;
+    }
+
+    state.settings = settings;
+    return state;
+  }
+
+  /**
    * Initialize the backend manager.
    * No longer loads global settings - settings are per-workspace.
    */
@@ -93,30 +130,8 @@ class BackendManager {
       return this.connectWithTestBackend(workspaceId, directory);
     }
 
-    // Get the workspace to retrieve its server settings
-    const workspace = await getWorkspace(workspaceId);
-    if (!workspace) {
-      throw new Error(`Workspace not found: ${workspaceId}`);
-    }
-
-    const settings = workspace.serverSettings;
-    let state = this.connections.get(workspaceId);
-
-    // Create new connection state if it doesn't exist
-    if (!state) {
-      state = {
-        backend: this.createBackendForSettings(settings),
-        settings,
-        connectionError: null,
-      };
-      this.connections.set(workspaceId, state);
-    } else {
-      // Update settings from workspace (in case they changed)
-      if (state.settings.agent.provider !== settings.agent.provider) {
-        state.backend = this.createBackendForSettings(settings);
-      }
-      state.settings = settings;
-    }
+    const state = await this.ensureWorkspaceState(workspaceId);
+    const settings = state.settings;
 
     // If already connected, disconnect first
     if (state.backend.isConnected()) {
@@ -484,12 +499,17 @@ class BackendManager {
   }
 
   /**
-   * Get the backend instance for a workspace (workspace-level operations only).
+   * Get an already-initialized backend instance for a workspace
+   * (workspace-level operations only).
+   *
    * Used for operations that don't belong to a specific loop (name generation,
-   * model listing, directory validation).
-   * Creates a new backend if one doesn't exist.
+   * model listing, directory validation) when the workspace state is already
+   * initialized.
    *
    * IMPORTANT: Do NOT use this for loop execution. Use getLoopBackend() instead.
+   *
+   * @throws Error if workspace state has not been initialized yet.
+   *         Use getBackendAsync() or connect() to hydrate it first.
    */
   getBackend(workspaceId: string): Backend {
     // Use test backend if set
@@ -502,15 +522,31 @@ class BackendManager {
       return state.backend;
     }
 
-    // Create a new backend on demand
-    const defaultSettings = getDefaultServerSettings();
-    const backend = this.createBackendForSettings(defaultSettings);
-    this.connections.set(workspaceId, {
-      backend,
-      settings: defaultSettings,
-      connectionError: null,
-    });
-    return backend;
+    throw new Error(`[BackendManager] Workspace ${workspaceId} not initialized. Use getBackendAsync() or connect() first.`);
+  }
+
+  /**
+   * Get the cached backend instance for a workspace if it has already been initialized.
+   * Does not hydrate workspace state from persistence.
+   */
+  getInitializedBackend(workspaceId: string): Backend | null {
+    if (this.isTestBackend && this.testBackend) {
+      return this.testBackend;
+    }
+
+    return this.connections.get(workspaceId)?.backend ?? null;
+  }
+
+  /**
+   * Get the backend instance for a workspace, hydrating persisted settings first.
+   */
+  async getBackendAsync(workspaceId: string): Promise<Backend> {
+    if (this.isTestBackend && this.testBackend) {
+      return this.testBackend;
+    }
+
+    const state = await this.ensureWorkspaceState(workspaceId);
+    return state.backend;
   }
 
   /**
@@ -631,20 +667,7 @@ class BackendManager {
       return this.testExecutorFactory(directory);
     }
 
-    // Ensure workspace settings are loaded into state for executor creation.
-    let state = this.connections.get(workspaceId);
-    if (!state) {
-      const workspace = await getWorkspace(workspaceId);
-      if (!workspace) {
-        throw new Error(`Workspace not found: ${workspaceId}`);
-      }
-      state = {
-        backend: this.createBackendForSettings(workspace.serverSettings),
-        settings: workspace.serverSettings,
-        connectionError: null,
-      };
-      this.connections.set(workspaceId, state);
-    }
+    await this.ensureWorkspaceState(workspaceId);
 
     return this.getCommandExecutor(workspaceId, directory);
   }

@@ -96,15 +96,15 @@ export async function generateLoopTitleImpl(
   _ctx: LoopCtx,
   options: Pick<CreateLoopOptions, "prompt" | "directory" | "workspaceId">
 ): Promise<string> {
-  const workspaceBackend = backendManager.getBackend(options.workspaceId);
+  let backend = backendManager.getInitializedBackend(options.workspaceId);
   if (
-    !backendManager.isWorkspaceConnected(options.workspaceId)
-    || workspaceBackend.getDirectory() !== options.directory
+    !backend
+    || !backendManager.isWorkspaceConnected(options.workspaceId)
+    || backend.getDirectory() !== options.directory
   ) {
     await backendManager.connect(options.workspaceId, options.directory);
+    backend = backendManager.getBackend(options.workspaceId);
   }
-
-  const backend = backendManager.getBackend(options.workspaceId);
   const tempSession = await backend.createSession({
     title: "Loop Title Generation",
     directory: options.directory,
