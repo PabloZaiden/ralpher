@@ -27,8 +27,26 @@ export function MessageEntry({ data: msg, showHeader, spacingClass, index }: Mes
             </Badge>
           </span>
         )}
-        <div className="flex-1 min-w-0 whitespace-pre-wrap break-words">
-          {msg.content}
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="whitespace-pre-wrap break-words">
+            {msg.content}
+          </div>
+          {msg.attachments && msg.attachments.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {msg.attachments.map((attachment) => (
+                <div
+                  key={attachment.id}
+                  className="rounded border border-gray-700 bg-neutral-800 p-1"
+                >
+                  <img
+                    src={`data:${attachment.mimeType};base64,${attachment.data}`}
+                    alt={attachment.filename}
+                    className="h-20 w-20 rounded object-cover"
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

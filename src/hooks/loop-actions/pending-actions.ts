@@ -2,6 +2,7 @@
  * Pending prompt and pending value actions for loops.
  */
 
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import { apiCall, apiAction, apiActionWithBody } from "./helpers";
 
 /**
@@ -17,11 +18,12 @@ export interface SetPendingResult {
 export async function setPendingPromptApi(
   loopId: string,
   prompt: string,
+  attachments?: MessageImageAttachment[],
 ): Promise<boolean> {
   return apiActionWithBody(
     `/api/loops/${loopId}/pending-prompt`,
     "PUT",
-    { prompt },
+    { prompt, attachments },
     "Set pending prompt",
   );
 }
@@ -39,7 +41,7 @@ export async function clearPendingPromptApi(loopId: string): Promise<boolean> {
  */
 export async function setPendingApi(
   loopId: string,
-  options: { message?: string; model?: { providerID: string; modelID: string } },
+  options: { message?: string; model?: { providerID: string; modelID: string }; attachments?: MessageImageAttachment[] },
 ): Promise<SetPendingResult> {
   await apiCall(
     `/api/loops/${loopId}/pending`,

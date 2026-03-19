@@ -159,6 +159,7 @@ export const loopsCollectionRoutes = {
           name: body.name,
           directory,
           prompt: body.prompt,
+          attachments: body.attachments,
           workspaceId,
           modelProviderID: body.model?.providerID,
           modelID: body.model?.modelID,
@@ -195,7 +196,9 @@ export const loopsCollectionRoutes = {
         // Otherwise, start the loop immediately
         if (body.planMode) {
           try {
-            await loopManager.startPlanMode(loop.config.id);
+            await loopManager.startPlanMode(loop.config.id, {
+              attachments: body.attachments,
+            });
             // Return the loop with updated state after starting plan mode
             const updatedLoop = await loopManager.getLoop(loop.config.id);
             return Response.json(updatedLoop ?? loop, { status: 201 });
@@ -214,7 +217,9 @@ export const loopsCollectionRoutes = {
         } else {
           // Always start the loop immediately after creation (normal mode)
           try {
-            await loopManager.startLoop(loop.config.id);
+            await loopManager.startLoop(loop.config.id, {
+              attachments: body.attachments,
+            });
             // Return the loop with updated state after starting
             const updatedLoop = await loopManager.getLoop(loop.config.id);
             return Response.json(updatedLoop ?? loop, { status: 201 });

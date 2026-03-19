@@ -84,6 +84,7 @@ export function useCreateLoopForm({
   editLoopId = null,
   initialLoopData = null,
   isEditingDraft = false,
+  attachments = [],
   renderActions,
   mode = "loop",
 }: Pick<
@@ -100,6 +101,7 @@ export function useCreateLoopForm({
   | "editLoopId"
   | "initialLoopData"
   | "isEditingDraft"
+  | "attachments"
   | "renderActions"
   | "mode"
 >): UseCreateLoopFormReturn {
@@ -156,6 +158,7 @@ export function useCreateLoopForm({
     generatingTitle,
     prompt: fields.prompt,
     name: fields.name,
+    attachments,
   });
 
   return {

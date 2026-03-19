@@ -1,10 +1,15 @@
 import { getTemplateById } from "../../lib/prompt-templates";
+import type { ComposerImageAttachment } from "../../types/message-attachments";
+import { ImageAttachmentControl } from "../ImageAttachmentControl";
 
 interface PromptFieldProps {
   prompt: string;
   onChange: (value: string) => void;
+  attachments: ComposerImageAttachment[];
+  onAttachmentsChange: (attachments: ComposerImageAttachment[]) => void;
   isChatMode: boolean;
   planMode: boolean;
+  isEditingDraft?: boolean;
   selectedTemplate: string;
   onTemplateClear: () => void;
 }
@@ -12,8 +17,11 @@ interface PromptFieldProps {
 export function PromptField({
   prompt,
   onChange,
+  attachments,
+  onAttachmentsChange,
   isChatMode,
   planMode,
+  isEditingDraft = false,
   selectedTemplate,
   onTemplateClear,
 }: PromptFieldProps) {
@@ -47,6 +55,13 @@ export function PromptField({
       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
         {isChatMode ? "Your first message to start the conversation" : "The prompt sent to the AI agent at the start of each iteration"}
       </p>
+      <div className="mt-3">
+        <ImageAttachmentControl
+          attachments={attachments}
+          onChange={onAttachmentsChange}
+          hint={isEditingDraft ? "Images are sent when you start the draft and are not saved with it." : "Optional. Images are sent inline with the first message only."}
+        />
+      </div>
     </div>
   );
 }

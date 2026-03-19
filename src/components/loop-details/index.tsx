@@ -212,9 +212,9 @@ export function LoopDetails({
           submitLabel={canTerminalFollowUp ? (isChatMode ? "Send" : "Restart") : undefined}
           helperText={canTerminalFollowUp ? "Message will start a new feedback cycle immediately. Model change takes effect on that cycle." : undefined}
           onQueuePending={async (options) => {
-            if (isPlanning) { if (options.message) { await sendPlanFeedback(options.message); return true; } return false; }
-            if (canTerminalFollowUp) { if (options.message) return await sendFollowUp(options.message, options.model); return false; }
-            if (isChatMode) { if (options.message) return await sendChatMessage(options.message, options.model); return false; }
+            if (isPlanning) { if (options.message) { await sendPlanFeedback(options.message, options.attachments); return true; } return false; }
+            if (canTerminalFollowUp) { if (options.message) return await sendFollowUp(options.message, options.model, options.attachments); return false; }
+            if (isChatMode) { if (options.message) return await sendChatMessage(options.message, options.model, options.attachments); return false; }
             const result = await setPending(options);
             return result.success;
           }}

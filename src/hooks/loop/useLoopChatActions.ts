@@ -13,19 +13,22 @@ import {
 } from "../loopActions";
 import { createLogger } from "../../lib/logger";
 import type { SshSession } from "../../types";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { UseLoopActionsParams } from "./useLoopActions";
 
 const log = createLogger("useLoop");
 
 export interface UseLoopChatActionsResult {
-  addressReviewComments: (comments: string) => Promise<AddressCommentsResult>;
+  addressReviewComments: (comments: string, attachments?: MessageImageAttachment[]) => Promise<AddressCommentsResult>;
   sendChatMessage: (
     message: string,
     model?: { providerID: string; modelID: string },
+    attachments?: MessageImageAttachment[],
   ) => Promise<boolean>;
   sendFollowUp: (
     message: string,
     model?: { providerID: string; modelID: string },
+    attachments?: MessageImageAttachment[],
   ) => Promise<boolean>;
   connectViaSsh: () => Promise<SshSession | null>;
 }
@@ -35,7 +38,7 @@ export function useLoopChatActions(params: UseLoopActionsParams): UseLoopChatAct
     params;
 
   const addressReviewComments = useCallback(
-    async (comments: string): Promise<AddressCommentsResult> => {
+    async (comments: string, attachments?: MessageImageAttachment[]): Promise<AddressCommentsResult> => {
       const actionLoopId = loopId;
       const staleAction = ignoreStaleLoopAction("addressReviewComments", actionLoopId, {
         success: false,
@@ -48,7 +51,7 @@ export function useLoopChatActions(params: UseLoopActionsParams): UseLoopChatAct
         commentsLength: comments.length,
       });
       try {
-        const result = await addressReviewCommentsApi(actionLoopId, comments);
+        const result = await addressReviewCommentsApi(actionLoopId, comments, attachments);
         await refresh();
         if (!isActiveLoop(actionLoopId)) {
           return { success: false };
@@ -80,10 +83,11 @@ export function useLoopChatActions(params: UseLoopActionsParams): UseLoopChatAct
   );
 
   const sendChatMessage = useCallback(
-    async (
-      message: string,
-      model?: { providerID: string; modelID: string },
-    ): Promise<boolean> => {
+      async (
+        message: string,
+        model?: { providerID: string; modelID: string },
+        attachments?: MessageImageAttachment[],
+      ): Promise<boolean> => {
       const actionLoopId = loopId;
       const staleAction = ignoreStaleLoopAction("sendChatMessage", actionLoopId, false);
       if (staleAction !== null) {
@@ -91,7 +95,7 @@ export function useLoopChatActions(params: UseLoopActionsParams): UseLoopChatAct
       }
       log.debug("Sending chat message", { loopId: actionLoopId, messageLength: message.length });
       try {
-        await sendChatMessageApi(actionLoopId, message, model);
+        await sendChatMessageApi(actionLoopId, message, model, attachments);
         await refresh();
         if (!isActiveLoop(actionLoopId)) {
           return false;
@@ -112,10 +116,11 @@ export function useLoopChatActions(params: UseLoopActionsParams): UseLoopChatAct
   );
 
   const sendFollowUp = useCallback(
-    async (
-      message: string,
-      model?: { providerID: string; modelID: string },
-    ): Promise<boolean> => {
+      async (
+        message: string,
+        model?: { providerID: string; modelID: string },
+        attachments?: MessageImageAttachment[],
+      ): Promise<boolean> => {
       const actionLoopId = loopId;
       const staleAction = ignoreStaleLoopAction("sendFollowUp", actionLoopId, false);
       if (staleAction !== null) {
@@ -126,7 +131,7 @@ export function useLoopChatActions(params: UseLoopActionsParams): UseLoopChatAct
         messageLength: message.length,
       });
       try {
-        await sendFollowUpApi(actionLoopId, message, model);
+        await sendFollowUpApi(actionLoopId, message, model, attachments);
         await refresh();
         if (!isActiveLoop(actionLoopId)) {
           return false;

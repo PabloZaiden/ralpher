@@ -38,7 +38,7 @@ export const loopsReviewRoutes = {
       const body = validation.data;
 
       try {
-        const result = await loopManager.addressReviewComments(req.params.id, body.comments);
+        const result = await loopManager.addressReviewComments(req.params.id, body.comments, body.attachments);
 
         if (!result.success) {
           // Map error messages to status codes

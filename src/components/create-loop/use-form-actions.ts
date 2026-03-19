@@ -5,9 +5,11 @@
 
 import { useState, useRef, useEffect, useCallback, type FormEvent } from "react";
 import type { CreateLoopRequest, CreateChatRequest } from "../../types";
+import type { ComposerImageAttachment } from "../../types/message-attachments";
 import { parseModelKey } from "../ModelSelector";
 import { createLogger } from "../../lib/logger";
 import type { CreateLoopFormProps, CreateLoopFormSubmitRequest } from "./types";
+import { toMessageImageAttachments } from "../../lib/image-attachments";
 
 const log = createLogger("CreateLoopForm");
 
@@ -49,6 +51,7 @@ export function useFormActions({
   generatingTitle,
   prompt,
   name,
+  attachments,
 }: {
   selectedWorkspaceId: string | undefined;
   selectedModel: string;
@@ -75,6 +78,7 @@ export function useFormActions({
   generatingTitle: boolean;
   prompt: string;
   name: string;
+  attachments: ComposerImageAttachment[];
 }): UseFormActionsReturn {
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -130,13 +134,17 @@ export function useFormActions({
 
       let request: CreateLoopFormSubmitRequest;
 
-      if (isChatMode) {
-        const chatRequest: CreateChatRequest = {
-          workspaceId: selectedWorkspaceId,
-          prompt: currentPrompt.trim(),
-          model,
-          useWorktree,
-        };
+        if (isChatMode) {
+          const chatRequest: CreateChatRequest = {
+            workspaceId: selectedWorkspaceId,
+            prompt: currentPrompt.trim(),
+            model,
+            useWorktree,
+          };
+
+          if (attachments.length > 0 && !asDraft) {
+            chatRequest.attachments = toMessageImageAttachments(attachments);
+          }
 
         if (selectedBranch && selectedBranch !== currentBranch) {
           chatRequest.baseBranch = selectedBranch;
@@ -153,6 +161,10 @@ export function useFormActions({
           model,
           useWorktree,
         };
+
+        if (attachments.length > 0 && !asDraft) {
+          loopRequest.attachments = toMessageImageAttachments(attachments);
+        }
 
         if (maxIterations.trim()) {
           const num = parseInt(maxIterations, 10);
@@ -217,6 +229,7 @@ export function useFormActions({
       currentBranch,
       clearPlanningFolder,
       useWorktree,
+      attachments,
     ]
   );
 

@@ -11,6 +11,7 @@ import type {
   ModelConfig,
 } from "../../types/loop";
 import type { LoopEvent } from "../../types/events";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { GitService } from "../git-service";
 import type { SimpleEventEmitter } from "../event-emitter";
 
@@ -72,6 +73,8 @@ export interface LoopEngineOptions {
   onPersistState?: (state: LoopState) => Promise<void>;
   /** Skip git branch setup (for review cycles where branch is already set up) */
   skipGitSetup?: boolean;
+  /** Transient attachments for the first prompt sent by this engine */
+  initialPromptAttachments?: MessageImageAttachment[];
 }
 
 /**

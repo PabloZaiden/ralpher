@@ -10,9 +10,12 @@
 
 import { useState, useCallback, type FormEvent } from "react";
 import type { ModelInfo, ModelConfig, LoopConfig } from "../types";
+import type { ComposerImageAttachment, MessageImageAttachment } from "../types/message-attachments";
 import { Button } from "./common";
 import { ModelSelector, makeModelKey, parseModelKey, isModelEnabled, getModelDisplayName } from "./ModelSelector";
 import { createLogger } from "../lib/logger";
+import { ImageAttachmentControl } from "./ImageAttachmentControl";
+import { toMessageImageAttachments } from "../lib/image-attachments";
 
 const log = createLogger("LoopActionBar");
 
@@ -32,7 +35,7 @@ export interface LoopActionBarProps {
   /** Whether models are loading */
   modelsLoading: boolean;
   /** Callback when user queues a message and/or model change */
-  onQueuePending: (options: { message?: string; model?: ModelConfig }) => Promise<boolean>;
+  onQueuePending: (options: { message?: string; model?: ModelConfig; attachments?: MessageImageAttachment[] }) => Promise<boolean>;
   /** Callback when user clears pending values */
   onClearPending: () => Promise<boolean>;
   /** Whether the action bar is disabled */
@@ -62,6 +65,7 @@ export function LoopActionBar({
 }: LoopActionBarProps) {
   const [message, setMessage] = useState("");
   const [selectedModel, setSelectedModel] = useState<string>("");
+  const [attachments, setAttachments] = useState<ComposerImageAttachment[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const isChatMode = mode === "chat";
@@ -83,7 +87,8 @@ export function LoopActionBar({
 
   // Check if user has local changes (not yet submitted)
   const hasLocalChanges = message.trim().length > 0 || selectedModel !== "";
-  const canSubmit = hasLocalChanges && (!requireMessage || message.trim().length > 0);
+  const hasAttachmentWithoutMessage = attachments.length > 0 && message.trim().length === 0;
+  const canSubmit = hasLocalChanges && !hasAttachmentWithoutMessage && (!requireMessage || message.trim().length > 0);
 
   // Check if the selected model is enabled (connected)
   const selectedModelEnabled = selectedModel ? isModelEnabled(models, selectedModel) : true;
@@ -105,10 +110,14 @@ export function LoopActionBar({
 
     try {
       // Build the pending update
-      const options: { message?: string; model?: ModelConfig } = {};
+      const options: { message?: string; model?: ModelConfig; attachments?: MessageImageAttachment[] } = {};
       
       if (message.trim()) {
         options.message = message.trim();
+      }
+
+      if (attachments.length > 0) {
+        options.attachments = toMessageImageAttachments(attachments);
       }
       
       if (selectedModel) {
@@ -124,13 +133,14 @@ export function LoopActionBar({
         // Clear local state on success
         setMessage("");
         setSelectedModel("");
+        setAttachments([]);
       } else {
         log.warn("Failed to queue pending changes");
       }
     } finally {
       setIsSubmitting(false);
     }
-  }, [canSubmit, disabled, isSubmitting, message, selectedModel, selectedModelEnabled, onQueuePending]);
+  }, [attachments, canSubmit, disabled, isSubmitting, message, selectedModel, selectedModelEnabled, onQueuePending]);
 
   // Handle clear pending
   const handleClear = useCallback(async () => {
@@ -218,10 +228,25 @@ export function LoopActionBar({
           </Button>
         </div>
 
+        <div className="mt-2">
+          <ImageAttachmentControl
+            attachments={attachments}
+            onChange={setAttachments}
+            disabled={disabled || isSubmitting}
+            compact
+            hint="Optional images are sent inline with your message."
+          />
+        </div>
+
         {/* Error message for disconnected model */}
         {selectedModel && !selectedModelEnabled && (
           <p className="mt-2 text-xs text-red-600 dark:text-red-400">
             The selected model's provider is not connected. Please select a different model.
+          </p>
+        )}
+        {hasAttachmentWithoutMessage && (
+          <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+            Add a message before sending images.
           </p>
         )}
 

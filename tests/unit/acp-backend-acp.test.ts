@@ -6,7 +6,10 @@ type PrivateBackend = {
   handleRpcMessage(message: unknown): void;
   parseModelsFromSessionResult(result: unknown): unknown;
   buildPromptParams(sessionId: string, prompt: {
-    parts: Array<{ type: "text"; text: string }>;
+    parts: Array<
+      | { type: "text"; text: string }
+      | { type: "image"; mimeType: string; data: string }
+    >;
     model?: { providerID: string; modelID: string; variant?: string };
   }): Record<string, unknown>;
   sessionSubscribers: Map<string, Set<(event: unknown) => void>>;
@@ -24,7 +27,12 @@ type PrivateBackend = {
   ): Promise<T>;
   sendPromptAsync(
     sessionId: string,
-    prompt: { parts: Array<{ type: "text"; text: string }> },
+    prompt: {
+      parts: Array<
+        | { type: "text"; text: string }
+        | { type: "image"; mimeType: string; data: string }
+      >;
+    },
   ): Promise<void>;
 };
 
@@ -689,5 +697,20 @@ describe("AcpBackend ACP parsing", () => {
     });
 
     expect(params["model"]).toBe("gpt-5.3-codex");
+  });
+
+  test("buildPromptParams preserves image prompt parts", () => {
+    const backend = getBackend();
+    const params = backend.buildPromptParams("session-1", {
+      parts: [
+        { type: "text", text: "Hello" },
+        { type: "image", mimeType: "image/png", data: "ZmFrZQ==" },
+      ],
+    });
+
+    expect(params["prompt"]).toEqual([
+      { type: "text", text: "Hello" },
+      { type: "image", mimeType: "image/png", data: "ZmFrZQ==" },
+    ]);
   });
 });

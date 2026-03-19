@@ -1,5 +1,6 @@
 import type { LoopCtx } from "./context";
 import type { ModelConfig } from "../../types/loop";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { SendFollowUpResult } from "./loop-types";
 import { loadLoop } from "../../persistence/loops";
 import { canReuseExistingBranch, jumpstartLoopFromEngine, reviveDeletedLoop } from "./loop-jumpstart";
@@ -7,7 +8,7 @@ import { canReuseExistingBranch, jumpstartLoopFromEngine, reviveDeletedLoop } fr
 export async function sendFollowUpImpl(
   ctx: LoopCtx,
   loopId: string,
-  options: { message: string; model?: ModelConfig }
+  options: { message: string; model?: ModelConfig; attachments?: MessageImageAttachment[] }
 ): Promise<SendFollowUpResult> {
   const message = options.message.trim();
   if (message === "") {
@@ -26,6 +27,7 @@ export async function sendFollowUpImpl(
     return ctx.startFeedbackCycle(loopId, {
       prompt: message,
       model: options.model,
+      attachments: options.attachments,
     });
   }
 
@@ -36,6 +38,7 @@ export async function sendFollowUpImpl(
         return jumpstartLoopFromEngine(ctx, loopId, {
           message,
           model: options.model,
+          attachments: options.attachments,
         });
       }
 
@@ -45,7 +48,7 @@ export async function sendFollowUpImpl(
       }
 
       try {
-        await ctx.sendChatMessage(loopId, message, options.model);
+        await ctx.sendChatMessage(loopId, message, options.model, options.attachments);
         return { success: true };
       } catch (error) {
         return { success: false, error: String(error) };
@@ -55,12 +58,13 @@ export async function sendFollowUpImpl(
     return jumpstartLoopFromEngine(ctx, loopId, {
       message,
       model: options.model,
+      attachments: options.attachments,
     });
   }
 
   if (loop.config.mode === "chat") {
     try {
-      await ctx.sendChatMessage(loopId, message, options.model);
+      await ctx.sendChatMessage(loopId, message, options.model, options.attachments);
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
@@ -70,5 +74,6 @@ export async function sendFollowUpImpl(
   return jumpstartLoopFromEngine(ctx, loopId, {
     message,
     model: options.model,
+    attachments: options.attachments,
   });
 }

@@ -38,7 +38,7 @@ export const loopsPendingRoutes = {
       }
       const body = validation.data;
 
-      const result = await loopManager.setPendingPrompt(req.params.id, body.prompt);
+      const result = await loopManager.setPendingPrompt(req.params.id, body.prompt, body.attachments);
 
       if (!result.success) {
         if (result.error?.includes("not found")) {
@@ -139,12 +139,14 @@ export const loopsPendingRoutes = {
         result = await loopManager.injectPending(req.params.id, {
           message: trimmedMessage,
           model: body.model,
+          attachments: body.attachments,
         });
       } else {
         // Queue for next natural iteration
         result = await loopManager.setPending(req.params.id, {
           message: trimmedMessage,
           model: body.model,
+          attachments: body.attachments,
         });
       }
 
@@ -206,6 +208,7 @@ export const loopsPendingRoutes = {
       const result = await loopManager.sendFollowUp(req.params.id, {
         message: body.message.trim(),
         model: body.model,
+        attachments: body.attachments,
       });
       if (!result.success) {
         if (result.error?.includes("not found")) {

@@ -2,6 +2,7 @@
  * CreateLoopForm component for creating new Ralph Loops.
  */
 
+import { useState } from "react";
 import { WorkspaceSelector } from "../WorkspaceSelector";
 import {
   type CreateLoopFormActionState,
@@ -19,6 +20,7 @@ import { LoopSettings } from "./loop-settings";
 import { AdvancedOptions } from "./advanced-options";
 import { FormActions } from "./form-actions";
 import { useCreateLoopForm } from "./use-create-loop-form";
+import type { ComposerImageAttachment } from "../../types/message-attachments";
 
 export type { CreateLoopFormActionState, CreateLoopFormProps, CreateLoopFormSubmitRequest };
 export { getComposeDraftActionLabel, getComposeSubmitActionLabel };
@@ -48,6 +50,7 @@ export function CreateLoopForm({
   leadingActions,
   mode = "loop",
 }: CreateLoopFormProps) {
+  const [attachments, setAttachments] = useState<ComposerImageAttachment[]>([]);
   const {
     formRef,
     promptRef,
@@ -103,6 +106,7 @@ export function CreateLoopForm({
     editLoopId,
     initialLoopData,
     isEditingDraft,
+    attachments,
     renderActions,
     mode,
   });
@@ -195,8 +199,11 @@ export function CreateLoopForm({
           setPrompt(value);
           promptRef.current = value;
         }}
+        attachments={attachments}
+        onAttachmentsChange={setAttachments}
         isChatMode={isChatMode}
         planMode={planMode}
+        isEditingDraft={isEditingDraft}
         selectedTemplate={selectedTemplate}
         onTemplateClear={() => setSelectedTemplate("")}
       />

@@ -48,6 +48,7 @@ export async function startLoopImpl(ctx: LoopCtx, loopId: string, _options?: Sta
     onPersistState: async (state) => {
       await updateLoopState(loopId, state);
     },
+    initialPromptAttachments: _options?.attachments,
   });
 
   ctx.engines.set(loopId, engine);
@@ -86,7 +87,7 @@ export async function stopLoopImpl(ctx: LoopCtx, loopId: string, reason = "User 
   log.info("Loop execution stopped", { loopId, reason, status: engine.state.status });
 }
 
-export async function startPlanModeImpl(ctx: LoopCtx, loopId: string): Promise<void> {
+export async function startPlanModeImpl(ctx: LoopCtx, loopId: string, options?: StartLoopOptions): Promise<void> {
   const loop = await loadLoop(loopId);
   if (!loop) {
     throw new Error(`Loop not found: ${loopId}`);
@@ -125,6 +126,7 @@ export async function startPlanModeImpl(ctx: LoopCtx, loopId: string): Promise<v
     onPersistState: async (state) => {
       await updateLoopState(loopId, state);
     },
+    initialPromptAttachments: options?.attachments,
   });
 
   try {
@@ -156,7 +158,7 @@ export async function startPlanModeImpl(ctx: LoopCtx, loopId: string): Promise<v
 export async function startDraftImpl(
   ctx: LoopCtx,
   loopId: string,
-  options: { planMode: boolean }
+  options: { planMode: boolean; attachments?: StartLoopOptions["attachments"] }
 ): Promise<Loop> {
   const loop = await loadLoop(loopId);
   if (!loop) {
@@ -178,13 +180,13 @@ export async function startDraftImpl(
     };
     await updateLoopState(loopId, loop.state);
 
-    await startPlanModeImpl(ctx, loopId);
+    await startPlanModeImpl(ctx, loopId, { attachments: options.attachments });
   } else {
     assertValidTransition(loop.state.status, "idle", "startDraft");
     loop.state.status = "idle";
     await updateLoopState(loopId, loop.state);
 
-    await startLoopImpl(ctx, loopId);
+    await startLoopImpl(ctx, loopId, { attachments: options.attachments });
   }
 
   const updatedLoop = await ctx.getLoop(loopId);

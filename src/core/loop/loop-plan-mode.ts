@@ -7,8 +7,14 @@ import { sshSessionManager } from "../ssh-session-manager";
 import { log } from "../logger";
 import { assertValidTransition } from "../loop-state-machine";
 import type { LoopState } from "../../types/loop";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 
-export async function sendPlanFeedbackImpl(ctx: LoopCtx, loopId: string, feedback: string): Promise<void> {
+export async function sendPlanFeedbackImpl(
+  ctx: LoopCtx,
+  loopId: string,
+  feedback: string,
+  attachments: MessageImageAttachment[] = [],
+): Promise<void> {
   const engine = ctx.engines.get(loopId) ?? await ctx.recoverPlanningEngine(loopId);
 
   if (engine.state.status !== "planning") {
@@ -29,7 +35,7 @@ export async function sendPlanFeedbackImpl(ctx: LoopCtx, loopId: string, feedbac
     timestamp: createTimestamp(),
   });
 
-  await engine.injectPlanFeedback(feedback);
+  await engine.injectPlanFeedback(feedback, attachments);
 }
 
 export async function answerPendingPlanQuestionImpl(ctx: LoopCtx, loopId: string, answers: string[][]): Promise<void> {
@@ -159,7 +165,8 @@ export async function sendChatMessageImpl(
   ctx: LoopCtx,
   loopId: string,
   message: string,
-  model?: ModelConfig
+  model?: ModelConfig,
+  attachments: MessageImageAttachment[] = [],
 ): Promise<void> {
   const engine = ctx.engines.get(loopId) ?? await ctx.recoverChatEngine(loopId);
 
@@ -172,5 +179,5 @@ export async function sendChatMessageImpl(
     throw new Error(`Cannot send chat message in status: ${engine.state.status}`);
   }
 
-  await engine.injectChatMessage(message, model);
+  await engine.injectChatMessage(message, model, attachments);
 }

@@ -14,6 +14,11 @@ import type { ShellRoute } from "./shell-types";
 import { ShellPanel } from "./shell-panel";
 import type { CreateLoopRequest } from "../../types";
 
+function stripTransientAttachments<T extends { attachments?: unknown }>(request: T): Omit<T, "attachments"> {
+  const { attachments: _attachments, ...persistedRequest } = request;
+  return persistedRequest;
+}
+
 export function DraftLoopComposer({
   loop,
   workspaces,
@@ -75,7 +80,7 @@ export function DraftLoopComposer({
       const response = await appFetch(`/api/loops/${loop.config.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
+        body: JSON.stringify(stripTransientAttachments(request)),
       });
 
       if (!response.ok) {
@@ -112,7 +117,10 @@ export function DraftLoopComposer({
       const response = await appFetch(`/api/loops/${loop.config.id}/draft/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planMode: request.planMode ?? false }),
+        body: JSON.stringify({
+          planMode: request.planMode ?? false,
+          attachments: request.attachments,
+        }),
       });
 
       if (response.status === 409) {

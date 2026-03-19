@@ -4,6 +4,7 @@
 
 import { log } from "../logger";
 import type { LoopConfig, LoopState, ModelConfig } from "../../types/loop";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { LogLevel } from "../../types/events";
 import type { PromptInput } from "../../backends/types";
 import type { IterationContext } from "./engine-types";
@@ -15,9 +16,31 @@ export interface PromptBuildContext {
   workingDirectory: string;
   isChatMode: boolean;
   stopDetector: StopPatternDetector;
-  emitUserMessage: (content: string, idSuffix?: string) => void;
+  emitUserMessage: (content: string, idSuffix?: string, attachments?: MessageImageAttachment[]) => void;
   emitLog: (level: LogLevel, message: string, details?: Record<string, unknown>) => string;
   updateState: (update: Partial<LoopState>) => void;
+  consumeInitialPromptAttachments: () => MessageImageAttachment[];
+  consumePendingPromptAttachments: () => MessageImageAttachment[];
+}
+
+function buildPromptParts(text: string, attachments: MessageImageAttachment[]): PromptInput["parts"] {
+  return [
+    { type: "text", text },
+    ...attachments.map((attachment) => ({
+      type: "image" as const,
+      mimeType: attachment.mimeType,
+      data: attachment.data,
+      filename: attachment.filename,
+    })),
+  ];
+}
+
+function consumePendingOrInitialAttachments(ctx: PromptBuildContext): MessageImageAttachment[] {
+  const pendingAttachments = ctx.consumePendingPromptAttachments();
+  if (pendingAttachments.length > 0) {
+    return pendingAttachments;
+  }
+  return ctx.consumeInitialPromptAttachments();
 }
 
 export function buildErrorContext(consecutiveErrors: LoopState["consecutiveErrors"]): string {
@@ -54,7 +77,8 @@ function buildPlanModePrompt(ctx: PromptBuildContext, model: ModelConfig | undef
   const feedbackRounds = ctx.state.planMode!.feedbackRounds;
 
   if (feedbackRounds === 0) {
-    ctx.emitUserMessage(ctx.config.prompt, "initial-goal");
+    const attachments = ctx.consumeInitialPromptAttachments();
+    ctx.emitUserMessage(ctx.config.prompt, "initial-goal", attachments);
 
     const errorContext = buildErrorContext(ctx.state.consecutiveErrors);
     const text = `- Goal: ${ctx.config.prompt}
@@ -76,15 +100,16 @@ ${errorContext}
 <promise>PLAN_READY</promise>`;
 
     return {
-      parts: [{ type: "text", text }],
+      parts: buildPromptParts(text, attachments),
       model,
     };
   }
 
   const feedback = ctx.state.pendingPrompt ?? "Please refine the plan based on feedback.";
+  const attachments = consumePendingOrInitialAttachments(ctx);
 
   if (ctx.state.pendingPrompt) {
-    ctx.emitUserMessage(ctx.state.pendingPrompt, `plan-feedback-${feedbackRounds}`);
+    ctx.emitUserMessage(ctx.state.pendingPrompt, `plan-feedback-${feedbackRounds}`, attachments);
   }
 
   const errorContext = buildErrorContext(ctx.state.consecutiveErrors);
@@ -105,19 +130,22 @@ When the updated plan is ready, end your response with:
   ctx.updateState({ pendingPrompt: undefined });
 
   return {
-    parts: [{ type: "text", text }],
+    parts: buildPromptParts(text, attachments),
     model,
   };
 }
 
 function buildChatPrompt(ctx: PromptBuildContext, model: ModelConfig | undefined): PromptInput {
   const userMessage = ctx.state.pendingPrompt;
+  const attachments = userMessage
+    ? consumePendingOrInitialAttachments(ctx)
+    : ctx.consumeInitialPromptAttachments();
 
   const messageToLog = userMessage ?? ctx.config.prompt;
   const userMessageIdSuffix = userMessage
     ? `chat-turn-${crypto.randomUUID()}`
     : "initial-goal";
-  ctx.emitUserMessage(messageToLog, userMessageIdSuffix);
+  ctx.emitUserMessage(messageToLog, userMessageIdSuffix, attachments);
 
   ctx.updateState({ pendingPrompt: undefined });
 
@@ -131,16 +159,21 @@ function buildChatPrompt(ctx: PromptBuildContext, model: ModelConfig | undefined
   const text = `${contextSection}${errorContext}${userMessage ?? ctx.config.prompt}`;
 
   return {
-    parts: [{ type: "text", text }],
+    parts: buildPromptParts(text, attachments),
     model,
   };
 }
 
 function buildExecutionPrompt(ctx: PromptBuildContext, model: ModelConfig | undefined): PromptInput {
   const userMessage = ctx.state.pendingPrompt;
+  const attachments = userMessage
+    ? consumePendingOrInitialAttachments(ctx)
+    : ctx.state.currentIteration <= 1
+    ? ctx.consumeInitialPromptAttachments()
+    : [];
 
   if (userMessage) {
-    ctx.emitUserMessage(userMessage, `injected-${crypto.randomUUID()}`);
+    ctx.emitUserMessage(userMessage, `injected-${crypto.randomUUID()}`, attachments);
     ctx.emitLog("info", "User injected a new message", {
       originalGoal: ctx.config.prompt.slice(0, 50) + (ctx.config.prompt.length > 50 ? "..." : ""),
       userMessage: userMessage.slice(0, 50) + (userMessage.length > 50 ? "..." : ""),
@@ -149,7 +182,7 @@ function buildExecutionPrompt(ctx: PromptBuildContext, model: ModelConfig | unde
       pendingPrompt: undefined,
     });
   } else if (ctx.state.currentIteration <= 1) {
-    ctx.emitUserMessage(ctx.config.prompt, "initial-goal");
+    ctx.emitUserMessage(ctx.config.prompt, "initial-goal", attachments);
   }
 
   const userMessageSection = userMessage
@@ -188,7 +221,7 @@ ${userMessageSection}${errorContext}
 <promise>COMPLETE</promise>`;
 
   return {
-    parts: [{ type: "text", text }],
+    parts: buildPromptParts(text, attachments),
     model,
   };
 }

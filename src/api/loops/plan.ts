@@ -49,7 +49,7 @@ export const loopsPlanRoutes = {
       const body = validation.data;
 
       try {
-        await loopManager.sendPlanFeedback(req.params.id, body.feedback);
+        await loopManager.sendPlanFeedback(req.params.id, body.feedback, body.attachments);
         return successResponse();
       } catch (error) {
         const errorMsg = String(error);

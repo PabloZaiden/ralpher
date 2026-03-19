@@ -1,4 +1,5 @@
 import type { Loop } from "../../types/loop";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { SshSession } from "../../types/ssh-session";
 
 /**
@@ -11,6 +12,8 @@ export interface CreateLoopOptions {
   directory: string;
   /** The task prompt/PRD */
   prompt: string;
+  /** Transient image attachments for the initial prompt */
+  attachments?: MessageImageAttachment[];
   /** Workspace ID this loop belongs to */
   workspaceId: string;
   /** Model provider ID (required) */
@@ -53,7 +56,8 @@ export interface CreateLoopOptions {
  * in the main repository do not affect loop execution.
  */
 export interface StartLoopOptions {
-  // Reserved for future options
+  /** Transient image attachments for the first prompt sent after start */
+  attachments?: MessageImageAttachment[];
 }
 
 export interface AcceptPlanOptions {

@@ -6,6 +6,9 @@
 import { useState } from "react";
 import { Modal, Button } from "./common";
 import { log } from "../lib/logger";
+import type { ComposerImageAttachment, MessageImageAttachment } from "../types/message-attachments";
+import { ImageAttachmentControl } from "./ImageAttachmentControl";
+import { toMessageImageAttachments } from "../lib/image-attachments";
 
 const ADDRESS_UNRESOLVED_PR_COMMENTS_PROMPT =
   "Find the PR associated to this branch and address the unresolved comments";
@@ -16,7 +19,7 @@ export interface AddressCommentsModalProps {
   /** Callback when modal should close */
   onClose: () => void;
   /** Callback to submit comments */
-  onSubmit: (comments: string) => Promise<void>;
+  onSubmit: (comments: string, attachments?: MessageImageAttachment[]) => Promise<void>;
   /** Name of the loop */
   loopName: string;
   /** Current review cycle number */
@@ -34,6 +37,7 @@ export function AddressCommentsModal({
   reviewCycle,
 }: AddressCommentsModalProps) {
   const [comments, setComments] = useState("");
+  const [attachments, setAttachments] = useState<ComposerImageAttachment[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   function handleInsertPrPrompt() {
@@ -55,9 +59,14 @@ export function AddressCommentsModal({
 
     setSubmitting(true);
     try {
-      await onSubmit(comments);
+      if (attachments.length > 0) {
+        await onSubmit(comments, toMessageImageAttachments(attachments));
+      } else {
+        await onSubmit(comments);
+      }
       // Clear comments and close modal on success
       setComments("");
+      setAttachments([]);
       onClose();
     } catch (error) {
       // Keep modal open on error so user can retry
@@ -70,6 +79,7 @@ export function AddressCommentsModal({
   function handleClose() {
     if (!submitting) {
       setComments("");
+      setAttachments([]);
       onClose();
     }
   }
@@ -135,6 +145,14 @@ export function AddressCommentsModal({
           <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
             The loop will restart and address these comments by making targeted changes to the code.
           </p>
+          <div className="mt-3">
+            <ImageAttachmentControl
+              attachments={attachments}
+              onChange={setAttachments}
+              disabled={submitting}
+              hint="Optional images are sent with this feedback and are not stored on the server."
+            />
+          </div>
         </div>
 
         <div className="bg-blue-50 dark:bg-neutral-900/40 border border-blue-200 dark:border-gray-700 rounded-md p-3">

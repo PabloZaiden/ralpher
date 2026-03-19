@@ -15,6 +15,11 @@ export function isCreateLoopRequest(request: CreateLoopFormSubmitRequest): reque
   return "name" in request;
 }
 
+function stripTransientAttachments<T extends { attachments?: unknown }>(request: T): Omit<T, "attachments"> {
+  const { attachments: _attachments, ...persistedRequest } = request;
+  return persistedRequest;
+}
+
 interface SubmitHandlerProps {
   workspaces: Workspace[];
   setLastModel: (model: { providerID: string; modelID: string } | null) => void;
@@ -38,7 +43,7 @@ export async function handleCreateLoopSubmit(
         const response = await appFetch(`/api/loops/${editLoop.config.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(request),
+          body: JSON.stringify(stripTransientAttachments(request)),
         });
 
         if (!response.ok) {
@@ -70,7 +75,10 @@ export async function handleCreateLoopSubmit(
       const startResponse = await appFetch(`/api/loops/${editLoop.config.id}/draft/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ planMode: request.planMode ?? false }),
+        body: JSON.stringify({
+          planMode: request.planMode ?? false,
+          attachments: request.attachments,
+        }),
       });
 
       if (!startResponse.ok) {

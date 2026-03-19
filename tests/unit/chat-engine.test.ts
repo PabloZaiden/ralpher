@@ -27,10 +27,20 @@ import { createEventStream, type EventStream } from "../../src/utils/event-strea
 import { GitService } from "../../src/core/git-service";
 import { TestCommandExecutor } from "../mocks/mock-executor";
 import { backendManager } from "../../src/core/backend-manager";
+import type { MessageImageAttachment } from "../../src/types/message-attachments";
+
+type MockLoopBackend = LoopBackend & { sentPrompts: PromptInput[] };
 
 describe("LoopEngine - Chat Mode", () => {
+  const sampleAttachment: MessageImageAttachment = {
+    id: "img-1",
+    filename: "screen.png",
+    mimeType: "image/png",
+    data: "ZmFrZQ==",
+    size: 1234,
+  };
   let testDir: string;
-  let mockBackend: LoopBackend;
+  let mockBackend: MockLoopBackend;
   let emitter: SimpleEventEmitter<LoopEvent>;
   let emittedEvents: LoopEvent[];
   let gitService: GitService;
@@ -39,13 +49,13 @@ describe("LoopEngine - Chat Mode", () => {
    * Create a mock backend that supports async streaming.
    * Tracks prompts sent for assertion.
    */
-  function createMockBackend(responses: string[]): LoopBackend & { sentPrompts: PromptInput[] } {
+  function createMockBackend(responses: string[]): MockLoopBackend {
     let responseIndex = 0;
     let connected = false;
     let pendingResponse: string | null = null;
     const sentPrompts: PromptInput[] = [];
 
-    const backend: LoopBackend & { sentPrompts: PromptInput[] } = {
+    const backend: MockLoopBackend = {
       sentPrompts,
 
       async connect(_config: BackendConnectionConfig): Promise<void> {
@@ -245,6 +255,43 @@ describe("LoopEngine - Chat Mode", () => {
     expect(completedEvents.length).toBe(1);
   });
 
+  test("chat mode includes transient image attachments in the first prompt and user event", async () => {
+    const loop = createChatLoop();
+    mockBackend = createMockBackend([
+      "Here is my response to your question.",
+    ]);
+
+    const engine = new LoopEngine({
+      loop,
+      backend: mockBackend,
+      gitService,
+      eventEmitter: emitter,
+      initialPromptAttachments: [sampleAttachment],
+    });
+
+    await engine.start();
+
+    expect(mockBackend.sentPrompts[0]?.parts[0]).toMatchObject({
+      type: "text",
+    });
+    expect(
+      mockBackend.sentPrompts[0]?.parts[0]?.type === "text"
+        ? mockBackend.sentPrompts[0].parts[0].text
+        : "",
+    ).toContain("Hello, how are you?");
+    expect(mockBackend.sentPrompts[0]?.parts[1]).toEqual({
+      type: "image",
+      mimeType: "image/png",
+      data: "ZmFrZQ==",
+      filename: "screen.png",
+    });
+
+    const userMessageEvent = emittedEvents.find((event): event is LoopMessageEvent =>
+      event.type === "loop.message" && event.message.role === "user",
+    );
+    expect(userMessageEvent?.message.attachments).toEqual([sampleAttachment]);
+  });
+
   test("chat mode completes even when response contains COMPLETE pattern", async () => {
     // In chat mode, stop pattern detection is skipped entirely.
     // The outcome is always "complete" after one iteration, regardless of content.
@@ -303,7 +350,9 @@ describe("LoopEngine - Chat Mode", () => {
 
     // The first prompt sent should include the working directory context
     expect(backend.sentPrompts.length).toBeGreaterThanOrEqual(1);
-    const firstPromptText = backend.sentPrompts[0]!.parts[0]!.text;
+    const firstPromptText = backend.sentPrompts[0]!.parts[0]!.type === "text"
+      ? backend.sentPrompts[0]!.parts[0]!.text
+      : "";
     expect(firstPromptText).toContain("You are working in directory:");
     expect(firstPromptText).toContain("What files are here?");
   });
@@ -323,7 +372,9 @@ describe("LoopEngine - Chat Mode", () => {
     await engine.start();
 
     expect(backend.sentPrompts.length).toBeGreaterThanOrEqual(1);
-    const firstPromptText = backend.sentPrompts[0]!.parts[0]!.text;
+    const firstPromptText = backend.sentPrompts[0]!.parts[0]!.type === "text"
+      ? backend.sentPrompts[0]!.parts[0]!.text
+      : "";
 
     // Should NOT contain loop-mode planning instructions
     expect(firstPromptText).not.toContain(".planning/plan.md");
@@ -348,7 +399,9 @@ describe("LoopEngine - Chat Mode", () => {
 
     await engine.start();
 
-    const firstPromptText = backend.sentPrompts[0]!.parts[0]!.text;
+    const firstPromptText = backend.sentPrompts[0]!.parts[0]!.type === "text"
+      ? backend.sentPrompts[0]!.parts[0]!.text
+      : "";
     expect(firstPromptText).toContain("Follow-up question");
 
     // pendingPrompt should be cleared after use
@@ -491,7 +544,9 @@ describe("LoopEngine - Chat Mode", () => {
     expect(engine.state.currentIteration).toBe(1);
 
     // The second prompt should contain the follow-up question
-    const secondPromptText = backend.sentPrompts[1]?.parts[0]?.text;
+    const secondPromptText = backend.sentPrompts[1]?.parts[0]?.type === "text"
+      ? backend.sentPrompts[1]?.parts[0]?.text
+      : undefined;
     expect(secondPromptText).toContain("Follow-up question");
   }, 10000);
 

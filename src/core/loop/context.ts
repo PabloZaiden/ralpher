@@ -5,6 +5,7 @@ import type { LoopEngine } from "../loop-engine";
 import type { SimpleEventEmitter } from "../event-emitter";
 import type { LoopEvent } from "../../types/events";
 import type { Loop, ModelConfig } from "../../types/loop";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { GitService } from "../git-service";
 import type { CommandExecutor } from "../command-executor";
 import type { SendFollowUpResult } from "./loop-types";
@@ -18,15 +19,26 @@ export interface LoopCtx {
   deleteLoop(loopId: string): Promise<boolean>;
   discardLoop(loopId: string): Promise<{ success: boolean; error?: string }>;
   getLoop(loopId: string): Promise<Loop | null>;
-  startLoop(loopId: string): Promise<void>;
-  startPlanMode(loopId: string): Promise<void>;
-  sendChatMessage(loopId: string, message: string, model?: ModelConfig): Promise<void>;
+  startLoop(loopId: string, options?: { attachments?: MessageImageAttachment[] }): Promise<void>;
+  startPlanMode(loopId: string, options?: { attachments?: MessageImageAttachment[] }): Promise<void>;
+  sendChatMessage(
+    loopId: string,
+    message: string,
+    model?: ModelConfig,
+    attachments?: MessageImageAttachment[],
+  ): Promise<void>;
   startStatePersistence(loopId: string): void;
   ensureLoopBranchCheckedOut(loop: Loop, git: GitService, workingDirectory: string): Promise<void>;
   validateMainCheckoutStart(loop: Loop, git: GitService): Promise<void>;
   clearPlanningFiles(loopId: string, loop: Loop, executor: CommandExecutor, worktreePath: string): Promise<void>;
   recoverPlanningEngine(loopId: string): Promise<LoopEngine>;
   recoverChatEngine(loopId: string): Promise<LoopEngine>;
-  startFeedbackCycle(loopId: string, options: { prompt: string; model?: ModelConfig; reviewCommentText?: string }): Promise<SendFollowUpResult>;
-  jumpstartLoop(loopId: string, options: { message?: string; model?: ModelConfig }): Promise<{ success: boolean; error?: string }>;
+  startFeedbackCycle(
+    loopId: string,
+    options: { prompt: string; model?: ModelConfig; reviewCommentText?: string; attachments?: MessageImageAttachment[] },
+  ): Promise<SendFollowUpResult>;
+  jumpstartLoop(
+    loopId: string,
+    options: { message?: string; model?: ModelConfig; attachments?: MessageImageAttachment[] },
+  ): Promise<{ success: boolean; error?: string }>;
 }

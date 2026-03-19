@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import type { SshSession, PullRequestDestinationResponse } from "../../types";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { ToastContextValue } from "../../hooks/useToast";
 import type { AcceptPlanResult, PushLoopResult, AddressCommentsResult } from "../../hooks/loopActions";
 import { log } from "../../lib/logger";
@@ -18,7 +19,7 @@ interface UseLoopActionsOptions {
   remove: () => Promise<boolean>;
   purge: () => Promise<boolean>;
   markMerged: () => Promise<boolean>;
-  addressReviewComments: (comments: string) => Promise<AddressCommentsResult>;
+  addressReviewComments: (comments: string, attachments?: MessageImageAttachment[]) => Promise<AddressCommentsResult>;
   acceptPlan: (mode?: "start_loop" | "open_ssh") => Promise<AcceptPlanResult>;
   discardPlan: () => Promise<boolean>;
   connectViaSsh: () => Promise<SshSession | null>;
@@ -56,7 +57,7 @@ export interface UseLoopActionsResult {
   handlePurge: () => Promise<void>;
   handleUpdateBranch: () => Promise<void>;
   handleMarkMerged: () => Promise<void>;
-  handleAddressComments: (comments: string) => Promise<void>;
+  handleAddressComments: (comments: string, attachments?: MessageImageAttachment[]) => Promise<void>;
   handleOpenPullRequest: (destination: PullRequestDestinationResponse | null) => void;
   handleAcceptPlan: (mode?: "start_loop" | "open_ssh") => Promise<void>;
   handleDiscardPlan: () => Promise<void>;
@@ -141,9 +142,9 @@ export function useLoopActions({
     setMarkMergedModal(false);
   }
 
-  async function handleAddressComments(comments: string) {
+  async function handleAddressComments(comments: string, attachments?: MessageImageAttachment[]) {
     try {
-      const result = await addressReviewComments(comments);
+      const result = await addressReviewComments(comments, attachments);
       if (!result.success) {
         throw new Error("Failed to address comments");
       }

@@ -1,5 +1,6 @@
 import type { LoopCtx } from "./context";
 import type { ModelConfig } from "../../types/loop";
+import type { MessageImageAttachment } from "../../types/message-attachments";
 import type { SendFollowUpResult } from "./loop-types";
 import { loadLoop } from "../../persistence/loops";
 import { backendManager } from "../backend-manager";
@@ -11,7 +12,8 @@ export { getReviewCommentsImpl } from "./review-history";
 export async function addressReviewCommentsImpl(
   ctx: LoopCtx,
   loopId: string,
-  comments: string
+  comments: string,
+  attachments: MessageImageAttachment[] = [],
 ): Promise<{ success: boolean; error?: string; reviewCycle?: number; branch?: string; commentIds?: string[] }> {
   if (!comments || comments.trim() === "") {
     return { success: false, error: "Comments cannot be empty" };
@@ -20,6 +22,7 @@ export async function addressReviewCommentsImpl(
   return startFeedbackCycleImpl(ctx, loopId, {
     prompt: constructReviewPrompt(comments.trim()),
     reviewCommentText: comments.trim(),
+    attachments,
   });
 }
 
@@ -30,6 +33,7 @@ export async function startFeedbackCycleImpl(
     prompt: string;
     model?: ModelConfig;
     reviewCommentText?: string;
+    attachments?: MessageImageAttachment[];
   }
 ): Promise<SendFollowUpResult> {
   const loop = await loadLoop(loopId);
@@ -75,6 +79,7 @@ export async function startFeedbackCycleImpl(
         reviewComment,
         nextReviewCycle,
         resultBranch: loop.state.git.workingBranch,
+        attachments: options.attachments,
       });
     }
 
@@ -92,6 +97,7 @@ export async function startFeedbackCycleImpl(
       reviewComment,
       nextReviewCycle,
       resultBranch: reviewBranchName,
+      attachments: options.attachments,
     });
   } catch (error) {
     return { success: false, error: String(error) };

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { CreateLoopRequest, CreateChatRequest, ModelInfo, BranchInfo, SshServer } from "../../types";
+import type { ComposerImageAttachment } from "../../types/message-attachments";
 import type { Workspace } from "../../types/workspace";
 
 /** State for action buttons, exposed via renderActions prop */
@@ -93,6 +94,8 @@ export interface CreateLoopFormProps {
   workspaceError?: string | null;
   /** Registered SSH servers for workspace label resolution */
   registeredSshServers?: readonly SshServer[];
+  /** Transient image attachments for the initial prompt */
+  attachments?: ComposerImageAttachment[];
   /** 
    * Optional render prop for action buttons. When provided, action buttons 
    * are NOT rendered inside the form - caller is responsible for rendering them.
