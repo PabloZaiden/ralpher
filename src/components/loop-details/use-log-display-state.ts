@@ -1,0 +1,45 @@
+/**
+ * Hook for managing log-tab display preferences in LoopDetails.
+ * Returns values with the `onChange` naming convention expected by LogTab.
+ */
+
+import { useState } from "react";
+
+export interface LogDisplayState {
+  showSystemInfo: boolean;
+  onShowSystemInfoChange: (v: boolean) => void;
+  showReasoning: boolean;
+  onShowReasoningChange: (v: boolean) => void;
+  showTools: boolean;
+  onShowToolsChange: (v: boolean) => void;
+  autoScroll: boolean;
+  onAutoScrollChange: (v: boolean) => void;
+  logsCollapsed: boolean;
+  onLogsCollapsedChange: (v: boolean) => void;
+  todosCollapsed: boolean;
+  onTodosCollapsedChange: (v: boolean) => void;
+}
+
+export function useLogDisplayState(): LogDisplayState {
+  const [showSystemInfo, setShowSystemInfo] = useState(false);
+  const [showReasoning, setShowReasoning] = useState(true);
+  const [showTools, setShowTools] = useState(false);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [logsCollapsed, setLogsCollapsed] = useState(false);
+  const [todosCollapsed, setTodosCollapsed] = useState(false);
+
+  return {
+    showSystemInfo,
+    onShowSystemInfoChange: setShowSystemInfo,
+    showReasoning,
+    onShowReasoningChange: setShowReasoning,
+    showTools,
+    onShowToolsChange: setShowTools,
+    autoScroll,
+    onAutoScrollChange: setAutoScroll,
+    logsCollapsed,
+    onLogsCollapsedChange: setLogsCollapsed,
+    todosCollapsed,
+    onTodosCollapsedChange: setTodosCollapsed,
+  };
+}
