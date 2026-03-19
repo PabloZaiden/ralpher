@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import { Badge } from "../common";
 import { MarkdownRenderer } from "../MarkdownRenderer";
 import { LazyDetails } from "./lazy-details";
@@ -20,13 +20,22 @@ function getOtherDetails(details: Record<string, unknown>): Record<string, unkno
 }
 
 export const LogEntryItem = memo(function LogEntryItem({ data: log, showHeader, spacingClass, index, markdownEnabled }: LogEntryItemProps) {
+  const details = log.details;
   const logKind = log.details?.["logKind"] as string | undefined;
   const isReasoning = logKind === "reasoning" || (!logKind && log.message === "AI reasoning...");
   const responseContent = log.details?.["responseContent"];
   const hasResponseContent = typeof responseContent === "string" && responseContent.length > 0;
-  const hasOtherDetails = log.details
-    ? Object.keys(log.details).some((key) => key !== "responseContent" && key !== "logKind")
+  const hasOtherDetails = details
+    ? Object.keys(details).some((key) => key !== "responseContent" && key !== "logKind")
     : false;
+  const renderDetails = useCallback(
+    () => (
+      <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
+        {JSON.stringify(getOtherDetails(details!), null, 2)}
+      </pre>
+    ),
+    [details]
+  );
 
   return (
     <div key={`log-${log.id}-${index}`} className={`group ${isReasoning ? "opacity-60" : ""} ${spacingClass}`}>
@@ -65,11 +74,7 @@ export const LogEntryItem = memo(function LogEntryItem({ data: log, showHeader, 
           {hasOtherDetails && (
             <LazyDetails
               summary="Details"
-              renderContent={() => (
-                <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
-                  {JSON.stringify(getOtherDetails(log.details!), null, 2)}
-                </pre>
-              )}
+              renderContent={renderDetails}
             />
           )}
         </div>

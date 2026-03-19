@@ -10,19 +10,21 @@ export const LazyDetails = memo(function LazyDetails({
   summary,
   renderContent,
 }: LazyDetailsProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [hasOpened, setHasOpened] = useState(false);
 
   return (
     <details
       className="mt-1"
       onToggle={(event) => {
-        setIsOpen(event.currentTarget.open);
+        if (event.currentTarget.open) {
+          setHasOpened(true);
+        }
       }}
     >
       <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
         {summary}
       </summary>
-      {isOpen ? renderContent() : null}
+      {hasOpened ? renderContent() : null}
     </details>
   );
 });

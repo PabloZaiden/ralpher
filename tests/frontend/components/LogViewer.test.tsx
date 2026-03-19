@@ -162,13 +162,29 @@ describe("LogViewer", () => {
         name: "Read",
         output: "file contents here",
       });
-      const { getByText, user } = renderWithUser(
+      const { getByText, queryByText, user } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       expect(getByText("Output")).toBeInTheDocument();
-      expect(() => getByText("file contents here")).toThrow();
+      expect(queryByText("file contents here")).not.toBeInTheDocument();
       await user.click(getByText("Output"));
       expect(getByText("file contents here")).toBeInTheDocument();
+    });
+
+    test("keeps tool detail content mounted after first expansion", async () => {
+      const tool = createToolCallData({
+        name: "Read",
+        output: "file contents here",
+      });
+      const { getByText, queryByText, user } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
+      );
+      const outputSummary = getByText("Output");
+      expect(queryByText("file contents here")).not.toBeInTheDocument();
+      await user.click(outputSummary);
+      expect(getByText("file contents here")).toBeInTheDocument();
+      await user.click(outputSummary);
+      expect(queryByText("file contents here")).toBeInTheDocument();
     });
 
     test("renders tool output as JSON when it is an object", async () => {

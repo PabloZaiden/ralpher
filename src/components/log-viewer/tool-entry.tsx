@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useCallback } from "react";
 import type { ToolCallData } from "../../types";
 import { formatTime, getToolStatusColor } from "./utils";
 import { LazyDetails } from "./lazy-details";
@@ -12,6 +12,25 @@ interface ToolEntryProps {
 }
 
 export const ToolEntry = memo(function ToolEntry({ data: tool, timestamp, showHeader, spacingClass, index }: ToolEntryProps) {
+  const renderInput = useCallback(
+    () => (
+      <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
+        {String(JSON.stringify(tool.input, null, 2))}
+      </pre>
+    ),
+    [tool.input]
+  );
+  const renderOutput = useCallback(
+    () => (
+      <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
+        {typeof tool.output === "string"
+          ? tool.output
+          : String(JSON.stringify(tool.output, null, 2))}
+      </pre>
+    ),
+    [tool.output]
+  );
+
   return (
     <div key={`tool-${tool.id}-${index}`} className={`group ${spacingClass}`}>
       <div className="flex items-start gap-2 sm:gap-3">
@@ -34,23 +53,13 @@ export const ToolEntry = memo(function ToolEntry({ data: tool, timestamp, showHe
           {tool.input != null && (
             <LazyDetails
               summary="Input"
-              renderContent={() => (
-                <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
-                  {String(JSON.stringify(tool.input, null, 2))}
-                </pre>
-              )}
+              renderContent={renderInput}
             />
           )}
           {tool.output != null && (
             <LazyDetails
               summary="Output"
-              renderContent={() => (
-                <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
-                  {typeof tool.output === "string"
-                    ? tool.output
-                    : String(JSON.stringify(tool.output, null, 2))}
-                </pre>
-              )}
+              renderContent={renderOutput}
             />
           )}
         </div>
