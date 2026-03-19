@@ -86,7 +86,7 @@ export function getServerDevelopmentConfig(
 export function getServerStartupMessages(config: ServerRuntimeConfig): string[] {
   const listenMessage = config.hostSource === "RALPHER_HOST"
     ? `Listening on http://${config.host}:${String(config.port)} from RALPHER_HOST. Change RALPHER_HOST to choose which interfaces accept requests.`
-    : `Listening on http://${config.host}:${String(config.port)} using the default host because RALPHER_HOST was not set. Set RALPHER_HOST=0.0.0.0 to listen on all interfaces instead.`;
+    : `Listening on http://${config.host}:${String(config.port)} using the default host because RALPHER_HOST was not set. Set RALPHER_HOST to the interface you want to bind (e.g. RALPHER_HOST=0.0.0.0 to listen on all interfaces).`;
 
   if (config.basicAuth.enabled) {
     const usernameMessage = config.basicAuth.usernameSource === "RALPHER_USERNAME"
