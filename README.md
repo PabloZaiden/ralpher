@@ -156,7 +156,7 @@ When the server starts, it logs the effective listening address and whether buil
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `RALPHER_HOST` | Host/interface passed to `Bun.serve`; set this to restrict which interfaces accept requests | `0.0.0.0` |
+| `RALPHER_HOST` | Host/interface passed to `Bun.serve` (e.g. `0.0.0.0` to listen on all interfaces, or a specific IP to bind to a particular network interface) | `127.0.0.1` |
 | `RALPHER_PORT` | Server port | `3000` |
 | `RALPHER_PASSWORD` | Enable built-in HTTP Basic auth for every request when this is non-empty after trimming | unset |
 | `RALPHER_USERNAME` | Username for built-in HTTP Basic auth when `RALPHER_PASSWORD` enables it | `ralpher` |
