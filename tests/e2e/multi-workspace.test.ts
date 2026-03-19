@@ -221,42 +221,6 @@ describe("Multi-Workspace E2E", () => {
       expect(ws2Settings.agent.hostname).toBeUndefined();
     });
 
-    test("resetting one workspace connection does not affect another", async () => {
-      // Create two workspaces
-      const ws1Response = await fetch(`${baseUrl}/api/workspaces`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Workspace 1",
-          directory: testWorkDir1,
-        }),
-      });
-      const ws1 = await ws1Response.json();
-
-      const ws2Response = await fetch(`${baseUrl}/api/workspaces`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: "Workspace 2",
-          directory: testWorkDir2,
-        }),
-      });
-      const ws2 = await ws2Response.json();
-
-      // Reset connection for workspace 1
-      const resetResponse = await fetch(`${baseUrl}/api/workspaces/${ws1.id}/server-settings/reset`, {
-        method: "POST",
-      });
-      expect(resetResponse.ok).toBe(true);
-
-      // Both workspaces should still be accessible
-      const ws1GetResponse = await fetch(`${baseUrl}/api/workspaces/${ws1.id}`);
-      expect(ws1GetResponse.ok).toBe(true);
-
-      const ws2GetResponse = await fetch(`${baseUrl}/api/workspaces/${ws2.id}`);
-      expect(ws2GetResponse.ok).toBe(true);
-    });
-
     test("loops are isolated to their workspace", async () => {
       // Create two workspaces
       const ws1Response = await fetch(`${baseUrl}/api/workspaces`, {

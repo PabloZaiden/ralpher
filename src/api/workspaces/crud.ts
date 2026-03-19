@@ -12,7 +12,7 @@ import {
 } from "../../persistence/workspaces";
 import { backendManager } from "../../core/backend-manager";
 import { createLogger } from "../../core/logger";
-import { getDefaultServerSettings } from "../../types/settings";
+import { areServerSettingsEqual, getDefaultServerSettings } from "../../types/settings";
 import type { Workspace } from "../../types/workspace";
 import { parseAndValidate } from "../validation";
 import {
@@ -164,7 +164,11 @@ export const crudRoutes = {
           return currentWorkspace;
         }
 
-        if (body.serverSettings) {
+        const nameChanged = body.name !== undefined && body.name !== currentWorkspace.name;
+        const serverSettingsChanged = body.serverSettings !== undefined
+          && !areServerSettingsEqual(currentWorkspace.serverSettings, body.serverSettings);
+
+        if (serverSettingsChanged && body.serverSettings) {
           const existingWorkspace = await getWorkspaceByDirectoryAndServerSettings(
             currentWorkspace.directory,
             body.serverSettings,
@@ -181,17 +185,27 @@ export const crudRoutes = {
           }
         }
 
-        const workspace = await updateWorkspace(id, {
-          name: body.name,
-          serverSettings: body.serverSettings,
-        });
+        if (!nameChanged && !serverSettingsChanged) {
+          log.info(`Workspace unchanged: ${currentWorkspace.name}`);
+          return Response.json(currentWorkspace);
+        }
+
+        const workspaceUpdates: Partial<Pick<Workspace, "name" | "serverSettings">> = {};
+        if (nameChanged) {
+          workspaceUpdates.name = body.name;
+        }
+        if (serverSettingsChanged && body.serverSettings) {
+          workspaceUpdates.serverSettings = body.serverSettings;
+        }
+
+        const workspace = await updateWorkspace(id, workspaceUpdates);
         if (!workspace) {
           log.debug("PUT /api/workspaces/:id - Workspace not found", { workspaceId: id });
           return errorResponse("workspace_not_found", "Workspace not found", 404);
         }
 
         // Reset connection if server settings were updated so new config takes effect
-        if (body.serverSettings) {
+        if (serverSettingsChanged) {
           await backendManager.resetWorkspaceConnection(id);
         }
 

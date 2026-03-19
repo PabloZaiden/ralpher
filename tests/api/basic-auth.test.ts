@@ -5,15 +5,16 @@
 import { Buffer } from "node:buffer";
 import { serve } from "bun";
 import { afterAll, describe, expect, test } from "bun:test";
-import index from "../../src/index.html";
 import {
   createAuthenticatedStaticRoute,
-  createStaticAssetServer,
   isRequestAuthorized,
   wrapRouteHandler,
   wrapRouteMethods,
 } from "../../src/api/basic-auth";
-import type { BasicAuthConfig } from "../../src/core/server-config";
+import {
+  DEFAULT_SERVER_IDLE_TIMEOUT_SECONDS,
+  type BasicAuthConfig,
+} from "../../src/core/server-config";
 
 const authConfig: BasicAuthConfig = {
   enabled: true,
@@ -32,6 +33,7 @@ function startServer(routes: NonNullable<Parameters<typeof serve<undefined>>[0][
   const server = serve<undefined>({
     hostname: "127.0.0.1",
     port: 0,
+    idleTimeout: DEFAULT_SERVER_IDLE_TIMEOUT_SECONDS,
     routes,
   });
   startedServers.push(server);
@@ -144,8 +146,13 @@ describe("wrapRouteHandler", () => {
 
 describe("createAuthenticatedStaticRoute", () => {
   test("protects the SPA fallback and bundled assets", async () => {
-    const staticAssetServer = createStaticAssetServer(index);
-    startedServers.push(staticAssetServer);
+    const staticAssetServer = startServer({
+      "/*": async () => new Response("<!doctype html><div id=\"root\"></div>", {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+        },
+      }),
+    });
     const server = startServer({
       "/*": createAuthenticatedStaticRoute(staticAssetServer, authConfig),
     });

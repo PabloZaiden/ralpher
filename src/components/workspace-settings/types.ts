@@ -19,8 +19,6 @@ export interface WorkspaceSettingsModalProps {
   onSave: (name: string, settings: ServerSettings) => Promise<boolean>;
   /** Callback to test connection */
   onTest: (settings: ServerSettings) => Promise<{ success: boolean; error?: string }>;
-  /** Callback to reset connection for this workspace */
-  onResetConnection?: () => Promise<boolean>;
   /** Callback to purge the workspace loops covered by the terminal-state settings action */
   onPurgeArchivedLoops?: () => Promise<PurgeArchivedLoopsResult>;
   /** Callback to delete the workspace */
@@ -33,8 +31,6 @@ export interface WorkspaceSettingsModalProps {
   saving?: boolean;
   /** Whether testing is in progress */
   testing?: boolean;
-  /** Whether resetting connection is in progress */
-  resettingConnection?: boolean;
   /** Whether the terminal-state purge action is in progress */
   purgingPurgeableLoops?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */
@@ -53,8 +49,6 @@ export interface WorkspaceSettingsFormProps {
   onSave: (name: string, settings: ServerSettings) => Promise<boolean>;
   /** Callback to test connection */
   onTest: (settings: ServerSettings) => Promise<{ success: boolean; error?: string }>;
-  /** Callback to reset connection for this workspace */
-  onResetConnection?: () => Promise<boolean>;
   /** Callback to purge the workspace loops covered by the terminal-state settings action */
   onPurgeArchivedLoops?: () => Promise<PurgeArchivedLoopsResult>;
   /** Callback to delete the workspace */
@@ -67,8 +61,6 @@ export interface WorkspaceSettingsFormProps {
   saving?: boolean;
   /** Whether testing is in progress */
   testing?: boolean;
-  /** Whether resetting connection is in progress */
-  resettingConnection?: boolean;
   /** Whether the terminal-state purge action is in progress */
   purgingPurgeableLoops?: boolean;
   /** Whether remote-only mode is enabled (RALPHER_REMOTE_ONLY) */

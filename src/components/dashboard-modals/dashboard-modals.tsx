@@ -90,10 +90,8 @@ export interface DashboardModalsProps {
   workspaceStatus: UseWorkspaceServerSettingsResult["status"];
   workspaceSettingsSaving: boolean;
   workspaceSettingsTesting: boolean;
-  workspaceSettingsResetting: boolean;
   workspaceArchivedLoopsPurging: boolean;
   testWorkspaceConnection: UseWorkspaceServerSettingsResult["testConnection"];
-  resetWorkspaceConnection: UseWorkspaceServerSettingsResult["resetConnection"];
   updateWorkspaceSettings: UseWorkspaceServerSettingsResult["updateWorkspace"];
   archivedLoopCount: number;
   workspaceLoopCount: number;
@@ -201,7 +199,6 @@ export function DashboardModals(props: DashboardModalsProps) {
           return success;
         }}
         onTest={props.testWorkspaceConnection}
-        onResetConnection={props.resetWorkspaceConnection}
         onPurgeArchivedLoops={async () => {
           if (!props.workspaceSettingsModal.workspaceId) {
             return {
@@ -228,7 +225,6 @@ export function DashboardModals(props: DashboardModalsProps) {
         workspaceLoopCount={props.workspaceLoopCount}
         saving={props.workspaceSettingsSaving}
         testing={props.workspaceSettingsTesting}
-        resettingConnection={props.workspaceSettingsResetting}
         purgingPurgeableLoops={props.workspaceArchivedLoopsPurging}
         remoteOnly={props.remoteOnly}
       />

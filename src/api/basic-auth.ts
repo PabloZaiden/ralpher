@@ -5,7 +5,11 @@
 import { Buffer } from "node:buffer";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { serve, type Server } from "bun";
-import type { BasicAuthConfig, BunDevelopmentConfig } from "../core/server-config";
+import {
+  DEFAULT_SERVER_IDLE_TIMEOUT_SECONDS,
+  type BasicAuthConfig,
+  type BunDevelopmentConfig,
+} from "../core/server-config";
 
 type MaybePromise<T> = T | Promise<T>;
 
@@ -163,6 +167,7 @@ export function createStaticAssetServer(
     hostname: "127.0.0.1",
     port: 0,
     development,
+    idleTimeout: DEFAULT_SERVER_IDLE_TIMEOUT_SECONDS,
     routes: {
       "/*": indexBundle,
     },

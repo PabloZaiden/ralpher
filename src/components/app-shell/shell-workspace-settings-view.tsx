@@ -32,9 +32,7 @@ export function WorkspaceSettingsView({
     error: workspaceSettingsError,
     saving: workspaceSettingsSaving,
     testing: workspaceSettingsTesting,
-    resettingConnection: workspaceSettingsResetting,
     testConnection: testWorkspaceConnection,
-    resetConnection: resetWorkspaceConnection,
     updateWorkspace: updateWorkspaceSettings,
     workspaceSettingsWorkspaceId,
     workspaceSettingsFormValid,
@@ -86,7 +84,6 @@ export function WorkspaceSettingsView({
             return success;
           }}
           onTest={testWorkspaceConnection}
-          onResetConnection={resetWorkspaceConnection}
           onPurgeArchivedLoops={
             workspaceSettingsWorkspaceId
               ? async () => await handlePurgeArchivedLoops(workspaceSettingsWorkspaceId)
@@ -101,7 +98,6 @@ export function WorkspaceSettingsView({
           workspaceLoopCount={selectedWorkspaceLoopCount}
           saving={workspaceSettingsSaving}
           testing={workspaceSettingsTesting}
-          resettingConnection={workspaceSettingsResetting}
           purgingPurgeableLoops={workspaceArchivedLoopsPurging}
           remoteOnly={dashboardData.remoteOnly}
           showConnectionStatus={false}

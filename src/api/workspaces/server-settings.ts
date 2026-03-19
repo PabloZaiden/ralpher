@@ -1,10 +1,11 @@
 /**
- * Route handlers for workspace server settings: CRUD, status, test connection, and reset.
+ * Route handlers for workspace server settings: CRUD, status, and test connection.
  */
 
 import { getWorkspaceByDirectoryAndServerSettings, updateWorkspace } from "../../persistence/workspaces";
 import { backendManager } from "../../core/backend-manager";
 import { createLogger } from "../../core/logger";
+import { areServerSettingsEqual } from "../../types/settings";
 import { parseAndValidate } from "../validation";
 import {
   requireWorkspace,
@@ -49,6 +50,13 @@ export const serverSettingsRoutes = {
         const currentWorkspace = await requireWorkspace(id);
         if (currentWorkspace instanceof Response) {
           return currentWorkspace;
+        }
+
+        const settingsChanged = !areServerSettingsEqual(currentWorkspace.serverSettings, body);
+
+        if (!settingsChanged) {
+          log.info(`Server settings unchanged for workspace: ${currentWorkspace.name}`);
+          return Response.json(currentWorkspace.serverSettings);
         }
 
         const existingWorkspace = await getWorkspaceByDirectoryAndServerSettings(
@@ -150,26 +158,6 @@ export const serverSettingsRoutes = {
       } catch (error) {
         log.error("Failed to test workspace connection:", String(error));
         return errorResponse("test_failed", `Failed to test connection: ${String(error)}`, 500);
-      }
-    },
-  },
-
-  /**
-   * POST /api/workspaces/:id/server-settings/reset - Reset connection for workspace
-   */
-  "/api/workspaces/:id/server-settings/reset": {
-    async POST(req: Request & { params: { id: string } }) {
-      const { id } = req.params;
-      try {
-        const workspace = await requireWorkspace(id);
-        if (workspace instanceof Response) return workspace;
-
-        await backendManager.resetWorkspaceConnection(id);
-        log.info(`Reset connection for workspace: ${workspace.name}`);
-        return Response.json({ success: true });
-      } catch (error) {
-        log.error("Failed to reset workspace connection:", String(error));
-        return errorResponse("reset_failed", `Failed to reset connection: ${String(error)}`, 500);
       }
     },
   },
