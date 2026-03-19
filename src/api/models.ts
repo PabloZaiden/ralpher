@@ -76,7 +76,7 @@ async function getAgentBackendModels(
     return await testBackend.getModels(directory);
   }
 
-  const existingBackend = backendManager.getBackend(workspaceId);
+  const existingBackend = await backendManager.getBackendAsync(workspaceId);
   if (existingBackend.isConnected()) {
     return await existingBackend.getModels(directory);
   }

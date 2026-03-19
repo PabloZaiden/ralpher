@@ -250,7 +250,7 @@ export class LoopManager {
   }
 
   async generateLoopTitle(options: Pick<CreateLoopOptions, "prompt" | "directory" | "workspaceId">): Promise<string> {
-    const workspaceBackend = backendManager.getBackend(options.workspaceId);
+    const workspaceBackend = await backendManager.getBackendAsync(options.workspaceId);
     if (
       !backendManager.isWorkspaceConnected(options.workspaceId)
       || workspaceBackend.getDirectory() !== options.directory
@@ -258,7 +258,7 @@ export class LoopManager {
       await backendManager.connect(options.workspaceId, options.directory);
     }
 
-    const backend = backendManager.getBackend(options.workspaceId);
+    const backend = await backendManager.getBackendAsync(options.workspaceId);
     const tempSession = await backend.createSession({
       title: "Loop Title Generation",
       directory: options.directory,
