@@ -22,15 +22,7 @@ export function SessionInfoSection({ session, standaloneServerName, standaloneSe
       <Badge variant={effectiveConnectionMode === "direct" ? "info" : "default"} className="shrink-0">
         {getSshConnectionModeLabel(effectiveConnectionMode ?? session.config.connectionMode)}
       </Badge>
-      {hasPersistentSession ? (
-        <span className="min-w-0 break-words font-mono text-right [overflow-wrap:anywhere]">
-          {session.config.remoteSessionName}
-        </span>
-      ) : (
-        <span className="min-w-0 break-words text-right [overflow-wrap:anywhere]">
-          fresh shell on reconnect
-        </span>
-      )}
+
       {session.state.notice && (
         <Badge variant="warning" className="shrink-0">
           fallback
@@ -42,7 +34,7 @@ export function SessionInfoSection({ session, standaloneServerName, standaloneSe
         </Badge>
       )}
     </div>
-  ), [effectiveConnectionMode, hasPersistentSession, session]);
+  ), [effectiveConnectionMode, session]);
 
   return (
     <CompactBar
