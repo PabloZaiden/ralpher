@@ -829,37 +829,6 @@ describe("Workspace API Integration", () => {
       });
     });
 
-    describe("POST /api/workspaces/:id/server-settings/reset", () => {
-      test("resets connection for workspace", async () => {
-        // Create a workspace
-        const createResponse = await fetch(`${baseUrl}/api/workspaces`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            name: "Reset Connection Test",
-            directory: testWorkDir,
-          }),
-        });
-        const workspace = await createResponse.json();
-
-        // Reset connection
-        const response = await fetch(`${baseUrl}/api/workspaces/${workspace.id}/server-settings/reset`, {
-          method: "POST",
-        });
-        expect(response.ok).toBe(true);
-        const result = await response.json();
-
-        expect(result.success).toBe(true);
-      });
-
-      test("returns 404 for non-existent workspace", async () => {
-        const response = await fetch(`${baseUrl}/api/workspaces/non-existent-id/server-settings/reset`, {
-          method: "POST",
-        });
-        expect(response.status).toBe(404);
-      });
-    });
-
     describe("Workspace creation with serverSettings", () => {
       test("creates workspace with default server settings when not provided", async () => {
         const response = await fetch(`${baseUrl}/api/workspaces`, {
@@ -988,7 +957,7 @@ describe("Workspace API Integration", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: "Reset Connection Test",
+            name: "Workspace Settings Update Test",
             directory: testWorkDir,
           }),
         });
@@ -1033,7 +1002,7 @@ describe("Workspace API Integration", () => {
         }
       });
 
-      test("does NOT reset connection when only name is updated", async () => {
+      test("does NOT emit a reset event when only name is updated", async () => {
         // Import the event emitter to capture events
         const { loopEventEmitter } = await import("../../src/core/event-emitter");
         

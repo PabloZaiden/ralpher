@@ -42,9 +42,8 @@ export function useWorkspaceServerSettings(workspaceId: string | null) {
     setError,
   );
 
-  const { testing, resettingConnection, testConnection, resetConnection } = useWorkspaceConnection(
+  const { testing, testConnection } = useWorkspaceConnection(
     workspaceId,
-    fetchStatus,
     setError,
   );
 
@@ -67,12 +66,10 @@ export function useWorkspaceServerSettings(workspaceId: string | null) {
     error,
     saving,
     testing,
-    resettingConnection,
     refresh,
     updateSettings,
     updateName,
     updateWorkspace,
     testConnection,
-    resetConnection,
   };
 }

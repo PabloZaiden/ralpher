@@ -212,9 +212,7 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
     status: workspaceStatus,
     saving: workspaceSettingsSaving,
     testing: workspaceSettingsTesting,
-    resettingConnection: workspaceSettingsResetting,
     testConnection: testWorkspaceConnection,
-    resetConnection: resetWorkspaceConnection,
     updateWorkspace: updateWorkspaceSettings,
   } = useWorkspaceServerSettings(modals.workspaceSettingsModal.workspaceId);
 
@@ -332,10 +330,8 @@ export function Dashboard({ onSelectLoop, onSelectChat, onSelectSshSession }: Da
         workspaceStatus={workspaceStatus}
         workspaceSettingsSaving={workspaceSettingsSaving}
         workspaceSettingsTesting={workspaceSettingsTesting}
-        workspaceSettingsResetting={workspaceSettingsResetting}
         workspaceArchivedLoopsPurging={workspaceArchivedLoopsPurging}
         testWorkspaceConnection={testWorkspaceConnection}
-        resetWorkspaceConnection={resetWorkspaceConnection}
         updateWorkspaceSettings={updateWorkspaceSettings}
         archivedLoopCount={selectedWorkspaceArchivedLoopCount}
         workspaceLoopCount={selectedWorkspaceLoopCount}

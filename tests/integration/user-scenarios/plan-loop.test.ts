@@ -750,7 +750,7 @@ describe("Plan + Loop User Scenarios", () => {
       expect(status).toBe(404);
     });
 
-    test("preserves planning loop status after connection reset", async () => {
+    test("preserves planning loop status after server settings update", async () => {
       ctx.mockBackend.reset(createPlanModeMockResponses({ 
         planIterations: 3, // Initial + post-reset feedback 
         executionResponses: ["<promise>COMPLETE</promise>"],
@@ -773,19 +773,27 @@ describe("Plan + Loop User Scenarios", () => {
       expect(currentLoop.state.status).toBe("planning");
       expect(currentLoop.state.planMode?.isPlanReady).toBe(true);
 
-      // Reset workspace connection via API (simulating "Reset Connection" button in workspace settings)
-      const resetResponse = await fetch(`${ctx.baseUrl}/api/workspaces/${ctx.workspaceId}/server-settings/reset`, {
-        method: "POST",
-      });
-      expect(resetResponse.status).toBe(200);
+      // Updating server settings still performs a supported internal connection reset.
+      const currentSettingsResponse = await fetch(
+        `${ctx.baseUrl}/api/workspaces/${ctx.workspaceId}/server-settings`,
+      );
+      expect(currentSettingsResponse.status).toBe(200);
+      const currentSettings = await currentSettingsResponse.json();
 
-      // Verify the loop is still in planning status after reset
+      const updateResponse = await fetch(`${ctx.baseUrl}/api/workspaces/${ctx.workspaceId}/server-settings`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(currentSettings),
+      });
+      expect(updateResponse.status).toBe(200);
+
+      // Verify the loop is still in planning status after the settings-triggered reset
       currentLoop = await waitForLoopStatus(ctx.baseUrl, loop.config.id, "planning");
       expect(currentLoop.state.status).toBe("planning");
       // Note: isPlanReady should still be true since we didn't change the state
       expect(currentLoop.state.planMode?.isPlanReady).toBe(true);
 
-      // Send feedback to continue planning (this should work after reset)
+      // Send feedback to continue planning (this should still work after the reset)
       const { status: feedbackStatus } = await sendPlanFeedbackViaAPI(
         ctx.baseUrl,
         loop.config.id,

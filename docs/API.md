@@ -1984,24 +1984,6 @@ If no body (or `{}`) is provided, the workspace's current settings are used.
 | 400 | `validation_error` | Proposed settings do not match schema |
 | 404 | `workspace_not_found` | Workspace not found |
 
-#### POST /api/workspaces/:id/server-settings/reset
-
-Reset the connection for a specific workspace. Clears connection state so the next operation will establish a fresh connection.
-
-**Response**
-
-```json
-{
-  "success": true
-}
-```
-
-**Errors**
-
-| Status | Error | Description |
-|--------|-------|-------------|
-| 404 | `not_found` | Workspace not found |
-
 #### POST /api/server-settings/test
 
 Test a server connection without requiring a workspace. Useful for validating connection settings before creating a workspace.

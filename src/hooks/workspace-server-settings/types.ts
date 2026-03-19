@@ -17,8 +17,6 @@ export interface UseWorkspaceServerSettingsResult {
   saving: boolean;
   /** Whether a test operation is in progress */
   testing: boolean;
-  /** Whether a reset connection operation is in progress */
-  resettingConnection: boolean;
   /** Refresh settings from the server */
   refresh: () => Promise<void>;
   /** Update server settings for the workspace */
@@ -29,6 +27,4 @@ export interface UseWorkspaceServerSettingsResult {
   updateWorkspace: (name: string, settings: ServerSettings) => Promise<boolean>;
   /** Test connection with provided settings (uses workspace's current settings if not provided) */
   testConnection: (settings?: ServerSettings) => Promise<{ success: boolean; error?: string }>;
-  /** Reset connection for the workspace */
-  resetConnection: () => Promise<boolean>;
 }

@@ -8,7 +8,6 @@ import { ServerSettingsForm } from "../ServerSettingsForm";
 import type { ServerSettings } from "../../types/settings";
 import { createLogger } from "../../lib/logger";
 import { AgentsMdSection } from "./agents-md-section";
-import { ResetConnectionSection } from "./reset-connection-section";
 import { PurgeLoopsSection } from "./purge-loops-section";
 import { DeleteWorkspaceSection } from "./delete-workspace-section";
 import type { WorkspaceSettingsFormProps } from "./types";
@@ -20,14 +19,12 @@ export function WorkspaceSettingsForm({
   status,
   onSave,
   onTest,
-  onResetConnection,
   onPurgeArchivedLoops,
   onDeleteWorkspace,
   purgeableLoopCount = 0,
   workspaceLoopCount = 0,
   saving = false,
   testing = false,
-  resettingConnection = false,
   purgingPurgeableLoops = false,
   remoteOnly = false,
   showConnectionStatus = true,
@@ -160,14 +157,6 @@ export function WorkspaceSettingsForm({
 
         {/* AGENTS.md Optimization */}
         {workspace && <AgentsMdSection workspace={workspace} />}
-
-        {/* Reset Connection */}
-        {onResetConnection && (
-          <ResetConnectionSection
-            onResetConnection={onResetConnection}
-            resettingConnection={resettingConnection}
-          />
-        )}
       </form>
 
       {/* Terminal-state loop purge — rendered outside <form> so ConfirmModal buttons

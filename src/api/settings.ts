@@ -6,7 +6,7 @@
  * - Resetting database
  * 
  * Note: Server settings and connection management are now per-workspace.
- * Use the workspace API to get/update server settings or reset connections
+ * Use the workspace API to get/update server settings and test connections
  * for a specific workspace.
  * 
  * @module api/settings
