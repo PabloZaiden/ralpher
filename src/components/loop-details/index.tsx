@@ -18,7 +18,7 @@ import {
   MarkMergedModal,
   UpdateBranchModal,
   RenameLoopModal,
-} from "./LoopModals";
+} from "../LoopModals";
 import { LoopActionBar } from "../LoopActionBar";
 import {
   getStatusLabel,
