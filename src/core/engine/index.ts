@@ -1749,7 +1749,7 @@ export class LoopEngine {
    * Tries session/set_config_option first, then falls back to session/set_model
    * for agents (like OpenCode) that use the older model API.
    */
-  private async setModelViaConfigOption(session: import("../backends/types").AgentSession): Promise<void> {
+  private async setModelViaConfigOption(session: import("../../backends/types").AgentSession): Promise<void> {
     const desiredModel = this.config.model?.modelID;
     if (!desiredModel || !this.sessionId) {
       return;
