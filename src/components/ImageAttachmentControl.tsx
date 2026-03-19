@@ -86,7 +86,7 @@ export function ImageAttachmentControl({
     : "Add image";
 
   return (
-    <div className={iconOnly && attachments.length === 0 ? "" : "space-y-2"}>
+    <div className={iconOnly && attachments.length === 0 && !error ? "" : "space-y-2"}>
       <div className="flex items-center gap-2">
         <input
           ref={inputRef}

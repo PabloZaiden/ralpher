@@ -46,11 +46,11 @@ describe("LoopActionBar", () => {
       expect(select).toBeInTheDocument();
     });
 
-    test("renders the submit button with appropriate aria-label", () => {
+    test("renders the submit button with appropriate aria-label for planning mode", () => {
       const { getByRole } = renderWithUser(
-        <LoopActionBar {...defaultProps()} />
+        <LoopActionBar {...defaultProps({ isPlanning: true })} />
       );
-      expect(getByRole("button", { name: "Queue" })).toBeInTheDocument();
+      expect(getByRole("button", { name: "Send Feedback" })).toBeInTheDocument();
     });
   });
 
