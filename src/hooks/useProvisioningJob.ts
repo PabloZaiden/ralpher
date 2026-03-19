@@ -154,9 +154,6 @@ export function useProvisioningJob(): UseProvisioningJobResult {
     url: websocketUrl,
     autoConnect: activeJobId !== null,
     onEvent: handleProvisioningEvent,
-    onFocusRecovery: async () => {
-      await refreshJob();
-    },
     onStatusChange: (status) => {
       if (status === "open" && activeJobId) {
         void refreshJob();

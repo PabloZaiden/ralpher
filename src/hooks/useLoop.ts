@@ -432,7 +432,6 @@ export function useLoop(loopId: string): UseLoopResult {
   // WebSocket connection for real-time updates
   const { events, status: connectionStatus, clearEvents } = useLoopEvents<LoopEvent>(loopId, {
     onEvent: handleEvent,
-    onFocusRecovery: refresh,
   });
 
   // Update the loop

@@ -6,7 +6,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { appWebSocketUrl } from "../lib/public-path";
 import { log } from "../lib/logger";
-import { useWindowFocusRecovery, type WindowFocusRecoveryTrigger } from "./useWindowFocusRecovery";
 
 export type WebSocketConnectionStatus = "connecting" | "open" | "closed" | "error";
 
@@ -19,8 +18,6 @@ export interface UseWebSocketOptions<T> {
   onEvent?: (event: T) => void;
   /** Callback when connection status changes */
   onStatusChange?: (status: WebSocketConnectionStatus) => void;
-  /** Callback invoked when focus recovery detects an unhealthy socket */
-  onFocusRecovery?: (trigger: WindowFocusRecoveryTrigger) => void | Promise<void>;
   /** Maximum number of events to keep in history */
   maxEvents?: number;
 }
@@ -50,7 +47,7 @@ function buildWebSocketUrl(path: string): string {
  * Hook for connecting to WebSocket events endpoint.
  */
 export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseWebSocketResult<T> {
-  const { url, autoConnect = true, onEvent, onStatusChange, onFocusRecovery, maxEvents = 1000 } = options;
+  const { url, autoConnect = true, onEvent, onStatusChange, maxEvents = 1000 } = options;
 
   const [events, setEvents] = useState<T[]>([]);
   const [status, setStatus] = useState<WebSocketConnectionStatus>("closed");
@@ -59,12 +56,10 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
   const reconnectAttemptRef = useRef(0);
   const isManualDisconnectRef = useRef(false);
   const activeConnectionIdRef = useRef(0);
-  const statusRef = useRef<WebSocketConnectionStatus>("closed");
 
   // Use refs for callbacks to avoid re-triggering effects
   const onEventRef = useRef(onEvent);
   const onStatusChangeRef = useRef(onStatusChange);
-  const onFocusRecoveryRef = useRef(onFocusRecovery);
   const maxEventsRef = useRef(maxEvents);
 
   // Keep refs up to date
@@ -77,16 +72,11 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
   }, [onStatusChange]);
 
   useEffect(() => {
-    onFocusRecoveryRef.current = onFocusRecovery;
-  }, [onFocusRecovery]);
-
-  useEffect(() => {
     maxEventsRef.current = maxEvents;
   }, [maxEvents]);
 
   // Update status and call callback
   const updateStatus = useCallback((newStatus: WebSocketConnectionStatus) => {
-    statusRef.current = newStatus;
     setStatus(newStatus);
     onStatusChangeRef.current?.(newStatus);
   }, []);
@@ -202,24 +192,6 @@ export function useWebSocket<T = unknown>(options: UseWebSocketOptions<T>): UseW
       }, backoffMs);
     };
   }, [clearReconnectTimeout, closeCurrentSocket, url, updateStatus]);
-
-  useWindowFocusRecovery({
-    enabled: autoConnect,
-    onRecover: async (trigger) => {
-      if (isManualDisconnectRef.current) {
-        return;
-      }
-
-      const currentSocket = wsRef.current;
-      const isConnectionHealthy = currentSocket?.readyState === WebSocket.OPEN && statusRef.current === "open";
-      if (isConnectionHealthy) {
-        return;
-      }
-
-      connect();
-      await onFocusRecoveryRef.current?.(trigger);
-    },
-  });
 
   // Clear events
   const clearEvents = useCallback(() => {
