@@ -7,7 +7,7 @@ import { Badge, Button, EditIcon, getStatusBadgeVariant } from "../common";
 import { LoopActionBar } from "../LoopActionBar";
 import { getStatusLabel, getPlanningStatusLabel, isLoopActive, canSendTerminalFollowUp, getEntityLabel } from "../../utils";
 import type { TabId } from "./types";
-import { tabs } from "./types";
+import { tabs, formatDateTime } from "./types";
 import { useTabState } from "./use-tab-state";
 import { useLoopContent } from "./use-loop-content";
 import { useLoopActions } from "./use-loop-actions";
@@ -142,6 +142,12 @@ export function LoopDetails({
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-medium text-red-800 dark:text-red-300">{labels.capitalized} Error</h3>
                 <p className="mt-1 text-sm text-red-700 dark:text-red-400 break-words">{state.error.message}</p>
+                <div className="mt-2 text-xs text-red-600 dark:text-red-500">
+                  <span className="mr-3">Iteration: {state.error.iteration}</span>
+                  {state.error.timestamp && (
+                    <span>Time: {formatDateTime(state.error.timestamp)}</span>
+                  )}
+                </div>
               </div>
             </div>
           </div>

@@ -1,17 +1,22 @@
 import type { ServerWebSocket } from "bun";
 import { createLogger } from "../../core/logger";
 import type { WebSocketData } from "./types";
-import { startTerminalBridge, sendTerminalAuthError } from "./terminal";
+import type { startTerminalBridge, sendTerminalAuthError } from "./terminal";
 
 const log = createLogger("api:websocket");
 
+type TerminalHelpers = {
+  startTerminalBridge: typeof startTerminalBridge;
+  sendTerminalAuthError: typeof sendTerminalAuthError;
+};
+
 /**
- * Called when a message is received from the client.
- *
- * Handles ping/pong for keep-alive. Clients should send {"type":"ping"}
- * periodically to keep the connection alive; server responds with {"type":"pong"}.
+ * Creates the WebSocket message handler bound to the given terminal helpers.
+ * Accepting helpers by reference (not closure) allows tests to spy on the
+ * handler object's methods and have the spy intercepted correctly.
  */
-export function message(ws: ServerWebSocket<WebSocketData>, msg: string | Buffer): void {
+export function createMessageHandler(helpers: TerminalHelpers) {
+  return function message(ws: ServerWebSocket<WebSocketData>, msg: string | Buffer): void {
   if (ws.data.portForwardMode) {
     const proxySocket = ws.data.proxySocket;
 
@@ -20,6 +25,17 @@ export function message(ws: ServerWebSocket<WebSocketData>, msg: string | Buffer
       return;
     }
 
+    // Treat CONNECTING as transient — the upstream may open shortly.
+    // Drop the message silently instead of closing the client, to avoid
+    // flaky disconnects during the handshake/startup window.
+    if (proxySocket?.readyState === WebSocket.CONNECTING) {
+      log.debug("Dropping port-forward message while upstream proxy is still connecting", {
+        portForwardId: ws.data.portForwardId,
+      });
+      return;
+    }
+
+    // Upstream is definitively unavailable (CLOSING, CLOSED, or missing) — close the client.
     log.debug("Closing port-forward WebSocket because upstream proxy is not open", {
       portForwardId: ws.data.portForwardId,
       proxyReadyState: proxySocket ? proxySocket.readyState : "missing",
@@ -44,17 +60,17 @@ export function message(ws: ServerWebSocket<WebSocketData>, msg: string | Buffer
           ? data.credentialToken.trim()
           : "";
         if (!credentialToken) {
-          sendTerminalAuthError(
+          helpers.sendTerminalAuthError(
             ws,
             "credentialToken is required for standalone SSH terminals",
           );
           return;
         }
-        void startTerminalBridge(ws, credentialToken);
+        void helpers.startTerminalBridge(ws, credentialToken);
         return;
       }
       if (data.type !== "ping") {
-        sendTerminalAuthError(
+        helpers.sendTerminalAuthError(
           ws,
           "terminal.auth is required before using a standalone SSH terminal",
         );
@@ -90,4 +106,5 @@ export function message(ws: ServerWebSocket<WebSocketData>, msg: string | Buffer
   } catch (parseError) {
     log.trace("Received invalid JSON from WebSocket client", { error: String(parseError) });
   }
+  };
 }

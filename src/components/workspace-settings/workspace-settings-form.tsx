@@ -168,28 +168,30 @@ export function WorkspaceSettingsForm({
             resettingConnection={resettingConnection}
           />
         )}
-
-        {/* Terminal-state loop purge */}
-        {workspace && onPurgeArchivedLoops && (
-          <PurgeLoopsSection
-            workspace={workspace}
-            onPurgeArchivedLoops={onPurgeArchivedLoops}
-            purgeableLoopCount={purgeableLoopCount}
-            purgingPurgeableLoops={purgingPurgeableLoops}
-          />
-        )}
-
-        {/* Delete Workspace */}
-        {workspace && onDeleteWorkspace && (
-          <DeleteWorkspaceSection
-            workspace={workspace}
-            onDeleteWorkspace={onDeleteWorkspace}
-            workspaceLoopCount={workspaceLoopCount}
-            saving={saving}
-            onDeleted={onDeleted}
-          />
-        )}
       </form>
+
+      {/* Terminal-state loop purge — rendered outside <form> so ConfirmModal buttons
+          do not accidentally submit the form. */}
+      {workspace && onPurgeArchivedLoops && (
+        <PurgeLoopsSection
+          workspace={workspace}
+          onPurgeArchivedLoops={onPurgeArchivedLoops}
+          purgeableLoopCount={purgeableLoopCount}
+          purgingPurgeableLoops={purgingPurgeableLoops}
+        />
+      )}
+
+      {/* Delete Workspace — rendered outside <form> so ConfirmModal buttons
+          do not accidentally submit the form. */}
+      {workspace && onDeleteWorkspace && (
+        <DeleteWorkspaceSection
+          workspace={workspace}
+          onDeleteWorkspace={onDeleteWorkspace}
+          workspaceLoopCount={workspaceLoopCount}
+          saving={saving}
+          onDeleted={onDeleted}
+        />
+      )}
     </>
   );
 }

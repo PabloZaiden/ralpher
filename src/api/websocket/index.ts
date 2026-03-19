@@ -29,21 +29,35 @@
 export type { WebSocketData } from "./types";
 export { startTerminalBridge, sendTerminalAuthError } from "./terminal";
 export { open, close, error, activeConnections, MAX_CONNECTIONS } from "./connection";
-export { message } from "./message-handler";
+export { createMessageHandler } from "./message-handler";
 
 import { open, close, error } from "./connection";
-import { message } from "./message-handler";
+import { createMessageHandler } from "./message-handler";
 import { startTerminalBridge, sendTerminalAuthError } from "./terminal";
 
 /**
  * WebSocket message handlers for Bun.serve().
  * These handlers manage the WebSocket lifecycle and event streaming.
+ *
+ * `message` is created via a factory that holds a reference to `websocketHandlers`
+ * itself so that spying on `websocketHandlers.startTerminalBridge` in tests correctly
+ * intercepts calls made from inside the message handler.
  */
 export const websocketHandlers = {
   startTerminalBridge,
   sendTerminalAuthError,
   open,
-  message,
   close,
   error,
+} as {
+  startTerminalBridge: typeof startTerminalBridge;
+  sendTerminalAuthError: typeof sendTerminalAuthError;
+  open: typeof open;
+  close: typeof close;
+  error: typeof error;
+  message: ReturnType<typeof createMessageHandler>;
 };
+
+// Assign message after the object is created so `websocketHandlers` is the live
+// reference passed to the factory — any spy on the object's methods is intercepted.
+(websocketHandlers as Record<string, unknown>)["message"] = createMessageHandler(websocketHandlers);
