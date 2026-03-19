@@ -13,6 +13,8 @@ interface ImageAttachmentControlProps {
   disabled?: boolean;
   compact?: boolean;
   hint?: string;
+  /** When true, render only a small icon button with no text or hint */
+  iconOnly?: boolean;
 }
 
 export function ImageAttachmentControl({
@@ -21,6 +23,7 @@ export function ImageAttachmentControl({
   disabled = false,
   compact = false,
   hint,
+  iconOnly = false,
 }: ImageAttachmentControlProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -83,7 +86,7 @@ export function ImageAttachmentControl({
     : "Add image";
 
   return (
-    <div className="space-y-2">
+    <div className={iconOnly && attachments.length === 0 && !error ? "" : "space-y-2"}>
       <div className="flex items-center gap-2">
         <input
           ref={inputRef}
@@ -95,19 +98,34 @@ export function ImageAttachmentControl({
           disabled={disabled}
           onChange={(event) => void handleFilesSelected(event.target.files)}
         />
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={disabled || attachments.length >= MESSAGE_IMAGE_ATTACHMENT_LIMIT}
-          className={`inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-neutral-700 px-2.5 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 disabled:cursor-not-allowed disabled:opacity-50 ${compact ? "" : "text-sm"}`}
-        >
-          <span aria-hidden="true">📎</span>
-          <span>{buttonLabel}</span>
-        </button>
-        {hint && (
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            {hint}
-          </span>
+        {iconOnly ? (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={disabled || attachments.length >= MESSAGE_IMAGE_ATTACHMENT_LIMIT}
+            className="inline-flex items-center justify-center h-9 w-9 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-neutral-700 text-gray-700 dark:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 disabled:cursor-not-allowed disabled:opacity-50 flex-shrink-0"
+            aria-label={buttonLabel}
+            title={buttonLabel}
+          >
+            <span aria-hidden="true" className="text-base">📎</span>
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              disabled={disabled || attachments.length >= MESSAGE_IMAGE_ATTACHMENT_LIMIT}
+              className={`inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-neutral-700 px-2.5 py-1.5 text-xs text-gray-700 dark:text-gray-200 hover:border-gray-400 dark:hover:border-gray-500 disabled:cursor-not-allowed disabled:opacity-50 ${compact ? "" : "text-sm"}`}
+            >
+              <span aria-hidden="true">📎</span>
+              <span>{buttonLabel}</span>
+            </button>
+            {hint && (
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {hint}
+              </span>
+            )}
+          </>
         )}
       </div>
 

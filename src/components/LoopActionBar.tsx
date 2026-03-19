@@ -11,7 +11,6 @@
 import { useState, useCallback, type FormEvent } from "react";
 import type { ModelInfo, ModelConfig, LoopConfig } from "../types";
 import type { ComposerImageAttachment, MessageImageAttachment } from "../types/message-attachments";
-import { Button } from "./common";
 import { ModelSelector, makeModelKey, parseModelKey, isModelEnabled, getModelDisplayName } from "./ModelSelector";
 import { createLogger } from "../lib/logger";
 import { ImageAttachmentControl } from "./ImageAttachmentControl";
@@ -44,8 +43,7 @@ export interface LoopActionBarProps {
   requireMessage?: boolean;
   /** Override the submit button label */
   submitLabel?: string;
-  /** Override the helper text below the composer */
-  helperText?: string;
+
 }
 
 export function LoopActionBar({
@@ -61,7 +59,6 @@ export function LoopActionBar({
   disabled = false,
   requireMessage = false,
   submitLabel,
-  helperText,
 }: LoopActionBarProps) {
   const [message, setMessage] = useState("");
   const [selectedModel, setSelectedModel] = useState<string>("");
@@ -216,26 +213,28 @@ export function LoopActionBar({
             className="flex-1 min-w-0 h-9 text-sm px-3 rounded-md border border-gray-300 bg-white dark:border-gray-600 dark:bg-neutral-700 text-gray-900 dark:text-gray-100 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
           />
 
-          {/* Submit button */}
-          <Button
-            type="submit"
-            size="sm"
-            disabled={disabled || isSubmitting || !canSubmit || (selectedModel !== "" && !selectedModelEnabled)}
-            loading={isSubmitting}
-            className="flex-shrink-0 h-9"
-          >
-            {submitLabel ?? (isPlanning ? "Send Feedback" : isChatMode ? "Send" : "Queue")}
-          </Button>
-        </div>
-
-        <div className="mt-2">
+          {/* Image attachment button (icon-only) */}
           <ImageAttachmentControl
             attachments={attachments}
             onChange={setAttachments}
             disabled={disabled || isSubmitting}
-            compact
-            hint="Optional images are sent inline with your message."
+            iconOnly
           />
+
+          {/* Submit button (compact arrow) */}
+          <button
+            type="submit"
+            disabled={disabled || isSubmitting || !canSubmit || (selectedModel !== "" && !selectedModelEnabled)}
+            className="flex-shrink-0 inline-flex items-center justify-center h-9 w-9 rounded-md bg-gray-900 text-white hover:bg-gray-800 disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed dark:bg-neutral-100 dark:text-gray-950 dark:hover:bg-neutral-200 dark:disabled:bg-neutral-800 dark:disabled:text-gray-500"
+            aria-label={submitLabel ?? (isPlanning ? "Send Feedback" : isChatMode ? "Send" : "Queue")}
+            title={submitLabel ?? (isPlanning ? "Send Feedback" : isChatMode ? "Send" : "Queue")}
+          >
+            {isSubmitting ? (
+              <span className="animate-spin text-sm">⏳</span>
+            ) : (
+              <span className="text-lg leading-none">↑</span>
+            )}
+          </button>
         </div>
 
         {/* Error message for disconnected model */}
@@ -249,14 +248,6 @@ export function LoopActionBar({
             Add a message before sending images.
           </p>
         )}
-
-        <p className="hidden sm:block mt-2 text-xs text-gray-500 dark:text-gray-400">
-          {helperText ?? (isPlanning
-            ? "Feedback will interrupt current generation and start a new plan revision."
-            : isChatMode
-            ? "Message will be sent immediately. Model change takes effect on next message."
-            : "Message will be sent after current step completes. Model change takes effect on next prompt.")}
-        </p>
       </form>
     </div>
   );

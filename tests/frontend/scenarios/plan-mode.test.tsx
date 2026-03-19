@@ -196,9 +196,9 @@ describe("plan mode scenario", () => {
     expect(feedbackInput.placeholder).toContain("feedback");
     await user.type(feedbackInput, "X");
 
-    // Click Send Feedback
+    // Click Send Feedback (button uses aria-label instead of text)
     const feedbackBtn = Array.from(document.querySelectorAll("button")).find(
-      (b) => b.textContent?.includes("Send Feedback"),
+      (b) => b.getAttribute("aria-label")?.includes("Send Feedback"),
     );
     expect(feedbackBtn).toBeTruthy();
     await user.click(feedbackBtn!);
