@@ -1,5 +1,7 @@
+import { memo } from "react";
 import type { ToolCallData } from "../../types";
 import { formatTime, getToolStatusColor } from "./utils";
+import { LazyDetails } from "./lazy-details";
 
 interface ToolEntryProps {
   data: ToolCallData;
@@ -9,7 +11,7 @@ interface ToolEntryProps {
   index: number;
 }
 
-export function ToolEntry({ data: tool, timestamp, showHeader, spacingClass, index }: ToolEntryProps) {
+export const ToolEntry = memo(function ToolEntry({ data: tool, timestamp, showHeader, spacingClass, index }: ToolEntryProps) {
   return (
     <div key={`tool-${tool.id}-${index}`} className={`group ${spacingClass}`}>
       <div className="flex items-start gap-2 sm:gap-3">
@@ -30,29 +32,29 @@ export function ToolEntry({ data: tool, timestamp, showHeader, spacingClass, ind
             <span className="text-yellow-400 break-all">{tool.name}</span>
           )}
           {tool.input != null && (
-            <details className="mt-1">
-              <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
-                Input
-              </summary>
-              <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
-                {String(JSON.stringify(tool.input, null, 2))}
-              </pre>
-            </details>
+            <LazyDetails
+              summary="Input"
+              renderContent={() => (
+                <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
+                  {String(JSON.stringify(tool.input, null, 2))}
+                </pre>
+              )}
+            />
           )}
           {tool.output != null && (
-            <details className="mt-1">
-              <summary className="cursor-pointer text-gray-500 hover:text-gray-400 text-xs">
-                Output
-              </summary>
-              <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
-                {typeof tool.output === "string"
-                  ? tool.output
-                  : String(JSON.stringify(tool.output, null, 2))}
-              </pre>
-            </details>
+            <LazyDetails
+              summary="Output"
+              renderContent={() => (
+                <pre className="mt-1 p-2 bg-neutral-800 rounded text-xs overflow-x-auto">
+                  {typeof tool.output === "string"
+                    ? tool.output
+                    : String(JSON.stringify(tool.output, null, 2))}
+                </pre>
+              )}
+            />
           )}
         </div>
       </div>
     </div>
   );
-}
+});

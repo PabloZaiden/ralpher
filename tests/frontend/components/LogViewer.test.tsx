@@ -142,14 +142,19 @@ describe("LogViewer", () => {
         name: "Write",
         input: { filePath: "/src/test.ts", content: "hello" },
       });
-      const { getByText, user } = renderWithUser(
+      const { container, getByText, user } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       // Input should be in a details/summary element
       const inputSummary = getByText("Input");
       expect(inputSummary).toBeInTheDocument();
+      expect(container.querySelectorAll("pre")).toHaveLength(0);
       // Clicking the summary should open details (toggle handled by browser)
       await user.click(inputSummary);
+      const inputPre = Array.from(container.querySelectorAll("pre")).find(
+        (element) => element.textContent?.includes("\"filePath\": \"/src/test.ts\"")
+      );
+      expect(inputPre).toBeDefined();
     });
 
     test("renders tool output in collapsible details", async () => {
@@ -157,21 +162,25 @@ describe("LogViewer", () => {
         name: "Read",
         output: "file contents here",
       });
-      const { getByText } = renderWithUser(
+      const { getByText, user } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
       expect(getByText("Output")).toBeInTheDocument();
+      expect(() => getByText("file contents here")).toThrow();
+      await user.click(getByText("Output"));
       expect(getByText("file contents here")).toBeInTheDocument();
     });
 
-    test("renders tool output as JSON when it is an object", () => {
+    test("renders tool output as JSON when it is an object", async () => {
       const tool = createToolCallData({
         name: "Bash",
         output: { exitCode: 0, stdout: "ok" },
       });
-      const { container } = renderWithUser(
+      const { container, getByText, user } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[tool]} showTools={true} />
       );
+      expect(container.querySelectorAll("pre")).toHaveLength(0);
+      await user.click(getByText("Output"));
       // JSON stringified output should be in the pre element
       const preElements = container.querySelectorAll("pre");
       const outputPre = Array.from(preElements).find(
@@ -251,15 +260,21 @@ describe("LogViewer", () => {
       expect(getByText("Agent thinking")).toBeInTheDocument();
     });
 
-    test("renders log details in collapsible section", () => {
+    test("renders log details in collapsible section", async () => {
       const log = createLogEntry({
         level: "agent",
         details: { key: "value", count: 42 },
       });
-      const { getByText } = renderWithUser(
+      const { container, getByText, user } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
       );
       expect(getByText("Details")).toBeInTheDocument();
+      expect(container.querySelectorAll("pre")).toHaveLength(0);
+      await user.click(getByText("Details"));
+      const detailsPre = Array.from(container.querySelectorAll("pre")).find(
+        (element) => element.textContent?.includes("\"key\": \"value\"")
+      );
+      expect(detailsPre).toBeDefined();
     });
 
     test("does not render Details when log has no details", () => {
