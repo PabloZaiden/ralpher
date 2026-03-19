@@ -74,6 +74,15 @@ describe("BackendManager workspace state hydration", () => {
     expect(internals.connections.has("workspace-ssh")).toBe(false);
   });
 
+  test("getInitializedBackend returns null for uninitialized workspaces without seeding state", async () => {
+    await createSshWorkspace();
+
+    expect(backendManager.getInitializedBackend("workspace-ssh")).toBeNull();
+
+    const internals = backendManager as unknown as BackendManagerInternals;
+    expect(internals.connections.has("workspace-ssh")).toBe(false);
+  });
+
   test("getCommandExecutorAsync hydrates SSH settings for an uninitialized workspace", async () => {
     await createSshWorkspace();
 

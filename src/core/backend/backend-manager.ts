@@ -499,12 +499,17 @@ class BackendManager {
   }
 
   /**
-   * Get the backend instance for a workspace (workspace-level operations only).
+   * Get an already-initialized backend instance for a workspace
+   * (workspace-level operations only).
+   *
    * Used for operations that don't belong to a specific loop (name generation,
-   * model listing, directory validation).
-   * Creates a new backend if one doesn't exist.
+   * model listing, directory validation) when the workspace state is already
+   * initialized.
    *
    * IMPORTANT: Do NOT use this for loop execution. Use getLoopBackend() instead.
+   *
+   * @throws Error if workspace state has not been initialized yet.
+   *         Use getBackendAsync() or connect() to hydrate it first.
    */
   getBackend(workspaceId: string): Backend {
     // Use test backend if set
@@ -518,6 +523,18 @@ class BackendManager {
     }
 
     throw new Error(`[BackendManager] Workspace ${workspaceId} not initialized. Use getBackendAsync() or connect() first.`);
+  }
+
+  /**
+   * Get the cached backend instance for a workspace if it has already been initialized.
+   * Does not hydrate workspace state from persistence.
+   */
+  getInitializedBackend(workspaceId: string): Backend | null {
+    if (this.isTestBackend && this.testBackend) {
+      return this.testBackend;
+    }
+
+    return this.connections.get(workspaceId)?.backend ?? null;
   }
 
   /**
