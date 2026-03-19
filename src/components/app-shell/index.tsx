@@ -33,7 +33,7 @@ import {
   getComposeSubmitActionLabel,
   type CreateLoopFormActionState,
   type CreateLoopFormSubmitRequest,
-} from "./CreateLoopForm";
+} from "../CreateLoopForm";
 import { LoopDetails } from "../LoopDetails";
 import { ProvisioningJobView } from "../ProvisioningJobView";
 import { ServerSettingsForm } from "../ServerSettingsForm";
@@ -53,7 +53,7 @@ import {
   getLoopStatusBadgeVariant,
   getSshSessionStatusBadgeVariant,
   getStatusBadgeVariant,
-} from "./common";
+} from "../common";
 
 const log = createLogger("AppShell");
 const SIDEBAR_SECTION_STORAGE_KEY = "ralpher.sidebarSectionCollapseState";
