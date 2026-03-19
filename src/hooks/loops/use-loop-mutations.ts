@@ -4,6 +4,7 @@
 
 import { useCallback } from "react";
 import type { Loop, CreateLoopRequest, CreateChatRequest, UpdateLoopRequest, UncommittedChangesError } from "../../types";
+import { createLogger } from "../../lib/logger";
 import { appFetch } from "../../lib/public-path";
 import { deleteLoopApi } from "../loopActions";
 
@@ -34,6 +35,7 @@ export interface UseLoopMutationsResult {
 }
 
 export function useLoopMutations({ setError, setLoops }: UseLoopMutationsOptions): UseLoopMutationsResult {
+  const log = createLogger("useLoopMutations");
   const createLoop = useCallback(async (request: CreateLoopRequest): Promise<CreateLoopResult> => {
     try {
       const response = await appFetch("/api/loops", {
@@ -63,6 +65,11 @@ export function useLoopMutations({ setError, setLoops }: UseLoopMutationsOptions
       // to avoid duplicate entries during the brief moment before refresh completes
       return { loop };
     } catch (err) {
+      log.error("Failed to create loop", {
+        workspaceId: request.workspaceId,
+        useWorktree: request.useWorktree,
+        error: String(err),
+      });
       setError(String(err));
       return { loop: null };
     }
@@ -94,6 +101,11 @@ export function useLoopMutations({ setError, setLoops }: UseLoopMutationsOptions
       const loop = (await response.json()) as Loop;
       return { loop };
     } catch (err) {
+      log.error("Failed to create chat", {
+        workspaceId: request.workspaceId,
+        useWorktree: request.useWorktree,
+        error: String(err),
+      });
       setError(String(err));
       return { loop: null };
     }
@@ -115,6 +127,7 @@ export function useLoopMutations({ setError, setLoops }: UseLoopMutationsOptions
       setLoops((prev) => prev.map((l) => (l.config.id === id ? loop : l)));
       return loop;
     } catch (err) {
+      log.error("Failed to update loop", { loopId: id, error: String(err) });
       setError(String(err));
       return null;
     }
@@ -127,6 +140,7 @@ export function useLoopMutations({ setError, setLoops }: UseLoopMutationsOptions
       // to avoid race conditions with state updates
       return true;
     } catch (err) {
+      log.error("Failed to delete loop", { loopId: id, error: String(err) });
       setError(String(err));
       return false;
     }

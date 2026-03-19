@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { createLogger } from "../../lib/logger";
 import type { ServerSettings } from "../../types/settings";
 import { appFetch } from "../../lib/public-path";
 
@@ -8,6 +9,7 @@ export function useWorkspaceMutations(
   fetchStatus: () => Promise<void>,
   setError: (error: string | null) => void,
 ) {
+  const log = createLogger("useWorkspaceMutations");
   const [saving, setSaving] = useState(false);
 
   const updateSettings = useCallback(async (newSettings: ServerSettings): Promise<boolean> => {
@@ -39,6 +41,10 @@ export function useWorkspaceMutations(
 
       return true;
     } catch (err) {
+      log.error("Failed to update workspace server settings", {
+        workspaceId,
+        error: String(err),
+      });
       setError(String(err));
       return false;
     } finally {
@@ -72,6 +78,10 @@ export function useWorkspaceMutations(
 
       return true;
     } catch (err) {
+      log.error("Failed to update workspace name", {
+        workspaceId,
+        error: String(err),
+      });
       setError(String(err));
       return false;
     } finally {
@@ -108,6 +118,10 @@ export function useWorkspaceMutations(
 
       return true;
     } catch (err) {
+      log.error("Failed to update workspace and settings", {
+        workspaceId,
+        error: String(err),
+      });
       setError(String(err));
       return false;
     } finally {

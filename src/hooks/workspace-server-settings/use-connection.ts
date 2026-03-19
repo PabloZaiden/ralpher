@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { createLogger } from "../../lib/logger";
 import type { ServerSettings } from "../../types/settings";
 import { appFetch } from "../../lib/public-path";
 
@@ -7,6 +8,7 @@ export function useWorkspaceConnection(
   fetchStatus: () => Promise<void>,
   setError: (error: string | null) => void,
 ) {
+  const log = createLogger("useWorkspaceConnection");
   const [testing, setTesting] = useState(false);
   const [resettingConnection, setResettingConnection] = useState(false);
 
@@ -29,6 +31,10 @@ export function useWorkspaceConnection(
         const data = (await response.json()) as { success: boolean; error?: string };
         return data;
       } catch (err) {
+        log.error("Failed to test workspace server connection", {
+          workspaceId,
+          error: String(err),
+        });
         return { success: false, error: String(err) };
       } finally {
         setTesting(false);
@@ -62,6 +68,10 @@ export function useWorkspaceConnection(
 
       return true;
     } catch (err) {
+      log.error("Failed to reset workspace server connection", {
+        workspaceId,
+        error: String(err),
+      });
       setError(String(err));
       return false;
     } finally {

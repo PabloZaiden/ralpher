@@ -3,6 +3,7 @@
  * behind a reverse proxy subpath.
  */
 
+import { createLogger } from "./logger";
 import {
   applyPublicBasePath,
   getPublicBasePathFromPathname,
@@ -10,6 +11,7 @@ import {
 } from "../utils/public-base-path";
 
 let configuredPublicBasePath: string | undefined;
+const log = createLogger("publicPath");
 
 export function setConfiguredPublicBasePath(basePath?: string | null): void {
   if (basePath == null) {
@@ -55,6 +57,15 @@ export function appWebSocketUrl(path: string): string {
   return url.toString();
 }
 
-export function appFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(appPath(path), init);
+export async function appFetch(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(appPath(path), init);
+  } catch (error) {
+    log.error("Application fetch failed", {
+      path,
+      method: init?.method ?? "GET",
+      error: String(error),
+    });
+    throw error;
+  }
 }

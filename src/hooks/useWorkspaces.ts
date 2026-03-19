@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Workspace, CreateWorkspaceRequest, WorkspaceImportResult, WorkspaceExportData } from "../types/workspace";
-import { log } from "../lib/logger";
+import { createLogger } from "../lib/logger";
 import { appFetch } from "../lib/public-path";
 
 export interface UseWorkspacesResult {
@@ -38,6 +38,7 @@ export interface UseWorkspacesResult {
  * Provides CRUD operations for workspaces.
  */
 export function useWorkspaces(): UseWorkspacesResult {
+  const log = createLogger("useWorkspaces");
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +60,7 @@ export function useWorkspaces(): UseWorkspacesResult {
       const data = (await response.json()) as Workspace[];
       setWorkspaces(data);
     } catch (err) {
+      log.error("Failed to fetch workspaces", { error: String(err) });
       setError(String(err));
     } finally {
       setLoading(false);
@@ -90,6 +92,11 @@ export function useWorkspaces(): UseWorkspacesResult {
       await fetchWorkspaces();
       return workspace;
     } catch (err) {
+      log.error("Failed to create workspace", {
+        workspaceName: request.name,
+        directory: request.directory,
+        error: String(err),
+      });
       setError(String(err));
       return null;
     } finally {
@@ -118,6 +125,7 @@ export function useWorkspaces(): UseWorkspacesResult {
       await fetchWorkspaces();
       return workspace;
     } catch (err) {
+      log.error("Failed to update workspace", { workspaceId: id, error: String(err) });
       setError(String(err));
       return null;
     } finally {
@@ -136,13 +144,16 @@ export function useWorkspaces(): UseWorkspacesResult {
 
       if (!response.ok) {
         const errorData = await response.json() as { message?: string };
-        return { success: false, error: errorData.message || "Failed to delete workspace" };
+        const message = errorData.message || "Failed to delete workspace";
+        log.error("Failed to delete workspace", { workspaceId: id, error: message });
+        return { success: false, error: message };
       }
 
       // Refresh the list to exclude the deleted workspace
       await fetchWorkspaces();
       return { success: true };
     } catch (err) {
+      log.error("Failed to delete workspace", { workspaceId: id, error: String(err) });
       setError(String(err));
       return { success: false, error: String(err) };
     } finally {
@@ -162,7 +173,10 @@ export function useWorkspaces(): UseWorkspacesResult {
       }
       return (await response.json()) as Workspace;
     } catch (err) {
-      log.error("Failed to get workspace by directory:", err);
+      log.error("Failed to get workspace by directory", {
+        directory,
+        error: String(err),
+      });
       return null;
     }
   }, []);
@@ -179,6 +193,7 @@ export function useWorkspaces(): UseWorkspacesResult {
       }
       return (await response.json()) as WorkspaceExportData;
     } catch (err) {
+      log.error("Failed to export workspaces", { error: String(err) });
       setError(String(err));
       return null;
     } finally {
@@ -217,6 +232,7 @@ export function useWorkspaces(): UseWorkspacesResult {
     } catch (err) {
       // Don't set error state if the request was intentionally aborted
       if (controller.signal.aborted) return null;
+      log.error("Failed to import workspaces", { error: String(err) });
       setError(String(err));
       return null;
     } finally {

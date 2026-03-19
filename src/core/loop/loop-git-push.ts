@@ -33,7 +33,7 @@ export async function pushLoopImpl(ctx: LoopCtx, loopId: string): Promise<PushLo
   }
 
   ctx.loopsBeingAccepted.add(loopId);
-  log.debug(`[LoopManager] pushLoop: Starting push for loop ${loopId}`);
+  log.info(`[LoopManager] pushLoop: Starting push for loop ${loopId}`);
 
   try {
     const executor = await backendManager.getCommandExecutorAsync(loop.config.workspaceId, loop.config.directory);
@@ -54,6 +54,7 @@ export async function pushLoopImpl(ctx: LoopCtx, loopId: string): Promise<PushLo
 
     return await syncBaseBranchAndPush(ctx, loopId, loop, git);
   } catch (error) {
+    log.error(`[LoopManager] pushLoop: Failed to push loop ${loopId}: ${String(error)}`);
     return { success: false, error: String(error) };
   } finally {
     ctx.loopsBeingAccepted.delete(loopId);
@@ -67,7 +68,7 @@ export async function updateBranchImpl(ctx: LoopCtx, loopId: string): Promise<Pu
     return { success: false, error: "Operation already in progress" };
   }
   ctx.loopsBeingAccepted.add(loopId);
-  log.debug(`[LoopManager] updateBranch: Starting branch update for loop ${loopId}`);
+  log.info(`[LoopManager] updateBranch: Starting branch update for loop ${loopId}`);
 
   try {
     const loop = await ctx.getLoop(loopId);
@@ -105,6 +106,7 @@ export async function updateBranchImpl(ctx: LoopCtx, loopId: string): Promise<Pu
 
     return await syncBaseBranchAndPush(ctx, loopId, loop, git);
   } catch (error) {
+    log.error(`[LoopManager] updateBranch: Failed to update branch for loop ${loopId}: ${String(error)}`);
     return { success: false, error: String(error) };
   } finally {
     ctx.loopsBeingAccepted.delete(loopId);
