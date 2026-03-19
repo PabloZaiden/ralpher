@@ -96,4 +96,10 @@ describe("buildPersistentSessionAttachCommand stale session cleanup", () => {
 
     expect(command).toContain("kill -9 \"$spid\"");
   });
+
+  test("has a SIGKILL fallback for the dtach master", () => {
+    const command = buildPersistentSessionAttachCommand(session);
+
+    expect(command).toContain("kill -9 \"$mpid\"");
+  });
 });
