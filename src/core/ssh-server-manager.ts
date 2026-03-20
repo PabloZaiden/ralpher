@@ -62,6 +62,7 @@ export class SshServerManager {
       name: request.name.trim(),
       address: request.address.trim(),
       username: request.username.trim(),
+      repositoriesBasePath: request.repositoriesBasePath?.trim() || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -81,6 +82,9 @@ export class SshServerManager {
       ...(request.name !== undefined ? { name: request.name.trim() } : {}),
       ...(request.address !== undefined ? { address: request.address.trim() } : {}),
       ...(request.username !== undefined ? { username: request.username.trim() } : {}),
+      ...(request.repositoriesBasePath !== undefined
+        ? { repositoriesBasePath: request.repositoriesBasePath?.trim() || undefined }
+        : {}),
       updatedAt: new Date().toISOString(),
     });
     const updated = await getSshServer(id);

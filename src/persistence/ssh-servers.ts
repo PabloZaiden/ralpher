@@ -23,6 +23,7 @@ const ALLOWED_SSH_SERVER_COLUMNS = new Set([
   "name",
   "address",
   "username",
+  "repositories_base_path",
   "created_at",
   "updated_at",
 ]);
@@ -56,6 +57,7 @@ function sshServerConfigToRow(config: SshServerConfig): Record<string, unknown> 
     name: config.name,
     address: config.address,
     username: config.username,
+    repositories_base_path: config.repositoriesBasePath ?? null,
     created_at: config.createdAt,
     updated_at: config.updatedAt,
   };
@@ -67,6 +69,7 @@ function rowToSshServerConfig(row: Record<string, unknown>): SshServerConfig {
     name: row["name"] as string,
     address: row["address"] as string,
     username: row["username"] as string,
+    repositoriesBasePath: (row["repositories_base_path"] as string | null) ?? undefined,
     createdAt: row["created_at"] as string,
     updatedAt: row["updated_at"] as string,
   };

@@ -46,6 +46,9 @@ export const provisioningRoutes = {
           repoUrl: validation.data.repoUrl,
           basePath: validation.data.basePath,
           provider: validation.data.provider,
+          mode: validation.data.mode,
+          targetDirectory: validation.data.targetDirectory,
+          workspaceId: validation.data.workspaceId,
           password,
         });
         return Response.json(snapshot, { status: 201 });

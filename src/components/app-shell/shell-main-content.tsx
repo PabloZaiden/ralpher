@@ -13,6 +13,7 @@ import { ShellPanel } from "./shell-panel";
 import { OverviewView, WorkspaceView, SshServerView } from "./shell-views";
 import { DraftLoopComposer } from "./shell-composers";
 import { ComposeView } from "./shell-compose-view";
+import { RebuildWorkspaceView } from "./rebuild-workspace-view";
 import { WorkspaceSettingsView } from "./shell-workspace-settings-view";
 import type { ComposeKind, ShellRoute } from "./shell-types";
 import type { UseWorkspaceCreateResult } from "./use-workspace-create";
@@ -304,6 +305,32 @@ function renderMainContent(props: ShellMainContentProps) {
           navigateWithinShell({ view: "home" });
           return true;
         }}
+      />
+    );
+  }
+
+  if (route.view === "rebuild-workspace") {
+    if (!selectedWorkspace) {
+      return (
+        <ShellPanel
+          eyebrow="Workspace"
+          title="Workspace not found"
+          description="The selected workspace no longer exists."
+        >
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Use the sidebar or home button to continue.
+          </p>
+        </ShellPanel>
+      );
+    }
+    return (
+      <RebuildWorkspaceView
+        workspace={selectedWorkspace}
+        servers={servers}
+        provisioning={props.provisioning}
+        shellHeaderOffsetClassName={shellHeaderOffsetClassName}
+        navigateWithinShell={navigateWithinShell}
+        refreshWorkspaces={refreshWorkspaces}
       />
     );
   }

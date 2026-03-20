@@ -47,6 +47,10 @@ export type ShellRoute =
       view: "compose";
       kind: "loop" | "chat" | "workspace" | "ssh-session" | "ssh-server";
       scopeId?: string;
+    }
+  | {
+      view: "rebuild-workspace";
+      workspaceId: string;
     };
 
 export type ComposeKind = Extract<ShellRoute, { view: "compose" }>["kind"];

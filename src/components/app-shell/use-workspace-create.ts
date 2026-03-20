@@ -101,6 +101,9 @@ export function useWorkspaceCreate({
       return;
     }
     setAutomaticServerId(servers[0].config.id);
+    if (servers[0].config.repositoriesBasePath) {
+      setAutomaticBasePath(servers[0].config.repositoriesBasePath);
+    }
   }, [automaticServerId, route, servers]);
 
   useEffect(() => {

@@ -459,6 +459,44 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 11,
+    name: "add_repositories_base_path_to_ssh_servers",
+    up: (db) => {
+      if (!tableExists(db, "ssh_servers")) {
+        return;
+      }
+      const columns = getTableColumns(db, "ssh_servers");
+      if (!columns.includes("repositories_base_path")) {
+        db.run("ALTER TABLE ssh_servers ADD COLUMN repositories_base_path TEXT");
+      }
+    },
+  },
+  {
+    version: 12,
+    name: "add_provisioning_metadata_to_workspaces",
+    up: (db) => {
+      if (!tableExists(db, "workspaces")) {
+        return;
+      }
+      const columns = getTableColumns(db, "workspaces");
+      if (!columns.includes("source_directory")) {
+        db.run("ALTER TABLE workspaces ADD COLUMN source_directory TEXT");
+      }
+      if (!columns.includes("ssh_server_id")) {
+        db.run("ALTER TABLE workspaces ADD COLUMN ssh_server_id TEXT");
+      }
+      if (!columns.includes("repo_url")) {
+        db.run("ALTER TABLE workspaces ADD COLUMN repo_url TEXT");
+      }
+      if (!columns.includes("base_path")) {
+        db.run("ALTER TABLE workspaces ADD COLUMN base_path TEXT");
+      }
+      if (!columns.includes("provider")) {
+        db.run("ALTER TABLE workspaces ADD COLUMN provider TEXT");
+      }
+    },
+  },
 ];
 
 /**

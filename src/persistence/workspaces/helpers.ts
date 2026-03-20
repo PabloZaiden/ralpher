@@ -3,6 +3,7 @@
  */
 
 import type { Workspace } from "../../types/workspace";
+import type { AgentProvider } from "../../types/settings";
 import { getServerFingerprint, parseServerSettings } from "../../types/settings";
 
 export function workspaceToRow(workspace: Workspace): Record<string, unknown> {
@@ -14,6 +15,11 @@ export function workspaceToRow(workspace: Workspace): Record<string, unknown> {
     server_settings: JSON.stringify(workspace.serverSettings),
     created_at: workspace.createdAt,
     updated_at: workspace.updatedAt,
+    source_directory: workspace.sourceDirectory ?? null,
+    ssh_server_id: workspace.sshServerId ?? null,
+    repo_url: workspace.repoUrl ?? null,
+    base_path: workspace.basePath ?? null,
+    provider: workspace.provider ?? null,
   };
 }
 
@@ -25,5 +31,10 @@ export function rowToWorkspace(row: Record<string, unknown>): Workspace {
     serverSettings: parseServerSettings(row["server_settings"] as string | null),
     createdAt: row["created_at"] as string,
     updatedAt: row["updated_at"] as string,
+    sourceDirectory: (row["source_directory"] as string | null) ?? undefined,
+    sshServerId: (row["ssh_server_id"] as string | null) ?? undefined,
+    repoUrl: (row["repo_url"] as string | null) ?? undefined,
+    basePath: (row["base_path"] as string | null) ?? undefined,
+    provider: (row["provider"] as AgentProvider | null) ?? undefined,
   };
 }

@@ -4,13 +4,30 @@ import { SshCredentialTokenSchema } from "./ssh-server";
 
 const RequiredTrimmedStringSchema = z.string().trim().min(1, "value is required");
 
+export const ProvisioningJobModeSchema = z.enum(["provision", "rebuild"]).default("provision");
+
 export const CreateProvisioningJobRequestSchema = z.object({
   name: RequiredTrimmedStringSchema,
   sshServerId: RequiredTrimmedStringSchema,
-  repoUrl: RequiredTrimmedStringSchema,
-  basePath: RequiredTrimmedStringSchema,
+  repoUrl: z.string().trim().optional().default(""),
+  basePath: z.string().trim().optional().default(""),
   provider: AgentProviderSchema.default("copilot"),
   credentialToken: SshCredentialTokenSchema.optional(),
+  mode: ProvisioningJobModeSchema,
+  /** For rebuild: directory on the host where the repo lives */
+  targetDirectory: z.string().trim().optional(),
+  /** For rebuild: existing workspace ID */
+  workspaceId: z.string().trim().optional(),
+}).refine((data) => {
+  if (data.mode === "provision") {
+    return data.repoUrl.length > 0 && data.basePath.length > 0;
+  }
+  if (data.mode === "rebuild") {
+    return (data.targetDirectory?.length ?? 0) > 0 && (data.workspaceId?.length ?? 0) > 0;
+  }
+  return true;
+}, {
+  message: "provision mode requires repoUrl and basePath; rebuild mode requires targetDirectory and workspaceId",
 });
 
 export type CreateProvisioningJobRequest = z.infer<typeof CreateProvisioningJobRequestSchema>;

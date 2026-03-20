@@ -276,6 +276,7 @@ describe("migration infrastructure", () => {
         "username",
         "created_at",
         "updated_at",
+        "repositories_base_path",
       ]);
       expect(getTableColumns(db, "ssh_server_sessions")).toEqual([
         "id",
@@ -802,6 +803,69 @@ describe("migration infrastructure", () => {
       const columns = getTableColumns(db, "loops");
       expect(columns).toContain("plan_mode_auto_reply");
       expect(columns).toContain("pending_plan_question");
+    });
+
+    test("migration 11 adds repositories_base_path to ssh_servers", () => {
+      db.run(`
+        CREATE TABLE ssh_servers (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          address TEXT NOT NULL,
+          username TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `);
+      db.run("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)");
+      for (const migration of migrations.filter((m) => m.version < 11)) {
+        db.run(
+          "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+          [migration.version, migration.name, "2025-01-01T00:00:00.000Z"],
+        );
+      }
+
+      runMigrations(db);
+
+      const columns = getTableColumns(db, "ssh_servers");
+      expect(columns).toContain("repositories_base_path");
+
+      // Should be idempotent
+      runMigrations(db);
+      expect(getTableColumns(db, "ssh_servers")).toContain("repositories_base_path");
+    });
+
+    test("migration 12 adds provisioning metadata columns to workspaces", () => {
+      db.run(`
+        CREATE TABLE workspaces (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          directory TEXT NOT NULL,
+          server_fingerprint TEXT NOT NULL,
+          server_settings TEXT NOT NULL DEFAULT '{}',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `);
+      db.run("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL)");
+      for (const migration of migrations.filter((m) => m.version < 12)) {
+        db.run(
+          "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+          [migration.version, migration.name, "2025-01-01T00:00:00.000Z"],
+        );
+      }
+
+      runMigrations(db);
+
+      const columns = getTableColumns(db, "workspaces");
+      expect(columns).toContain("source_directory");
+      expect(columns).toContain("ssh_server_id");
+      expect(columns).toContain("repo_url");
+      expect(columns).toContain("base_path");
+      expect(columns).toContain("provider");
+
+      // Should be idempotent
+      runMigrations(db);
+      expect(getTableColumns(db, "workspaces")).toContain("source_directory");
     });
   });
 

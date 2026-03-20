@@ -11,7 +11,7 @@
  * @module types/workspace
  */
 
-import type { ServerSettings } from "./settings";
+import type { AgentProvider, ServerSettings } from "./settings";
 import {
   CreateWorkspaceRequestSchema,
   UpdateWorkspaceRequestSchema,
@@ -41,6 +41,16 @@ export interface Workspace {
   createdAt: string;
   /** ISO 8601 timestamp of the last update */
   updatedAt: string;
+  /** Directory on the remote host where the repo was cloned (for auto-provisioned workspaces) */
+  sourceDirectory?: string;
+  /** ID of the SSH server used for provisioning */
+  sshServerId?: string;
+  /** Git repository URL used during provisioning */
+  repoUrl?: string;
+  /** Base path on the remote host used during provisioning */
+  basePath?: string;
+  /** Agent provider used during provisioning */
+  provider?: AgentProvider;
 }
 
 /**
