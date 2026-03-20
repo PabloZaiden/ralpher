@@ -610,7 +610,7 @@ describe("translateEvent: reasoning incremental text tracking", () => {
 // ==========================================================================
 
 describe("translateEvent: message.part.updated (step events)", () => {
-  test("emits empty message.delta for step-start", () => {
+  test("returns null for step-start (no empty delta)", () => {
     const backend = getBackend();
     const ctx = createContext();
 
@@ -628,7 +628,7 @@ describe("translateEvent: message.part.updated (step events)", () => {
       ctx
     );
 
-    expect(result).toEqual({ type: "message.delta", content: "" });
+    expect(result).toBeNull();
   });
 
   test("returns null for step-finish", () => {
