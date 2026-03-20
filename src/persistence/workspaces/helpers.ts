@@ -3,6 +3,7 @@
  */
 
 import type { Workspace } from "../../types/workspace";
+import type { AgentProvider } from "../../types/settings";
 import { getServerFingerprint, parseServerSettings } from "../../types/settings";
 
 export function workspaceToRow(workspace: Workspace): Record<string, unknown> {
@@ -34,6 +35,6 @@ export function rowToWorkspace(row: Record<string, unknown>): Workspace {
     sshServerId: (row["ssh_server_id"] as string | null) ?? undefined,
     repoUrl: (row["repo_url"] as string | null) ?? undefined,
     basePath: (row["base_path"] as string | null) ?? undefined,
-    provider: (row["provider"] as string | null) ?? undefined,
+    provider: (row["provider"] as AgentProvider | null) ?? undefined,
   };
 }

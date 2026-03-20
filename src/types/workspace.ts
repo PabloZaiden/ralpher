@@ -11,7 +11,7 @@
  * @module types/workspace
  */
 
-import type { ServerSettings } from "./settings";
+import type { AgentProvider, ServerSettings } from "./settings";
 import {
   CreateWorkspaceRequestSchema,
   UpdateWorkspaceRequestSchema,
@@ -50,7 +50,7 @@ export interface Workspace {
   /** Base path on the remote host used during provisioning */
   basePath?: string;
   /** Agent provider used during provisioning */
-  provider?: string;
+  provider?: AgentProvider;
 }
 
 /**

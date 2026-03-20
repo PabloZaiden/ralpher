@@ -587,7 +587,14 @@ export class ProvisioningManager {
       );
 
       // Update the existing workspace's server settings (port/password may change after rebuild)
-      await updateWorkspace(workspaceId, { serverSettings });
+      const updatedWorkspace = await updateWorkspace(workspaceId, { serverSettings });
+      if (!updatedWorkspace) {
+        throw new ProvisioningFailedError(
+          "workspace_not_found",
+          "devbox_status",
+          `Workspace ${workspaceId} not found or could not be updated`,
+        );
+      }
       appendSystemLog(record, this.maxLogEntries, "Updated workspace server settings", "devbox_status");
 
       setStep(record, this.maxLogEntries, "test_connection", "Testing workspace connection");

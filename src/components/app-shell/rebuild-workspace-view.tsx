@@ -46,7 +46,7 @@ export function RebuildWorkspaceView({
       sshServerId,
       repoUrl: workspace.repoUrl ?? "",
       basePath: workspace.basePath ?? "",
-      provider: (workspace.provider ?? "copilot") as import("../../types/settings").AgentProvider,
+      provider: workspace.provider ?? "copilot",
       password,
       mode: "rebuild",
       targetDirectory: workspace.sourceDirectory,
@@ -130,7 +130,7 @@ export function RebuildWorkspaceView({
               form="rebuild-workspace-form"
               size="sm"
               loading={provisioning.starting}
-              disabled={!sshServerId}
+              disabled={!sshServerId || (!!sshServerId && !selectedServer)}
             >
               Rebuild Devbox
             </Button>

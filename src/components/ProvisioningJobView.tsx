@@ -35,7 +35,7 @@ const REBUILD_STEPS: ProvisioningStep[] = [
   "workspace_ready",
 ];
 
-function getStepsForMode(mode: ProvisioningJobMode | undefined): [string, string][] {
+function getStepsForMode(mode: ProvisioningJobMode | undefined): [ProvisioningStep, string][] {
   const steps = mode === "rebuild" ? REBUILD_STEPS : PROVISION_STEPS;
   return steps.map((step) => [step, STEP_LABELS[step]]);
 }
