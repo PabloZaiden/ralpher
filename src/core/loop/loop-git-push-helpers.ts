@@ -38,10 +38,11 @@ export async function syncWorkingBranch(
   }
 
   log.debug(`[LoopManager] ${caller}: Merging origin/${workingBranch} into local working branch for loop ${loopId}`);
+  const lastCommitMessage = await git.getLastCommitMessage(worktreePath);
   const mergeResult = await git.mergeWithConflictDetection(
     worktreePath,
     `origin/${workingBranch}`,
-    `Merge origin/${workingBranch} into ${workingBranch}`
+    lastCommitMessage
   );
 
   if (mergeResult.success) {
@@ -68,6 +69,7 @@ export async function syncWorkingBranch(
       baseBranch,
       autoPushOnComplete: true,
       syncPhase: "working_branch",
+      mergeCommitMessage: lastCommitMessage,
     };
     assertValidTransition(loop.state.status, "resolving_conflicts", caller);
     loop.state.status = "resolving_conflicts";
@@ -132,10 +134,11 @@ export async function syncBaseBranchAndPush(
     });
   } else {
     log.debug(`[LoopManager] syncBaseBranchAndPush: Merging origin/${baseBranch} into working branch for loop ${loopId}`);
+    const lastCommitMessage = await git.getLastCommitMessage(worktreePath);
     const mergeResult = await git.mergeWithConflictDetection(
       worktreePath,
       `origin/${baseBranch}`,
-      `Merge origin/${baseBranch} into ${loop.state.git!.workingBranch}`
+      lastCommitMessage
     );
 
     if (mergeResult.success) {
@@ -167,6 +170,7 @@ export async function syncBaseBranchAndPush(
         baseBranch,
         autoPushOnComplete: true,
         syncPhase: "base_branch",
+        mergeCommitMessage: lastCommitMessage,
       };
       assertValidTransition(loop.state.status, "resolving_conflicts", "syncBaseBranchAndPush");
       loop.state.status = "resolving_conflicts";
@@ -249,7 +253,9 @@ function startConflictResolutionEngine(
 ): PushLoopResult {
   const backend = backendManager.getLoopBackend(loopId, loop.config.workspaceId);
 
-  const conflictPrompt = constructConflictResolutionPrompt(sourceBranch, conflictedFiles);
+  const conflictPrompt = constructConflictResolutionPrompt(
+    sourceBranch, conflictedFiles, loop.state.syncState?.mergeCommitMessage
+  );
 
   const engine = new LoopEngine({
     loop: { config: loop.config, state: loop.state },
@@ -337,8 +343,11 @@ async function handleConflictResolutionComplete(ctx: LoopCtx, loopId: string): P
   }
 }
 
-function constructConflictResolutionPrompt(sourceBranch: string, conflictedFiles: string[]): string {
+function constructConflictResolutionPrompt(sourceBranch: string, conflictedFiles: string[], mergeCommitMessage?: string): string {
   const fileList = conflictedFiles.map(f => `- ${f}`).join("\n");
+  const commitInstruction = mergeCommitMessage
+    ? `git commit -m ${JSON.stringify(mergeCommitMessage)}`
+    : "git commit --no-edit";
   return `The branch (${sourceBranch}) has diverged from your working branch and there are merge conflicts that need to be resolved before pushing.
 
 Merge the branch and resolve all conflicts:
@@ -351,7 +360,7 @@ ${fileList}
    - Resolve each conflict by keeping the correct code (merge both sides appropriately)
    - Remove all conflict markers
    - Stage the resolved file with: git add <file>
-4. After ALL conflicts are resolved and staged, complete the merge: git commit --no-edit
+4. After ALL conflicts are resolved and staged, complete the merge: ${commitInstruction}
 5. Verify the code still compiles/works correctly after the merge
 6. When all conflicts are resolved and the merge is complete, end your response with:
 

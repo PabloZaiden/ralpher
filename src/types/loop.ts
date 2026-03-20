@@ -189,6 +189,8 @@ export interface LoopState {
     autoPushOnComplete: boolean;
     /** Which sync phase is in progress — working branch pull or base branch merge */
     syncPhase?: "working_branch" | "base_branch";
+    /** Last local commit message to use for the merge commit */
+    mergeCommitMessage?: string;
   };
 }
 

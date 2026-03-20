@@ -1934,4 +1934,38 @@ describe("GitService", () => {
 
     });
   });
+
+  describe("getLastCommitMessage", () => {
+    test("returns the subject line of the most recent commit", async () => {
+      await withGitServiceTest(async (context) => {
+        const { testDir, git } = context;
+        await writeFile(join(testDir, "feature.txt"), "New feature\n");
+        await Bun.$`git -C ${testDir} add -A`.quiet();
+        await Bun.$`git -C ${testDir} commit -m "feat(auth): add JWT token refresh"`.quiet();
+
+        const message = await git.getLastCommitMessage(testDir);
+        expect(message).toBe("feat(auth): add JWT token refresh");
+      });
+    });
+
+    test("returns the initial commit message when no other commits exist", async () => {
+      await withGitServiceTest(async (context) => {
+        const { testDir, git } = context;
+        const message = await git.getLastCommitMessage(testDir);
+        expect(message).toBe("Initial commit");
+      });
+    });
+
+    test("returns only the subject line for multi-line commit messages", async () => {
+      await withGitServiceTest(async (context) => {
+        const { testDir, git } = context;
+        await writeFile(join(testDir, "fix.txt"), "Bug fix\n");
+        await Bun.$`git -C ${testDir} add -A`.quiet();
+        await Bun.$`git -C ${testDir} commit -m ${"fix: resolve crash\n\nThis fixes the crash that occurred on startup."}`.quiet();
+
+        const message = await git.getLastCommitMessage(testDir);
+        expect(message).toBe("fix: resolve crash");
+      });
+    });
+  });
 });

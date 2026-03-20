@@ -9,6 +9,19 @@ import { hasStagedChanges } from "./git-repo-query";
 import { ensureBranch } from "./git-branch";
 import type { CommitOptions, CommitInfo } from "./git-types";
 
+/**
+ * Get the subject line of the most recent commit on the current branch.
+ * Used to preserve meaningful commit messages for merge commits.
+ */
+export async function getLastCommitMessage(executor: CommandExecutor, directory: string): Promise<string> {
+  const args = ["log", "-1", "--format=%s"];
+  const result = await runGitCommand(executor, directory, args);
+  if (!result.success) {
+    throw gitError("Failed to get last commit message", result, args);
+  }
+  return result.stdout.trim();
+}
+
 export async function stageAll(executor: CommandExecutor, directory: string): Promise<void> {
   const args = ["add", "-A"];
   const result = await runGitCommand(executor, directory, args);
