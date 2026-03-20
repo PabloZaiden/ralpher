@@ -659,6 +659,18 @@ describe("LogViewer", () => {
       );
       expect(queryByText("AI reasoning...")).not.toBeInTheDocument();
     });
+
+    test("reasoning entries with no responseContent are filtered out", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI reasoning...",
+        details: { logKind: "reasoning" },
+      });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showReasoning={true} />
+      );
+      expect(queryByText("AI reasoning...")).not.toBeInTheDocument();
+    });
   });
 
   describe("chronological sorting", () => {
