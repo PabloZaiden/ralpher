@@ -36,6 +36,13 @@ interface ShellSidebarNavProps {
   version: string | undefined;
 }
 
+const iconButtonBase =
+  "inline-flex h-10 w-10 items-center justify-center rounded-xl border bg-white shadow-sm transition dark:bg-neutral-900";
+const iconButtonDefault =
+  `${iconButtonBase} border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100`;
+const iconButtonActive =
+  `${iconButtonBase} border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100`;
+
 export function ShellSidebarNav({
   route,
   sidebarOpen,
@@ -82,8 +89,8 @@ export function ShellSidebarNav({
               type="button"
               onClick={() => window.location.reload()}
               aria-label="Reload page"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-neutral-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
               title="Reload page"
+              className={iconButtonDefault}
             >
               <RefreshIcon size="h-5 w-5" />
             </button>
@@ -92,12 +99,7 @@ export function ShellSidebarNav({
               onClick={() => navigateWithinShell({ view: "settings" })}
               aria-label="Open settings"
               aria-current={route.view === "settings" ? "page" : undefined}
-              className={[
-                "inline-flex h-10 w-10 items-center justify-center rounded-xl border bg-white shadow-sm transition dark:bg-neutral-900",
-                route.view === "settings"
-                  ? "border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100"
-                  : "border-gray-200 text-gray-600 hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100",
-              ].join(" ")}
+              className={route.view === "settings" ? iconButtonActive : iconButtonDefault}
               title="Settings"
             >
               <GearIcon size="h-5 w-5" />
@@ -106,7 +108,7 @@ export function ShellSidebarNav({
               type="button"
               onClick={hideSidebar}
               aria-label={sidebarOpen ? "Close sidebar" : "Hide sidebar"}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-neutral-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
+              className={iconButtonDefault}
             >
               <SidebarIcon size="h-5 w-5" />
             </button>
