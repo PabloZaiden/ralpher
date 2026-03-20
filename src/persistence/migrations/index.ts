@@ -497,6 +497,29 @@ export const migrations: Migration[] = [
       }
     },
   },
+  {
+    version: 13,
+    name: "relax_workspace_directory_unique_constraint",
+    up: (db) => {
+      if (!tableExists(db, "workspaces")) {
+        return;
+      }
+      const columns = getTableColumns(db, "workspaces");
+      if (!columns.includes("server_fingerprint")) {
+        return;
+      }
+      // Drop the UNIQUE index on (directory, server_fingerprint) and replace
+      // with a non-unique index.  Workspaces must be identified exclusively
+      // by their primary-key `id`; the same directory (even with the same
+      // server fingerprint) is perfectly valid for multiple workspaces
+      // (e.g. two devbox containers provisioned from the same repo).
+      db.run("DROP INDEX IF EXISTS idx_workspaces_directory_server_fingerprint");
+      db.run(`
+        CREATE INDEX IF NOT EXISTS idx_workspaces_directory_server_fingerprint
+        ON workspaces(directory, server_fingerprint)
+      `);
+    },
+  },
 ];
 
 /**

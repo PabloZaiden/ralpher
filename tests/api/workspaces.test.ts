@@ -209,7 +209,7 @@ describe("Workspace API Integration", () => {
       await rm(nonGitDir, { recursive: true, force: true });
     });
 
-    test("returns existing workspace if the same directory already exists on the same server target", async () => {
+    test("allows creating multiple workspaces with the same directory on the same server target", async () => {
       // Create first workspace
       const firstResponse = await fetch(`${baseUrl}/api/workspaces`, {
         method: "POST",
@@ -222,7 +222,7 @@ describe("Workspace API Integration", () => {
       expect(firstResponse.ok).toBe(true);
       const firstData = await firstResponse.json();
 
-      // Try to create another workspace with the same directory
+      // Create another workspace with the same directory
       const secondResponse = await fetch(`${baseUrl}/api/workspaces`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -232,11 +232,11 @@ describe("Workspace API Integration", () => {
         }),
       });
 
-      // Should return 409 Conflict with the existing workspace
-      expect(secondResponse.status).toBe(409);
+      // Should succeed — workspaces are identified by ID, not directory
+      expect(secondResponse.status).toBe(201);
       const secondData = await secondResponse.json();
-      expect(secondData.existingWorkspace).toBeDefined();
-      expect(secondData.existingWorkspace.id).toBe(firstData.id);
+      expect(secondData.id).not.toBe(firstData.id);
+      expect(secondData.name).toBe("Second Workspace");
     });
 
     test("allows the same directory on a different server target", async () => {
@@ -1630,19 +1630,15 @@ describe("Workspace API Integration", () => {
           expect(response.ok).toBe(true);
           const result = await response.json();
 
-          expect(result.created).toBe(1);
-          expect(result.skipped).toBe(1);
+          expect(result.created).toBe(2);
+          expect(result.skipped).toBe(0);
           expect(result.failed).toBe(1);
           expect(result.details).toHaveLength(3);
 
-          const createdDetail = result.details.find((d: { status: string }) => d.status === "created");
-          const skippedDetail = result.details.find((d: { status: string }) => d.status === "skipped");
+          const createdDetails = result.details.filter((d: { status: string }) => d.status === "created");
           const failedDetail = result.details.find((d: { status: string }) => d.status === "failed");
-          expect(createdDetail).toBeDefined();
-          expect(createdDetail.name).toBe("New Import");
-          expect(skippedDetail).toBeDefined();
-          expect(skippedDetail.name).toBe("Duplicate Import");
-          expect(skippedDetail.reason).toContain(testWorkDir);
+          expect(createdDetails).toHaveLength(2);
+          expect(createdDetails.map((d: { name: string }) => d.name)).toEqual(["New Import", "Duplicate Import"]);
           expect(failedDetail).toBeDefined();
           expect(failedDetail.name).toBe("Invalid Import");
         } finally {

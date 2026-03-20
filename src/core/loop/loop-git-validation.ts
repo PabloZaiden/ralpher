@@ -8,7 +8,7 @@ export async function validateMainCheckoutStartImpl(_ctx: LoopCtx, loop: Loop, g
     return;
   }
 
-  const activeLoop = await getActiveLoopByDirectory(loop.config.directory);
+  const activeLoop = await getActiveLoopByDirectory(loop.config.directory, loop.config.workspaceId);
   if (activeLoop && activeLoop.config.id !== loop.config.id) {
     const error = new Error(
       `Cannot start without a worktree while loop "${activeLoop.config.name}" is already active in this workspace.`,

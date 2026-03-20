@@ -10,6 +10,9 @@
 import type { ErrorResponse } from "../types/api";
 import type { Workspace } from "../types/workspace";
 import { getWorkspace, listWorkspacesByDirectory } from "../persistence/workspaces";
+import { createLogger } from "../core/logger";
+
+const log = createLogger("api:helpers");
 
 /**
  * Create a standardized error response.
@@ -85,6 +88,13 @@ export async function resolveWorkspaceForDirectory(
     }
     return workspace;
   }
+
+  // Fallback: directory-only lookup. This path is deprecated and should be
+  // removed once all callers pass workspaceId.  Log a warning so we can
+  // track remaining call-sites.
+  log.warn("resolveWorkspaceForDirectory called without workspaceId — directory-only lookup is deprecated", {
+    directory: normalizedDirectory,
+  });
 
   const matches = await listWorkspacesByDirectory(normalizedDirectory);
   if (matches.length === 0) {

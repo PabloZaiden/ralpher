@@ -118,7 +118,10 @@ describe("createWorkspace", () => {
     });
   });
 
-  test("returns existing workspace on 409 conflict", async () => {
+  test("handles legacy 409 conflict gracefully by returning existing workspace", async () => {
+    // This tests the frontend's defensive handling of 409 responses.
+    // The API no longer returns 409 for duplicate directories, but the
+    // frontend gracefully handles it for backward compatibility.
     setupWorkspacesList();
     const existingWorkspace = createWorkspace({ id: "ws-existing", name: "Existing" });
 

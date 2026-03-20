@@ -5,7 +5,6 @@
 import {
   createWorkspace,
   exportWorkspaces,
-  getWorkspaceByDirectoryAndServerSettings,
 } from "../../persistence/workspaces";
 import { backendManager } from "../../core/backend-manager";
 import { createLogger } from "../../core/logger";
@@ -41,25 +40,7 @@ async function importWorkspacesWithValidation(
   for (const config of data.workspaces) {
     const name = config.name.trim();
     const directory = config.directory.trim();
-
-    // Check if a workspace with this directory already exists
     const serverSettings = config.serverSettings ?? getDefaultServerSettings();
-    const existing = await getWorkspaceByDirectoryAndServerSettings(directory, serverSettings);
-    if (existing) {
-      log.debug("Skipping workspace import - directory already exists", {
-        name,
-        directory,
-        existingId: existing.id,
-      });
-      result.skipped++;
-      result.details.push({
-        name,
-        directory,
-        status: "skipped",
-        reason: `A workspace already exists for directory ${directory} on this server target`,
-      });
-      continue;
-    }
 
     // Validate directory on the remote server (same validation as POST /api/workspaces)
     try {

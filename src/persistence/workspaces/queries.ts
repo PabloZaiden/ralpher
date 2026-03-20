@@ -18,6 +18,9 @@ const log = createLogger("persistence:workspaces");
 
 /**
  * List workspaces by directory path.
+ *
+ * @deprecated Prefer looking up workspaces by ID. This function exists for
+ * backward-compatible API endpoints that accept a directory path.
  */
 export async function listWorkspacesByDirectory(directory: string): Promise<Workspace[]> {
   log.debug("Listing workspaces by directory", { directory });
@@ -33,6 +36,9 @@ export async function listWorkspacesByDirectory(directory: string): Promise<Work
 
 /**
  * Get a workspace by directory path when the match is unambiguous.
+ *
+ * @deprecated Prefer looking up workspaces by ID. This function exists for
+ * backward-compatible API endpoints that accept a directory path.
  */
 export async function getWorkspaceByDirectory(directory: string): Promise<Workspace | null> {
   const matches = await listWorkspacesByDirectory(directory);
@@ -48,6 +54,11 @@ export async function getWorkspaceByDirectory(directory: string): Promise<Worksp
 
 /**
  * Get a workspace by directory and server settings.
+ *
+ * @deprecated Prefer looking up workspaces by ID. Multiple workspaces may
+ * share the same directory and server fingerprint after migration 13 relaxed
+ * the unique constraint. This function throws if multiple matches are found
+ * to surface ambiguity instead of returning a nondeterministic result.
  */
 export async function getWorkspaceByDirectoryAndServerSettings(
   directory: string,
@@ -63,11 +74,16 @@ export async function getWorkspaceByDirectoryAndServerSettings(
     SELECT * FROM workspaces
     WHERE directory = ? AND server_fingerprint = ?
   `);
-  const row = stmt.get(directory, serverFingerprint) as Record<string, unknown> | null;
-  if (!row) {
+  const rows = stmt.all(directory, serverFingerprint) as Record<string, unknown>[];
+  if (rows.length === 0) {
     return null;
   }
-  return rowToWorkspace(row);
+  if (rows.length > 1) {
+    throw new Error(
+      `Multiple workspaces found for directory "${directory}" with server fingerprint "${serverFingerprint}". Use workspace ID for lookup instead.`,
+    );
+  }
+  return rowToWorkspace(rows[0]!);
 }
 
 /**

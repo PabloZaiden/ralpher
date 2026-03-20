@@ -2,7 +2,7 @@
  * Route handlers for workspace server settings: CRUD, status, and test connection.
  */
 
-import { getWorkspaceByDirectoryAndServerSettings, updateWorkspace } from "../../persistence/workspaces";
+import { updateWorkspace } from "../../persistence/workspaces";
 import { backendManager } from "../../core/backend-manager";
 import { createLogger } from "../../core/logger";
 import { areServerSettingsEqual } from "../../types/settings";
@@ -57,21 +57,6 @@ export const serverSettingsRoutes = {
         if (!settingsChanged) {
           log.info(`Server settings unchanged for workspace: ${currentWorkspace.name}`);
           return Response.json(currentWorkspace.serverSettings);
-        }
-
-        const existingWorkspace = await getWorkspaceByDirectoryAndServerSettings(
-          currentWorkspace.directory,
-          body,
-        );
-        if (existingWorkspace && existingWorkspace.id !== id) {
-          return Response.json(
-            {
-              error: "duplicate_workspace",
-              message: "Another workspace already uses this directory on the same server target",
-              existingWorkspace,
-            },
-            { status: 409 },
-          );
         }
 
         const workspace = await updateWorkspace(id, { serverSettings: body });
