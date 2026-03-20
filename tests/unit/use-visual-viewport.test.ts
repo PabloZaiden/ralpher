@@ -1,8 +1,9 @@
 /**
- * Tests for the useVisualViewport hook logic.
+ * Tests for the useVisualViewport hook module.
  *
- * Since this is a React hook that depends on browser APIs (window.visualViewport,
- * requestAnimationFrame), we test the core behavior by mocking these globals.
+ * This file verifies the public API surface of the hook module (exported
+ * functions and the VisualViewportState shape). More detailed behavior and
+ * browser API interactions are covered in higher-level integration tests.
  */
 
 import { test, expect, describe } from "bun:test";
