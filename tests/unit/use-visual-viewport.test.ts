@@ -5,7 +5,7 @@
  * requestAnimationFrame), we test the core behavior by mocking these globals.
  */
 
-import { test, expect, describe, beforeEach, afterEach } from "bun:test";
+import { test, expect, describe } from "bun:test";
 
 // We test the hook's contract without React by verifying the module exports
 // and the expected behavior patterns. Full integration testing happens on
