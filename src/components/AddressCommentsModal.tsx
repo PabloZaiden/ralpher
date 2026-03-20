@@ -154,18 +154,6 @@ export function AddressCommentsModal({
             />
           </div>
         </div>
-
-        <div className="bg-blue-50 dark:bg-neutral-900/40 border border-blue-200 dark:border-gray-700 rounded-md p-3">
-          <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
-            How it works
-          </h4>
-          <ul className="text-xs text-blue-800 dark:text-blue-200 space-y-1">
-            <li>• The loop will read your comments and update the code accordingly</li>
-            <li>• New commits will be added to address each point</li>
-            <li>• You can review and provide additional feedback after completion</li>
-            <li>• This process can repeat until you're satisfied with the changes</li>
-          </ul>
-        </div>
       </div>
     </Modal>
   );

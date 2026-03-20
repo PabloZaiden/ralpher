@@ -2027,4 +2027,147 @@ describe("SshSessionDetails", () => {
 
     expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(0);
   });
+
+  test("shows focus mode toggle in touch controls and enters focus mode on click", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "Focus Mode Test" } }),
+    );
+
+    const { getByText, getByLabelText, queryByText, user } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-focus-1" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("Focus Mode Test")).toBeTruthy();
+      expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    // The focus mode toggle button should be visible in the touch controls summary
+    const focusButton = getByLabelText("Enter focus mode");
+    expect(focusButton).toBeTruthy();
+
+    // Click to enter focus mode
+    await user.click(focusButton);
+
+    // In focus mode: header, session info, and touch controls should be hidden
+    await waitFor(() => {
+      expect(queryByText("Focus Mode Test")).toBeNull();
+      expect(queryByText("Session Info")).toBeNull();
+      expect(queryByText("Touch controls")).toBeNull();
+    });
+
+    // The FocusModeBar should be visible with an exit button
+    const exitButton = getByLabelText("Exit focus mode");
+    expect(exitButton).toBeTruthy();
+
+    // FocusModeBar should have accessible arrow buttons
+    expect(getByLabelText("Arrow left")).toBeTruthy();
+    expect(getByLabelText("Arrow up")).toBeTruthy();
+    expect(getByLabelText("Arrow down")).toBeTruthy();
+    expect(getByLabelText("Arrow right")).toBeTruthy();
+    expect(getByLabelText("Enter")).toBeTruthy();
+    expect(getByLabelText("Space")).toBeTruthy();
+  });
+
+  test("exits focus mode and restores normal view", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "Focus Exit Test" } }),
+    );
+
+    const { getByText, getByLabelText, queryByText, user } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-focus-2" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(getByText("Focus Exit Test")).toBeTruthy();
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    // Enter focus mode
+    await user.click(getByLabelText("Enter focus mode"));
+    await waitFor(() => {
+      expect(queryByText("Focus Exit Test")).toBeNull();
+    });
+
+    // Exit focus mode
+    await user.click(getByLabelText("Exit focus mode"));
+
+    // Normal view should be restored
+    await waitFor(() => {
+      expect(getByText("Focus Exit Test")).toBeTruthy();
+      expect(getByText("Session Info")).toBeTruthy();
+      expect(getByText("Touch controls")).toBeTruthy();
+    });
+  });
+
+  test("persists focus mode preference across renders via localStorage", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "Focus Persist" } }),
+    );
+
+    const { getByLabelText, queryByText, user, unmount } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-focus-3" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    // Enter focus mode (which persists to localStorage)
+    await user.click(getByLabelText("Enter focus mode"));
+    await waitFor(() => {
+      expect(queryByText("Focus Persist")).toBeNull();
+    });
+
+    expect(localStorage.getItem("ralpher-ssh-focus-mode")).toBe("true");
+
+    // Unmount and re-render — should start in focus mode
+    unmount();
+    lastTerminal = null;
+
+    const { queryByText: queryByText2, getByLabelText: getByLabelText2 } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-focus-3" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    // Should be in focus mode (header hidden, exit button visible)
+    await waitFor(() => {
+      expect(queryByText2("Focus Persist")).toBeNull();
+      expect(getByLabelText2("Exit focus mode")).toBeTruthy();
+    });
+  });
+
+  test("keeps the terminal container mounted when toggling focus mode", async () => {
+    api.get("/api/ssh-sessions/:id", (req) =>
+      createSshSession({ config: { id: req.params["id"]!, name: "Focus Terminal" } }),
+    );
+
+    const { getByLabelText, user } = renderWithUser(
+      <SshSessionDetails sshSessionId="ssh-focus-4" onBack={() => {}} />,
+    );
+
+    await waitFor(() => {
+      expect(lastTerminal).not.toBeNull();
+    });
+
+    const terminalBeforeToggle = lastTerminal;
+
+    // Enter focus mode
+    await user.click(getByLabelText("Enter focus mode"));
+
+    // The terminal instance should be the same (not disposed and re-created)
+    expect(lastTerminal).toBe(terminalBeforeToggle);
+    expect(lastTerminal!.element).not.toBeNull();
+
+    // Exit focus mode
+    await user.click(getByLabelText("Exit focus mode"));
+
+    // Still the same terminal instance
+    expect(lastTerminal).toBe(terminalBeforeToggle);
+    expect(lastTerminal!.element).not.toBeNull();
+  });
 });
