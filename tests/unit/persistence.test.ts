@@ -260,7 +260,7 @@ describe("Persistence", () => {
 
         await setupPersistence();
 
-        const result = await getActiveLoopByDirectory("/tmp/test");
+        const result = await getActiveLoopByDirectory("/tmp/test", "test-workspace-id");
         expect(result).toBeNull();
       });
 
@@ -272,7 +272,7 @@ describe("Persistence", () => {
         const draftLoop = createTestLoop({ id: "draft-loop", status: "draft" });
         await saveLoop(draftLoop);
 
-        const result = await getActiveLoopByDirectory("/tmp/test");
+        const result = await getActiveLoopByDirectory("/tmp/test", "test-workspace-id");
         expect(result).toBeNull();
       });
 
@@ -291,7 +291,7 @@ describe("Persistence", () => {
           await saveLoop(loop);
         }
 
-        const result = await getActiveLoopByDirectory("/tmp/test");
+        const result = await getActiveLoopByDirectory("/tmp/test", "test-workspace-id");
         expect(result).toBeNull();
       });
 
@@ -311,7 +311,7 @@ describe("Persistence", () => {
 
           await saveLoop(testLoop);
 
-          const result = await getActiveLoopByDirectory(`/tmp/active-test-${status}`);
+          const result = await getActiveLoopByDirectory(`/tmp/active-test-${status}`, "test-workspace-id");
           expect(result).not.toBeNull();
           expect(result!.config.id).toBe(`active-loop-${status}`);
           expect(result!.state.status).toBe(status);
@@ -336,8 +336,45 @@ describe("Persistence", () => {
         await saveLoop(otherDirLoop);
 
         // Query for a different directory
-        const result = await getActiveLoopByDirectory("/tmp/my-dir");
+        const result = await getActiveLoopByDirectory("/tmp/my-dir", "test-workspace-id");
         expect(result).toBeNull();
+      });
+
+      test("does not return loops from different workspaces with the same directory", async () => {
+        const { saveLoop, getActiveLoopByDirectory } = await import("../../src/persistence/loops");
+        const { createWorkspace } = await import("../../src/persistence/workspaces");
+
+        await setupPersistence();
+
+        // Create a second workspace with the same directory
+        const otherWorkspaceId = "other-workspace-id";
+        await createWorkspace({
+          id: otherWorkspaceId,
+          name: "Other Workspace",
+          directory: "/tmp/test",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          serverSettings: getDefaultServerSettings(),
+        });
+
+        // Save a running loop in the other workspace's directory
+        const otherWsLoop = createTestLoop({
+          id: "other-ws-loop",
+          directory: "/tmp/test",
+          status: "running",
+        });
+        // Override workspaceId to point to the other workspace
+        otherWsLoop.config.workspaceId = otherWorkspaceId;
+        await saveLoop(otherWsLoop);
+
+        // Query should NOT find it when looking for test-workspace-id
+        const result = await getActiveLoopByDirectory("/tmp/test", "test-workspace-id");
+        expect(result).toBeNull();
+
+        // But SHOULD find it when looking for other-workspace-id
+        const otherResult = await getActiveLoopByDirectory("/tmp/test", otherWorkspaceId);
+        expect(otherResult).not.toBeNull();
+        expect(otherResult!.config.id).toBe("other-ws-loop");
       });
 
       test("returns the active loop even when other loops exist for same directory", async () => {
@@ -371,7 +408,7 @@ describe("Persistence", () => {
         });
         await saveLoop(runningLoop);
 
-        const result = await getActiveLoopByDirectory("/tmp/multi-test");
+        const result = await getActiveLoopByDirectory("/tmp/multi-test", "test-workspace-id");
         expect(result).not.toBeNull();
         expect(result!.config.id).toBe("running-loop");
         expect(result!.state.status).toBe("running");

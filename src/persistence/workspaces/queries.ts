@@ -18,6 +18,9 @@ const log = createLogger("persistence:workspaces");
 
 /**
  * List workspaces by directory path.
+ *
+ * @deprecated Prefer looking up workspaces by ID. This function exists for
+ * backward-compatible API endpoints that accept a directory path.
  */
 export async function listWorkspacesByDirectory(directory: string): Promise<Workspace[]> {
   log.debug("Listing workspaces by directory", { directory });
@@ -33,6 +36,9 @@ export async function listWorkspacesByDirectory(directory: string): Promise<Work
 
 /**
  * Get a workspace by directory path when the match is unambiguous.
+ *
+ * @deprecated Prefer looking up workspaces by ID. This function exists for
+ * backward-compatible API endpoints that accept a directory path.
  */
 export async function getWorkspaceByDirectory(directory: string): Promise<Workspace | null> {
   const matches = await listWorkspacesByDirectory(directory);
@@ -48,6 +54,10 @@ export async function getWorkspaceByDirectory(directory: string): Promise<Worksp
 
 /**
  * Get a workspace by directory and server settings.
+ *
+ * @deprecated Prefer looking up workspaces by ID. Multiple workspaces may
+ * share the same directory and server fingerprint; this returns only the
+ * first match. Kept for backward compatibility.
  */
 export async function getWorkspaceByDirectoryAndServerSettings(
   directory: string,

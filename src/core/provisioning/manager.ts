@@ -8,7 +8,6 @@ import {
   createWorkspace,
   deleteWorkspace,
   getWorkspace,
-  getWorkspaceByDirectoryAndServerSettings,
   updateWorkspace,
 } from "../../persistence/workspaces";
 import type {
@@ -307,44 +306,31 @@ export class ProvisioningManager {
       );
 
       setStep(record, this.maxLogEntries, "create_workspace", "Creating workspace record");
-      const existingWorkspace = await getWorkspaceByDirectoryAndServerSettings(
-        resolvedDirectory,
+      // Always create a new workspace. Workspaces are identified by their
+      // unique ID, not by directory+server_fingerprint. Two separate
+      // devbox containers may share the same directory path and SSH
+      // fingerprint but represent distinct workspaces.
+      const now = new Date().toISOString();
+      const workspace = {
+        id: crypto.randomUUID(),
+        name: record.job.config.name,
+        directory: resolvedDirectory,
         serverSettings,
-      );
-      if (existingWorkspace) {
-        this.updateState(record, {
-          workspaceId: existingWorkspace.id,
-          workspaceAction: "reused",
-        });
-        appendSystemLog(
-          record,
-          this.maxLogEntries,
-          `Reusing existing workspace ${existingWorkspace.name}`,
-          "create_workspace",
-        );
-      } else {
-        const now = new Date().toISOString();
-        const workspace = {
-          id: crypto.randomUUID(),
-          name: record.job.config.name,
-          directory: resolvedDirectory,
-          serverSettings,
-          createdAt: now,
-          updatedAt: now,
-          sourceDirectory: record.job.state.targetDirectory,
-          sshServerId: record.job.config.sshServerId,
-          repoUrl: record.job.config.repoUrl,
-          basePath: record.job.config.basePath,
-          provider: record.job.config.provider,
-        };
-        await createWorkspace(workspace);
-        createdWorkspaceId = workspace.id;
-        this.updateState(record, {
-          workspaceId: workspace.id,
-          workspaceAction: "created",
-        });
-        appendSystemLog(record, this.maxLogEntries, `Created workspace ${workspace.name}`, "create_workspace");
-      }
+        createdAt: now,
+        updatedAt: now,
+        sourceDirectory: record.job.state.targetDirectory,
+        sshServerId: record.job.config.sshServerId,
+        repoUrl: record.job.config.repoUrl,
+        basePath: record.job.config.basePath,
+        provider: record.job.config.provider,
+      };
+      await createWorkspace(workspace);
+      createdWorkspaceId = workspace.id;
+      this.updateState(record, {
+        workspaceId: workspace.id,
+        workspaceAction: "created",
+      });
+      appendSystemLog(record, this.maxLogEntries, `Created workspace ${workspace.name}`, "create_workspace");
 
       setStep(record, this.maxLogEntries, "test_connection", "Testing workspace connection");
       const connectionResult = await backendManager.testConnection(serverSettings, resolvedDirectory);

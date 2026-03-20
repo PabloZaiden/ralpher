@@ -8,7 +8,6 @@ import {
   listWorkspaces,
   updateWorkspace,
   deleteWorkspace,
-  getWorkspaceByDirectoryAndServerSettings,
 } from "../../persistence/workspaces";
 import { backendManager } from "../../core/backend-manager";
 import { createLogger } from "../../core/logger";
@@ -92,19 +91,6 @@ export const crudRoutes = {
           return errorResponse("not_git_repo", "Directory must be a git repository");
         }
 
-        // Check if a workspace already exists for this directory
-        const existingWorkspace = await getWorkspaceByDirectoryAndServerSettings(trimmedDirectory, serverSettings);
-        if (existingWorkspace) {
-          return Response.json(
-            {
-              error: "duplicate_workspace",
-              message: "A workspace already exists for this directory on the same server target",
-              existingWorkspace,
-            },
-            { status: 409 },
-          );
-        }
-
         const now = new Date().toISOString();
         const workspace: Workspace = {
           id: crypto.randomUUID(),
@@ -167,23 +153,6 @@ export const crudRoutes = {
         const nameChanged = body.name !== undefined && body.name !== currentWorkspace.name;
         const serverSettingsChanged = body.serverSettings !== undefined
           && !areServerSettingsEqual(currentWorkspace.serverSettings, body.serverSettings);
-
-        if (serverSettingsChanged && body.serverSettings) {
-          const existingWorkspace = await getWorkspaceByDirectoryAndServerSettings(
-            currentWorkspace.directory,
-            body.serverSettings,
-          );
-          if (existingWorkspace && existingWorkspace.id !== id) {
-            return Response.json(
-              {
-                error: "duplicate_workspace",
-                message: "Another workspace already uses this directory on the same server target",
-                existingWorkspace,
-              },
-              { status: 409 },
-            );
-          }
-        }
 
         if (!nameChanged && !serverSettingsChanged) {
           log.info(`Workspace unchanged: ${currentWorkspace.name}`);

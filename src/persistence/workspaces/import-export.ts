@@ -13,7 +13,6 @@ import { getDatabase } from "../database";
 import { createLogger } from "../../core/logger";
 import { rowToWorkspace } from "./helpers";
 import { createWorkspace } from "./crud";
-import { getWorkspaceByDirectoryAndServerSettings } from "./queries";
 
 const log = createLogger("persistence:workspaces");
 
@@ -46,7 +45,8 @@ export async function exportWorkspaces(): Promise<WorkspaceExportData> {
 
 /**
  * Import workspaces from a portable config format.
- * Creates new workspaces, skipping any whose directory already exists.
+ * Always creates new workspaces — workspaces are identified by their unique
+ * ID, not by directory, so imports never skip based on directory matches.
  */
 export async function importWorkspaces(data: WorkspaceExportData): Promise<WorkspaceImportResult> {
   log.debug("Importing workspaces", { count: data.workspaces.length });
@@ -61,23 +61,6 @@ export async function importWorkspaces(data: WorkspaceExportData): Promise<Works
   for (const config of data.workspaces) {
     const name = config.name.trim();
     const directory = config.directory.trim();
-
-    const existing = await getWorkspaceByDirectoryAndServerSettings(directory, config.serverSettings);
-    if (existing) {
-      log.debug("Skipping workspace import - directory already exists", {
-        name,
-        directory,
-        existingId: existing.id,
-      });
-      result.skipped++;
-      result.details.push({
-        name,
-        directory,
-        status: "skipped",
-        reason: `A workspace already exists for directory: ${directory}`,
-      });
-      continue;
-    }
 
     const now = new Date().toISOString();
     const workspace = {

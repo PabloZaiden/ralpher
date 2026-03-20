@@ -24,17 +24,18 @@ const ACTIVE_LOOP_STATUSES = [
 ];
 
 /**
- * Get an active (non-draft, non-terminal) loop for a specific directory.
+ * Get an active (non-draft, non-terminal) loop for a specific directory and workspace.
  *
  * Active loops are those in states: idle, planning, starting, running, waiting.
  * Draft and terminal states (completed, stopped, failed, max_iterations, merged, pushed, deleted)
  * are not considered active.
  *
  * @param directory - The absolute path to the working directory
+ * @param workspaceId - The workspace ID to scope the lookup to
  * @returns The active loop if one exists, null otherwise
  */
-export async function getActiveLoopByDirectory(directory: string): Promise<Loop | null> {
-  log.debug("Getting active loop by directory", { directory });
+export async function getActiveLoopByDirectory(directory: string, workspaceId: string): Promise<Loop | null> {
+  log.debug("Getting active loop by directory and workspace", { directory, workspaceId });
   const db = getDatabase();
 
   // Build placeholders for the IN clause
@@ -42,19 +43,19 @@ export async function getActiveLoopByDirectory(directory: string): Promise<Loop 
 
   const stmt = db.prepare(`
     SELECT * FROM loops 
-    WHERE directory = ? AND status IN (${placeholders})
+    WHERE directory = ? AND workspace_id = ? AND status IN (${placeholders})
     LIMIT 1
   `);
 
-  const row = stmt.get(directory, ...ACTIVE_LOOP_STATUSES) as Record<string, unknown> | null;
+  const row = stmt.get(directory, workspaceId, ...ACTIVE_LOOP_STATUSES) as Record<string, unknown> | null;
 
   if (!row) {
-    log.debug("No active loop found for directory", { directory });
+    log.debug("No active loop found for directory", { directory, workspaceId });
     return null;
   }
 
   const loop = rowToLoop(row);
-  log.debug("Active loop found", { directory, loopId: loop.config.id, status: loop.state.status });
+  log.debug("Active loop found", { directory, workspaceId, loopId: loop.config.id, status: loop.state.status });
   return loop;
 }
 
