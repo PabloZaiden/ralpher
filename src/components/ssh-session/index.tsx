@@ -27,6 +27,7 @@ import { useSshConnection } from "./use-ssh-connection";
 import { useTerminalRenderer } from "./use-terminal-renderer";
 import { useFocusMode } from "./use-focus-mode";
 import { FocusModeBar } from "./focus-mode-bar";
+import { useVisualViewport } from "./use-visual-viewport";
 
 export interface SshSessionDetailsProps {
   sshSessionId: string;
@@ -119,6 +120,57 @@ export function SshSessionDetails({
   });
 
   const { isFocusMode, toggleFocusMode } = useFocusMode();
+
+  // Track the visual viewport so the focus-mode layout can shrink when the
+  // mobile on-screen keyboard is visible.
+  const viewport = useVisualViewport(isFocusMode);
+
+  // Re-fit the terminal whenever the visual viewport height changes (keyboard
+  // appears/disappears). A double-rAF delay lets the CSS layout settle first.
+  const prevViewportHeightRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!viewport) {
+      prevViewportHeightRef.current = null;
+      return;
+    }
+    if (prevViewportHeightRef.current === viewport.height) {
+      return;
+    }
+    prevViewportHeightRef.current = viewport.height;
+    // Double rAF to let CSS layout settle before fitting
+    const raf1 = requestAnimationFrame(() => {
+      const raf2 = requestAnimationFrame(() => {
+        connection.syncTerminalSize({ fit: true });
+      });
+      rafCleanup.current = raf2;
+    });
+    const rafCleanup = { current: 0 as number };
+    return () => {
+      cancelAnimationFrame(raf1);
+      if (rafCleanup.current) {
+        cancelAnimationFrame(rafCleanup.current);
+      }
+    };
+  }, [viewport?.height, connection.syncTerminalSize]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Compute the focus-mode container style. When the visual viewport API
+  // reports a height (keyboard visible on mobile), use that as an explicit
+  // height + top offset so the terminal, bar, and keyboard don't overlap.
+  const focusModeContainerStyle = useMemo(() => {
+    if (!isFocusMode || !viewport) {
+      return undefined as Record<string, string> | undefined;
+    }
+    const style: Record<string, string> = {
+      height: `${viewport.height}px`,
+      overflow: "hidden",
+    };
+    // iOS Safari scrolls the layout viewport when the keyboard opens;
+    // translate the container back into the visible region.
+    if (viewport.offsetTop > 0) {
+      style["transform"] = `translateY(${viewport.offsetTop}px)`;
+    }
+    return style;
+  }, [isFocusMode, viewport]);
 
   useTerminalRenderer({
     sessionConfigId: session?.config.id,
@@ -229,6 +281,7 @@ export function SshSessionDetails({
           ? "flex h-full min-h-0 flex-col bg-[#1e1e1e]"
           : "h-full min-h-0 flex flex-col bg-gray-50 dark:bg-neutral-900"
       }
+      style={focusModeContainerStyle}
     >
       {/* Header — hidden in focus mode */}
       {!isFocusMode && (
