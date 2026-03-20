@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef } from "react";
 import { Badge } from "./common";
-import type { ProvisioningJobSnapshot, ProvisioningStep } from "../types";
+import type { ProvisioningJobMode, ProvisioningJobSnapshot, ProvisioningStep } from "../types";
 import type { WebSocketConnectionStatus } from "../hooks";
 
 const STEP_LABELS: Record<ProvisioningStep, string> = {
@@ -8,11 +8,37 @@ const STEP_LABELS: Record<ProvisioningStep, string> = {
   prepare_directory: "Prepare directory",
   clone_repo: "Clone repository",
   devbox_up: "Run devbox up",
+  devbox_rebuild: "Rebuild devbox",
   devbox_status: "Read devbox status",
   create_workspace: "Create workspace",
   test_connection: "Test connection",
   workspace_ready: "Workspace Ready",
 };
+
+const PROVISION_STEPS: ProvisioningStep[] = [
+  "verify_devbox",
+  "prepare_directory",
+  "clone_repo",
+  "devbox_up",
+  "devbox_status",
+  "create_workspace",
+  "test_connection",
+  "workspace_ready",
+];
+
+const REBUILD_STEPS: ProvisioningStep[] = [
+  "verify_devbox",
+  "prepare_directory",
+  "devbox_rebuild",
+  "devbox_status",
+  "test_connection",
+  "workspace_ready",
+];
+
+function getStepsForMode(mode: ProvisioningJobMode | undefined): [string, string][] {
+  const steps = mode === "rebuild" ? REBUILD_STEPS : PROVISION_STEPS;
+  return steps.map((step) => [step, STEP_LABELS[step]]);
+}
 
 function getStatusBadgeVariant(status: ProvisioningJobSnapshot["job"]["state"]["status"]) {
   switch (status) {
@@ -68,7 +94,8 @@ export const ProvisioningJobView = memo(function ProvisioningJobView({
     element.scrollTop = element.scrollHeight;
   }, [logs]);
 
-  const stepEntries = useMemo(() => Object.entries(STEP_LABELS), []);
+  const jobMode = snapshot?.job.config.mode;
+  const stepEntries = useMemo(() => getStepsForMode(jobMode), [jobMode]);
 
   if (loading && !snapshot) {
     return (

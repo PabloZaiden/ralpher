@@ -9,6 +9,7 @@ import {
   deleteWorkspace,
   getWorkspace,
   getWorkspaceByDirectoryAndServerSettings,
+  updateWorkspace,
 } from "../../persistence/workspaces";
 import type {
   ProvisioningJob,
@@ -38,6 +39,7 @@ export class ProvisioningManager {
   async startJob(options: StartProvisioningJobOptions): Promise<ProvisioningJobSnapshot> {
     const now = new Date().toISOString();
     const jobId = crypto.randomUUID();
+    const mode = options.mode ?? "provision";
     const record: ProvisioningJobRecord = {
       job: {
         config: {
@@ -47,6 +49,9 @@ export class ProvisioningManager {
           repoUrl: options.repoUrl.trim(),
           basePath: options.basePath.trim(),
           provider: options.provider,
+          mode,
+          targetDirectory: options.targetDirectory?.trim(),
+          workspaceId: options.workspaceId?.trim(),
           createdAt: now,
         },
         state: {
@@ -61,12 +66,21 @@ export class ProvisioningManager {
     this.jobs.set(jobId, record);
     emitJobStarted(record.job);
 
-    void this.runJob(record, options.password).catch((error) => {
-      log.error("Provisioning job crashed unexpectedly", {
-        provisioningJobId: record.job.config.id,
-        error: String(error),
+    if (mode === "rebuild") {
+      void this.runRebuildJob(record, options.password).catch((error) => {
+        log.error("Provisioning rebuild job crashed unexpectedly", {
+          provisioningJobId: record.job.config.id,
+          error: String(error),
+        });
       });
-    });
+    } else {
+      void this.runJob(record, options.password).catch((error) => {
+        log.error("Provisioning job crashed unexpectedly", {
+          provisioningJobId: record.job.config.id,
+          error: String(error),
+        });
+      });
+    }
 
     return await this.getSnapshotOrThrow(jobId);
   }
@@ -317,6 +331,11 @@ export class ProvisioningManager {
           serverSettings,
           createdAt: now,
           updatedAt: now,
+          sourceDirectory: record.job.state.targetDirectory,
+          sshServerId: record.job.config.sshServerId,
+          repoUrl: record.job.config.repoUrl,
+          basePath: record.job.config.basePath,
+          provider: record.job.config.provider,
         };
         await createWorkspace(workspace);
         createdWorkspaceId = workspace.id;
@@ -395,6 +414,224 @@ export class ProvisioningManager {
           });
         }
       }
+
+      const completedAt = new Date().toISOString();
+      record.job.state = {
+        ...record.job.state,
+        status: cancelled ? "cancelled" : "failed",
+        error: failure,
+        completedAt,
+        updatedAt: completedAt,
+      };
+      appendSystemLog(record, this.maxLogEntries, failure.message, failure.step);
+      if (cancelled) {
+        emitJobCancelled(record.job);
+      } else {
+        emitJobFailed(record.job, failure);
+      }
+      this.scheduleCleanup(record);
+    }
+  }
+
+  /**
+   * Rebuild flow: verify_devbox → prepare_directory → devbox_rebuild → devbox_status → test_connection → workspace_ready.
+   * Skips clone_repo and create_workspace since the workspace and directory already exist.
+   */
+  private async runRebuildJob(record: ProvisioningJobRecord, password?: string): Promise<void> {
+    try {
+      const targetDirectory = record.job.config.targetDirectory;
+      if (!targetDirectory) {
+        throw new ProvisioningFailedError(
+          "missing_target_directory",
+          "verify_devbox",
+          "Rebuild mode requires a target directory",
+        );
+      }
+
+      const workspaceId = record.job.config.workspaceId;
+      if (!workspaceId) {
+        throw new ProvisioningFailedError(
+          "missing_workspace_id",
+          "verify_devbox",
+          "Rebuild mode requires a workspace ID",
+        );
+      }
+
+      const { server, executor } = await sshServerManager.getCommandExecutor(
+        record.job.config.sshServerId,
+        password,
+      );
+
+      this.updateState(record, { targetDirectory, workspaceId });
+
+      setStep(record, this.maxLogEntries, "verify_devbox", "Checking for devbox");
+      await this.runCmd(record, executor, {
+        step: "verify_devbox",
+        label: "Checking devbox availability",
+        command: "bash",
+        args: ["-lc", "command -v devbox >/dev/null 2>&1"],
+        errorCode: "devbox_not_found",
+        errorMessage: "Devbox is not installed or not available on PATH",
+        captureStdout: false,
+      });
+
+      setStep(record, this.maxLogEntries, "prepare_directory", "Verifying target directory");
+      const targetExists = await executor.directoryExists(targetDirectory);
+      if (!targetExists) {
+        throw new ProvisioningFailedError(
+          "directory_not_found",
+          "prepare_directory",
+          `Target directory does not exist on the remote host: ${targetDirectory}`,
+        );
+      }
+      appendSystemLog(record, this.maxLogEntries, `Target directory verified: ${targetDirectory}`, "prepare_directory");
+
+      setStep(record, this.maxLogEntries, "devbox_rebuild", "Rebuilding devbox");
+      await this.runCmd(record, executor, {
+        step: "devbox_rebuild",
+        label: "Running devbox rebuild",
+        command: "devbox",
+        args: ["rebuild"],
+        cwd: targetDirectory,
+        timeout: DEVBOX_UP_TIMEOUT_MS,
+        streamOutput: true,
+        errorCode: "devbox_rebuild_failed",
+        errorMessage: "Failed to rebuild devbox",
+      });
+
+      setStep(record, this.maxLogEntries, "devbox_status", "Reading devbox status");
+      const statusResult = await this.runCmd(record, executor, {
+        step: "devbox_status",
+        label: "Reading devbox status",
+        command: "devbox",
+        args: ["status"],
+        cwd: targetDirectory,
+        errorCode: "invalid_devbox_status",
+        errorMessage: "Failed to read devbox status",
+        captureStdout: false,
+      });
+      const status = parseDevboxStatusOutput(statusResult.stdout);
+      if (!status.running) {
+        throw new ProvisioningFailedError(
+          "invalid_devbox_status",
+          "devbox_status",
+          "devbox status reported that the environment is not running",
+        );
+      }
+
+      let devboxCredential = parseDevboxCredentialContent("");
+      if (!status.password && status.hasCredentialFile && status.credentialPath) {
+        const credentialContent = await executor.readFile(status.credentialPath);
+        if (credentialContent) {
+          devboxCredential = parseDevboxCredentialContent(credentialContent);
+        }
+      }
+
+      const resolvedDirectory = status.workdir?.trim();
+      if (!resolvedDirectory) {
+        throw new ProvisioningFailedError(
+          "invalid_devbox_status",
+          "devbox_status",
+          "devbox status did not include a workdir value",
+        );
+      }
+
+      const resolvedPort = status.sshPort ?? status.port ?? getPublishedPortFallback(status);
+      if (!resolvedPort) {
+        throw new ProvisioningFailedError(
+          "invalid_devbox_status",
+          "devbox_status",
+          "devbox status did not include SSH port information",
+        );
+      }
+
+      const resolvedUsername =
+        status.sshUser?.trim() ||
+        devboxCredential.username?.trim() ||
+        status.remoteUser?.trim() ||
+        server.username.trim();
+      if (!resolvedUsername) {
+        throw new ProvisioningFailedError(
+          "invalid_devbox_status",
+          "devbox_status",
+          "devbox status did not include SSH username information",
+        );
+      }
+
+      const resolvedPassword = status.password?.trim() || devboxCredential.password?.trim();
+      if (!resolvedPassword) {
+        throw new ProvisioningFailedError(
+          "invalid_devbox_status",
+          "devbox_status",
+          "Could not determine the devbox SSH password from devbox status or credential file",
+        );
+      }
+
+      const serverSettings: ServerSettings = {
+        agent: {
+          provider: record.job.config.provider,
+          transport: "ssh",
+          hostname: server.address,
+          port: resolvedPort,
+          username: resolvedUsername,
+          password: resolvedPassword,
+        },
+      };
+
+      this.updateState(record, { resolvedDirectory, serverSettings });
+      appendSystemLog(
+        record,
+        this.maxLogEntries,
+        `Resolved devbox SSH endpoint ${resolvedUsername}@${server.address}:${resolvedPort}`,
+        "devbox_status",
+      );
+
+      // Update the existing workspace's server settings (port/password may change after rebuild)
+      await updateWorkspace(workspaceId, { serverSettings });
+      appendSystemLog(record, this.maxLogEntries, "Updated workspace server settings", "devbox_status");
+
+      setStep(record, this.maxLogEntries, "test_connection", "Testing workspace connection");
+      const connectionResult = await backendManager.testConnection(serverSettings, resolvedDirectory);
+      if (!connectionResult.success) {
+        throw new ProvisioningFailedError(
+          "connection_test_failed",
+          "test_connection",
+          connectionResult.error ?? "Workspace connection test failed",
+        );
+      }
+
+      setStep(record, this.maxLogEntries, "workspace_ready");
+      const completedAt = new Date().toISOString();
+      record.job.state = {
+        ...record.job.state,
+        status: "completed",
+        completedAt,
+        updatedAt: completedAt,
+      };
+      appendSystemLog(
+        record,
+        this.maxLogEntries,
+        `Workspace connection test succeeded. Devbox for ${record.job.config.name} was rebuilt successfully.`,
+        "workspace_ready",
+      );
+      emitJobCompleted(record.job);
+      this.scheduleCleanup(record);
+    } catch (error) {
+      const cancelled =
+        error instanceof ProvisioningCancelledError || record.abortController.signal.aborted;
+      const failure = cancelled
+        ? buildError(
+            "cancelled",
+            record.job.state.currentStep ?? "verify_devbox",
+            "Provisioning job was cancelled",
+          )
+        : error instanceof ProvisioningFailedError
+          ? buildError(error.code, error.step, error.message)
+          : buildError(
+              "rebuild_failed",
+              record.job.state.currentStep ?? "verify_devbox",
+              String(error),
+            );
 
       const completedAt = new Date().toISOString();
       record.job.state = {

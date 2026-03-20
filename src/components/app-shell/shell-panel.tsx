@@ -105,6 +105,7 @@ export function InlineField({
   placeholder,
   type = "text",
   required = false,
+  disabled = false,
   help,
   inputProps,
 }: {
@@ -115,6 +116,7 @@ export function InlineField({
   placeholder?: string;
   type?: string;
   required?: boolean;
+  disabled?: boolean;
   help?: string;
   inputProps?: InputHTMLAttributes<HTMLInputElement>;
 }) {
@@ -130,8 +132,9 @@ export function InlineField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
+        disabled={disabled}
         {...inputProps}
-        className="block w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700"
+        className={`block w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 shadow-sm outline-none transition focus:border-gray-500 focus:ring-2 focus:ring-gray-300 dark:border-gray-700 dark:bg-neutral-800 dark:text-gray-100 dark:focus:border-gray-500 dark:focus:ring-gray-700${disabled ? " cursor-not-allowed bg-gray-100 dark:bg-neutral-900" : ""}`}
       />
       {help && <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">{help}</p>}
     </div>

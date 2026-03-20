@@ -13,14 +13,16 @@ export const CreateSshServerRequestSchema = z.object({
   name: RequiredTrimmedStringSchema,
   address: RequiredTrimmedStringSchema,
   username: RequiredTrimmedStringSchema,
+  repositoriesBasePath: z.string().trim().optional(),
 });
 
 export const UpdateSshServerRequestSchema = z.object({
   name: RequiredTrimmedStringSchema.optional(),
   address: RequiredTrimmedStringSchema.optional(),
   username: RequiredTrimmedStringSchema.optional(),
+  repositoriesBasePath: z.string().trim().nullish(),
 }).refine((value) => {
-  return value.name !== undefined || value.address !== undefined || value.username !== undefined;
+  return value.name !== undefined || value.address !== undefined || value.username !== undefined || value.repositoriesBasePath !== undefined;
 }, {
   message: "at least one field must be provided",
 });

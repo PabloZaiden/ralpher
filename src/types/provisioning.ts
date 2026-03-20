@@ -11,11 +11,14 @@ export type CreateProvisioningJobRequest = z.infer<typeof CreateProvisioningJobR
 
 export type ProvisioningJobStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
+export type ProvisioningJobMode = "provision" | "rebuild";
+
 export type ProvisioningStep =
   | "verify_devbox"
   | "prepare_directory"
   | "clone_repo"
   | "devbox_up"
+  | "devbox_rebuild"
   | "devbox_status"
   | "create_workspace"
   | "test_connection"
@@ -44,6 +47,11 @@ export interface ProvisioningJobConfig {
   repoUrl: string;
   basePath: string;
   provider: AgentProvider;
+  mode?: ProvisioningJobMode;
+  /** For rebuild mode: directory where the repo lives on the host */
+  targetDirectory?: string;
+  /** For rebuild mode: existing workspace ID */
+  workspaceId?: string;
   createdAt: string;
 }
 

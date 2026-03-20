@@ -143,4 +143,129 @@ describe("ProvisioningManager", () => {
       cwd: "/",
     });
   });
+
+  test("provisions a workspace and persists provisioning metadata", async () => {
+    const server = await sshServerManager.createServer({
+      name: "Metadata Test",
+      address: "10.0.0.6",
+      username: "remote-user",
+    });
+    const executor = new ProvisioningTestExecutor();
+    sshServerManager.setExecutorFactoryForTesting(() => executor);
+
+    const manager = new ProvisioningManager(5_000, 500);
+    const started = await manager.startJob({
+      name: "Auto Workspace Metadata",
+      sshServerId: server.config.id,
+      repoUrl: "git@github.com:octocat/example.git",
+      basePath: "/workspaces",
+      provider: "copilot",
+    });
+
+    const snapshot = await waitForProvisioningStatus(manager, started.job.config.id, ["completed"]);
+    expect(snapshot.job.state.status).toBe("completed");
+
+    const workspace = await getWorkspace(snapshot.job.state.workspaceId!);
+    expect(workspace?.sourceDirectory).toBe("/workspaces/example");
+    expect(workspace?.sshServerId).toBe(server.config.id);
+    expect(workspace?.repoUrl).toBe("git@github.com:octocat/example.git");
+    expect(workspace?.basePath).toBe("/workspaces");
+    expect(workspace?.provider).toBe("copilot");
+  });
+
+  test("rebuilds an existing devbox workspace without cloning", async () => {
+    const server = await sshServerManager.createServer({
+      name: "Rebuild Host",
+      address: "10.0.0.7",
+      username: "remote-user",
+    });
+
+    // First, provision a workspace
+    const provisionExecutor = new ProvisioningTestExecutor();
+    sshServerManager.setExecutorFactoryForTesting(() => provisionExecutor);
+
+    const manager = new ProvisioningManager(5_000, 500);
+    const provisionSnapshot = await manager.startJob({
+      name: "Rebuild Target",
+      sshServerId: server.config.id,
+      repoUrl: "git@github.com:octocat/example.git",
+      basePath: "/workspaces",
+      provider: "copilot",
+    });
+    const provisioned = await waitForProvisioningStatus(manager, provisionSnapshot.job.config.id, ["completed"]);
+    const workspaceId = provisioned.job.state.workspaceId!;
+    const workspace = await getWorkspace(workspaceId);
+    expect(workspace).not.toBeNull();
+
+    // Now rebuild using a new executor (simulates fresh devbox)
+    const rebuildExecutor = new ProvisioningTestExecutor({
+      existingDirectories: ["/workspaces/example"],
+    });
+    sshServerManager.setExecutorFactoryForTesting(() => rebuildExecutor);
+
+    const rebuildSnapshot = await manager.startJob({
+      name: "Rebuild Target",
+      sshServerId: server.config.id,
+      repoUrl: "git@github.com:octocat/example.git",
+      basePath: "/workspaces",
+      provider: "copilot",
+      mode: "rebuild",
+      targetDirectory: "/workspaces/example",
+      workspaceId,
+    });
+
+    const rebuilt = await waitForProvisioningStatus(manager, rebuildSnapshot.job.config.id, ["completed"]);
+    expect(rebuilt.job.state.status).toBe("completed");
+    expect(rebuilt.job.config.mode).toBe("rebuild");
+
+    // Verify rebuild used devbox rebuild instead of devbox up
+    const rebuildCalls = rebuildExecutor.calls.map((c) => `${c.command} ${c.args.join(" ")}`);
+    expect(rebuildCalls.some((c) => c.includes("devbox rebuild"))).toBe(true);
+    expect(rebuildCalls.some((c) => c.includes("devbox up"))).toBe(false);
+    expect(rebuildCalls.some((c) => c.includes("git clone"))).toBe(false);
+
+    // Verify workspace server settings were updated
+    const updatedWorkspace = await getWorkspace(workspaceId);
+    expect(updatedWorkspace?.serverSettings.agent.transport).toBe("ssh");
+
+    // Verify final log message
+    expect(rebuilt.logs.at(-1)?.text).toContain("rebuilt successfully");
+  });
+
+  test("rebuild fails when target directory does not exist", async () => {
+    const server = await sshServerManager.createServer({
+      name: "Rebuild Fail Host",
+      address: "10.0.0.8",
+      username: "remote-user",
+    });
+
+    // Create a workspace manually
+    const db = getDatabase();
+    const now = new Date().toISOString();
+    db.run(
+      `INSERT INTO workspaces (id, name, directory, server_fingerprint, server_settings, created_at, updated_at, source_directory, ssh_server_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ["ws-rebuild-fail", "Missing Dir WS", "/workspaces/devbox", "copilot:ssh:10.0.0.8:5005:", '{"agent":{"provider":"copilot","transport":"ssh","hostname":"10.0.0.8","port":5005,"username":"vscode","password":"test"}}', now, now, "/workspaces/missing", server.config.id],
+    );
+
+    // Executor with NO existing directories
+    const executor = new ProvisioningTestExecutor();
+    sshServerManager.setExecutorFactoryForTesting(() => executor);
+
+    const manager = new ProvisioningManager(5_000, 500);
+    const snapshot = await manager.startJob({
+      name: "Missing Dir WS",
+      sshServerId: server.config.id,
+      repoUrl: "",
+      basePath: "",
+      provider: "copilot",
+      mode: "rebuild",
+      targetDirectory: "/workspaces/missing",
+      workspaceId: "ws-rebuild-fail",
+    });
+
+    const result = await waitForProvisioningStatus(manager, snapshot.job.config.id, ["failed"]);
+    expect(result.job.state.status).toBe("failed");
+    expect(result.job.state.error?.code).toBe("directory_not_found");
+  });
 });

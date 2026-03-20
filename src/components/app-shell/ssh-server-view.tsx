@@ -73,6 +73,9 @@ export function SshServerView({
         <SummaryCard label="Address" value={server.config.address} meta="Stored without credentials on the server." />
         <SummaryCard label="Username" value={server.config.username} meta="Used for standalone SSH sessions." />
         <SummaryCard label="Saved sessions" value={sessions.length} meta="Standalone terminals attached to this host." />
+        {server.config.repositoriesBasePath && (
+          <SummaryCard label="Repositories base path" value={server.config.repositoriesBasePath} meta="Default base path for automatic provisioning." />
+        )}
       </div>
 
       <div className="space-y-4 rounded-2xl border border-gray-200 bg-gray-50 p-5 dark:border-gray-800 dark:bg-neutral-950/50">

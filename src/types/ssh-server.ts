@@ -17,6 +17,8 @@ export interface SshServerConfig {
   name: string;
   address: string;
   username: string;
+  /** Default base path for cloning repositories on the remote host. */
+  repositoriesBasePath?: string;
   createdAt: string;
   updatedAt: string;
 }

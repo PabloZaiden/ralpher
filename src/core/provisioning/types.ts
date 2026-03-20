@@ -1,4 +1,4 @@
-import type { AgentProvider, ProvisioningJob, ProvisioningLogEntry } from "../../types";
+import type { AgentProvider, ProvisioningJob, ProvisioningJobMode, ProvisioningLogEntry } from "../../types";
 
 export interface StartProvisioningJobOptions {
   name: string;
@@ -6,7 +6,12 @@ export interface StartProvisioningJobOptions {
   repoUrl: string;
   basePath: string;
   provider: AgentProvider;
+  mode?: ProvisioningJobMode;
   password?: string;
+  /** For rebuild mode: directory on the host where the repo lives */
+  targetDirectory?: string;
+  /** For rebuild mode: existing workspace ID */
+  workspaceId?: string;
 }
 
 export interface ProvisioningJobRecord {

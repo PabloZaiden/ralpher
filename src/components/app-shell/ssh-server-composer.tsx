@@ -20,6 +20,7 @@ export function SshServerComposer({
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [username, setUsername] = useState("");
+  const [repositoriesBasePath, setRepositoriesBasePath] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -37,6 +38,7 @@ export function SshServerComposer({
           name: name.trim(),
           address: address.trim(),
           username: username.trim(),
+          repositoriesBasePath: repositoriesBasePath.trim() || undefined,
         },
         password.trim() || undefined,
       );
@@ -75,6 +77,14 @@ export function SshServerComposer({
           <InlineField id="server-name" label="Server name" value={name} onChange={setName} placeholder="Production host" required />
           <InlineField id="server-address" label="Address" value={address} onChange={setAddress} placeholder="server.example.com" required />
           <InlineField id="server-username" label="Username" value={username} onChange={setUsername} placeholder="ubuntu" required />
+          <InlineField
+            id="server-repositories-base-path"
+            label="Repositories base path"
+            value={repositoriesBasePath}
+            onChange={setRepositoriesBasePath}
+            placeholder="/workspaces"
+            help="Default base path for cloning repositories during automatic provisioning."
+          />
           <InlineField
             id="server-password"
             label="Client-only password"

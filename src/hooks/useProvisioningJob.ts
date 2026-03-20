@@ -24,6 +24,9 @@ export interface StartProvisioningJobRequest {
   basePath: string;
   provider: AgentProvider;
   password?: string;
+  mode?: "provision" | "rebuild";
+  targetDirectory?: string;
+  workspaceId?: string;
 }
 
 export interface UseProvisioningJobResult {
@@ -203,6 +206,9 @@ export function useProvisioningJob(): UseProvisioningJobResult {
           basePath: request.basePath.trim(),
           provider: request.provider,
           ...(credentialToken ? { credentialToken } : {}),
+          ...(request.mode ? { mode: request.mode } : {}),
+          ...(request.targetDirectory ? { targetDirectory: request.targetDirectory } : {}),
+          ...(request.workspaceId ? { workspaceId: request.workspaceId } : {}),
         }),
       });
       if (!response.ok) {

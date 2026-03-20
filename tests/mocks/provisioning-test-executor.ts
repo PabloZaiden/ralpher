@@ -11,9 +11,12 @@ export interface ProvisioningTestExecutorOptions {
   failDevboxVersion?: boolean;
   failClone?: boolean;
   failDevboxUp?: boolean;
+  failDevboxRebuild?: boolean;
   devboxUpDelayMs?: number;
   devboxStatusOutput?: string;
   credentialFileContent?: string;
+  /** Pre-populate these directories as existing */
+  existingDirectories?: string[];
 }
 
 async function waitWithSignal(signal: AbortSignal | undefined, durationMs: number): Promise<boolean> {
@@ -65,6 +68,11 @@ export class ProvisioningTestExecutor implements CommandExecutor {
   constructor(private readonly options: ProvisioningTestExecutorOptions = {}) {
     if (options.credentialFileContent) {
       this.files.set("/tmp/devbox/.sshcred", options.credentialFileContent);
+    }
+    if (options.existingDirectories) {
+      for (const dir of options.existingDirectories) {
+        this.directories.add(dir);
+      }
     }
   }
 
@@ -164,6 +172,22 @@ export class ProvisioningTestExecutor implements CommandExecutor {
           success: false,
           stdout,
           stderr: "devbox up failed",
+          exitCode: 1,
+        };
+      }
+
+      return { success: true, stdout, stderr: "", exitCode: 0 };
+    }
+
+    if (command === "devbox" && args[0] === "rebuild") {
+      const stdout = "Rebuilding devbox...\nDevbox rebuilt and started.\n";
+      options?.onStdoutChunk?.(stdout);
+
+      if (this.options.failDevboxRebuild) {
+        return {
+          success: false,
+          stdout,
+          stderr: "devbox rebuild failed",
           exitCode: 1,
         };
       }
