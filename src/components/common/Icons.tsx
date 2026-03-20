@@ -99,6 +99,37 @@ export function GearIcon({ className = "", size = "h-4 w-4" }: IconProps) {
 }
 
 /**
+ * Refresh icon for reloading the page.
+ */
+export function RefreshIcon({ className = "", size = "h-4 w-4" }: IconProps) {
+  return (
+    <svg
+      className={`${size} ${className}`.trim()}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 4v5h5"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M20 20v-5h-5"
+      />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 9a8 8 0 0113.292-4.293L20 9M20 15a8 8 0 01-13.292 4.293L4 15"
+      />
+    </svg>
+  );
+}
+
+/**
  * Sidebar/panel icon for opening and closing the navigation rail.
  */
 export function SidebarIcon({ className = "", size = "h-4 w-4" }: IconProps) {
