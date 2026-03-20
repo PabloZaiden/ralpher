@@ -40,8 +40,7 @@ export function FocusModeBar({
 
   return (
     <div
-      className="shrink-0 border-t border-neutral-700 bg-[#1e1e1e]"
-      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+      className="shrink-0 border-t border-neutral-700 bg-[#1e1e1e] safe-area-bottom"
     >
       <div
         className="hide-scrollbar flex items-center gap-1 overflow-x-auto px-1.5 py-1.5"
@@ -95,6 +94,8 @@ export function FocusModeBar({
             size="xs"
             className={`${btnClass} text-gray-400`}
             onClick={resetTerminalModifiers}
+            aria-label="Clear modifiers"
+            title="Clear modifiers"
           >
             ✕
           </Button>
@@ -109,29 +110,29 @@ export function FocusModeBar({
         <Button variant="secondary" size="xs" className={btnClass} onClick={() => sendEncodedTerminalKey("Tab")}>
           tab
         </Button>
-        <Button variant="secondary" size="xs" className={btnClass} onClick={() => sendEncodedTerminalKey("Enter")}>
+        <Button variant="secondary" size="xs" className={btnClass} aria-label="Enter" onClick={() => sendEncodedTerminalKey("Enter")}>
           ⏎
         </Button>
         <Button variant="secondary" size="xs" className={btnClass} aria-label="Backspace" onClick={() => sendEncodedTerminalKey("Backspace")}>
           ⌫
         </Button>
-        <Button variant="secondary" size="xs" className={btnClass} onClick={() => sendEncodedTerminalKey("Space")}>
+        <Button variant="secondary" size="xs" className={btnClass} aria-label="Space" onClick={() => sendEncodedTerminalKey("Space")}>
           ␣
         </Button>
 
         <span className={separatorClass} aria-hidden="true" />
 
         {/* Arrow keys */}
-        <Button variant="secondary" size="xs" className={btnClass} onClick={() => sendEncodedTerminalKey("ArrowLeft")}>
+        <Button variant="secondary" size="xs" className={btnClass} aria-label="Arrow left" onClick={() => sendEncodedTerminalKey("ArrowLeft")}>
           ◀
         </Button>
-        <Button variant="secondary" size="xs" className={btnClass} onClick={() => sendEncodedTerminalKey("ArrowUp")}>
+        <Button variant="secondary" size="xs" className={btnClass} aria-label="Arrow up" onClick={() => sendEncodedTerminalKey("ArrowUp")}>
           ▲
         </Button>
-        <Button variant="secondary" size="xs" className={btnClass} onClick={() => sendEncodedTerminalKey("ArrowDown")}>
+        <Button variant="secondary" size="xs" className={btnClass} aria-label="Arrow down" onClick={() => sendEncodedTerminalKey("ArrowDown")}>
           ▼
         </Button>
-        <Button variant="secondary" size="xs" className={btnClass} onClick={() => sendEncodedTerminalKey("ArrowRight")}>
+        <Button variant="secondary" size="xs" className={btnClass} aria-label="Arrow right" onClick={() => sendEncodedTerminalKey("ArrowRight")}>
           ▶
         </Button>
 

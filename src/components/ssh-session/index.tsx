@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FitAddon, Terminal } from "ghostty-web";
-import { Badge, Button, Card, ConfirmModal, EditIcon } from "../common";
+import { Badge, Button, ConfirmModal, EditIcon } from "../common";
 import { useSshSession, useToast } from "../../hooks";
 import { RenameSshSessionModal } from "../RenameSshSessionModal";
 import { isPersistentSshSession, writeTextToClipboard } from "../../utils";
@@ -218,116 +218,100 @@ export function SshSessionDetails({
     sendTerminalTextShortcut: keyboard.sendTerminalTextShortcut,
   };
 
-  if (isFocusMode) {
-    return (
-      <div className="flex h-full min-h-0 flex-col bg-[#1e1e1e]">
-        <div
-          ref={terminalContainerRef}
-          className="relative box-border min-h-0 flex-1 bg-[#1e1e1e] w-full"
-          style={{
-            padding: `${TERMINAL_PADDING_TOP_PX}px ${TERMINAL_PADDING_X_PX}px ${TERMINAL_PADDING_BOTTOM_PX}px`,
-          }}
-        />
-
-        <FocusModeBar
-          {...touchControlProps}
-          onExitFocusMode={toggleFocusMode}
-        />
-
-        {/* Modals still need to render in focus mode */}
-        <ConfirmModal
-          isOpen={showDeleteConfirm}
-          onClose={() => setShowDeleteConfirm(false)}
-          onConfirm={() => void handleDelete()}
-          title="Delete SSH session?"
-          message={hasPersistentSession
-            ? "This removes the Ralpher session metadata and attempts to stop the remote persistent session."
-            : "This removes the saved Ralpher session metadata. Direct SSH mode does not keep a remote persistent session."}
-          confirmLabel="Delete"
-          loading={false}
-        />
-        <StandalonePasswordModal
-          isOpen={standalone.showPasswordPrompt}
-          onClose={() => {
-            standalone.setShowPasswordPrompt(false);
-            standalone.setPendingStandaloneAction(null);
-          }}
-          onSubmit={() => void handleStandalonePasswordSubmit()}
-          password={standalone.standalonePassword}
-          onPasswordChange={standalone.setStandalonePassword}
-          pendingAction={standalone.pendingStandaloneAction}
-          hasPersistentSession={hasPersistentSession}
-        />
-      </div>
-    );
-  }
-
+  // Single persistent layout — the terminal container ref is always on the same
+  // DOM node so that useTerminalRenderer never needs to re-open the terminal
+  // when toggling focus mode. Focus mode hides the chrome via conditional
+  // rendering and changes the wrapper styles.
   return (
-    <div className="h-full min-h-0 flex flex-col bg-gray-50 dark:bg-neutral-900">
-      <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-neutral-800">
-        <div
-          className={[
-            headerOffsetClassName ?? "ml-14 sm:ml-16 lg:ml-0",
-            "flex min-h-14 flex-wrap items-center justify-between gap-1.5",
-          ].join(" ")}
-        >
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-            {showBackButton && onBack && (
-              <Button variant="ghost" size="xs" onClick={onBack}>← Back</Button>
-            )}
-            <h1 className="min-w-0 break-words text-base font-semibold text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
-              {session.config.name}
-            </h1>
-            <Badge variant={connection.socketStatus === "open" ? "success" : connection.socketStatus === "connecting" ? "info" : "warning"}>
-              {connection.socketStatus === "open" ? "connected" : connection.socketStatus === "closed" ? "disconnected" : "connecting"}
-            </Badge>
-          </div>
-          <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
-            {canRenameSession && (
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => setShowRenameModal(true)}
-                aria-label="Rename SSH session"
-                title="Rename SSH session"
-              >
-                <span className="flex items-center gap-1">
-                  <EditIcon size="h-3.5 w-3.5" />
-                  Rename
-                </span>
+    <div
+      className={
+        isFocusMode
+          ? "flex h-full min-h-0 flex-col bg-[#1e1e1e]"
+          : "h-full min-h-0 flex flex-col bg-gray-50 dark:bg-neutral-900"
+      }
+    >
+      {/* Header — hidden in focus mode */}
+      {!isFocusMode && (
+        <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-neutral-800">
+          <div
+            className={[
+              headerOffsetClassName ?? "ml-14 sm:ml-16 lg:ml-0",
+              "flex min-h-14 flex-wrap items-center justify-between gap-1.5",
+            ].join(" ")}
+          >
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+              {showBackButton && onBack && (
+                <Button variant="ghost" size="xs" onClick={onBack}>← Back</Button>
+              )}
+              <h1 className="min-w-0 break-words text-base font-semibold text-gray-900 dark:text-gray-100 [overflow-wrap:anywhere]">
+                {session.config.name}
+              </h1>
+              <Badge variant={connection.socketStatus === "open" ? "success" : connection.socketStatus === "connecting" ? "info" : "warning"}>
+                {connection.socketStatus === "open" ? "connected" : connection.socketStatus === "closed" ? "disconnected" : "connecting"}
+              </Badge>
+            </div>
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+              {canRenameSession && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  onClick={() => setShowRenameModal(true)}
+                  aria-label="Rename SSH session"
+                  title="Rename SSH session"
+                >
+                  <span className="flex items-center gap-1">
+                    <EditIcon size="h-3.5 w-3.5" />
+                    Rename
+                  </span>
+                </Button>
+              )}
+              <Button variant="danger" size="xs" onClick={() => setShowDeleteConfirm(true)}>
+                Delete Session
               </Button>
-            )}
-            <Button variant="danger" size="xs" onClick={() => setShowDeleteConfirm(true)}>
-              Delete Session
-            </Button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden p-2 sm:p-3">
-        <SessionInfoSection
-          session={session}
-          standaloneServerName={standalone.standaloneServerName}
-          standaloneServerTarget={standalone.standaloneServerTarget}
-        />
+      {/* Main content area */}
+      <div
+        className={
+          isFocusMode
+            ? "flex min-h-0 flex-1 flex-col"
+            : "flex-1 min-h-0 flex flex-col gap-2 overflow-hidden p-2 sm:p-3"
+        }
+      >
+        {/* Session info & touch controls — hidden in focus mode */}
+        {!isFocusMode && (
+          <>
+            <SessionInfoSection
+              session={session}
+              standaloneServerName={standalone.standaloneServerName}
+              standaloneServerTarget={standalone.standaloneServerTarget}
+            />
 
-        <TouchControlsSection
-          {...touchControlProps}
-          onEnterFocusMode={toggleFocusMode}
-        />
+            <TouchControlsSection
+              {...touchControlProps}
+              onEnterFocusMode={toggleFocusMode}
+            />
 
-        {clipboard.pendingTerminalClipboardText !== null && (
-          <ClipboardFallbackCard
-            pendingText={clipboard.pendingTerminalClipboardText}
-            onDismiss={() => clipboard.setPendingTerminalClipboardText(null)}
-            onRetry={clipboard.retryPendingTerminalClipboardCopy}
-          />
+            {clipboard.pendingTerminalClipboardText !== null && (
+              <ClipboardFallbackCard
+                pendingText={clipboard.pendingTerminalClipboardText}
+                onDismiss={() => clipboard.setPendingTerminalClipboardText(null)}
+                onRetry={clipboard.retryPendingTerminalClipboardCopy}
+              />
+            )}
+          </>
         )}
 
-        <Card
-          padding={false}
-          className="min-h-0 flex flex-1 flex-col overflow-visible rounded-sm bg-[#1e1e1e] dark:bg-[#1e1e1e]"
-          bodyClassName="min-h-0 flex flex-1 flex-col bg-[#1e1e1e] dark:bg-[#1e1e1e]"
+        {/* Terminal — always the same DOM node, never re-mounted */}
+        <div
+          className={
+            isFocusMode
+              ? "min-h-0 flex flex-1 flex-col overflow-visible bg-[#1e1e1e]"
+              : "min-h-0 flex flex-1 flex-col overflow-visible rounded-sm border border-gray-200 dark:border-gray-700 bg-[#1e1e1e] dark:bg-[#1e1e1e]"
+          }
         >
           <div
             ref={terminalContainerRef}
@@ -336,9 +320,18 @@ export function SshSessionDetails({
               padding: `${TERMINAL_PADDING_TOP_PX}px ${TERMINAL_PADDING_X_PX}px ${TERMINAL_PADDING_BOTTOM_PX}px`,
             }}
           />
-        </Card>
+        </div>
       </div>
 
+      {/* Focus mode bar — only shown in focus mode */}
+      {isFocusMode && (
+        <FocusModeBar
+          {...touchControlProps}
+          onExitFocusMode={toggleFocusMode}
+        />
+      )}
+
+      {/* Modals */}
       <ConfirmModal
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
@@ -350,12 +343,14 @@ export function SshSessionDetails({
         confirmLabel="Delete"
         loading={false}
       />
-      <RenameSshSessionModal
-        isOpen={showRenameModal}
-        onClose={() => setShowRenameModal(false)}
-        currentName={sessionKind === "workspace" ? session.config.name : ""}
-        onRename={handleRename}
-      />
+      {!isFocusMode && (
+        <RenameSshSessionModal
+          isOpen={showRenameModal}
+          onClose={() => setShowRenameModal(false)}
+          currentName={sessionKind === "workspace" ? session.config.name : ""}
+          onRename={handleRename}
+        />
+      )}
       <StandalonePasswordModal
         isOpen={standalone.showPasswordPrompt}
         onClose={() => {
