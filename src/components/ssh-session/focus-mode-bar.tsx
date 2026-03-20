@@ -40,7 +40,7 @@ export function FocusModeBar({
 
   return (
     <div
-      className="shrink-0 border-t border-neutral-700 bg-[#1e1e1e] safe-area-bottom"
+      className="shrink-0 bg-[#1e1e1e] safe-area-bottom"
     >
       <div
         className="hide-scrollbar flex items-center gap-1 overflow-x-auto px-1.5 py-1.5"
