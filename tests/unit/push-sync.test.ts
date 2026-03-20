@@ -292,6 +292,8 @@ describe("Push with Base Branch Sync", () => {
         // Verify syncState was set with mergeCommitMessage
         const conflictLoop = await ctx.manager.getLoop(loop.config.id);
         expect(conflictLoop).not.toBeNull();
+        expect(conflictLoop!.state.syncState).toBeDefined();
+        expect(conflictLoop!.state.syncState!.mergeCommitMessage).toBe("Loop changes to test.txt");
 
         // The conflict resolution engine should have been started. 
         // With the mock backend, it will complete quickly and trigger auto-push.

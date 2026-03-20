@@ -343,10 +343,18 @@ async function handleConflictResolutionComplete(ctx: LoopCtx, loopId: string): P
   }
 }
 
+/**
+ * Safely single-quotes a string for use as a POSIX shell argument.
+ * This ensures that characters like $, `, and $() are not expanded when pasted into a shell.
+ */
+function shellSingleQuote(value: string): string {
+  return "'" + value.replace(/'/g, "'\\''") + "'";
+}
+
 function constructConflictResolutionPrompt(sourceBranch: string, conflictedFiles: string[], mergeCommitMessage?: string): string {
   const fileList = conflictedFiles.map(f => `- ${f}`).join("\n");
   const commitInstruction = mergeCommitMessage
-    ? `git commit -m ${JSON.stringify(mergeCommitMessage)}`
+    ? `git commit -m ${shellSingleQuote(mergeCommitMessage)}`
     : "git commit --no-edit";
   return `The branch (${sourceBranch}) has diverged from your working branch and there are merge conflicts that need to be resolved before pushing.
 
