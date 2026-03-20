@@ -32,7 +32,7 @@ export type {
 import { isGitRepo, getCurrentBranch, getLocalBranches, getDefaultBranch, verifyBranch, hasUncommittedChanges, getChangedFiles, branchExists, hasStagedChanges, isAncestor, getConflictedFiles } from "./git-repo-query";
 import { getRemoteUrl as getRemoteUrlRemote, pushBranch, fetchBranch, pull } from "./git-remote";
 import { createBranch, checkoutBranch, deleteBranch, ensureBranch } from "./git-branch";
-import { stageAll, commit } from "./git-commit";
+import { stageAll, commit, getLastCommitMessage } from "./git-commit";
 import { stash, stashPop } from "./git-stash";
 import { resetHard, mergeBranch, mergeWithConflictDetection, abortMerge, ensureMergeStrategy } from "./git-merge";
 import { getDiff, getDiffSummary, getFileDiffContent, getDiffWithContent } from "./git-diff";
@@ -227,6 +227,10 @@ export class GitService {
 
   async commit(directory: string, message: string, options: CommitOptions = {}): Promise<CommitInfo> {
     return commit(this.executor, directory, message, options);
+  }
+
+  async getLastCommitMessage(directory: string): Promise<string> {
+    return getLastCommitMessage(this.executor, directory);
   }
 
   // ─── Stash operations ─────────────────────────────────────────────────────

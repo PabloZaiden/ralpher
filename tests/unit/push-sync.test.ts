@@ -186,6 +186,49 @@ describe("Push with Base Branch Sync", () => {
         await teardownTestContext(ctx);
       }
     });
+
+    test("merge commit uses last local commit message instead of standard merge format", async () => {
+      const ctx = await setupTestContext({
+        initGit: true,
+        initialFiles: { "test.txt": "Initial content" },
+      });
+
+      try {
+        const { remoteDir } = await setupRemote(ctx);
+        const loop = await createAndCompleteLoop(ctx);
+
+        // Get the worktree path for the loop
+        const completedLoop = await ctx.manager.getLoop(loop.config.id);
+        const worktreePath = completedLoop!.state.git!.worktreePath!;
+
+        // Make a commit in the worktree with a meaningful message
+        await writeFile(join(worktreePath, "feature.txt"), "New feature code\n");
+        await Bun.$`git -C ${worktreePath} add -A`.quiet();
+        await Bun.$`git -C ${worktreePath} commit -m "feat(auth): add JWT token refresh"`.quiet();
+
+        // Add a non-conflicting commit to the base branch
+        await addRemoteCommit(
+          remoteDir,
+          { "remote-only.txt": "Remote content\n" },
+          "Non-conflicting remote commit",
+          ctx.dataDir,
+        );
+
+        // Push — the merge commit message should use the last local commit message
+        const pushResult = await ctx.manager.pushLoop(loop.config.id);
+        expect(pushResult.success).toBe(true);
+        expect(pushResult.syncStatus).toBe("clean");
+
+        // Verify the merge commit message is the last local commit message, not "Merge origin/..."
+        const mergeCommitMsg = (
+          await Bun.$`git -C ${worktreePath} log -1 --format=%s`.text()
+        ).trim();
+        expect(mergeCommitMsg).toBe("feat(auth): add JWT token refresh");
+        expect(mergeCommitMsg).not.toContain("Merge origin/");
+      } finally {
+        await teardownTestContext(ctx);
+      }
+    });
   });
 
   describe("conflict resolution", () => {
@@ -246,9 +289,11 @@ describe("Push with Base Branch Sync", () => {
         const syncConflicts = ctx.events.find((e) => e.type === "loop.sync.conflicts");
         expect(syncConflicts).toBeDefined();
 
-        // Verify syncState was set
+        // Verify syncState was set with mergeCommitMessage
         const conflictLoop = await ctx.manager.getLoop(loop.config.id);
         expect(conflictLoop).not.toBeNull();
+        expect(conflictLoop!.state.syncState).toBeDefined();
+        expect(conflictLoop!.state.syncState!.mergeCommitMessage).toBe("Loop changes to test.txt");
 
         // The conflict resolution engine should have been started. 
         // With the mock backend, it will complete quickly and trigger auto-push.
