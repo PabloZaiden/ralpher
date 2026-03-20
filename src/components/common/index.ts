@@ -13,7 +13,7 @@ export {
   type BadgeVariant,
 } from "./Badge";
 export { Modal, ConfirmModal, type ModalProps, type ConfirmModalProps } from "./Modal";
-export { EditIcon, GearIcon, GridIcon, ListIcon, SidebarIcon, type IconProps } from "./Icons";
+export { EditIcon, GearIcon, GridIcon, ListIcon, RefreshIcon, SidebarIcon, type IconProps } from "./Icons";
 export { CollapsibleSection, type CollapsibleSectionProps } from "./CollapsibleSection";
 export { ToastProvider } from "./Toast";
 export { ActionMenu, type ActionMenuProps, type ActionMenuItem } from "./ActionMenu";

@@ -1,7 +1,7 @@
 import type { Loop, Workspace } from "../../types";
 import type { SshServer, SshServerSession } from "../../types/ssh-server";
 import { getLoopStatusLabel, getStatusLabel } from "../../utils";
-import { GearIcon, SidebarIcon, getLoopStatusBadgeVariant } from "../common";
+import { GearIcon, RefreshIcon, SidebarIcon, getLoopStatusBadgeVariant } from "../common";
 import type { BadgeVariant } from "../common";
 import { ShellSection, SectionItem, WorkspaceGroupedSectionItems, EmptySection } from "./shell-sidebar";
 import type { ShellRoute, SidebarSectionId, WorkspaceSidebarGroup } from "./shell-types";
@@ -78,6 +78,15 @@ export function ShellSidebarNav({
             Ralpher
           </button>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              aria-label="Reload page"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 shadow-sm transition hover:border-gray-300 hover:text-gray-900 dark:border-gray-800 dark:bg-neutral-900 dark:text-gray-300 dark:hover:border-gray-700 dark:hover:text-gray-100"
+              title="Reload page"
+            >
+              <RefreshIcon size="h-5 w-5" />
+            </button>
             <button
               type="button"
               onClick={() => navigateWithinShell({ view: "settings" })}
