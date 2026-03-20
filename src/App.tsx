@@ -31,6 +31,13 @@ function parseHash(): ShellRoute {
     }
   }
 
+  if (hash.startsWith("/rebuild-workspace/")) {
+    const workspaceId = hash.slice(19);
+    if (workspaceId) {
+      return { view: "rebuild-workspace", workspaceId };
+    }
+  }
+
   if (hash.startsWith("/workspace-settings/")) {
     const workspaceId = hash.slice(20);
     if (workspaceId) {
@@ -97,6 +104,9 @@ function navigateTo(route: ShellRoute) {
       return;
     case "settings":
       window.location.hash = "/settings";
+      return;
+    case "rebuild-workspace":
+      window.location.hash = `/rebuild-workspace/${route.workspaceId}`;
       return;
     case "compose":
       window.location.hash = route.scopeId
