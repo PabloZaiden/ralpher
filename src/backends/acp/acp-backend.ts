@@ -1631,11 +1631,8 @@ export class AcpBackend implements Backend {
             };
           }
         } else if (part.type === "step-start") {
-          // Step start - AI is beginning a new step in its reasoning
-          return {
-            type: "message.delta",
-            content: "", // Empty delta to indicate step start (could emit different event type in future)
-          };
+          // Step start - no content to emit, skip to avoid creating empty log entries
+          return null;
         } else if (part.type === "step-finish") {
           // Step finish - AI completed a step
           // The step-finish contains token usage but no content

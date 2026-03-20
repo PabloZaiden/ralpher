@@ -66,10 +66,13 @@ export const LogViewer = memo(function LogViewer({
     logs.forEach((logEntry) => {
       const logKind = logEntry.details?.["logKind"] as string | undefined;
 
-      // Reasoning entries: only shown if showReasoning is enabled
+      // Reasoning entries: only shown if showReasoning is enabled and have content
       if (logKind === "reasoning" || (!logKind && logEntry.message === "AI reasoning...")) {
         if (!showReasoning) return;
-        result.push({ type: "log", data: logEntry, timestamp: logEntry.timestamp });
+        const content = logEntry.details?.["responseContent"];
+        if (typeof content === "string" && content.length > 0) {
+          result.push({ type: "log", data: logEntry, timestamp: logEntry.timestamp });
+        }
         return;
       }
 
@@ -80,9 +83,12 @@ export const LogViewer = memo(function LogViewer({
         return;
       }
 
-      // Response streaming entries ("AI generating response..."): always shown
+      // Response streaming entries ("AI generating response..."): shown only if they have content
       if (logKind === "response" || (!logKind && logEntry.message === "AI generating response...")) {
-        result.push({ type: "log", data: logEntry, timestamp: logEntry.timestamp });
+        const content = logEntry.details?.["responseContent"];
+        if (typeof content === "string" && content.length > 0) {
+          result.push({ type: "log", data: logEntry, timestamp: logEntry.timestamp });
+        }
         return;
       }
 
