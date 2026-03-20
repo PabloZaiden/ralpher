@@ -56,8 +56,9 @@ export async function getWorkspaceByDirectory(directory: string): Promise<Worksp
  * Get a workspace by directory and server settings.
  *
  * @deprecated Prefer looking up workspaces by ID. Multiple workspaces may
- * share the same directory and server fingerprint; this returns only the
- * first match. Kept for backward compatibility.
+ * share the same directory and server fingerprint after migration 13 relaxed
+ * the unique constraint. This function throws if multiple matches are found
+ * to surface ambiguity instead of returning a nondeterministic result.
  */
 export async function getWorkspaceByDirectoryAndServerSettings(
   directory: string,
@@ -73,11 +74,16 @@ export async function getWorkspaceByDirectoryAndServerSettings(
     SELECT * FROM workspaces
     WHERE directory = ? AND server_fingerprint = ?
   `);
-  const row = stmt.get(directory, serverFingerprint) as Record<string, unknown> | null;
-  if (!row) {
+  const rows = stmt.all(directory, serverFingerprint) as Record<string, unknown>[];
+  if (rows.length === 0) {
     return null;
   }
-  return rowToWorkspace(row);
+  if (rows.length > 1) {
+    throw new Error(
+      `Multiple workspaces found for directory "${directory}" with server fingerprint "${serverFingerprint}". Use workspace ID for lookup instead.`,
+    );
+  }
+  return rowToWorkspace(rows[0]!);
 }
 
 /**
