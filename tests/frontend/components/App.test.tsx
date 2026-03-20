@@ -752,4 +752,48 @@ describe("App shell", () => {
       expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
     });
   });
+
+  test("renders rebuild-workspace view from hash route", async () => {
+    const workspace = createWorkspace({
+      id: "workspace-1",
+      name: "Frontend",
+      directory: "/workspaces/frontend",
+      sourceDirectory: "/workspaces/frontend-source",
+    });
+    setupDefaultApi({ workspaces: [workspace] });
+    api.get("/api/workspaces/:id", () => workspace);
+
+    const { getByRole } = renderWithUser(<App />, { route: "#/rebuild-workspace/workspace-1" });
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Rebuild Frontend" })).toBeTruthy();
+    });
+  });
+
+  test("navigating to rebuild-workspace via hash change renders the view", async () => {
+    const workspace = createWorkspace({
+      id: "workspace-1",
+      name: "Frontend",
+      directory: "/workspaces/frontend",
+      sourceDirectory: "/workspaces/frontend-source",
+    });
+    setupDefaultApi({ workspaces: [workspace] });
+    api.get("/api/workspaces/:id", () => workspace);
+
+    const { getByRole } = renderWithUser(<App />);
+
+    await waitFor(() => {
+      expect(getByRole("heading", { name: "Ralpher" })).toBeTruthy();
+    });
+
+    await act(() => {
+      window.location.hash = "/rebuild-workspace/workspace-1";
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+
+    await waitFor(() => {
+      expect(window.location.hash).toBe("#/rebuild-workspace/workspace-1");
+      expect(getByRole("heading", { name: "Rebuild Frontend" })).toBeTruthy();
+    });
+  });
 });
