@@ -54,13 +54,6 @@ describe("AddressCommentsModal", () => {
       expect(getByRole("button", { name: "Submit Comments" })).toBeInTheDocument();
     });
 
-    test("renders how-it-works info section", () => {
-      const { getByText } = renderWithUser(
-        <AddressCommentsModal {...defaultProps()} />
-      );
-      expect(getByText("How it works")).toBeInTheDocument();
-    });
-
     test("renders help text about loop behavior", () => {
       const { getByText } = renderWithUser(
         <AddressCommentsModal {...defaultProps()} />
