@@ -25,6 +25,8 @@ import { useClipboard } from "./use-clipboard";
 import { useStandaloneSession } from "./use-standalone-session";
 import { useSshConnection } from "./use-ssh-connection";
 import { useTerminalRenderer } from "./use-terminal-renderer";
+import { useFocusMode } from "./use-focus-mode";
+import { FocusModeBar } from "./focus-mode-bar";
 
 export interface SshSessionDetailsProps {
   sshSessionId: string;
@@ -116,6 +118,8 @@ export function SshSessionDetails({
     showErrorToast,
   });
 
+  const { isFocusMode, toggleFocusMode } = useFocusMode();
+
   useTerminalRenderer({
     sessionConfigId: session?.config.id,
     terminalContainerRef,
@@ -203,6 +207,61 @@ export function SshSessionDetails({
     );
   }
 
+  const touchControlProps = {
+    terminalModifiers: modifiers.terminalModifiers,
+    hasSelectedTerminalText: clipboard.hasSelectedTerminalText,
+    toggleTerminalModifier: modifiers.toggleTerminalModifier,
+    resetTerminalModifiers: modifiers.resetTerminalModifiers,
+    copySelectedTerminalText: clipboard.copySelectedTerminalText,
+    sendEncodedTerminalKey: keyboard.sendEncodedTerminalKey,
+    sendCtrlC: keyboard.sendCtrlC,
+    sendTerminalTextShortcut: keyboard.sendTerminalTextShortcut,
+  };
+
+  if (isFocusMode) {
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-[#1e1e1e]">
+        <div
+          ref={terminalContainerRef}
+          className="relative box-border min-h-0 flex-1 bg-[#1e1e1e] w-full"
+          style={{
+            padding: `${TERMINAL_PADDING_TOP_PX}px ${TERMINAL_PADDING_X_PX}px ${TERMINAL_PADDING_BOTTOM_PX}px`,
+          }}
+        />
+
+        <FocusModeBar
+          {...touchControlProps}
+          onExitFocusMode={toggleFocusMode}
+        />
+
+        {/* Modals still need to render in focus mode */}
+        <ConfirmModal
+          isOpen={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={() => void handleDelete()}
+          title="Delete SSH session?"
+          message={hasPersistentSession
+            ? "This removes the Ralpher session metadata and attempts to stop the remote persistent session."
+            : "This removes the saved Ralpher session metadata. Direct SSH mode does not keep a remote persistent session."}
+          confirmLabel="Delete"
+          loading={false}
+        />
+        <StandalonePasswordModal
+          isOpen={standalone.showPasswordPrompt}
+          onClose={() => {
+            standalone.setShowPasswordPrompt(false);
+            standalone.setPendingStandaloneAction(null);
+          }}
+          onSubmit={() => void handleStandalonePasswordSubmit()}
+          password={standalone.standalonePassword}
+          onPasswordChange={standalone.setStandalonePassword}
+          pendingAction={standalone.pendingStandaloneAction}
+          hasPersistentSession={hasPersistentSession}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full min-h-0 flex flex-col bg-gray-50 dark:bg-neutral-900">
       <div className="border-b border-gray-200 bg-white px-3 py-2 dark:border-gray-800 dark:bg-neutral-800">
@@ -253,14 +312,8 @@ export function SshSessionDetails({
         />
 
         <TouchControlsSection
-          terminalModifiers={modifiers.terminalModifiers}
-          hasSelectedTerminalText={clipboard.hasSelectedTerminalText}
-          toggleTerminalModifier={modifiers.toggleTerminalModifier}
-          resetTerminalModifiers={modifiers.resetTerminalModifiers}
-          copySelectedTerminalText={clipboard.copySelectedTerminalText}
-          sendEncodedTerminalKey={keyboard.sendEncodedTerminalKey}
-          sendCtrlC={keyboard.sendCtrlC}
-          sendTerminalTextShortcut={keyboard.sendTerminalTextShortcut}
+          {...touchControlProps}
+          onEnterFocusMode={toggleFocusMode}
         />
 
         {clipboard.pendingTerminalClipboardText !== null && (
