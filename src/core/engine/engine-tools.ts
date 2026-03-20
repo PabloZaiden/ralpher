@@ -96,6 +96,8 @@ function handleStreamingDelta(
   kind: "response" | "reasoning",
   toolCtx: ToolProcessingContext,
 ): void {
+  if (!content) return;
+
   if (kind === "response") {
     ctx.currentResponseLogContent += content;
     const logMsg = "AI generating response...";

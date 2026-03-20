@@ -623,6 +623,42 @@ describe("LogViewer", () => {
       );
       expect(getByText("AI generating response...")).toBeInTheDocument();
     });
+
+    test("response entries with empty responseContent are filtered out", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI generating response...",
+        details: { logKind: "response", responseContent: "" },
+      });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(queryByText("AI generating response...")).not.toBeInTheDocument();
+    });
+
+    test("response entries with no responseContent are filtered out", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI generating response...",
+        details: { logKind: "response" },
+      });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
+      );
+      expect(queryByText("AI generating response...")).not.toBeInTheDocument();
+    });
+
+    test("reasoning entries with empty responseContent are filtered out", () => {
+      const log = createLogEntry({
+        level: "agent",
+        message: "AI reasoning...",
+        details: { logKind: "reasoning", responseContent: "" },
+      });
+      const { queryByText } = renderWithUser(
+        <LogViewer messages={[]} toolCalls={[]} logs={[log]} showReasoning={true} />
+      );
+      expect(queryByText("AI reasoning...")).not.toBeInTheDocument();
+    });
   });
 
   describe("chronological sorting", () => {

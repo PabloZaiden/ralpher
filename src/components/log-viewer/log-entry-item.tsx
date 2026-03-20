@@ -37,6 +37,12 @@ export const LogEntryItem = memo(function LogEntryItem({ data: log, showHeader, 
     [details]
   );
 
+  // Don't render response/reasoning entries with no displayable content
+  const isResponseOrReasoning = logKind === "response" || logKind === "reasoning";
+  if (isResponseOrReasoning && !hasResponseContent && !hasOtherDetails) {
+    return null;
+  }
+
   return (
     <div key={`log-${log.id}-${index}`} className={`group ${isReasoning ? "opacity-60" : ""} ${spacingClass}`}>
       <div className="flex items-start gap-2 sm:gap-3">
