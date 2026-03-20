@@ -18,6 +18,7 @@ export interface TouchControlsSectionProps {
   sendEncodedTerminalKey: (key: TerminalSpecialKey | string) => void;
   sendCtrlC: () => void;
   sendTerminalTextShortcut: (data: string) => void;
+  onEnterFocusMode?: () => void;
 }
 
 export function TouchControlsSection({
@@ -29,6 +30,7 @@ export function TouchControlsSection({
   sendEncodedTerminalKey,
   sendCtrlC,
   sendTerminalTextShortcut,
+  onEnterFocusMode,
 }: TouchControlsSectionProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -51,11 +53,26 @@ export function TouchControlsSection({
           Modifiers off
         </Badge>
       )}
+      {onEnterFocusMode && (
+        <Button
+          variant="ghost"
+          size="xs"
+          className="min-h-[24px] shrink-0 px-1.5 py-0 text-[11px]"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEnterFocusMode();
+          }}
+          aria-label="Enter focus mode"
+          title="Focus mode — fullscreen terminal with compact controls"
+        >
+          ⛶
+        </Button>
+      )}
       <span className="hidden min-w-0 break-words text-xs text-gray-500 dark:text-gray-400 [overflow-wrap:anywhere] sm:block">
         Touch keys
       </span>
     </div>
-  ), [activeModifierLabel, terminalModifiers]);
+  ), [activeModifierLabel, terminalModifiers, onEnterFocusMode]);
 
   return (
     <CompactBar
