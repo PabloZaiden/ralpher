@@ -306,7 +306,7 @@ describe("tab navigation", () => {
     });
 
     // All tabs should be visible
-    for (const tabLabel of ["Log", "Info", "Prompt", "Plan", "Status", "Diff", "Review", "Actions"]) {
+    for (const tabLabel of ["Log", "Info", "Prompt", "Plan", "Diff", "Actions"]) {
       expect(getByText(tabLabel)).toBeTruthy();
     }
   });
@@ -457,22 +457,27 @@ describe("tab navigation", () => {
     });
   });
 
-  test("can switch to Review tab", async () => {
+  test("Actions tab does not show review section when review mode is not enabled", async () => {
     setupDefaultApi();
-    const { getByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
+    const { getByText, queryByText, user } = renderWithUser(<LoopDetails loopId={LOOP_ID} />);
 
     await waitFor(() => {
       expect(getByText("Test Loop")).toBeTruthy();
     });
 
-    await user.click(getByText("Review"));
+    await user.click(getByText("Actions"));
 
     await waitFor(() => {
-      expect(getByText(/does not have review mode enabled/)).toBeTruthy();
+      // Actions tab should be visible
+      expect(getByText("Delete Loop")).toBeTruthy();
     });
+
+    // Review section should not appear when review mode is not enabled
+    expect(queryByText(/does not have review mode enabled/)).toBeFalsy();
+    expect(queryByText("Review Mode Status")).toBeFalsy();
   });
 
-  test("Review tab shows review info when review mode is enabled", async () => {
+  test("Actions tab shows review info when review mode is enabled", async () => {
     const loop = createLoopWithStatus("pushed", {
       config: { id: LOOP_ID, name: "Review Loop" },
       state: {
@@ -499,7 +504,7 @@ describe("tab navigation", () => {
       expect(getByText("Review Loop")).toBeTruthy();
     });
 
-    await user.click(getByText("Review"));
+    await user.click(getByText("Actions"));
 
     await waitFor(() => {
       expect(getByText("Review Mode Status")).toBeTruthy();
@@ -1708,7 +1713,7 @@ describe("status badge variations", () => {
   }
 });
 
-// ─── Review tab comment history ──────────────────────────────────────────────
+// ─── Actions tab comment history (review section) ────────────────────────────
 
 describe("review tab comment history", () => {
   test("shows comments grouped by review cycle", async () => {
@@ -1759,7 +1764,7 @@ describe("review tab comment history", () => {
       expect(getByText("Review Loop")).toBeTruthy();
     });
 
-    await user.click(getByText("Review"));
+    await user.click(getByText("Actions"));
 
     await waitFor(() => {
       expect(getByText("Review Cycle 1")).toBeTruthy();
@@ -1798,7 +1803,7 @@ describe("review tab comment history", () => {
       expect(getByText("Review Loop")).toBeTruthy();
     });
 
-    await user.click(getByText("Review"));
+    await user.click(getByText("Actions"));
 
     await waitFor(() => {
       expect(getByText("No comments yet.")).toBeTruthy();

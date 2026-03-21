@@ -6,13 +6,14 @@ interface ReviewTabProps {
   labels: EntityLabels;
   loadingComments: boolean;
   reviewComments: ReviewComment[];
+  /** When true, renders without the outer scroll container (for embedding inside another tab). */
+  embedded?: boolean;
 }
 
-export function ReviewTab({ loop, labels, loadingComments, reviewComments }: ReviewTabProps) {
-  return (
-    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-      <div className="min-w-0 w-full space-y-4">
-        {loop.state.reviewMode ? (
+export function ReviewTab({ loop, labels, loadingComments, reviewComments, embedded = false }: ReviewTabProps) {
+  const content = (
+    <div className="min-w-0 w-full space-y-4">
+      {loop.state.reviewMode ? (
           <>
             <div className="bg-gray-50 dark:bg-neutral-900/40 border border-gray-200 dark:border-gray-800 rounded-lg p-4">
               <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">
@@ -152,6 +153,13 @@ export function ReviewTab({ loop, labels, loadingComments, reviewComments }: Rev
           </div>
         )}
       </div>
+  );
+
+  if (embedded) return content;
+
+  return (
+    <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
+      {content}
     </div>
   );
 }

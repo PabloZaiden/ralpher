@@ -1,7 +1,9 @@
+import type { Loop, ReviewComment } from "../../types/loop";
 import type { LoopState } from "../../types/loop";
 import type { FileContentResponse, PullRequestDestinationResponse } from "../../types";
 import type { EntityLabels } from "../../utils";
 import { isFinalState, canAccept, canMarkMerged } from "../../utils";
+import { ReviewTab } from "./review-tab";
 
 interface ActionsTabProps {
   isPlanning: boolean;
@@ -21,6 +23,9 @@ interface ActionsTabProps {
   onAcceptModal: () => void;
   onDeleteModal: () => void;
   labels: EntityLabels;
+  loop: Loop;
+  loadingComments: boolean;
+  reviewComments: ReviewComment[];
 }
 
 export function ActionsTab({
@@ -41,10 +46,14 @@ export function ActionsTab({
   onAcceptModal,
   onDeleteModal,
   labels,
+  loop,
+  loadingComments,
+  reviewComments,
 }: ActionsTabProps) {
   return (
     <div className="flex min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 dark-scrollbar">
-      <div className="max-w-md min-w-0 space-y-2">
+      <div className="min-w-0 w-full space-y-4">
+        <div className="max-w-md min-w-0 space-y-2">
 
         {isPlanning ? (
           <>
@@ -219,6 +228,20 @@ export function ActionsTab({
               <span className="text-gray-400 dark:text-gray-500">→</span>
             </button>
           </>
+        )}
+        </div>
+
+        {/* Review cycle history — shown when review mode is active */}
+        {loop.state.reviewMode && (
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <ReviewTab
+              loop={loop}
+              labels={labels}
+              loadingComments={loadingComments}
+              reviewComments={reviewComments}
+              embedded
+            />
+          </div>
         )}
       </div>
     </div>
