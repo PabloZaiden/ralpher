@@ -78,6 +78,12 @@ export function useWorkspaceCreate({
     }
 
     if (provisioning.activeJobId) {
+      // Auto-clear completed/failed/cancelled jobs so the form is accessible again
+      const jobStatus = provisioning.snapshot?.job.state.status;
+      if (jobStatus === "completed" || jobStatus === "failed" || jobStatus === "cancelled") {
+        provisioning.clearActiveJob();
+        return;
+      }
       setWorkspaceCreateMode("automatic");
       return;
     }
@@ -94,7 +100,7 @@ export function useWorkspaceCreate({
     setAutomaticBasePath("/workspaces");
     setAutomaticProvider("copilot");
     setAutomaticPassword("");
-  }, [provisioning.activeJobId, route, servers]);
+  }, [provisioning.activeJobId, provisioning.snapshot?.job.state.status, route, servers]);
 
   useEffect(() => {
     if (route.view !== "compose" || route.kind !== "workspace" || automaticServerId || !servers[0]) {
