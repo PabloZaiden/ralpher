@@ -153,7 +153,7 @@ export const LogViewer = memo(function LogViewer({
             const spacingClass = index === 0
               ? ""
               : entry.showHeader
-                ? "mt-2 sm:mt-3"  // Normal spacing at group boundary
+                ? "mt-1 sm:mt-2"  // Normal spacing at group boundary
                 : "mt-0.5";       // Tight spacing within a group
             if (entry.type === "message") {
               return (

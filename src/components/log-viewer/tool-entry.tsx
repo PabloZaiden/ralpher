@@ -33,36 +33,39 @@ export const ToolEntry = memo(function ToolEntry({ data: tool, timestamp, showHe
 
   return (
     <div key={`tool-${tool.id}-${index}`} className={`group ${spacingClass}`}>
-      <div className="flex items-start gap-2 sm:gap-3">
-        <span className={`text-gray-500 flex-shrink-0 text-xs hidden sm:inline ${!showHeader ? "invisible" : ""}`}>
+      {showHeader && (
+        <div className="text-gray-500 text-xs mb-0.5">
           {formatTime(timestamp)}
-        </span>
-        <span className={`flex-shrink-0 ${getToolStatusColor(tool.status)} ${!showHeader ? "invisible" : ""}`}>
-          {tool.status === "running" && (
-            <span className="inline-block animate-spin mr-1">⟳</span>
-          )}
-          {tool.status === "completed" && "✓ "}
-          {tool.status === "failed" && "✗ "}
-          {tool.status === "pending" && "○ "}
-        </span>
-        <div className="flex-1 min-w-0">
-          {/* Always show tool name when input/output exists, so details aren't orphaned */}
-          {(showHeader || tool.input != null || tool.output != null) && (
-            <span className="text-yellow-400 break-all">{tool.name}</span>
-          )}
-          {tool.input != null && (
-            <LazyDetails
-              summary="Input"
-              renderContent={renderInput}
-            />
-          )}
-          {tool.output != null && (
-            <LazyDetails
-              summary="Output"
-              renderContent={renderOutput}
-            />
-          )}
         </div>
+      )}
+      <div className="min-w-0">
+        {/* Always show tool name when input/output exists, so details aren't orphaned */}
+        {(showHeader || tool.input != null || tool.output != null) && (
+          <span>
+            <span className={`${getToolStatusColor(tool.status)} mr-1`}>
+              {tool.status === "running" && (
+                <span className="inline-block animate-spin mr-1">⟳</span>
+              )}
+              {tool.status === "completed" && "✓"}
+              {tool.status === "failed" && "✗"}
+              {tool.status === "pending" && "○"}
+            </span>
+            {" "}
+            <span className="text-yellow-400 break-all">{tool.name}</span>
+          </span>
+        )}
+        {tool.input != null && (
+          <LazyDetails
+            summary="Input"
+            renderContent={renderInput}
+          />
+        )}
+        {tool.output != null && (
+          <LazyDetails
+            summary="Output"
+            renderContent={renderOutput}
+          />
+        )}
       </div>
     </div>
   );
