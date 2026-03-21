@@ -4,9 +4,9 @@ const STORAGE_KEY = "ralpher-ssh-focus-mode";
 
 function readStoredValue(): boolean {
   try {
-    return localStorage.getItem(STORAGE_KEY) === "true";
+    return localStorage.getItem(STORAGE_KEY) !== "false";
   } catch {
-    return false;
+    return true;
   }
 }
 

@@ -269,6 +269,9 @@ describe("SshSessionDetails", () => {
     lastTerminalOptions = null;
     clipboardWrites = [];
     restoreDocumentFonts();
+    // Default to non-focus mode for tests that don't specifically test focus mode,
+    // so they can interact with the header and session info normally.
+    globalThis.localStorage?.setItem("ralpher-ssh-focus-mode", "false");
   });
 
   afterEach(() => {
@@ -2029,6 +2032,9 @@ describe("SshSessionDetails", () => {
   });
 
   test("shows focus mode toggle in touch controls and enters focus mode on click", async () => {
+    // Clear the explicit "false" set in beforeEach to test the real default (focus mode ON)
+    globalThis.localStorage?.removeItem("ralpher-ssh-focus-mode");
+
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "Focus Mode Test" } }),
     );
@@ -2038,39 +2044,55 @@ describe("SshSessionDetails", () => {
     );
 
     await waitFor(() => {
-      expect(getByText("Focus Mode Test")).toBeTruthy();
       expect(ws.getConnections("/api/ssh-terminal")).toHaveLength(1);
       expect(lastTerminal).not.toBeNull();
     });
 
-    // The focus mode toggle button should be visible in the touch controls summary
-    const focusButton = getByLabelText("Enter focus mode");
-    expect(focusButton).toBeTruthy();
-
-    // Click to enter focus mode
-    await user.click(focusButton);
-
-    // In focus mode: header, session info, and touch controls should be hidden
+    // Default is focus mode: header, session info, and touch controls should be hidden
     await waitFor(() => {
       expect(queryByText("Focus Mode Test")).toBeNull();
       expect(queryByText("Session Info")).toBeNull();
       expect(queryByText("Touch controls")).toBeNull();
     });
 
-    // The FocusModeBar should be visible with an exit button
+    // The FocusModeBar should be visible with an exit button and arrow buttons
     const exitButton = getByLabelText("Exit focus mode");
     expect(exitButton).toBeTruthy();
-
-    // FocusModeBar should have accessible arrow buttons
     expect(getByLabelText("Arrow left")).toBeTruthy();
     expect(getByLabelText("Arrow up")).toBeTruthy();
     expect(getByLabelText("Arrow down")).toBeTruthy();
     expect(getByLabelText("Arrow right")).toBeTruthy();
     expect(getByLabelText("Enter")).toBeTruthy();
     expect(getByLabelText("Space")).toBeTruthy();
+
+    // Exit focus mode — normal view should be restored with the "Enter focus mode" button
+    await user.click(exitButton);
+
+    await waitFor(() => {
+      expect(getByText("Focus Mode Test")).toBeTruthy();
+      expect(getByText("Session Info")).toBeTruthy();
+      expect(getByText("Touch controls")).toBeTruthy();
+    });
+
+    // The focus mode toggle button should be visible in the touch controls summary
+    const focusButton = getByLabelText("Enter focus mode");
+    expect(focusButton).toBeTruthy();
+
+    // Click to re-enter focus mode
+    await user.click(focusButton);
+
+    // In focus mode again: header, session info, and touch controls should be hidden
+    await waitFor(() => {
+      expect(queryByText("Focus Mode Test")).toBeNull();
+      expect(queryByText("Session Info")).toBeNull();
+      expect(queryByText("Touch controls")).toBeNull();
+    });
   });
 
   test("exits focus mode and restores normal view", async () => {
+    // Clear the explicit "false" set in beforeEach to test the real default (focus mode ON)
+    globalThis.localStorage?.removeItem("ralpher-ssh-focus-mode");
+
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "Focus Exit Test" } }),
     );
@@ -2080,12 +2102,10 @@ describe("SshSessionDetails", () => {
     );
 
     await waitFor(() => {
-      expect(getByText("Focus Exit Test")).toBeTruthy();
       expect(lastTerminal).not.toBeNull();
     });
 
-    // Enter focus mode
-    await user.click(getByLabelText("Enter focus mode"));
+    // Default is focus mode: header should be hidden
     await waitFor(() => {
       expect(queryByText("Focus Exit Test")).toBeNull();
     });
@@ -2102,11 +2122,14 @@ describe("SshSessionDetails", () => {
   });
 
   test("persists focus mode preference across renders via localStorage", async () => {
+    // Clear the explicit "false" set in beforeEach to test the real default (focus mode ON)
+    globalThis.localStorage?.removeItem("ralpher-ssh-focus-mode");
+
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "Focus Persist" } }),
     );
 
-    const { getByLabelText, queryByText, user, unmount } = renderWithUser(
+    const { queryByText, getByLabelText, user, unmount } = renderWithUser(
       <SshSessionDetails sshSessionId="ssh-focus-3" onBack={() => {}} />,
     );
 
@@ -2114,19 +2137,22 @@ describe("SshSessionDetails", () => {
       expect(lastTerminal).not.toBeNull();
     });
 
-    // Enter focus mode (which persists to localStorage)
-    await user.click(getByLabelText("Enter focus mode"));
+    // Default is focus mode — exit it (which persists "false" to localStorage)
     await waitFor(() => {
       expect(queryByText("Focus Persist")).toBeNull();
     });
+    await user.click(getByLabelText("Exit focus mode"));
+    await waitFor(() => {
+      expect(queryByText("Focus Persist")).not.toBeNull();
+    });
 
-    expect(localStorage.getItem("ralpher-ssh-focus-mode")).toBe("true");
+    expect(localStorage.getItem("ralpher-ssh-focus-mode")).toBe("false");
 
-    // Unmount and re-render — should start in focus mode
+    // Unmount and re-render — should start in normal mode (preference was persisted)
     unmount();
     lastTerminal = null;
 
-    const { queryByText: queryByText2, getByLabelText: getByLabelText2 } = renderWithUser(
+    const { queryByText: queryByText2, getByText: getByText2 } = renderWithUser(
       <SshSessionDetails sshSessionId="ssh-focus-3" onBack={() => {}} />,
     );
 
@@ -2134,14 +2160,17 @@ describe("SshSessionDetails", () => {
       expect(lastTerminal).not.toBeNull();
     });
 
-    // Should be in focus mode (header hidden, exit button visible)
+    // Should be in normal mode (header visible, no exit button in FocusModeBar)
     await waitFor(() => {
-      expect(queryByText2("Focus Persist")).toBeNull();
-      expect(getByLabelText2("Exit focus mode")).toBeTruthy();
+      expect(getByText2("Focus Persist")).toBeTruthy();
+      expect(queryByText2("Session Info")).not.toBeNull();
     });
   });
 
   test("keeps the terminal container mounted when toggling focus mode", async () => {
+    // Clear the explicit "false" set in beforeEach to test the real default (focus mode ON)
+    globalThis.localStorage?.removeItem("ralpher-ssh-focus-mode");
+
     api.get("/api/ssh-sessions/:id", (req) =>
       createSshSession({ config: { id: req.params["id"]!, name: "Focus Terminal" } }),
     );
@@ -2156,15 +2185,15 @@ describe("SshSessionDetails", () => {
 
     const terminalBeforeToggle = lastTerminal;
 
-    // Enter focus mode
-    await user.click(getByLabelText("Enter focus mode"));
+    // Exit focus mode (default is focus mode ON)
+    await user.click(getByLabelText("Exit focus mode"));
 
     // The terminal instance should be the same (not disposed and re-created)
     expect(lastTerminal).toBe(terminalBeforeToggle);
     expect(lastTerminal!.element).not.toBeNull();
 
-    // Exit focus mode
-    await user.click(getByLabelText("Exit focus mode"));
+    // Re-enter focus mode
+    await user.click(getByLabelText("Enter focus mode"));
 
     // Still the same terminal instance
     expect(lastTerminal).toBe(terminalBeforeToggle);
