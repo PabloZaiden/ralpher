@@ -103,12 +103,14 @@ export async function initializeDatabase(): Promise<void> {
  * Create all database tables if they don't exist.
  * Uses a transaction to ensure atomicity of schema creation.
  *
- * This is the single source of truth for the database schema. All legacy
- * migrations (v1-v16, then v1-v13) have been removed and their columns
- * are included directly in the base schema below.
+ * This base schema is the frozen baseline after the latest clean-cut reset.
+ * All legacy migrations (v1-v16, then v1-v13) have been folded into it.
  *
- * When adding new columns, add them ONLY as migrations (see migrations/index.ts).
- * Do NOT add them to the base schema here.
+ * The current database schema = this baseline + any migrations in migrations/index.ts.
+ *
+ * New columns and tables should be added ONLY as migrations. The base schema
+ * here should only be updated during future clean-cut resets that fold
+ * accumulated migrations back in.
  */
 function createTables(database: Database): void {
   // Wrap all schema creation in a transaction
@@ -313,13 +315,16 @@ function createTables(database: Database): void {
       CREATE INDEX IF NOT EXISTS idx_loops_created_at ON loops(created_at DESC)
     `);
 
-    // Create index for workspace lookups (non-unique composite with server_fingerprint)
-    database.run(`
-      CREATE INDEX IF NOT EXISTS idx_workspaces_directory ON workspaces(directory)
-    `);
+    // Create composite index for workspace lookups by directory and server_fingerprint.
+    // The leftmost prefix also covers single-column directory lookups.
     database.run(`
       CREATE INDEX IF NOT EXISTS idx_workspaces_directory_server_fingerprint
       ON workspaces(directory, server_fingerprint)
+    `);
+
+    // Drop legacy single-column index that is now redundant with the composite index.
+    database.run(`
+      DROP INDEX IF EXISTS idx_workspaces_directory
     `);
 
     // Create index for loops by workspace
