@@ -53,26 +53,6 @@ export function getLogLevelColor(level: LogLevel): string {
 }
 
 /**
- * Get the badge variant for a log level.
- */
-export function getLogLevelBadge(level: LogLevel): "default" | "info" | "success" | "warning" | "error" {
-  switch (level) {
-    case "agent":
-      return "success";
-    case "debug":
-      return "default";
-    case "info":
-      return "info";
-    case "warn":
-      return "warning";
-    case "error":
-      return "error";
-    default:
-      return "default";
-  }
-}
-
-/**
  * Derive a grouping key for an entry. Two consecutive entries belong to
  * the same visual group (and thus collapse their headers) when their
  * keys are equal.
