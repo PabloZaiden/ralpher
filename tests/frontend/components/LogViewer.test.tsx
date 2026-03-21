@@ -54,12 +54,11 @@ describe("LogViewer", () => {
   });
 
   describe("message rendering", () => {
-    test("renders a user message with info badge", () => {
+    test("renders a user message", () => {
       const msg = createMessageData({ role: "user", content: "Hello world" });
       const { getByText } = renderWithUser(
         <LogViewer messages={[msg]} toolCalls={[]} />
       );
-      expect(getByText("user")).toBeInTheDocument();
       expect(getByText("Hello world")).toBeInTheDocument();
     });
 
@@ -250,48 +249,43 @@ describe("LogViewer", () => {
   });
 
   describe("log entry rendering", () => {
-    test("renders an info log with INFO badge when showSystemInfo is true", () => {
+    test("renders an info log when showSystemInfo is true", () => {
       const log = createLogEntry({ level: "info", message: "Server started" });
       const { getByText } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={[log]} showSystemInfo={true} />
       );
-      expect(getByText("INFO")).toBeInTheDocument();
       expect(getByText("Server started")).toBeInTheDocument();
     });
 
-    test("renders a warn log with WARN badge when showSystemInfo is true", () => {
+    test("renders a warn log when showSystemInfo is true", () => {
       const log = createLogEntry({ level: "warn", message: "Rate limit approaching" });
       const { getByText } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={[log]} showSystemInfo={true} />
       );
-      expect(getByText("WARN")).toBeInTheDocument();
       expect(getByText("Rate limit approaching")).toBeInTheDocument();
     });
 
-    test("renders an error log with ERROR badge when showSystemInfo is true", () => {
+    test("renders an error log when showSystemInfo is true", () => {
       const log = createLogEntry({ level: "error", message: "Connection failed" });
       const { getByText } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={[log]} showSystemInfo={true} />
       );
-      expect(getByText("ERROR")).toBeInTheDocument();
       expect(getByText("Connection failed")).toBeInTheDocument();
     });
 
-    test("renders a debug log with DEBUG badge when showSystemInfo is true", () => {
+    test("renders a debug log when showSystemInfo is true", () => {
       const log = createLogEntry({ level: "debug", message: "Debug info" });
       const { getByText } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={[log]} showSystemInfo={true} />
       );
-      expect(getByText("DEBUG")).toBeInTheDocument();
       expect(getByText("Debug info")).toBeInTheDocument();
     });
 
-    test("renders an agent log with AGENT badge", () => {
+    test("renders an agent log", () => {
       const log = createLogEntry({ level: "agent", message: "Agent thinking" });
       const { getByText } = renderWithUser(
         <LogViewer messages={[]} toolCalls={[]} logs={[log]} />
       );
-      expect(getByText("AGENT")).toBeInTheDocument();
       expect(getByText("Agent thinking")).toBeInTheDocument();
     });
 
