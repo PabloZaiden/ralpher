@@ -157,7 +157,7 @@ describe("useWorkspaceCreate", () => {
 
     test("does NOT clear running provisioning job", async () => {
       const clearActiveJob = mock(() => {});
-      renderUseWorkspaceCreate({
+      const { result } = renderUseWorkspaceCreate({
         route: composeWorkspaceRoute,
         provisioning: {
           activeJobId: "job-4",
@@ -166,15 +166,16 @@ describe("useWorkspaceCreate", () => {
         },
       });
 
-      // Give it time to settle — clearActiveJob should not be called
+      // Wait for the positive state change that confirms the effect ran
       await waitFor(() => {
-        expect(clearActiveJob).not.toHaveBeenCalled();
+        expect(result.current.workspaceCreateMode).toBe("automatic");
       });
+      expect(clearActiveJob).not.toHaveBeenCalled();
     });
 
     test("does NOT clear pending provisioning job", async () => {
       const clearActiveJob = mock(() => {});
-      renderUseWorkspaceCreate({
+      const { result } = renderUseWorkspaceCreate({
         route: composeWorkspaceRoute,
         provisioning: {
           activeJobId: "job-5",
@@ -183,9 +184,11 @@ describe("useWorkspaceCreate", () => {
         },
       });
 
+      // Wait for the positive state change that confirms the effect ran
       await waitFor(() => {
-        expect(clearActiveJob).not.toHaveBeenCalled();
+        expect(result.current.workspaceCreateMode).toBe("automatic");
       });
+      expect(clearActiveJob).not.toHaveBeenCalled();
     });
 
     test("sets mode to automatic for in-progress provisioning", async () => {
@@ -231,10 +234,9 @@ describe("useWorkspaceCreate", () => {
         },
       });
 
-      // Should not interact with provisioning when on a different route
-      await waitFor(() => {
-        expect(clearActiveJob).not.toHaveBeenCalled();
-      });
+      // Let effects settle before asserting the negative
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(clearActiveJob).not.toHaveBeenCalled();
     });
   });
 });

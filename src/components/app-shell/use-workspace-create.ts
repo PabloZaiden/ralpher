@@ -71,16 +71,23 @@ export function useWorkspaceCreate({
   const [automaticProvider, setAutomaticProvider] = useState<AgentProvider>("copilot");
   const [automaticPassword, setAutomaticPassword] = useState("");
   const lastProvisioningRefreshIdRef = useRef<string | null>(null);
+  const wasOnComposeWorkspaceRef = useRef(false);
 
   useEffect(() => {
-    if (route.view !== "compose" || route.kind !== "workspace") {
+    const isOnComposeWorkspace = route.view === "compose" && route.kind === "workspace";
+    const wasOnComposeWorkspace = wasOnComposeWorkspaceRef.current;
+    wasOnComposeWorkspaceRef.current = isOnComposeWorkspace;
+
+    if (!isOnComposeWorkspace) {
       return;
     }
 
     if (provisioning.activeJobId) {
-      // Auto-clear completed/failed/cancelled jobs so the form is accessible again
+      // Auto-clear terminal jobs only on initial entry to compose/workspace,
+      // not while already viewing the provisioning result.
       const jobStatus = provisioning.snapshot?.job.state.status;
-      if (jobStatus === "completed" || jobStatus === "failed" || jobStatus === "cancelled") {
+      const isTerminal = jobStatus === "completed" || jobStatus === "failed" || jobStatus === "cancelled";
+      if (isTerminal && !wasOnComposeWorkspace) {
         provisioning.clearActiveJob();
         return;
       }
