@@ -104,8 +104,8 @@ export async function initializeDatabase(): Promise<void> {
  * Uses a transaction to ensure atomicity of schema creation.
  *
  * This is the single source of truth for the database schema. All legacy
- * migrations (v1-v16) have been removed and their columns are included
- * directly in the base schema below.
+ * migrations (v1-v16, then v1-v13) have been removed and their columns
+ * are included directly in the base schema below.
  *
  * When adding new columns, add them ONLY as migrations (see migrations/index.ts).
  * Do NOT add them to the base schema here.
@@ -118,10 +118,16 @@ function createTables(database: Database): void {
       CREATE TABLE IF NOT EXISTS workspaces (
         id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
-        directory TEXT UNIQUE NOT NULL,
+        directory TEXT NOT NULL,
+        server_fingerprint TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
-        server_settings TEXT NOT NULL DEFAULT '{}'
+        server_settings TEXT NOT NULL DEFAULT '{}',
+        source_directory TEXT,
+        ssh_server_id TEXT,
+        repo_url TEXT,
+        base_path TEXT,
+        provider TEXT
       )
     `);
 
@@ -182,7 +188,12 @@ function createTables(database: Database): void {
         planning_folder_cleared INTEGER DEFAULT 0,
         plan_is_ready INTEGER DEFAULT 0,
         -- Review mode state
-        review_mode TEXT
+        review_mode TEXT,
+        -- Worktree setting
+        use_worktree INTEGER NOT NULL DEFAULT 1,
+        -- Plan question persistence
+        plan_mode_auto_reply INTEGER NOT NULL DEFAULT 1,
+        pending_plan_question TEXT
       )
     `);
 
@@ -222,14 +233,93 @@ function createTables(database: Database): void {
       )
     `);
 
+    // SSH sessions table - workspace-level SSH sessions
+    database.run(`
+      CREATE TABLE IF NOT EXISTS ssh_sessions (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        directory TEXT NOT NULL,
+        remote_session_name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ready',
+        last_connected_at TEXT,
+        error_message TEXT,
+        loop_id TEXT,
+        connection_mode TEXT NOT NULL DEFAULT 'dtach',
+        runtime_connection_mode TEXT,
+        notice_message TEXT,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+      )
+    `);
+
+    // SSH servers table - standalone SSH server definitions
+    database.run(`
+      CREATE TABLE IF NOT EXISTS ssh_servers (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        address TEXT NOT NULL,
+        username TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        repositories_base_path TEXT
+      )
+    `);
+
+    // SSH server sessions table - sessions on standalone SSH servers
+    database.run(`
+      CREATE TABLE IF NOT EXISTS ssh_server_sessions (
+        id TEXT PRIMARY KEY,
+        ssh_server_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        remote_session_name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ready',
+        last_connected_at TEXT,
+        error_message TEXT,
+        connection_mode TEXT NOT NULL DEFAULT 'dtach',
+        runtime_connection_mode TEXT,
+        notice_message TEXT,
+        FOREIGN KEY (ssh_server_id) REFERENCES ssh_servers(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Forwarded ports table - port forwarding for SSH sessions
+    database.run(`
+      CREATE TABLE IF NOT EXISTS forwarded_ports (
+        id TEXT PRIMARY KEY,
+        loop_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        ssh_session_id TEXT,
+        remote_host TEXT NOT NULL,
+        remote_port INTEGER NOT NULL,
+        local_port INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'starting',
+        pid INTEGER,
+        connected_at TEXT,
+        error_message TEXT,
+        FOREIGN KEY (loop_id) REFERENCES loops(id) ON DELETE CASCADE,
+        FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+        FOREIGN KEY (ssh_session_id) REFERENCES ssh_sessions(id) ON DELETE CASCADE
+      )
+    `);
+
     // Create index for faster loop listing
     database.run(`
       CREATE INDEX IF NOT EXISTS idx_loops_created_at ON loops(created_at DESC)
     `);
 
-    // Create index for workspace lookups
+    // Create index for workspace lookups (non-unique composite with server_fingerprint)
     database.run(`
       CREATE INDEX IF NOT EXISTS idx_workspaces_directory ON workspaces(directory)
+    `);
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_workspaces_directory_server_fingerprint
+      ON workspaces(directory, server_fingerprint)
     `);
 
     // Create index for loops by workspace
@@ -243,6 +333,57 @@ function createTables(database: Database): void {
     `);
     database.run(`
       CREATE INDEX IF NOT EXISTS idx_review_comments_loop_cycle ON review_comments(loop_id, review_cycle)
+    `);
+
+    // SSH sessions indexes
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_ssh_sessions_workspace_id
+      ON ssh_sessions(workspace_id)
+    `);
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_ssh_sessions_created_at
+      ON ssh_sessions(created_at DESC)
+    `);
+    database.run(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_ssh_sessions_loop_id_unique
+      ON ssh_sessions(loop_id)
+      WHERE loop_id IS NOT NULL
+    `);
+
+    // SSH servers indexes
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_ssh_servers_name
+      ON ssh_servers(name COLLATE NOCASE, created_at ASC)
+    `);
+
+    // SSH server sessions indexes
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_ssh_server_sessions_server_id
+      ON ssh_server_sessions(ssh_server_id, created_at DESC)
+    `);
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_ssh_server_sessions_created_at
+      ON ssh_server_sessions(created_at DESC)
+    `);
+
+    // Forwarded ports indexes
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_forwarded_ports_loop_id
+      ON forwarded_ports(loop_id, created_at DESC)
+    `);
+    database.run(`
+      CREATE INDEX IF NOT EXISTS idx_forwarded_ports_ssh_session_id
+      ON forwarded_ports(ssh_session_id)
+    `);
+    database.run(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_forwarded_ports_local_port_active
+      ON forwarded_ports(local_port)
+      WHERE status IN ('starting', 'active', 'stopping')
+    `);
+    database.run(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_forwarded_ports_workspace_remote_port_active
+      ON forwarded_ports(workspace_id, remote_port)
+      WHERE status IN ('starting', 'active', 'stopping')
     `);
 
     // Note: No index needed for sessions - composite primary key (backend_name, loop_id)
