@@ -93,8 +93,10 @@ export function useLoopContent({
         } else if (activeTab === "diff") {
           const content = await getDiff();
           setDiffContent(content);
-        } else if (activeTab === "actions") {
-          await fetchReviewComments();
+        } else {
+          // No file content to load for other tabs
+          setLoadingContent(false);
+          return;
         }
       } finally {
         setLoadingContent(false);
@@ -104,7 +106,12 @@ export function useLoopContent({
     if (activeTab !== "log" && activeTab !== "prompt") {
       loadContent();
     }
-  }, [activeTab, getPlan, getStatusFile, getDiff, fetchReviewComments]);
+
+    // Fetch review comments separately so loadingComments (not loadingContent) reflects the state
+    if (activeTab === "actions" && loop?.state.reviewMode) {
+      fetchReviewComments();
+    }
+  }, [activeTab, getPlan, getStatusFile, getDiff, fetchReviewComments, loop?.state.reviewMode]);
 
   // Load plan content when in planning mode to keep it fresh regardless of active tab
   useEffect(() => {

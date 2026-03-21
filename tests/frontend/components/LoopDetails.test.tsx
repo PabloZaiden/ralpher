@@ -1715,7 +1715,7 @@ describe("status badge variations", () => {
 
 // ─── Actions tab comment history (review section) ────────────────────────────
 
-describe("review tab comment history", () => {
+describe("actions tab comment history", () => {
   test("shows comments grouped by review cycle", async () => {
     const loop = createLoopWithStatus("pushed", {
       config: { id: LOOP_ID, name: "Review Loop" },

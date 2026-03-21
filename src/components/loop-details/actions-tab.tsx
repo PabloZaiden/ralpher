@@ -1,5 +1,4 @@
-import type { Loop, ReviewComment } from "../../types/loop";
-import type { LoopState } from "../../types/loop";
+import type { Loop, ReviewComment, LoopState } from "../../types/loop";
 import type { FileContentResponse, PullRequestDestinationResponse } from "../../types";
 import type { EntityLabels } from "../../utils";
 import { isFinalState, canAccept, canMarkMerged } from "../../utils";
