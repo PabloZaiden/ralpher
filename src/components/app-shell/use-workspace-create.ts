@@ -71,13 +71,26 @@ export function useWorkspaceCreate({
   const [automaticProvider, setAutomaticProvider] = useState<AgentProvider>("copilot");
   const [automaticPassword, setAutomaticPassword] = useState("");
   const lastProvisioningRefreshIdRef = useRef<string | null>(null);
+  const wasOnComposeWorkspaceRef = useRef(false);
 
   useEffect(() => {
-    if (route.view !== "compose" || route.kind !== "workspace") {
+    const isOnComposeWorkspace = route.view === "compose" && route.kind === "workspace";
+    const wasOnComposeWorkspace = wasOnComposeWorkspaceRef.current;
+    wasOnComposeWorkspaceRef.current = isOnComposeWorkspace;
+
+    if (!isOnComposeWorkspace) {
       return;
     }
 
     if (provisioning.activeJobId) {
+      // Auto-clear terminal jobs only on initial entry to compose/workspace,
+      // not while already viewing the provisioning result.
+      const jobStatus = provisioning.snapshot?.job.state.status;
+      const isTerminal = jobStatus === "completed" || jobStatus === "failed" || jobStatus === "cancelled";
+      if (isTerminal && !wasOnComposeWorkspace) {
+        provisioning.clearActiveJob();
+        return;
+      }
       setWorkspaceCreateMode("automatic");
       return;
     }
@@ -94,7 +107,7 @@ export function useWorkspaceCreate({
     setAutomaticBasePath("/workspaces");
     setAutomaticProvider("copilot");
     setAutomaticPassword("");
-  }, [provisioning.activeJobId, route, servers]);
+  }, [provisioning.activeJobId, provisioning.snapshot?.job.state.status, route, servers]);
 
   useEffect(() => {
     if (route.view !== "compose" || route.kind !== "workspace" || automaticServerId || !servers[0]) {
