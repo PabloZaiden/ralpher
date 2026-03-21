@@ -86,16 +86,17 @@ export function useLoopContent({
       setLoadingContent(true);
       try {
         if (activeTab === "plan") {
-          const content = await getPlan();
-          setPlanContent(content);
-        } else if (activeTab === "status") {
-          const content = await getStatusFile();
-          setStatusContent(content);
+          // Load both plan and status content together since status is embedded in the plan tab
+          const [planResult, statusResult] = await Promise.all([getPlan(), getStatusFile()]);
+          setPlanContent(planResult);
+          setStatusContent(statusResult);
         } else if (activeTab === "diff") {
           const content = await getDiff();
           setDiffContent(content);
-        } else if (activeTab === "review") {
-          await fetchReviewComments();
+        } else {
+          // No file content to load for other tabs
+          setLoadingContent(false);
+          return;
         }
       } finally {
         setLoadingContent(false);
@@ -105,7 +106,12 @@ export function useLoopContent({
     if (activeTab !== "log" && activeTab !== "prompt") {
       loadContent();
     }
-  }, [activeTab, getPlan, getStatusFile, getDiff, fetchReviewComments]);
+
+    // Fetch review comments separately so loadingComments (not loadingContent) reflects the state
+    if (activeTab === "actions" && loop?.state.reviewMode) {
+      fetchReviewComments();
+    }
+  }, [activeTab, getPlan, getStatusFile, getDiff, fetchReviewComments, loop?.state.reviewMode]);
 
   // Load plan content when in planning mode to keep it fresh regardless of active tab
   useEffect(() => {
@@ -150,18 +156,18 @@ export function useLoopContent({
     prevPlanContent.current = currentContent;
   }, [planContent?.content, activeTab, setTabsWithUpdates]);
 
-  // Detect changes in status content
+  // Detect changes in status content — mark "plan" tab since status is now embedded there
   useEffect(() => {
     const currentContent = statusContent?.content ?? null;
-    if (currentContent !== null && currentContent !== prevStatusContent.current && activeTab !== "status") {
-      setTabsWithUpdates((prev) => new Set(prev).add("status"));
+    if (currentContent !== null && currentContent !== prevStatusContent.current && activeTab !== "plan") {
+      setTabsWithUpdates((prev) => new Set(prev).add("plan"));
     }
     prevStatusContent.current = currentContent;
   }, [statusContent?.content, activeTab, setTabsWithUpdates]);
 
   // Refetch comments when loop state changes (comment submitted or loop completes)
   useEffect(() => {
-    if (loop?.state.reviewMode && activeTab === "review") {
+    if (loop?.state.reviewMode && activeTab === "actions") {
       fetchReviewComments();
     }
   }, [loop?.state.reviewMode?.reviewCycles, loop?.state.status, activeTab, fetchReviewComments]);

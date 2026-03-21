@@ -17,9 +17,7 @@ import { LogTab } from "./log-tab";
 import { InfoTab } from "./info-tab";
 import { PromptTab } from "./prompt-tab";
 import { PlanTab } from "./plan-tab";
-import { StatusTab } from "./status-tab";
 import { DiffTab } from "./diff-tab";
-import { ReviewTab } from "./review-tab";
 import { ActionsTab } from "./actions-tab";
 
 interface LoopDetailsTabContentProps {
@@ -118,12 +116,6 @@ export function LoopDetailsTabContent({
           isPlanReady={isPlanReady}
           feedbackRounds={feedbackRounds}
           planContent={content.planContent}
-          loadingContent={content.loadingContent}
-          markdownEnabled={markdownEnabled}
-        />
-      )}
-      {activeTab === "status" && (
-        <StatusTab
           statusContent={content.statusContent}
           loadingContent={content.loadingContent}
           markdownEnabled={markdownEnabled}
@@ -135,14 +127,6 @@ export function LoopDetailsTabContent({
           loadingContent={content.loadingContent}
           expandedFiles={content.expandedFiles}
           onExpandedFilesChange={content.setExpandedFiles}
-        />
-      )}
-      {activeTab === "review" && (
-        <ReviewTab
-          loop={loop}
-          labels={labels}
-          loadingComments={content.loadingComments}
-          reviewComments={content.reviewComments}
         />
       )}
       {activeTab === "actions" && (
@@ -164,6 +148,9 @@ export function LoopDetailsTabContent({
           onAcceptModal={() => actions.setAcceptModal(true)}
           onDeleteModal={() => actions.setDeleteModal(true)}
           labels={labels}
+          loop={loop}
+          loadingComments={content.loadingComments}
+          reviewComments={content.reviewComments}
         />
       )}
     </div>
