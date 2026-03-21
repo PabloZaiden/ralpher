@@ -42,6 +42,11 @@ export const LogEntryItem = memo(function LogEntryItem({ data: log, showHeader, 
     return null;
   }
 
+  // Streaming entries (response, reasoning, tool) don't need a message label —
+  // the content itself or the tool entry is self-explanatory.
+  const isStreamingEntry = logKind === "response" || logKind === "reasoning" || logKind === "tool";
+  const showMessageLabel = showHeader && !isStreamingEntry;
+
   return (
     <div key={`log-${log.id}-${index}`} className={`group ${isReasoning ? "opacity-60" : ""} ${spacingClass}`}>
       {showHeader && (
@@ -50,7 +55,7 @@ export const LogEntryItem = memo(function LogEntryItem({ data: log, showHeader, 
         </div>
       )}
       <div className={`min-w-0 ${isReasoning ? "text-gray-400 italic" : getLogLevelColor(log.level)}`}>
-        {showHeader && (
+        {showMessageLabel && (
           <span className="break-words">{log.message}</span>
         )}
         {/* Show responseContent as proper text */}
