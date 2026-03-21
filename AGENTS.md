@@ -466,7 +466,7 @@ Common fixes:
 
 The project uses a migration system to evolve the database schema over time. The complete current schema is defined in `src/persistence/database.ts` as the base schema. Migrations are used only for schema changes added after the base schema was established.
 
-**Note:** Legacy migrations (v1-v16) were removed in a clean-cut reset. Databases created before this reset must be recreated (delete `data/ralpher.db` and restart).
+**Note:** Legacy migrations (v1-v16) were removed in the first clean-cut reset. Post-reset migrations (v1-v13) were removed in the second clean-cut reset. Databases created before this reset must be recreated (delete `data/ralpher.db` and restart).
 
 ### How Migrations Work
 
